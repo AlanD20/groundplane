@@ -13,7 +13,11 @@ it does not redefine the [product contract](mvp.md) or authorize implementation.
 
 ## Available implementation and remaining proof
 
-The [Task execution redesign](decisions/task-execution-redesign.md) is implemented.
+The [Task execution redesign](decisions/task-execution-redesign.md) has native
+scheduling and execution. Partial-Apply cleanup now includes native Detach input
+preparation, retained declarations, Entry file cleanup and pre-input settlement.
+These repairs still need their combined installed qualification; see
+[partial-Apply cleanup](issues/runtime-qualification.md#partial-apply-cleanup).
 Native scheduling, typed work/attempt storage, protocol cutover
 guards and the replacement viewer have partial local and installed qualification;
 the QA matrix records candidate-specific limits. Low-reserve admission has local

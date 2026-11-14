@@ -15,8 +15,7 @@ type ServicePlanner struct {
 	hosts    hostbindings.Reader
 	removals ServiceRemovalReader
 }
-type NetworkPlanner struct{ hosts hostbindings.Reader }
-type AttachPlanner struct{ hosts hostbindings.Reader }
+type HostResourcePlanner struct{ hosts hostbindings.Reader }
 type ComponentPlanner struct{ hosts hostbindings.Reader }
 
 func NewServicePlanner(hosts hostbindings.Reader, removals ServiceRemovalReader) (*ServicePlanner, error) {
@@ -26,18 +25,36 @@ func NewServicePlanner(hosts hostbindings.Reader, removals ServiceRemovalReader)
 	return &ServicePlanner{hosts: hosts, removals: removals}, nil
 }
 
-func NewNetworkPlanner(hosts hostbindings.Reader) (*NetworkPlanner, error) {
+// HostResourcePlanner owns placement and exclusion for the closed resource
+// operations that have no additional admission policy. Typed input owners still
+// capture and execute each operation independently.
+func NewHostResourcePlanner(hosts hostbindings.Reader) (*HostResourcePlanner, error) {
 	if hosts == nil {
-		return nil, errs.New(errs.KindInternal, "Blueprint Network planner requires host ownership storage")
+		return nil, errs.New(errs.KindInternal, "Blueprint resource placement requires host ownership storage")
 	}
-	return &NetworkPlanner{hosts: hosts}, nil
+	return &HostResourcePlanner{hosts: hosts}, nil
 }
 
-func NewAttachPlanner(hosts hostbindings.Reader) (*AttachPlanner, error) {
-	if hosts == nil {
-		return nil, errs.New(errs.KindInternal, "Blueprint Attach planner requires host ownership storage")
+func (planner *HostResourcePlanner) PrepareBlueprintWork(ctx context.Context, task workexecution.Task,
+	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
+) (PreparedUnit, error) {
+	switch unit.Target.Kind {
+	case ids.KindNetwork, ids.KindAttach:
+	case ids.KindEnvEntry:
+		if !unit.Removal {
+			return PreparedUnit{}, errs.New(
+				errs.KindValidationFailed,
+				"Native Entry configuration is for captured omissions",
+			)
+		}
+	default:
+		return PreparedUnit{}, errs.New(errs.KindValidationFailed, "Resource has a separate admission policy")
 	}
-	return &AttachPlanner{hosts: hosts}, nil
+	operation, err := DeferredResourceOperation(unit.Target.Kind, unit.Removal)
+	if err != nil {
+		return PreparedUnit{}, err
+	}
+	return prepareHostResource(ctx, planner.hosts, task, unit, baseline, unit.Target.Kind, operation)
 }
 
 func NewComponentPlanner(hosts hostbindings.Reader) (*ComponentPlanner, error) {
@@ -56,22 +73,6 @@ func (planner *ServicePlanner) PrepareBlueprintWork(ctx context.Context, task wo
 		return planner.prepareRemoval(ctx, task, unit, baseline)
 	}
 	return prepareHostResource(ctx, planner.hosts, task, unit, baseline, ids.KindService, workexecution.Release)
-}
-
-func (planner *NetworkPlanner) PrepareBlueprintWork(ctx context.Context, task workexecution.Task,
-	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
-) (PreparedUnit, error) {
-	return prepareHostResource(ctx, planner.hosts, task, unit, baseline, ids.KindNetwork, workexecution.Network)
-}
-
-func (planner *AttachPlanner) PrepareBlueprintWork(ctx context.Context, task workexecution.Task,
-	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
-) (PreparedUnit, error) {
-	operation := workexecution.Attach
-	if unit.Removal {
-		operation = workexecution.Detach
-	}
-	return prepareHostResource(ctx, planner.hosts, task, unit, baseline, ids.KindAttach, operation)
 }
 
 func (planner *ComponentPlanner) PrepareBlueprintWork(ctx context.Context, task workexecution.Task,
@@ -108,6 +109,13 @@ func prepareHostResource(ctx context.Context, hosts hostbindings.Reader, task wo
 	unit blueprintunits.Unit, baseline blueprintunits.Snapshot, kind ids.Kind,
 	operation workexecution.Operation,
 ) (PreparedUnit, error) {
+	expected, err := DeferredResourceOperation(kind, unit.Removal)
+	if err != nil || operation != expected {
+		return PreparedUnit{}, errs.New(
+			errs.KindInternal,
+			"Blueprint planner selected an unsupported native input operation",
+		)
+	}
 	if task.Validate() != nil || task.Action != workexecution.ActionApply || task.PublicationComplete ||
 		task.Scope.EnvironmentID != baseline.EnvironmentID || baseline.ReadRevision <= 0 ||
 		blueprintunits.ValidateUnit(unit) != nil || unit.Target.Kind != kind {

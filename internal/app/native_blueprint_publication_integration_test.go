@@ -161,6 +161,13 @@ func TestNativeBlueprintInputSupersessionFencesPlanningAndConcurrentHead(t *test
 				units,
 				[]workdispatch.InputRegistration{
 					{Action: workexecution.ActionApply, Operation: workexecution.Release, Owner: planner},
+					{Action: workexecution.ActionApply, Operation: workexecution.ServiceRemoval, Owner: planner},
+					{Action: workexecution.ActionApply, Operation: workexecution.Component, Owner: planner},
+					{Action: workexecution.ActionApply, Operation: workexecution.Volume, Owner: planner},
+					{Action: workexecution.ActionApply, Operation: workexecution.Network, Owner: planner},
+					{Action: workexecution.ActionApply, Operation: workexecution.Attach, Owner: planner},
+					{Action: workexecution.ActionApply, Operation: workexecution.Detach, Owner: planner},
+					{Action: workexecution.ActionApply, Operation: workexecution.EntryConfiguration, Owner: planner},
 				},
 			)
 			if err != nil {

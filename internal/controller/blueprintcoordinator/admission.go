@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -42,14 +43,14 @@ func NewAdmission(registrations []ResourceRegistration) (*Admission, error) {
 			return nil, errs.New(errs.KindInternal, "Blueprint work planner registration is missing or duplicated")
 		}
 		switch registration.Kind {
-		case ids.KindService, ids.KindNetwork, ids.KindVolume,
+		case ids.KindService, ids.KindEnvEntry, ids.KindNetwork, ids.KindVolume,
 			ids.KindAttach, ids.KindComponent:
 		default:
 			return nil, errs.New(errs.KindInternal, "Blueprint work planner resource kind is unsupported")
 		}
 		planners[registration.Kind] = registration.Planner
 	}
-	for _, kind := range []ids.Kind{ids.KindService, ids.KindNetwork, ids.KindVolume,
+	for _, kind := range []ids.Kind{ids.KindService, ids.KindEnvEntry, ids.KindNetwork, ids.KindVolume,
 		ids.KindAttach, ids.KindComponent} {
 		if planners[kind] == nil {
 			return nil, errs.New(errs.KindInternal, "Blueprint work planner catalog is incomplete")
@@ -60,7 +61,7 @@ func NewAdmission(registrations []ResourceRegistration) (*Admission, error) {
 
 func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task,
 	plan blueprintunits.DesiredPlan, baseline blueprintunits.Snapshot, components map[string]core.ComponentSpec,
-	attaches []blueprintattachinputs.Generation,
+	attaches []blueprintattachinputs.Generation, detaches []attachremoval.BlueprintInput,
 ) (blueprintunits.CapturedGraph, error) {
 	if admission == nil || ctx == nil || !plan.Complete || plan.ParentTaskID != task.ID ||
 		plan.EnvironmentID != task.Scope.EnvironmentID || baseline.EnvironmentID != plan.EnvironmentID ||
@@ -80,6 +81,24 @@ func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task
 		}
 		controllerBindings[generation.AttachID] = generation.SettlesInController()
 	}
+
+	removals := make(map[string]attachremoval.BlueprintInput, len(detaches))
+	for _, captured := range detaches {
+		if captured.Validate(ctx, false) != nil || captured.TaskID != task.ID ||
+			captured.EnvironmentID != task.Scope.EnvironmentID {
+			return blueprintunits.CapturedGraph{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Detach placement requires its admission snapshot",
+			)
+		}
+		if _, duplicate := removals[captured.AttachID]; duplicate {
+			return blueprintunits.CapturedGraph{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Detach capture is duplicated",
+			)
+		}
+		removals[captured.AttachID] = captured
+	}
 	for _, unit := range plan.Units {
 		if err := ctx.Err(); err != nil {
 			return blueprintunits.CapturedGraph{}, err
@@ -90,7 +109,6 @@ func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task
 		selected := PreparedUnit{Unit: unit, Operation: workexecution.EntrySettlement,
 			Placement: workexecution.Placement{Executor: workexecution.Controller}}
 		switch unit.Target.Kind {
-		case ids.KindEnvEntry:
 		case ids.KindRoute, ids.KindScript, ids.KindDNSRecord:
 			selected.Operation = workexecution.ResourceDefinition
 			input, err := blueprintunits.DefinitionWorkInput(task, unit)
@@ -98,6 +116,11 @@ func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task
 				return blueprintunits.CapturedGraph{}, err
 			}
 			selected.Input = &input
+		case ids.KindEnvEntry:
+			if !unit.Removal {
+				break
+			}
+			fallthrough
 		default:
 			if unit.Target.Kind == ids.KindAttach && !unit.Removal && controllerBindings[unit.Target.ID] {
 				selected.Operation = workexecution.Attach
@@ -131,6 +154,23 @@ func (admission *Admission) Prepare(ctx context.Context, task workexecution.Task
 					errs.KindInternal,
 					"Blueprint work planner changed the captured resource plan",
 				)
+			}
+		}
+
+		if unit.Target.Kind == ids.KindAttach && unit.Removal {
+			captured, found := removals[unit.Target.ID]
+			if !found {
+				return blueprintunits.CapturedGraph{}, errs.New(
+					errs.KindValidationFailed,
+					"Blueprint Detach has no frozen admission source",
+				)
+			}
+			hostID := selected.Placement.HostID
+			if captured.Snapshot != nil {
+				selected.EffectClaims = attachremoval.RemovalClaims(captured.Snapshot.Source.Attach, hostID)
+			}
+			if !captured.HasHostEffects() {
+				selected.Placement = workexecution.Placement{Executor: workexecution.Controller}
 			}
 		}
 		prepared = append(prepared, selected)

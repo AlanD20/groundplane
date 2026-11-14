@@ -20,7 +20,7 @@ func (service *Service) captureComponentWorkConfiguration(ctx context.Context, w
 		work.Item.Item.ID,
 		"component-configuration",
 	)
-	return service.repository.PrepareComponentWorkConfiguration(ctx, work, configurationID,
+	return service.repository.PrepareResourceWorkConfiguration(ctx, work, configurationID,
 		placement.Selection.Source.desired.Record.RenderGeneration, files)
 }
 

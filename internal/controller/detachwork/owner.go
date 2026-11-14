@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/attachplan"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,17 +20,19 @@ type Owner struct {
 	queue   *workqueue.Repository
 	inputs  *attachremoval.InputRepository
 	planner *attachplan.RemovalPlanner
+	units   *blueprintunits.Repository
 }
 
 func New(
 	queue *workqueue.Repository,
 	inputs *attachremoval.InputRepository,
 	planner *attachplan.RemovalPlanner,
+	units *blueprintunits.Repository,
 ) (*Owner, error) {
-	if queue == nil || inputs == nil || planner == nil {
+	if queue == nil || inputs == nil || planner == nil || units == nil {
 		return nil, errs.New(errs.KindInternal, "Detach execution requires one queue and captured input owners")
 	}
-	return &Owner{queue: queue, inputs: inputs, planner: planner}, nil
+	return &Owner{queue: queue, inputs: inputs, planner: planner, units: units}, nil
 }
 
 func (owner *Owner) Admit(
@@ -57,7 +60,7 @@ func (owner *Owner) Admit(
 		if item.Placement.Executor != workexecution.Controller {
 			return workdispatch.Decision{}, errs.New(errs.KindStateConflict, "Detach decision cannot execute host work")
 		}
-		change, err := owner.inputs.PrepareDetachDecision(ctx, view, at)
+		change, err := owner.prepareDecision(ctx, view, at)
 		return workdispatch.Decision{Disposition: workdispatch.Settle, Change: change}, err
 	}
 	if item.Placement.Executor != workexecution.Agent ||
@@ -108,6 +111,9 @@ func (owner *Owner) prepareQueuedStop(
 	view workqueue.View,
 	at time.Time,
 ) (workqueue.Change, error) {
+	if view.Item.Item.Input == nil {
+		return workqueue.PrepareInputSettlement(view, at)
+	}
 	if view.Item.Item.AttemptNumber == 0 {
 		return owner.inputs.PrepareDetachDecision(ctx, view, at)
 	}

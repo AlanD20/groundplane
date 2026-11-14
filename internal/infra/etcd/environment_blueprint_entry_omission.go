@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -53,15 +54,6 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 			"Blueprint Entry omission has been superseded",
 		)
 	}
-	// Per-Service acknowledgements can be newer than the Environment-wide
-	// projection. Their presence precludes a metadata-only absence proof, even
-	// when the older projection does not list this Entry.
-	for _, applied := range snapshot.Applied {
-		if applied.Record.Target.Kind == ids.KindService && applied.Record.Execution != nil &&
-			applied.Record.State != blueprintunits.Absent {
-			return workqueue.Change{}, false, nil
-		}
-	}
 	environmentID, entryID := parent.Scope.EnvironmentID, unit.Target.ID
 	keys := []string{
 		workqueue.TaskKey(parent.ID), workqueue.ItemKey(work.Item.Item.ID),
@@ -83,7 +75,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 	defer keyvalue.ClearValues(read.Values)
 	conditions := make([]keyvalue.Condition, 0, len(keys))
 	for index, value := range read.Values {
-		if (index < 7 && value == nil) || (value != nil && value.Key != keys[index]) {
+		if (index < 4 && value == nil) || (value != nil && value.Key != keys[index]) {
 			return workqueue.Change{}, false, errs.New(
 				errs.KindStateConflict,
 				"Blueprint Entry omission authority is unavailable",
@@ -125,31 +117,32 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 			return workqueue.Change{}, false, errs.New(errs.KindStateConflict, "Blueprint Entry is still declared")
 		}
 	}
-	record, err := entries.DecodeRecord(read.Values[4].Value)
-	if err != nil || record.Entry.ID != entryID || record.EnvironmentID != environmentID ||
-		string(read.Values[5].Value) != entryID || string(read.Values[6].Value) != environmentID {
-		return workqueue.Change{}, false, errs.New(errs.KindStateConflict, "Blueprint Entry omission owner changed")
+	record, sourceConditions, err := repository.omittedEntryRecord(ctx, work, unit, snapshot, owned, read.Values)
+	if err != nil {
+		return workqueue.Change{}, false, err
 	}
+
 	if _, declared := desired.Input.Entries[record.BlueprintKey]; declared {
 		return workqueue.Change{}, false, errs.New(
 			errs.KindStateConflict,
 			"Blueprint Entry omission retains its authored name",
 		)
 	}
-	if read.Values[7] != nil {
-		applied, err := environmentprojection.DecodeEnvironmentComposeProjectionStorage(read.Values[7].Value)
-		if err != nil || applied.EnvironmentID != environmentID {
-			return workqueue.Change{}, false, errs.New(
-				errs.KindStateConflict,
-				"Blueprint Entry applied runtime is invalid",
-			)
-		}
-		for _, entry := range applied.Entries {
-			if entry.Entry.ID == entryID {
-				return workqueue.Change{}, false, nil
-			}
-		}
+	files, err := runtimeconfiguration.New(repository.store)
+	if err != nil {
+		return workqueue.Change{}, false, err
 	}
+	configuration, configurationRevision, err := files.ReadAcknowledged(ctx, environmentID, snapshot.ReadRevision)
+	if err != nil {
+		return workqueue.Change{}, false, err
+	}
+	if configuration.ReferencesEntry(entryID) {
+		return workqueue.Change{}, false, nil
+	}
+	conditions = append(
+		conditions,
+		keyvalue.Condition{Key: runtimeconfiguration.HeadKey(environmentID), ModRevision: configurationRevision},
+	)
 	for _, value := range read.Values[8:] {
 		if value != nil {
 			return workqueue.Change{}, false, errs.New(
@@ -176,7 +169,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 	if len(retirementConditions) != 1 || retirementConditions[0] != conditions[6] {
 		return workqueue.Change{}, false, errs.New(errs.KindStateConflict, "Blueprint Entry retirement lookup changed")
 	}
-	receipt, err := blueprintunits.PrepareEntryWorkSettlement(
+	receipt, err := blueprintunits.PrepareEntryOmissionDecision(
 		snapshot, work, unit, record.CurrentValueGenerationID, at,
 	)
 	if err != nil {
@@ -193,6 +186,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntryOmission(
 	}
 	defer clear(epochMutation.Value)
 	conditions = append(conditions, receipt.Conditions...)
+	conditions = append(conditions, sourceConditions...)
 	conditions = append(conditions, scriptConditions...)
 	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations = append(mutations, receipt.Mutations...)

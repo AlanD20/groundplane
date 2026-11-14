@@ -27,6 +27,9 @@ func NewInputPreparations(queue *workqueue.Repository, units *blueprintunits.Rep
 	if queue == nil || units == nil || len(registrations) == 0 {
 		return nil, errs.New(errs.KindInternal, "Blueprint input preparation requires ownership and typed planners")
 	}
+	if err := ValidateInputPreparations(registrations); err != nil {
+		return nil, err
+	}
 	result := make([]workdispatch.InputRegistration, 0, len(registrations))
 	for _, registration := range registrations {
 		if registration.Action != workexecution.ActionApply || registration.Owner == nil ||

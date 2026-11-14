@@ -50,6 +50,7 @@ func (service *Service) planAuthoredUnits(
 		ctx,
 		input.desired.EnvironmentID,
 		omissions,
+		input.identities,
 		snapshot.ReadRevision,
 	)
 	if err != nil {
@@ -126,6 +127,7 @@ func orderAuthoredRemovalUnits(units []blueprintunits.Unit) []blueprintunits.Uni
 	for _, unit := range units {
 		byKind[unit.Target.Kind] = append(byKind[unit.Target.Kind], unit.Target)
 	}
+	entryRemovals := canonicalAuthoredUnitKeys(byKind[ids.KindEnvEntry])
 	for index := range units {
 		var after []blueprintunits.ResourceKey
 		switch units[index].Target.Kind {
@@ -139,6 +141,15 @@ func orderAuthoredRemovalUnits(units []blueprintunits.Unit) []blueprintunits.Uni
 			after = append(after, byKind[ids.KindComponent]...)
 		case ids.KindEnvEntry, ids.KindVolume:
 			after = append(after, byKind[ids.KindScript]...)
+		}
+
+		if units[index].Target.Kind == ids.KindEnvEntry {
+			for order, target := range entryRemovals {
+				if target == units[index].Target && order > 0 {
+					after = append(after, entryRemovals[order-1])
+					break
+				}
+			}
 		}
 		units[index].After = canonicalAuthoredUnitKeys(after)
 	}

@@ -8,6 +8,7 @@ import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
+	"github.com/AlanD20/groundplane/internal/controller/entryfiles"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -283,7 +284,13 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	}
 	var references []materializationrecord.Record
 	if request.action == entryDesiredMutationRemove {
-		references, err = service.removalSources(ctx, request.entryID, removalConfiguration.Files, allocator)
+		references, err = entryfiles.RemoveEntry(
+			ctx,
+			request.entryID,
+			removalConfiguration.Files,
+			allocator.Named,
+			service.materials,
+		)
 	} else {
 		references, err = service.entryMaterializations(ctx, request.environmentID, allocator, materializations)
 	}

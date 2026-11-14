@@ -36,7 +36,10 @@ func (service *Service) PrepareEntrySettlement(
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry settlement is not configured")
 	}
 	if unit.Removal {
-		return service.prepareEntryOmission(ctx, work, unit)
+		return workqueue.Change{}, errs.New(
+			errs.KindInternal,
+			"Entry omissions require their native file-cleanup owner",
+		)
 	}
 	settler, ok := service.repository.(authoredEntrySettlementRepository)
 	if !ok {

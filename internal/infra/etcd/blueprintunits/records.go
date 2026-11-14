@@ -62,6 +62,7 @@ type AppliedRecord struct {
 	ControllerComponentRuntimeRevision  int64                          `json:"controller_component_runtime_revision,omitempty"`
 	ControllerProxySelection            bool                           `json:"controller_proxy_selection,omitempty"`
 	ControllerScriptSetRevision         int64                          `json:"controller_script_set_revision,omitempty"`
+	ControllerDetach                    *ControllerDetachReceipt       `json:"controller_detach,omitempty"`
 	ControllerDNS                       *DNSReceipt                    `json:"controller_dns,omitempty"`
 	MetadataDNS                         *MetadataDNSReceipt            `json:"metadata_dns,omitempty"`
 	ControllerServiceDeclarationAbsence *ServiceDeclarationAbsence     `json:"controller_service_declaration_absence,omitempty"`
@@ -239,6 +240,12 @@ func validateApplied(record AppliedRecord) error {
 	if ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil || !validKey(record.Target) ||
 		!validKeys(record.AffectedWrites) {
 		return invalidRecord()
+	}
+	if record.ControllerDetach != nil {
+		if !validControllerDetach(record) {
+			return invalidRecord()
+		}
+		return nil
 	}
 	if record.MetadataDNS != nil {
 		if !validMetadataDNSReceipt(record) {

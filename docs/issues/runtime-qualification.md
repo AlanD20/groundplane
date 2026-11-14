@@ -27,6 +27,30 @@ through the real Console/CLI/API; desired state is not live-health evidence.
 
 ## Hosting, configuration and recovery
 
+### Partial-Apply cleanup
+
+Successful first Apply does not qualify cleanup after a stopped or failed Apply.
+A declaration can exist before its backing binding, value generation or runtime
+projection. Native cleanup must distinguish those states using retained immutable
+declarations and positive birth/effect evidence; a missing generated record alone
+proves neither corruption nor safe absence.
+
+Native cleanup must register its input owners before accepting work and retain
+completion evidence for decisions made before executable input exists. Entry
+cleanup uses acknowledged file sources rather than the presence of an unrelated
+running Service. DNS withdrawal distinguishes a serving resolver from verified
+stopped or never-published state. The combined installed journey remains open.
+
+Closure requires native removal inputs frozen under the accepted Apply, exact
+credential/Secret ownership, dependency ordering and current runtime claims;
+declared-only resources need a Controller absence proof rather than fabricated
+Agent execution. Applied resources retain their normal host cleanup and recovery.
+Qualify partial Apply followed by omission, reapply and application startup,
+including multiple connections belonging to one consumer. No compatibility reader,
+history rewrite or reset establishes that behavior.
+
+### Other hosting qualification
+
 Historical H35 and H46 close specific same-name backing overlap and failed-rollout
 recovery sequences on their recorded candidates. They do not establish every
 current Entry/Attach/Blueprint writer, source-retention path or recovery variant.

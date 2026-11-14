@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
@@ -87,6 +88,19 @@ func (repository *InputRepository) PrepareAppliedState(ctx context.Context, view
 	}
 	proof.Conditions = append(proof.Conditions, removal.Conditions...)
 	proof.Mutations = append(proof.Mutations, removal.Mutations...)
+
+	if capture.BlueprintRemoval != nil {
+		ledger, err := blueprintunits.NewRepository(repository.store)
+		if err != nil {
+			return workqueue.Change{}, err
+		}
+		receipt, err := ledger.PrepareEntryRemovalCompletionReceipt(ctx, view)
+		if err != nil {
+			return workqueue.Change{}, err
+		}
+		proof.Conditions = append(proof.Conditions, receipt.Conditions...)
+		proof.Mutations = append(proof.Mutations, receipt.Mutations...)
+	}
 	sources, err := runtimeconfiguration.New(repository.store)
 	if err != nil {
 		return workqueue.Change{}, err

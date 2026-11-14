@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeprovenance"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/serviceremovalwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -195,7 +196,19 @@ func (repository *ServiceRepository) captureBlueprintServiceRemoval(
 			"Service removal is fenced by a different operation",
 		)
 	}
+	var prerequisiteGuards []keyvalue.Condition
 	if source.RuntimeRevision != runtime.Revision {
+		var ownPredecessor bool
+		prerequisiteGuards, ownPredecessor, err = runtimeprovenance.PredecessorConditions(
+			ctx,
+			repository.store,
+			view,
+			runtime,
+			graph.Record.Items,
+		)
+		if err != nil {
+			return blueprintRemovalCapture{}, err
+		}
 		reject := func(reason string) blueprintRemovalCapture {
 			return blueprintRemovalCapture{rejection: reason, guards: []keyvalue.Condition{
 				{Key: blueprintunits.CapturedGraphKey(task.Scope.EnvironmentID, task.ID), ModRevision: graph.Revision},
@@ -204,7 +217,7 @@ func (repository *ServiceRepository) captureBlueprintServiceRemoval(
 				{Key: serviceremovalwork.InputKey(item.ID)},
 			}}
 		}
-		if source.Predecessor == nil || runtime.Revision == 0 {
+		if !ownPredecessor && (source.Predecessor == nil || runtime.Revision == 0) {
 			return reject(
 				"Service runtime changed after this Apply was accepted. Apply the Blueprint again to capture the current runtime.",
 			), nil
@@ -213,9 +226,9 @@ func (repository *ServiceRepository) captureBlueprintServiceRemoval(
 		if err != nil {
 			return blueprintRemovalCapture{}, err
 		}
-		fromPredecessor := runtime.Record.Source.TaskID == source.Predecessor.TaskID &&
+		fromPredecessor := source.Predecessor != nil && runtime.Record.Source.TaskID == source.Predecessor.TaskID &&
 			runtime.Record.Source.WorkItemID == source.Predecessor.WorkItemID
-		if !fromPredecessor && fingerprint != source.RuntimeSHA256 {
+		if !ownPredecessor && !fromPredecessor && fingerprint != source.RuntimeSHA256 {
 			return reject(
 				"Service runtime was changed by another operation. Apply the Blueprint again; this removal did not run.",
 			), nil
@@ -277,5 +290,6 @@ func (repository *ServiceRepository) captureBlueprintServiceRemoval(
 			ModRevision: owned.Revision,
 		},
 	)
+	guards = append(guards, prerequisiteGuards...)
 	return blueprintRemovalCapture{input: input, service: current, guards: guards}, nil
 }

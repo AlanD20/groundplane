@@ -5,6 +5,15 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Reconcile omitted connections from retained Blueprint declarations, with native
+  cleanup ordering, captured hook/Secret inputs and explicit resource receipts.
+- Remove omitted Entry files through the existing native file-cleanup and recovery
+  path; keep loaded process environments until the next Deploy.
+- Preserve completion evidence for work cancelled before input creation, and
+  allow DNS withdrawal with a stopped or never-published resolver.
+- The new cleanup receipts use storage epoch 48; this unreleased format requires
+  a clean cutover from epoch 47, with no compatibility reader.
+
 - Allow Detach before first Deploy and while initial Blueprint runtime rendering
   is pending, preserving concurrent deployment and desired-state checks.
 - Keep Attach provisioning, Release, Script and Environment-removal checkpoint

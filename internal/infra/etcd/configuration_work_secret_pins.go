@@ -32,7 +32,7 @@ func prepareConfigurationWorkSecretPins(ctx context.Context, store configuration
 		return tasksecretpins.Prepared{}, err
 	}
 	if store == nil ||
-		(work.Item.Item.Operation != workexecution.Release && work.Item.Item.Operation != workexecution.Component) ||
+		(work.Item.Item.Operation != workexecution.Release && work.Item.Item.Operation != workexecution.Component && work.Item.Item.Operation != workexecution.EntryConfiguration) ||
 		ids.Validate(ids.KindOperation, operationID) != nil ||
 		work.Task.Revision <= 0 ||
 		work.Item.Revision <= 0 ||

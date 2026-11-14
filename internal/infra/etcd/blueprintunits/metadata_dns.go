@@ -34,7 +34,7 @@ func validMetadataDNSReceipt(record AppliedRecord) bool {
 		record.ControllerValueGenerationID != "" || record.ControllerRuntimeRevision != 0 || record.ControllerAuthoredRevision != 0 ||
 		record.ControllerComponentRecordRevision != 0 || record.ControllerComponentRuntimeRevision != 0 ||
 		record.ControllerProxySelection || record.ControllerScriptSetRevision != 0 || record.ControllerDNS != nil ||
-		record.ControllerServiceDeclarationAbsence != nil {
+		record.ControllerServiceDeclarationAbsence != nil || record.ControllerDetach != nil {
 		return false
 	}
 	if proof.NeverPublished {

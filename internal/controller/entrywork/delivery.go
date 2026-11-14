@@ -92,7 +92,7 @@ func (owner *AgentWork) capturedAssignment(
 	if err != nil {
 		return nil, nil, err
 	}
-	if input.EnvironmentId != task.Scope.EnvironmentID || input.EnvironmentId != item.TargetID {
+	if input.EnvironmentId != task.Scope.EnvironmentID {
 		return nil, nil, errs.New(errs.KindStateConflict, "Entry assignment targets a different Environment")
 	}
 	owned, err := executionplan.OpenEntryConfigurationWorkInput(attempt, input)

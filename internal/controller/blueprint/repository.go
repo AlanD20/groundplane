@@ -2,13 +2,16 @@ package blueprint
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
@@ -31,6 +34,22 @@ import (
 )
 
 type environmentBlueprintRepository interface {
+	PrepareBlueprintEntryOmission(
+		context.Context,
+		workqueue.View,
+		blueprintunits.Unit,
+		time.Time,
+	) (workqueue.Change, bool, error)
+	ReadEntryRemovalConfiguration(context.Context, string, int64) (etcd.EntryRemovalConfiguration, error)
+	ReadBlueprintEntryRemoval(
+		context.Context,
+		workqueue.View,
+		blueprintunits.Unit,
+	) (etcd.BlueprintEntryRemovalSource, error)
+	CaptureBlueprintDetach(context.Context, workexecution.Task, blueprintunits.Unit,
+		projectionrecord.EnvironmentOwnedIdentities, blueprintunits.Snapshot) (attachremoval.BlueprintInput, error)
+	ReadBlueprintOmissionSource(context.Context, projectionrecord.EnvironmentOwnedIdentities,
+		ids.Kind, string, int64) (blueprints.OmissionSource, error)
 	GetBlueprintPrerequisiteAuthority(context.Context, string, string, int64,
 	) (etcdstore.Versioned[etcd.BlueprintPrerequisiteAuthority], bool, error)
 	ValidateAgentProxyPublication(
@@ -39,24 +58,24 @@ type environmentBlueprintRepository interface {
 		componentplanning.ProxyServicePreflight,
 		workqueue.Change,
 	) error
-	LoadComponentWorkConfiguration(
+	LoadWorkConfiguration(
 		context.Context,
 		runtimeconfiguration.Reference,
 	) (runtimeconfiguration.Snapshot, error)
-	PrepareComponentWorkSecretPins(
+	PrepareResourceWorkSecretPins(
 		context.Context,
 		workqueue.View,
 		string,
 		runtimeconfiguration.WorkCapture,
 	) (tasksecretpins.Prepared, error)
-	PrepareComponentWorkConfiguration(
+	PrepareResourceWorkConfiguration(
 		context.Context,
 		workqueue.View,
 		string,
 		uint64,
 		[]taskmaterialization.Record,
 	) (runtimeconfiguration.WorkCapture, error)
-	ComponentWorkConfigurationConditions(
+	ResourceWorkConfigurationConditions(
 		context.Context,
 		workqueue.View,
 		runtimeconfiguration.WorkCapture,

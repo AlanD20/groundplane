@@ -113,7 +113,7 @@ func (owner *ComponentWorkPreparation) Prepare(ctx context.Context, taskID, work
 		return err
 	}
 	defer keyvalue.ClearMutationValues(prepared.Placement.Change.Mutations)
-	guards, err := owner.service.repository.ComponentWorkConfigurationConditions(
+	guards, err := owner.service.repository.ResourceWorkConfigurationConditions(
 		ctx,
 		work,
 		prepared.Capture.Configuration,

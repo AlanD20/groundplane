@@ -12,14 +12,14 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *EnvironmentBlueprintRepository) PrepareComponentWorkConfiguration(ctx context.Context,
+func (repository *EnvironmentBlueprintRepository) PrepareResourceWorkConfiguration(ctx context.Context,
 	work workqueue.View, configurationID string, generation uint64, files []taskmaterialization.Record,
 ) (runtimeconfiguration.WorkCapture, error) {
 	if repository == nil || repository.HierarchyRepository == nil ||
-		work.Item.Item.Operation != workexecution.Component {
+		(work.Item.Item.Operation != workexecution.Component && work.Item.Item.Operation != workexecution.EntryConfiguration) {
 		return runtimeconfiguration.WorkCapture{}, errs.New(
 			errs.KindValidationFailed,
-			"Component configuration requires native Component work",
+			"Configuration requires native Component or Entry cleanup work",
 		)
 	}
 	sources, err := runtimeconfiguration.New(repository.store)
@@ -37,7 +37,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareComponentWorkConfigurat
 	)
 }
 
-func (repository *EnvironmentBlueprintRepository) LoadComponentWorkConfiguration(ctx context.Context,
+func (repository *EnvironmentBlueprintRepository) LoadWorkConfiguration(ctx context.Context,
 	reference runtimeconfiguration.Reference,
 ) (runtimeconfiguration.Snapshot, error) {
 	if repository == nil || repository.HierarchyRepository == nil {
@@ -53,25 +53,25 @@ func (repository *EnvironmentBlueprintRepository) LoadComponentWorkConfiguration
 	return sources.LoadRetained(ctx, reference)
 }
 
-func (repository *EnvironmentBlueprintRepository) PrepareComponentWorkSecretPins(ctx context.Context,
+func (repository *EnvironmentBlueprintRepository) PrepareResourceWorkSecretPins(ctx context.Context,
 	work workqueue.View, operationID string, capture runtimeconfiguration.WorkCapture,
 ) (tasksecretpins.Prepared, error) {
 	if repository == nil || repository.HierarchyRepository == nil ||
-		work.Item.Item.Operation != workexecution.Component {
+		(work.Item.Item.Operation != workexecution.Component && work.Item.Item.Operation != workexecution.EntryConfiguration) {
 		return tasksecretpins.Prepared{}, errs.New(
 			errs.KindValidationFailed,
-			"Secret retention requires native Component work",
+			"Secret retention requires captured resource configuration",
 		)
 	}
 	return prepareConfigurationWorkSecretPins(ctx, repository.store, work, operationID, capture)
 }
 
-func (repository *EnvironmentBlueprintRepository) ComponentWorkConfigurationConditions(ctx context.Context,
+func (repository *EnvironmentBlueprintRepository) ResourceWorkConfigurationConditions(ctx context.Context,
 	work workqueue.View, capture runtimeconfiguration.WorkCapture,
 ) ([]keyvalue.Condition, error) {
 	if repository == nil || repository.HierarchyRepository == nil ||
-		work.Item.Item.Operation != workexecution.Component {
-		return nil, errs.New(errs.KindValidationFailed, "Component configuration admission requires native work")
+		(work.Item.Item.Operation != workexecution.Component && work.Item.Item.Operation != workexecution.EntryConfiguration) {
+		return nil, errs.New(errs.KindValidationFailed, "Configuration admission requires native resource work")
 	}
 	if err := capture.Matches(work.Task.Task, work.Item.Item); err != nil {
 		return nil, err

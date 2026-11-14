@@ -53,7 +53,7 @@ func (repository *InputRepository) PrepareUnstarted(
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	if input.EnvironmentId != item.TargetID || input.EnvironmentId != task.Scope.EnvironmentID {
+	if input.EnvironmentId != task.Scope.EnvironmentID {
 		return workqueue.Change{}, conflict("Entry settlement differs from its captured resource")
 	}
 	value, err := recordcodec.Encode("entry-unstarted", UnstartedResult{TaskID: task.ID, WorkItemID: item.ID,

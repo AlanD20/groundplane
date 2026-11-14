@@ -14,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -87,13 +88,19 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDNS(
 	if unit.Removal != (binding == nil) {
 		return BlueprintDNSPreparation{}, errs.New(errs.KindStateConflict, "Blueprint DNS declaration changed")
 	}
-	ack, ready, err := readResolverAcknowledgement(ctx, repository.store, snapshot.ReadRevision)
+	purpose := resolverServingAcknowledgement
+	if unit.Removal {
+		purpose = resolverWithdrawalBeforeEffects
+	}
+	ack, ready, err := readResolverStateAcknowledgement(ctx, repository.store, snapshot.ReadRevision, purpose)
 	if err != nil {
 		return BlueprintDNSPreparation{}, err
 	}
 	conditions = append(conditions, ack.conditions...)
-	if !ready || ack.state.Applied == nil ||
-		!blueprintDNSBindingAcknowledged(*ack.state.Applied, unit.Target.ID, binding) {
+	withdrawn := unit.Removal && (ack.state.Applied == nil || !ack.state.Applied.Desired.Enabled)
+	if !ready ||
+		!withdrawn &&
+			(ack.state.Applied == nil || !blueprintDNSBindingAcknowledged(*ack.state.Applied, unit.Target.ID, binding)) {
 		failedTaskID, _, err := failedResolverConfigurationRequest(ctx, repository.store, snapshot.ReadRevision, ack)
 		if err != nil {
 			return BlueprintDNSPreparation{}, err
@@ -138,8 +145,12 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDNS(
 		})
 		keyvalue.ClearValues(claimRead.Values)
 	}
+	var hosts []platformcomponents.PlatformDNSHost
+	if applied := ack.state.Applied; applied != nil && applied.Desired.Enabled {
+		hosts = applied.Hosts
+	}
 	retirementConditions, mutations, more, err := reader.PrepareHostnameRetirement(ctx,
-		snapshot.EnvironmentID, unit.Target.ID, keepHostname, ack.state.Applied.Hosts, snapshot.ReadRevision,
+		snapshot.EnvironmentID, unit.Target.ID, keepHostname, hosts, snapshot.ReadRevision,
 	)
 	if err != nil {
 		return BlueprintDNSPreparation{}, err
@@ -149,9 +160,11 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintDNS(
 		return BlueprintDNSPreparation{}, nil
 	}
 	if !more {
-		proof := blueprintunits.DNSReceipt{
-			ComponentID: ack.state.Applied.ComponentID, HostID: ack.state.HostID,
-			AppliedRevision: ack.state.AppliedRevision, CorefileSHA256: ack.state.Applied.ConfigurationSHA256(), Binding: binding,
+
+		proof := blueprintunits.DNSReceipt{ComponentID: ack.component.Desired.ID, HostID: ack.state.HostID,
+			AppliedRevision: ack.state.AppliedRevision, Binding: binding, NeverPublished: ack.state.Applied == nil}
+		if applied := ack.state.Applied; applied != nil {
+			proof.CorefileSHA256, proof.ResolverEnabled = applied.ConfigurationSHA256(), applied.Desired.Enabled
 		}
 		receipt, err := blueprintunits.PrepareDNSWorkSettlement(snapshot, work, unit, authoredRevision, proof, at)
 		if err != nil {

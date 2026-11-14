@@ -1,4 +1,4 @@
-package operations
+package entryfiles
 
 import (
 	"context"
@@ -8,18 +8,21 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
-	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// removalSources edits only acknowledged file sources containing this Entry.
+type Resolver interface {
+	ResolveTaskMaterializationSource(context.Context, string, taskmaterialization.Source) ([]byte, error)
+}
+
+// RemoveEntry edits only acknowledged file sources containing this Entry.
 // Other values stay pinned to their applied generations, even if desired state
 // already contains unrelated edits. No Compose consumer is selected for removal.
-func (service *entryDesiredMutationService) removalSources(ctx context.Context, entryID string,
-	snapshot runtimeconfiguration.Snapshot, allocator *desiredrevision.BlueprintIdentityAllocator,
+func RemoveEntry(ctx context.Context, entryID string, snapshot runtimeconfiguration.Snapshot,
+	allocate func(ids.Kind, string) string, resolve Resolver,
 ) ([]taskmaterialization.Record, error) {
-	if ids.Validate(ids.KindEnvEntry, entryID) != nil || allocator == nil {
+	if ids.Validate(ids.KindEnvEntry, entryID) != nil || allocate == nil || resolve == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Entry removal source identity is invalid")
 	}
 	var changes []taskmaterialization.Record
@@ -61,12 +64,12 @@ func (service *entryDesiredMutationService) removalSources(ctx context.Context, 
 			}
 			file.Source = taskmaterialization.Source{Kind: taskmaterialization.SourceRemoval}
 		}
-		file.StepID = allocator.Named(ids.KindStep, "entry-removal-step/"+file.Destination)
-		file.MaterializationID = allocator.Named(ids.KindConfig, "entry-removal/"+file.Destination)
+		file.StepID = allocate(ids.KindStep, "entry-removal-step/"+file.Destination)
+		file.MaterializationID = allocate(ids.KindConfig, "entry-removal/"+file.Destination)
 		var content []byte
 		if !remove {
 			var err error
-			content, err = service.materials.ResolveTaskMaterializationSource(ctx, snapshot.EnvironmentID, file.Source)
+			content, err = resolve.ResolveTaskMaterializationSource(ctx, snapshot.EnvironmentID, file.Source)
 			if err != nil {
 				clear(content)
 				return nil, err

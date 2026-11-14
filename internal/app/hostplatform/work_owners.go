@@ -169,7 +169,7 @@ func (platform *Platform) newWorkOwners(
 	if err != nil {
 		return nil, err
 	}
-	detaches, err := detachwork.New(queue, detachRecords, attachRemovals)
+	detaches, err := detachwork.New(queue, detachRecords, attachRemovals, blueprintLedger)
 	if err != nil {
 		return nil, err
 	}

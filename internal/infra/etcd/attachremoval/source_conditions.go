@@ -21,6 +21,21 @@ func SourceConditions(
 	store SourceReader,
 	input Input,
 ) ([]keyvalue.Condition, error) {
+	return sourceConditions(ctx, store, input, true)
+}
+
+// CaptureSourceConditions freezes cleanup inputs before ordered dependents retire.
+// Execution publication must still use SourceConditions after dependencies settle.
+func CaptureSourceConditions(ctx context.Context, store SourceReader, input Input) ([]keyvalue.Condition, error) {
+	return sourceConditions(ctx, store, input, false)
+}
+
+func sourceConditions(
+	ctx context.Context,
+	store SourceReader,
+	input Input,
+	requireIdle bool,
+) ([]keyvalue.Condition, error) {
 	if err := Validate(input); err != nil {
 		return nil, err
 	}
@@ -38,24 +53,31 @@ func SourceConditions(
 		return nil, errs.New(errs.KindStateConflict, "Attach cleanup source changed")
 	}
 	defer keyvalue.ClearValues(read.Values)
-	for _, prefix := range []string{attachrecord.AttachGrantedByPrefix(input.Attach.ID), attachrecord.AttachCredentialByPrefix(input.Attach.ID)} {
-		dependents, err := store.Range(
-			ctx,
-			keyvalue.RangeRequest{Prefix: prefix, Limit: 1, Revision: read.ReadRevision},
-		)
-		if err != nil {
-			return nil, err
-		}
-		if dependents == nil || dependents.ReadRevision != read.ReadRevision {
-			return nil, errs.New(errs.KindStateConflict, "Attach dependency snapshot is unavailable")
-		}
-		inUse := len(dependents.Values) != 0 || dependents.More
-		keyvalue.ClearRangeValues(dependents.Values)
-		if inUse {
-			return nil, errs.New(
-				errs.KindResourceInUse,
-				"remove dependent Attaches and grants before detaching their credential owner",
+	var dependencyGuards []keyvalue.Condition
+	if requireIdle {
+		for _, prefix := range []string{attachrecord.AttachGrantedByPrefix(input.Attach.ID), attachrecord.AttachCredentialByPrefix(input.Attach.ID)} {
+			dependents, err := store.Range(
+				ctx,
+				keyvalue.RangeRequest{Prefix: prefix, Limit: 1, Revision: read.ReadRevision},
 			)
+			if err != nil {
+				return nil, err
+			}
+			if dependents == nil || dependents.ReadRevision != read.ReadRevision {
+				return nil, errs.New(errs.KindStateConflict, "Attach dependency snapshot is unavailable")
+			}
+			inUse := len(dependents.Values) != 0 || dependents.More
+			keyvalue.ClearRangeValues(dependents.Values)
+			if inUse {
+				return nil, errs.New(
+					errs.KindResourceInUse,
+					"remove dependent Attaches and grants before detaching their credential owner",
+				)
+			}
+		}
+		dependencyGuards = []keyvalue.Condition{
+			{Key: attachrecord.AttachGrantedByPrefix(input.Attach.ID), Prefix: true},
+			{Key: attachrecord.AttachCredentialByPrefix(input.Attach.ID), Prefix: true},
 		}
 	}
 	exclusion, err := attachrecord.RequireAttachBackupSourceExclusionAbsent(
@@ -89,18 +111,16 @@ func SourceConditions(
 		NeedsAgent(input) && backing.Record.Runtime.RuntimeIntent != "running" {
 		return nil, errs.New(errs.KindStateConflict, "Attach backing Service changed or is not runnable")
 	}
-	return []keyvalue.Condition{
+	return append(dependencyGuards, []keyvalue.Condition{
 		{Key: keys[0], ModRevision: input.AttachRevision},
 		{Key: keys[1], ModRevision: input.FactsRevision},
 		exclusion,
 		servicerecord.ServiceDesiredCondition(backing),
 		servicerecord.ServiceRuntimeCondition(backing),
-		{Key: attachrecord.AttachGrantedByPrefix(input.Attach.ID), Prefix: true},
-		{Key: attachrecord.AttachCredentialByPrefix(input.Attach.ID), Prefix: true},
 		{Key: deletions.TombstoneKey("attach", input.Attach.ID)},
 		{Key: deletions.TombstoneKey("project", input.Attach.BackingProjectID)},
 		{Key: deletions.TombstoneKey("environment", input.Attach.BackingEnvironmentID)},
 		{Key: deletions.TombstoneKey("service", input.Attach.BackingServiceID)},
 		{Key: deletions.TombstoneKey("zone", input.Attach.BackingNetworkID)},
-	}, nil
+	}...), nil
 }

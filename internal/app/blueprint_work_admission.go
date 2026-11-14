@@ -14,15 +14,11 @@ func newBlueprintWorkAdmission(
 	if err != nil {
 		return nil, err
 	}
-	networks, err := blueprintcoordinator.NewNetworkPlanner(hosts)
+	resources, err := blueprintcoordinator.NewHostResourcePlanner(hosts)
 	if err != nil {
 		return nil, err
 	}
 	volumes, err := blueprintcoordinator.NewVolumePlanner(hosts)
-	if err != nil {
-		return nil, err
-	}
-	attaches, err := blueprintcoordinator.NewAttachPlanner(hosts)
 	if err != nil {
 		return nil, err
 	}
@@ -32,9 +28,10 @@ func newBlueprintWorkAdmission(
 	}
 	return blueprintcoordinator.NewAdmission([]blueprintcoordinator.ResourceRegistration{
 		{Kind: ids.KindService, Planner: services},
-		{Kind: ids.KindNetwork, Planner: networks},
+		{Kind: ids.KindEnvEntry, Planner: resources},
+		{Kind: ids.KindNetwork, Planner: resources},
 		{Kind: ids.KindVolume, Planner: volumes},
-		{Kind: ids.KindAttach, Planner: attaches},
+		{Kind: ids.KindAttach, Planner: resources},
 		{Kind: ids.KindComponent, Planner: components},
 	})
 }

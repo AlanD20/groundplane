@@ -30,7 +30,12 @@ func (owner *Owner) PrepareRemovalCheckpoint(ctx context.Context, view workqueue
 func (owner *Owner) PrepareRemovalCompletion(ctx context.Context, view workqueue.ResumeView,
 	input attachexecution.RemovalInput, at time.Time,
 ) (workqueue.Change, error) {
-	return owner.inputs.PrepareDetachCompletion(ctx, view, input, at)
+	change, err := owner.inputs.PrepareDetachCompletion(ctx, view, input, at)
+	if err != nil || view.Work.Task.Task.Action != workexecution.ActionApply {
+		return change, err
+	}
+	receipt, err := owner.units.PrepareDetachCompletionReceipt(ctx, view)
+	return joinBlueprintReceipt(change, receipt, err)
 }
 
 func (owner *Owner) PrepareRemovalFailure(ctx context.Context, view workqueue.ResumeView,
@@ -46,7 +51,13 @@ func (owner *Owner) LoadRemovalFailure(ctx context.Context, view workqueue.Resum
 func (owner *Owner) PrepareRemovalInspection(ctx context.Context, view workqueue.ResumeView,
 	report attachexecution.RemovalInspection, at time.Time,
 ) (workqueue.Change, workexecution.Completion, error) {
-	return owner.inputs.PrepareDetachInspection(ctx, view, report, at, false)
+	change, completion, err := owner.inputs.PrepareDetachInspection(ctx, view, report, at, false)
+	if err != nil || !completion.EffectsSettled || view.Work.Task.Task.Action != workexecution.ActionApply {
+		return change, completion, err
+	}
+	receipt, err := owner.units.PrepareDetachRecoveryReceipt(ctx, view, completion.Evidence)
+	change, err = joinBlueprintReceipt(change, receipt, err)
+	return change, completion, err
 }
 
 func (owner *Owner) LoadRemovalInspection(ctx context.Context, view workqueue.ResumeView) ([]byte, error) {

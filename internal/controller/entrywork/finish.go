@@ -40,6 +40,21 @@ func (owner *AgentWork) PrepareFinish(
 		conditions, err := owner.inputs.DefinitionConditions(ctx, view)
 		return workqueue.Change{Conditions: conditions}, err
 	}
+	if item.Item.Input == nil {
+		settlement, err := owner.queue.ReadInputSettlement(ctx, view)
+		if err != nil {
+			return workqueue.Change{}, err
+		}
+		if settlement == nil {
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Unprepared Entry action has no saved settlement",
+			)
+		}
+		return workqueue.Change{Conditions: []keyvalue.Condition{
+			{Key: workqueue.ItemKey(item.Item.ID), ModRevision: item.Revision},
+		}}, nil
+	}
 	_, _, conditions, err := owner.inputs.Load(ctx, view)
 	if err != nil {
 		return workqueue.Change{}, err

@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/controller/entryfiles"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -79,7 +80,7 @@ func TestRemovalSourcesPreservesAcknowledgedValuesAndOwnership(t *testing.T) {
 	resolver := &removalSourceResolver{expectedEnvironment: snapshot.EnvironmentID, expectedGeneration: oldGeneration}
 	service := &entryDesiredMutationService{materials: resolver}
 	allocator := removalSourceAllocator(t)
-	changes, err := service.removalSources(t.Context(), removed, snapshot, allocator)
+	changes, err := entryfiles.RemoveEntry(t.Context(), removed, snapshot, allocator.Named, service.materials)
 	if err != nil || len(changes) != 4 || resolver.calls != 1 {
 		t.Fatalf("removal sources: changes=%d reads=%d error=%v", len(changes), resolver.calls, err)
 	}
@@ -118,7 +119,13 @@ func TestRemovalSourcesPreservesAcknowledgedValuesAndOwnership(t *testing.T) {
 		t.Fatal("cleanup retained resolved file plaintext")
 	}
 	// The same durable action reconstructs the same file identities after restart.
-	again, err := service.removalSources(t.Context(), removed, snapshot, removalSourceAllocator(t))
+	again, err := entryfiles.RemoveEntry(
+		t.Context(),
+		removed,
+		snapshot,
+		removalSourceAllocator(t).Named,
+		service.materials,
+	)
 	if err != nil || len(again) != len(changes) {
 		t.Fatalf("recreated cleanup: %v", err)
 	}
@@ -167,7 +174,13 @@ func TestRemovalSourcesAbsentEntryAndPartialFailure(t *testing.T) {
 						}}},
 			}
 		}
-		changes, err := service.removalSources(t.Context(), removed, snapshot, removalSourceAllocator(t))
+		changes, err := entryfiles.RemoveEntry(
+			t.Context(),
+			removed,
+			snapshot,
+			removalSourceAllocator(t).Named,
+			service.materials,
+		)
 		if fail {
 			if !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) || changes != nil || resolver.calls != 1 ||
 				!bytes.Equal(resolver.returned, make([]byte, len(resolver.returned))) {
@@ -232,7 +245,13 @@ func TestRemovalSourcesKeepsEmptySharedEnvironmentFile(t *testing.T) {
 				GeneratedEnvironment: &taskmaterialization.GeneratedEnvironmentValueReference{FormatVersion: 1,
 					Values: []taskmaterialization.GeneratedEnvironmentEntryReference{{Name: "LAST",
 						Value: taskmaterialization.EntryValueReference{EntryID: entry}}}}}}}}
-	changes, err := service.removalSources(t.Context(), entry, snapshot, removalSourceAllocator(t))
+	changes, err := entryfiles.RemoveEntry(
+		t.Context(),
+		entry,
+		snapshot,
+		removalSourceAllocator(t).Named,
+		service.materials,
+	)
 	digest := sha256.Sum256(nil)
 	if err != nil || len(changes) != 1 || resolver.calls != 1 || changes[0].Length != 0 ||
 		changes[0].OutputKind != taskmaterialization.OutputGeneratedEnvironment ||

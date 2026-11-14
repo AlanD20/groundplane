@@ -116,7 +116,9 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintRouteOmission(
 	}
 	var router *BlueprintRuntimeComponent
 	for index := range authorities {
-		if authorities[index].Component.Record.Desired.Kind == core.ComponentKindIngressCaddy {
+		if authorities[index].Component.Record.Desired.Kind.SharesEnvironmentCapability(
+			core.ComponentKindIngressCaddy,
+		) {
 			router = &authorities[index]
 		}
 	}

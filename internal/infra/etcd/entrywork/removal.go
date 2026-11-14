@@ -46,6 +46,9 @@ func (removal Removal) matches(view workqueue.View, environmentID string, genera
 func (repository *InputRepository) prepareRemoval(ctx context.Context, view workqueue.View,
 	input *agentpb.EntryConfigurationWorkInput, capture Capture,
 ) (workqueue.Change, error) {
+	if capture.BlueprintRemoval != nil {
+		return repository.prepareBlueprintRemoval(ctx, view, *capture.BlueprintRemoval)
+	}
 	if capture.Removal == nil {
 		if input.Removal {
 			return workqueue.Change{}, conflict("Entry removal authority is absent")

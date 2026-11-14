@@ -182,7 +182,7 @@ func nativeControllerAttachJourney(t *testing.T, adapter string) {
 	graph, err := admission.Prepare(t.Context(), parent, blueprintunits.DesiredPlan{
 		EnvironmentID: f.base.environmentID, ParentTaskID: task.ID, Complete: true, Units: []blueprintunits.Unit{unit},
 	}, blueprintunits.Snapshot{EnvironmentID: f.base.environmentID, ReadRevision: f.base.store.revision}, nil,
-		[]blueprintattachinputs.Generation{generation})
+		[]blueprintattachinputs.Generation{generation}, nil)
 	if err != nil || len(graph.Items) != 1 || graph.Items[0].Placement.Executor != workexecution.Controller ||
 		graph.Items[0].Placement.HostID != "" || graph.Items[0].Operation != workexecution.Attach {
 		t.Fatalf("Blueprint routed a decision-only binding to host execution: %v", err)

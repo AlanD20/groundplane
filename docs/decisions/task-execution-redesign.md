@@ -156,6 +156,13 @@ Blueprint to invent missing instructions or choose a newer configuration. Generi
 shell jobs, runtime plugins and permissive fallback decoders are not introduced.
 Existing explicitly authorized Script and Custom hook boundaries remain intact.
 
+Cleanup distinguishes an admitted declaration from a materialized record and an
+acknowledged host effect. Retained declarations and positive absence evidence
+authorize metadata retirement; applied resources require their native cleanup
+proof. Cleanup inputs must not require the complete new Environment projection
+when that projection itself waits for cleanup. The native input-owner catalog
+is checked at composition, before accepting an Apply.
+
 An operation declares durable checkpoints at meaningful side-effect boundaries.
 The engine requires their persistence before the next action that depends on
 them. Progress output alone neither authorizes effects nor proves completion.

@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -73,6 +74,7 @@ type PublishAuthoredInput struct {
 	ZoneReservations         []zones.Record
 	PrerequisiteAuthority    etcd.BlueprintPrerequisiteAuthority
 	AttachInputGenerations   []etcd.BlueprintAttachInputGenerationPublication
+	DetachInputs             []attachremoval.BlueprintInput
 	RetainedAttachConditions []keyvalue.Condition
 	Evidence                 Evidence
 	Locator                  idempotency.IdempotencyLocator
@@ -141,6 +143,7 @@ func PublishAuthored(
 			ZoneReservations:         input.ZoneReservations,
 			PrerequisiteAuthority:    input.PrerequisiteAuthority,
 			AttachInputGenerations:   input.AttachInputGenerations,
+			DetachInputs:             input.DetachInputs,
 			RetainedAttachConditions: input.RetainedAttachConditions,
 			Parent:                   input.Parent, Graph: input.Graph, Baseline: input.Baseline, Marker: marker,
 			ScriptPublication: input.ScriptPublication,

@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
@@ -39,6 +40,7 @@ type BlueprintAuthoredPublication struct {
 	ZoneReservations         []zones.Record
 	PrerequisiteAuthority    BlueprintPrerequisiteAuthority
 	AttachInputGenerations   []BlueprintAttachInputGenerationPublication
+	DetachInputs             []attachremoval.BlueprintInput
 	RetainedAttachConditions []keyvalue.Condition
 	Parent                   workexecution.Task
 	Graph                    blueprintunits.CapturedGraph
@@ -49,7 +51,7 @@ type BlueprintAuthoredPublication struct {
 
 func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAuthoredRevision(
 	ctx context.Context, input BlueprintAuthoredPublication,
-) (keyvalue.TransactionResult, error) {
+) (publicationResult keyvalue.TransactionResult, resultErr error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return keyvalue.TransactionResult{}, err
 	}
@@ -280,6 +282,24 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	if err != nil {
 		return keyvalue.TransactionResult{}, err
 	}
+
+	detachInputs, err := repository.prepareBlueprintDetachInputs(ctx, parent, input.Graph, input.DetachInputs,
+		keyvalue.Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
+		[]keyvalue.Condition{
+			{
+				Key:         blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
+				ModRevision: input.ExpectedHeadRevision,
+			},
+			{Key: blueprintunits.EpochKey(environment.Record.ID), ModRevision: input.Baseline.EpochRevision},
+		})
+	if err != nil {
+		return keyvalue.TransactionResult{}, err
+	}
+	defer func() {
+		resultErr = detachInputs.finish(ctx, repository.store, parent.ID, publicationResult, resultErr)
+	}()
+	conditions = append(conditions, detachInputs.change.Conditions...)
+	mutations = append(mutations, detachInputs.change.Mutations...)
 	attachInputs, err := repository.prepareBlueprintAttachInputGenerations(
 		ctx, parent, input.AttachInputGenerations,
 	)

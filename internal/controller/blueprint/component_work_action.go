@@ -20,7 +20,7 @@ func (service *Service) prepareComponentWorkAction(ctx context.Context, placemen
 	var prior runtimeconfiguration.Snapshot
 	var err error
 	if capture.Prior != nil {
-		prior, err = service.repository.LoadComponentWorkConfiguration(ctx, *capture.Prior)
+		prior, err = service.repository.LoadWorkConfiguration(ctx, *capture.Prior)
 		if err != nil {
 			return nil, err
 		}

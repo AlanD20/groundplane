@@ -26,6 +26,9 @@ func (repository *InputRepository) PrepareRetention(
 		item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete {
 		return false, workqueue.Change{}, conflict("Entry input retention requires expired and fully settled work")
 	}
+	if item.Input == nil && item.Placement.Executor == workexecution.Agent {
+		return repository.prepareUnpreparedRetention(ctx, view, final)
+	}
 	if item.Placement.Executor == workexecution.Controller {
 		return repository.retireDefinition(ctx, view, at, final)
 	}

@@ -312,7 +312,7 @@ func validAppliedAdvance(
 		if !exists || (next.State != Applied &&
 			!((next.Target.Kind == ids.KindScript || next.Target.Kind == ids.KindEnvEntry ||
 				next.Target.Kind == ids.KindRoute || next.Target.Kind == ids.KindComponent || next.Target.Kind == ids.KindDNSRecord ||
-				validServiceDeclarationAbsence(next)) && next.State == Absent)) ||
+				validServiceDeclarationAbsence(next) || validControllerDetach(next)) && next.State == Absent)) ||
 			(next.Target.Kind != ids.KindAttach && next.Target.Kind != ids.KindEnvEntry && next.Target.Kind != ids.KindService &&
 				next.Target.Kind != ids.KindRoute && next.Target.Kind != ids.KindScript && next.Target.Kind != ids.KindComponent && next.Target.Kind != ids.KindDNSRecord) ||
 			snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
@@ -322,6 +322,9 @@ func validAppliedAdvance(
 		for _, unit := range snapshot.Desired.Record.Units {
 			if unit.Target == next.Target {
 				writeScopeValid := len(unit.Writes) == 1 && unit.Writes[0] == next.Target
+				if next.Target.Kind == ids.KindAttach && validControllerDetach(next) {
+					writeScopeValid = validDetachWrites(unit)
+				}
 				if next.Target.Kind == ids.KindComponent {
 					writeScopeValid = validControllerComponentWrites(unit)
 				}

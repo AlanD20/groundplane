@@ -4,7 +4,6 @@ import (
 	"context"
 
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -50,31 +49,5 @@ func (repository *AttachRepository) GetAttachFactsVersioned(
 	}
 	return etcdstore.Versioned[attachrecord.EncryptedFacts]{
 		Record: facts, Revision: read.Values[0].ModRevision, ReadRevision: revision,
-	}, true, nil
-}
-
-func (repository *AttachRepository) GetAuthoredAttachRemovalIntent(
-	ctx context.Context,
-	taskID string,
-) (etcdstore.Versioned[environmentchanges.AttachRemovalIntent], bool, error) {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[environmentchanges.AttachRemovalIntent]{}, false, err
-	}
-	key := environmentchanges.AttachRemovalIntentKey(taskID)
-	read, err := repository.store.Get(ctx, key)
-	if err != nil {
-		return etcdstore.Versioned[environmentchanges.AttachRemovalIntent]{}, false, err
-	}
-	if read == nil || read.Entry == nil {
-		return etcdstore.Versioned[environmentchanges.AttachRemovalIntent]{}, false, nil
-	}
-	intent, err := environmentchanges.DecodeAttachRemovalIntent(read.Entry.Value)
-	if err != nil || intent.TaskID != taskID {
-		environmentchanges.ClearAttachRemovalIntent(&intent)
-		return etcdstore.Versioned[environmentchanges.AttachRemovalIntent]{}, false,
-			errs.New(errs.KindInternal, "authored Attach removal authority is corrupt")
-	}
-	return etcdstore.Versioned[environmentchanges.AttachRemovalIntent]{
-		Record: intent, Revision: read.Entry.ModRevision, ReadRevision: read.ReadRevision,
 	}, true, nil
 }

@@ -108,7 +108,7 @@ func (service *Service) prepareComponentWork(ctx context.Context, work workqueue
 		placement.Change.Conditions = append(placement.Change.Conditions, proxyChange.Conditions...)
 		placement.Change.Mutations = append(placement.Change.Mutations, proxyChange.Mutations...)
 	}
-	secrets, err := service.repository.PrepareComponentWorkSecretPins(ctx, work, operationID, configuration)
+	secrets, err := service.repository.PrepareResourceWorkSecretPins(ctx, work, operationID, configuration)
 	if err != nil {
 		return result, err
 	}

@@ -44,7 +44,7 @@ func (owner *Owner) ReconcileInterrupted(ctx context.Context, view workqueue.Res
 		}
 		defer attachexecution.ClearRemoval(input.Removal)
 		if checkpoint := view.Checkpoint.Record; checkpoint != nil && checkpoint.Sequence == uint64(input.CommandCount())*2 {
-			proof, err = owner.inputs.PrepareDetachCompletion(ctx, view, input, at)
+			proof, err = owner.PrepareRemovalCompletion(ctx, view, input, at)
 			outcome := workexecution.Succeeded
 			if view.Work.Task.Task.Stop != nil {
 				outcome = view.Work.Task.Task.Stop.Outcome

@@ -24,13 +24,16 @@ func (repository *InputRepository) PrepareDetachRetention(
 	if task.Validate() != nil || item.Validate() != nil || view.Task.Revision <= 0 || view.Item.Revision <= 0 ||
 		task.CollectionStartedAt == nil || task.FinishedAt == nil || task.RetainUntil == nil ||
 		at.IsZero() || at.Location() != time.UTC || at.Before(*task.CollectionStartedAt) || at.Before(*task.RetainUntil) ||
-		item.Operation != workexecution.Detach || item.TaskID != task.ID || item.Input == nil || item.Result == nil ||
+		item.Operation != workexecution.Detach || item.TaskID != task.ID || item.Result == nil ||
 		item.Phase != workexecution.Settled || item.ActiveAttemptID != "" ||
 		item.Cleanup != workexecution.CleanupNone && item.Cleanup != workexecution.CleanupComplete {
 		return false, workqueue.Change{}, errs.New(
 			errs.KindStateConflict,
 			"Detach history requires expired, fully settled execution",
 		)
+	}
+	if item.Input == nil {
+		return repository.prepareBlueprintInputRetention(ctx, view, final)
 	}
 	active, err := repository.read(ctx, []string{WorkCaptureKey(item.ID)}, view.ReadRevision)
 	if err != nil {
@@ -77,6 +80,10 @@ func (repository *InputRepository) PrepareDetachRetention(
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: DetachInputPrefix(item.ID), Prefix: true},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: WorkCaptureKey(item.ID)},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: WorkRecoveryKey(item.ID)})
+	if task.Action == workexecution.ActionApply {
+		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete,
+			Key: BlueprintInputKey(task.Scope.EnvironmentID, task.ID, item.ID)})
+	}
 	return true, change, nil
 }
 

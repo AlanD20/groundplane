@@ -48,6 +48,26 @@ func PrepareRevocation(
 	if task.Task.Stop != nil {
 		outcome = task.Task.Stop.Outcome
 	}
+
+	// An input-less item has no executable result to retain. Publish its native
+	// preparation settlement with revocation, rather than leaving a terminal
+	// item whose operation owner can never load completion evidence.
+	if waitingInput(item.Item) && item.Item.AttemptNumber == 0 && item.Item.ActiveAttemptID == "" &&
+		item.Item.Cleanup == workexecution.CleanupNone {
+		view := View{Task: task, Item: item, ReadRevision: max(task.Revision, item.Revision)}
+		if task.Task.Stop != nil {
+			return PrepareInputSettlement(view, at)
+		}
+		if outcome != workexecution.Cancelled && outcome != workexecution.Superseded {
+			return Change{}, invalid("unprepared work revocation requires cancellation or supersession")
+		}
+		reason := "Cancelled before executable input was published"
+		if outcome == workexecution.Superseded {
+			reason = "Superseded before executable input was published"
+		}
+		return prepareInputSettlement(view, InputSettlement{TaskID: task.Task.ID, WorkID: item.Item.ID,
+			Outcome: outcome, Reason: reason, At: at})
+	}
 	next, err := workexecution.RevokeForward(item.Item, outcome, at)
 	if err != nil {
 		return Change{}, err

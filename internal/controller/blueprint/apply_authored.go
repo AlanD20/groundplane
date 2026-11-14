@@ -275,6 +275,12 @@ func (service *Service) applyAuthoredOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+
+	detachInputs, err := service.prepareAuthoredDetachInputs(ctx, parent, plan, owned, baseline.ledger)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	defer clearAuthoredDetachInputs(detachInputs)
 	attachCaptures := make([]attachinputs.Generation, len(attachInputGenerations))
 	for index, capture := range attachInputGenerations {
 		attachCaptures[index] = capture.Generation
@@ -285,7 +291,7 @@ func (service *Service) applyAuthoredOnce(
 		plan,
 		baseline.ledger,
 		desired.Input.Components,
-		attachCaptures,
+		attachCaptures, detachInputs,
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -314,6 +320,7 @@ func (service *Service) applyAuthoredOnce(
 			ZoneReservations:         zoneReservations,
 			PrerequisiteAuthority:    prerequisiteAuthority,
 			AttachInputGenerations:   attachInputGenerations,
+			DetachInputs:             detachInputs,
 			RetainedAttachConditions: admission.Conditions,
 			Evidence:                 evidence, Locator: locator, Parent: parent,
 			ScriptPublication: scriptPublication,

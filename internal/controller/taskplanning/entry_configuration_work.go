@@ -67,14 +67,15 @@ func NewEntryConfigurationWork(scope workexecution.Scope, placement workexecutio
 }
 
 type EntryConfigurationRequest struct {
-	Task          workexecution.Task
-	Item          workexecution.Item
-	OperationID   string
-	Candidate     projectionrecord.EnvironmentComposeProjection
-	Files         []taskmaterialization.Record
-	Configuration runtimeconfiguration.WorkCapture
-	Secrets       *tasksecretpins.Binding
-	Removal       *entrywork.Removal
+	Task             workexecution.Task
+	Item             workexecution.Item
+	OperationID      string
+	Candidate        projectionrecord.EnvironmentComposeProjection
+	Files            []taskmaterialization.Record
+	Configuration    runtimeconfiguration.WorkCapture
+	Secrets          *tasksecretpins.Binding
+	BlueprintRemoval *entrywork.BlueprintRemoval
+	Removal          *entrywork.Removal
 }
 
 // PrepareConfigurationWork emits a closed operation, not an ExecutionPlan.
@@ -86,14 +87,16 @@ func (runtime EntryMutationRuntime) PrepareConfigurationWork(
 	task, item, candidate := request.Task, request.Item, request.Candidate
 	if runtime.EpochRevision <= 0 || task.Validate() != nil || item.Validate() != nil ||
 		item.Operation != workexecution.EntryConfiguration || item.TaskID != task.ID ||
-		item.TargetID != candidate.EnvironmentID || task.Scope.EnvironmentID != candidate.EnvironmentID ||
+		(task.Action != workexecution.ActionApply && item.TargetID != candidate.EnvironmentID ||
+			task.Action == workexecution.ActionApply && (request.BlueprintRemoval == nil || item.TargetID != request.BlueprintRemoval.EntryID)) || task.Scope.EnvironmentID != candidate.EnvironmentID ||
 		runtime.Projection.EnvironmentID != candidate.EnvironmentID || candidate.RevisionID != task.ID ||
 		candidate.RenderGeneration <= runtime.Projection.RenderGeneration ||
 		request.Configuration.Matches(
 			task,
 			item,
 		) != nil || request.Configuration.Generation != candidate.RenderGeneration ||
-		(request.Removal != nil) != (task.Action == workexecution.ActionRemove) {
+		(request.Removal != nil) != (task.Action == workexecution.ActionRemove) ||
+		(request.BlueprintRemoval != nil) != (task.Action == workexecution.ActionApply) || request.Removal != nil && request.BlueprintRemoval != nil {
 		return nil, entrywork.Capture{}, errs.New(
 			errs.KindStateConflict,
 			"Entry configuration has inconsistent captured authority",
@@ -117,7 +120,7 @@ func (runtime EntryMutationRuntime) PrepareConfigurationWork(
 	}
 	input := &agentpb.EntryConfigurationWorkInput{
 		OperationId: request.OperationID, EnvironmentId: candidate.EnvironmentID,
-		RenderGeneration: candidate.RenderGeneration, Removal: request.Removal != nil,
+		RenderGeneration: candidate.RenderGeneration, Removal: request.Removal != nil || request.BlueprintRemoval != nil,
 		Baseline: baseline, Candidate: artifact, Configuration: configuration,
 	}
 	if request.Configuration.Prior != nil {
@@ -147,7 +150,10 @@ func (runtime EntryMutationRuntime) PrepareConfigurationWork(
 		binding := *request.Secrets
 		capture.Secrets = &binding
 	}
-	if request.Removal != nil {
+	if request.BlueprintRemoval != nil {
+		removal := *request.BlueprintRemoval
+		capture.BlueprintRemoval = &removal
+	} else if request.Removal != nil {
 		removal := *request.Removal
 		capture.Removal = &removal
 	} else {

@@ -77,42 +77,50 @@ func (capture WorkCapture) validate(active bool) error {
 		) || ids.Validate(ids.KindProject, capture.BackingProjectID) != nil {
 		return recordcodec.CorruptRecord()
 	}
-	if capture.Hook == nil {
-		if len(capture.Sources) != 0 || capture.Pins != nil {
+	return validateHookCapture(capture.OperationID, capture.TaskID, capture.WorkItemID,
+		capture.Hook, capture.Sources, capture.Pins, active)
+}
+
+func validateHookCapture(operationID, taskID, workID string,
+	hook *taskconfiguration.BackingHookEncryptedInputs, sources []tasksecretpinrecord.Record,
+	pins *tasksecretpins.Binding, active bool,
+) error {
+	if hook == nil {
+		if len(sources) != 0 || pins != nil {
 			return recordcodec.CorruptRecord()
 		}
 		return nil
 	}
-	if taskconfiguration.ValidateBackingHookEncryptedInputs(*capture.Hook) != nil ||
-		capture.Hook.OperationID != capture.OperationID {
+	if taskconfiguration.ValidateBackingHookEncryptedInputs(*hook) != nil ||
+		hook.OperationID != operationID {
 		return recordcodec.CorruptRecord()
 	}
 	previous := ""
-	for _, source := range capture.Sources {
-		if tasksecretpinrecord.Validate(source) != nil || source.OperationID != capture.OperationID ||
+	for _, source := range sources {
+		if tasksecretpinrecord.Validate(source) != nil || source.OperationID != operationID ||
 			source.SecretID <= previous {
 			return recordcodec.CorruptRecord()
 		}
 		previous = source.SecretID
 	}
-	if len(capture.Sources) == 0 {
-		if capture.Pins != nil {
+	if len(sources) == 0 {
+		if pins != nil {
 			return recordcodec.CorruptRecord()
 		}
 		return nil
 	}
-	if len(capture.Sources) > tasksecretpins.MaximumPins {
+	if len(sources) > tasksecretpins.MaximumPins {
 		return recordcodec.CorruptRecord()
 	}
 	if !active {
-		if capture.Pins != nil {
+		if pins != nil {
 			return recordcodec.CorruptRecord()
 		}
 		return nil
 	}
-	if capture.Pins == nil || capture.Pins.Validate() != nil ||
-		capture.Pins.OperationID != capture.OperationID || capture.Pins.TaskID != capture.TaskID ||
-		capture.Pins.WorkItemID != capture.WorkItemID || !capture.Pins.MatchesSources(capture.Sources) {
+	if pins == nil || pins.Validate() != nil ||
+		pins.OperationID != operationID || pins.TaskID != taskID ||
+		pins.WorkItemID != workID || !pins.MatchesSources(sources) {
 		return recordcodec.CorruptRecord()
 	}
 	return nil

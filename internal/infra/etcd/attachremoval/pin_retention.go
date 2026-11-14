@@ -26,27 +26,41 @@ func RetireCapturePins(
 			"Attach Secret release requires captured pins and settled-work comparisons",
 		)
 	}
-	pins, err := tasksecretpins.NewEtcdRepository(store, capture.BackingProjectID)
+	return RetireOwnedPins(ctx, store, revision, capture.BackingProjectID, *capture.Pins, guards)
+}
+
+// RetireOwnedPins releases an exact admission binding even when executable
+// work was never published. The caller proves collection and input custody.
+func RetireOwnedPins(ctx context.Context, store workqueue.Store, revision int64, projectID string,
+	binding tasksecretpins.Binding, guards []keyvalue.Condition,
+) (bool, workqueue.Change, error) {
+	if ctx == nil || store == nil || revision <= 0 || binding.Validate() != nil || len(guards) == 0 {
+		return false, workqueue.Change{}, errs.New(
+			errs.KindStateConflict,
+			"Secret release requires exact settled admission custody",
+		)
+	}
+	pins, err := tasksecretpins.NewEtcdRepository(store, projectID)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
-	root, found, err := pins.LoadActive(ctx, capture.OperationID, revision)
+	root, found, err := pins.LoadActive(ctx, binding.OperationID, revision)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
 	if !found {
 		return true, workqueue.Change{Conditions: []keyvalue.Condition{
-			{Key: tasksecretpins.RootKey(capture.OperationID)},
-			{Key: tasksecretpins.PreparationKey(capture.OperationID)},
-			{Key: tasksecretpins.ReversePrefix(capture.OperationID), Prefix: true},
+			{Key: tasksecretpins.RootKey(binding.OperationID)},
+			{Key: tasksecretpins.PreparationKey(binding.OperationID)},
+			{Key: tasksecretpins.ReversePrefix(binding.OperationID), Prefix: true},
 		}}, nil
 	}
-	_, releasing, err := root.RetentionCondition(*capture.Pins)
+	_, releasing, err := root.RetentionCondition(binding)
 	if err != nil {
 		return false, workqueue.Change{}, err
 	}
 	if releasing {
-		_, _, err := pins.ReleaseBatch(ctx, capture.OperationID)
+		_, _, err := pins.ReleaseBatch(ctx, binding.OperationID)
 		return false, workqueue.Change{}, err
 	}
 	fragment, err := tasksecretpins.BeginRelease(root)

@@ -57,6 +57,29 @@ func (repository *Repository) PrepareAttachCompletionReceipt(
 	)
 }
 
+func (repository *Repository) PrepareEntryRemovalCompletionReceipt(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (workqueue.Change, error) {
+	return repository.prepareForwardResourceReceipt(ctx, view, ids.KindEnvEntry, workexecution.EntryConfiguration, true)
+}
+
+func (repository *Repository) PrepareDetachCompletionReceipt(
+	ctx context.Context,
+	view workqueue.ResumeView,
+) (workqueue.Change, error) {
+	return repository.prepareForwardResourceReceipt(ctx, view, ids.KindAttach, workexecution.Detach, true)
+}
+
+// An inspection proves stopped execution, not that a partially revoked
+// credential or arbitrary hook was rolled back. Preserve that distinction.
+func (repository *Repository) PrepareDetachRecoveryReceipt(ctx context.Context, view workqueue.ResumeView,
+	result workexecution.Input,
+) (workqueue.Change, error) {
+	return repository.prepareResourceCompletionReceipt(ctx, view, ids.KindAttach, workexecution.Detach,
+		resourceReceiptEvidence{direction: workexecution.Recovery, result: result, removal: true, diverged: true})
+}
+
 func (repository *Repository) PrepareNetworkCompletionReceipt(
 	ctx context.Context,
 	view workqueue.ResumeView,
@@ -133,6 +156,7 @@ type resourceReceiptEvidence struct {
 	removal   bool
 	absent    bool
 	preserve  bool
+	diverged  bool
 }
 
 func (repository *Repository) prepareResourceCompletionReceipt(ctx context.Context, view workqueue.ResumeView,
@@ -175,7 +199,10 @@ func (repository *Repository) prepareResourceCompletionReceipt(ctx context.Conte
 		break
 	}
 	if unit == nil || unit.Target.Kind != kind || unit.Removal != proof.removal ||
-		!slices.Contains(unit.Writes, unit.Target) || operation != workexecution.Component && len(unit.Writes) != 1 {
+		!slices.Contains(
+			unit.Writes,
+			unit.Target,
+		) || operation != workexecution.Component && !(operation == workexecution.Detach && validDetachWrites(*unit)) && len(unit.Writes) != 1 {
 		return workqueue.Change{}, errs.New(
 			errs.KindStateConflict,
 			"Blueprint resource receipt has no captured storage effect",
@@ -225,6 +252,10 @@ func (repository *Repository) prepareResourceCompletionReceipt(ctx context.Conte
 	}
 	if proof.absent {
 		receipt.Fingerprint = ""
+	}
+	if proof.diverged {
+		receipt.State, receipt.Fingerprint = Diverged, prior.Fingerprint
+		receipt.AffectedWrites = []ResourceKey{unit.Target}
 	}
 	value, err := EncodeApplied(receipt)
 	if err != nil {

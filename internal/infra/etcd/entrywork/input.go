@@ -68,7 +68,7 @@ func (repository *InputRepository) Stage(
 	guards []keyvalue.Condition,
 ) (workexecution.Input, workqueue.Change, error) {
 	if task.Validate() != nil || item.Validate() != nil || task.Stop != nil || task.FinishedAt != nil ||
-		(task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove) ||
+		(task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove && task.Action != workexecution.ActionApply) ||
 		task.CollectionStartedAt != nil || item.TaskID != task.ID || item.Operation != workexecution.EntryConfiguration ||
 		item.Placement.Executor != workexecution.Agent || item.Phase != workexecution.Waiting || item.Wait == nil ||
 		item.Wait.Reason != workexecution.WaitInput || item.Input != nil || item.AttemptNumber != 0 ||
@@ -89,11 +89,31 @@ func (repository *InputRepository) Stage(
 		return workexecution.Input{}, workqueue.Change{}, err
 	}
 	guards = append(append([]keyvalue.Condition(nil), guards...), consumers...)
-	guards = append(
-		guards,
-		keyvalue.Condition{Key: workqueue.TaskKey(taskID)},
-		keyvalue.Condition{Key: workqueue.ItemKey(workID)},
-	)
+
+	if task.Action == workexecution.ActionApply {
+		if !task.PublicationComplete || capture.BlueprintRemoval == nil {
+			return workexecution.Input{}, workqueue.Change{}, conflict(
+				"Blueprint Entry cleanup requires accepted omission authority",
+			)
+		}
+		for _, key := range []string{workqueue.TaskKey(taskID), workqueue.ItemKey(workID)} {
+			fenced := false
+			for _, guard := range guards {
+				if guard.Key == key && guard.ModRevision > 0 && guard.ModRevision <= view.ReadRevision &&
+					!guard.Prefix {
+					fenced = true
+				}
+			}
+			if !fenced {
+				return workexecution.Input{}, workqueue.Change{}, conflict(
+					"Blueprint Entry input staging lost its accepted work comparison",
+				)
+			}
+		}
+	} else {
+		guards = append(guards, keyvalue.Condition{Key: workqueue.TaskKey(taskID)}, keyvalue.Condition{Key: workqueue.ItemKey(workID)})
+	}
+
 	_, wire, reference, err := executionplan.CaptureEntryConfigurationWorkInput(inputID, input)
 	if err != nil {
 		return workexecution.Input{}, workqueue.Change{}, err
@@ -238,7 +258,10 @@ func (repository *InputRepository) Load(
 		return nil, Capture{}, nil, err
 	}
 	if reference != manifest.Input || !bytes.Equal(stored.Wire, canonical) ||
-		owned.EnvironmentId != item.TargetID || owned.EnvironmentId != view.Task.Task.Scope.EnvironmentID {
+		!stored.Capture.targetMatches(
+			view.Task.Task,
+			item,
+		) || owned.EnvironmentId != view.Task.Task.Scope.EnvironmentID {
 		return nil, Capture{}, nil, conflict("Entry configuration captured input does not match its sealed digest")
 	}
 	if err := stored.Capture.matches(view, owned); err != nil {

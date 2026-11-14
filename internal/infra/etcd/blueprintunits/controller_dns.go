@@ -19,21 +19,35 @@ type DNSReceipt struct {
 	HostID          string                         `json:"host_id"`
 	AppliedRevision int64                          `json:"applied_revision"`
 	CorefileSHA256  string                         `json:"corefile_sha256"`
+	NeverPublished  bool                           `json:"never_published"`
+	ResolverEnabled bool                           `json:"resolver_enabled"`
 	Binding         *dnsrecords.EnvironmentBinding `json:"binding,omitempty"`
 }
 
 func validDNSReceipt(record AppliedRecord) bool {
 	proof := record.ControllerDNS
-	if proof == nil || ids.Validate(ids.KindComponent, proof.ComponentID) != nil ||
-		ids.Validate(ids.KindHost, proof.HostID) != nil || proof.AppliedRevision <= 0 ||
-		!recordcodec.ValidSHA256(proof.CorefileSHA256) {
+
+	if proof == nil {
+		return false
+	}
+	if proof.NeverPublished {
+		return record.State == Absent && proof.Binding == nil && proof.AppliedRevision == 0 &&
+			!proof.ResolverEnabled && proof.CorefileSHA256 == "" &&
+			(proof.ComponentID == "" || ids.Validate(ids.KindComponent, proof.ComponentID) == nil) &&
+			(proof.HostID == "" || ids.Validate(ids.KindHost, proof.HostID) == nil)
+	}
+	if ids.Validate(ids.KindComponent, proof.ComponentID) != nil || ids.Validate(ids.KindHost, proof.HostID) != nil ||
+		proof.AppliedRevision <= 0 || proof.ResolverEnabled && !recordcodec.ValidSHA256(proof.CorefileSHA256) ||
+		proof.CorefileSHA256 != "" && !recordcodec.ValidSHA256(proof.CorefileSHA256) {
 		return false
 	}
 	if record.State == Absent {
 		return proof.Binding == nil
 	}
-	return record.State == Applied && proof.Binding != nil && proof.Binding.Validate() == nil &&
-		proof.Binding.Record.ID == record.Target.ID && proof.Binding.Record.EnvironmentID == record.EnvironmentID
+	return record.State == Applied && proof.ResolverEnabled && proof.Binding != nil &&
+		proof.Binding.Validate() == nil &&
+		proof.Binding.Record.ID == record.Target.ID &&
+		proof.Binding.Record.EnvironmentID == record.EnvironmentID
 }
 
 // The caller joins this receipt with the immutable authored input, native work
