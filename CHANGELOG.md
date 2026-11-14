@@ -5,13 +5,19 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+## 0.0.1 — 2026-11-14
+
+Initial single-host release.
+
+### Lifecycle cleanup repairs
+
 - Reconcile omitted connections from retained Blueprint declarations, with native
   cleanup ordering, captured hook/Secret inputs and explicit resource receipts.
 - Remove omitted Entry files through the existing native file-cleanup and recovery
   path; keep loaded process environments until the next Deploy.
 - Preserve completion evidence for work cancelled before input creation, and
   allow DNS withdrawal with a stopped or never-published resolver.
-- The new cleanup receipts use storage epoch 48; this unreleased format requires
+- The new cleanup receipts use storage epoch 48; this replacement format requires
   a clean cutover from epoch 47, with no compatibility reader.
 
 - Allow Detach before first Deploy and while initial Blueprint runtime rendering
@@ -24,16 +30,12 @@ that every deployment or failure scenario has been qualified.
 - Settle interrupted initial Volume creation when recovery proves both the
   directory and Docker Volume absent, retaining the failed action and its history.
 
-## 0.0.1 — 2026-11-14
-
-Initial single-host release.
-
 ### Update and configuration repairs
 
 - Qualify combined Controller/Agent updates as one prepared pair, including
   channel-format changes, with predecessor-pair rollback on failed readiness.
   Reject mismatched single-component updates before activation. This replacement
-  uses storage epoch 47; earlier pre-release installations require a clean cutover.
+  uses storage epoch 48; earlier pre-release installations require a clean cutover.
 - Retry contended native execution checkpoints without disconnecting unrelated
   Agent work, and record refused checkpoints in Task execution details.
 - Edit Project and Platform file Secret contents in the Console, preserving
