@@ -1,5 +1,6 @@
 """Publish scoped release assets; a combined tag publishes both component tags too."""
 import argparse
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -37,7 +38,8 @@ def publish(tag, root, *, check=False):
         if refs and refs.splitlines()[-1].split()[0] != commit:
             raise ValueError(f"existing tag {selected} points to another commit; never overwrite it")
         try:
-            read_json(f"https://api.github.com/repos/{REPOSITORY}/releases/tags/{urllib.parse.quote(selected, safe='')}")
+            read_json(f"https://api.github.com/repos/{REPOSITORY}/releases/tags/{urllib.parse.quote(selected, safe='')}",
+                      github_token=os.environ.get("GH_TOKEN"))
         except urllib.error.HTTPError as error:
             if error.code != 404:
                 raise

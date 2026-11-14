@@ -1,6 +1,7 @@
 """Resolve published stable GP releases within one explicit component namespace."""
 import json
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -9,10 +10,22 @@ SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 IMAGE = re.compile(r"ghcr\.io/aland20/groundplane-agent@sha256:[0-9a-f]{64}")
 
 
-def read_json(url):
-    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
-                                                 "User-Agent": "groundplane-installer"})
-    with urllib.request.urlopen(request, timeout=30) as response:
+class RejectAPIRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        raise urllib.error.HTTPError(request.full_url, code, "authenticated API redirects are refused", headers, response)
+
+
+def read_json(url, *, github_token=None):
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "groundplane-installer"}
+    if github_token:
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme != "https" or parsed.netloc != "api.github.com":
+            raise ValueError("GitHub API credentials require the canonical HTTPS API origin")
+        headers["Authorization"] = "Bearer " + github_token
+    request = urllib.request.Request(url, headers=headers)
+    open_url = (urllib.request.build_opener(RejectAPIRedirects()).open
+                if github_token else urllib.request.urlopen)
+    with open_url(request, timeout=30) as response:
         if urllib.parse.urlsplit(response.url).scheme != "https":
             raise ValueError("release download left HTTPS")
         raw = response.read(2 * 1024 * 1024 + 1)
