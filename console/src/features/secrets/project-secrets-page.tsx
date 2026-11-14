@@ -263,6 +263,7 @@ export default function ProjectSecretsPage() {
           emptyTitle="No project Secrets"
           emptyDescription="Resolution falls back to matching platform Secrets."
           scopeLabel="defined here"
+          editable
           onRemove={(secret) => store.removeReusableSecret(secret.id)}
           onRefresh={() => store.refreshReusableSecrets()}
           onReveal={(secret) => store.revealReusableSecret(secret.id)}

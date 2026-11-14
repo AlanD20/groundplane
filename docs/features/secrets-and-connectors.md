@@ -50,7 +50,13 @@ blocks replacement of bytes it still needs; edits do not retain a hidden old
 plaintext/ciphertext copy. Previously materialized running processes change only
 through their normal configuration/deployment actions.
 
-Platform and Project Secret pages provide **Import / edit .env** for pasted text
+File Secrets have an **Edit** action on their owning Project or Platform page.
+The editor loads the current contents explicitly, supports search and full-screen
+editing, and saves with the loaded metadata revision. Close or Cancel discards
+the draft. A concurrent edit must be reloaded; an uncertain save can retry the
+same submission. Reveal confirmation applies when enabled in Preferences.
+
+Platform and Project Secret pages provide **Bulk edit** for pasted dotenv text
 or a local file. The editor uses the existing bulk Entry grammar: `KEY=value`,
 blank/comment lines, first-`=` splitting and JSON-quoted strings for escaped or
 multiline values. It does not expand shell variables or execute the file. Only

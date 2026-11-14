@@ -5,6 +5,9 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Edit Project and Platform file Secret contents in the Console, preserving
+  stable references and guarding concurrent updates.
+
 ## 0.0.1 — 2026-11-14
 
 Initial single-host release.

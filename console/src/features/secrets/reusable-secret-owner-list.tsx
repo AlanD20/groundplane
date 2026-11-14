@@ -21,8 +21,9 @@ import {
 } from "@/components/ui/table";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import type { ReusableSecret } from "@/lib/types";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { FileSecretEditor } from "./file-secret-editor";
 
 export function ReusableSecretOwnerList({
   secrets,
@@ -33,6 +34,7 @@ export function ReusableSecretOwnerList({
   onRemove,
   onRefresh,
   onReveal,
+  editable = false,
 }: {
   secrets: ReusableSecret[];
   loading: boolean;
@@ -42,7 +44,9 @@ export function ReusableSecretOwnerList({
   onRemove?: (secret: ReusableSecret) => Promise<{ task_id: string }>;
   onRefresh?: () => Promise<void>;
   onReveal: (secret: ReusableSecret) => Promise<string>;
+  editable?: boolean;
 }) {
+  const [editing, setEditing] = useState<ReusableSecret | null>(null);
   const [confirmation, setConfirmation] = useState<ReusableSecret | null>(null);
   const [query, setQuery] = useState("");
   const matches = secrets.filter((secret) =>
@@ -141,6 +145,16 @@ export function ReusableSecretOwnerList({
                           label={secret.key}
                           file={secret.kind === "file"}
                         />
+                        {editable && secret.kind === "file" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditing(secret)}
+                            aria-label={`Edit ${secret.key}`}
+                          >
+                            <Pencil className="size-3.5" /> Edit
+                          </Button>
+                        )}
                         {onRemove && (
                           <Button
                             variant="ghost"
@@ -166,6 +180,16 @@ export function ReusableSecretOwnerList({
           </ResourceTable>
           <TablePagination table={table} label="Secrets" />
         </div>
+      )}
+      {editing && (
+        <FileSecretEditor
+          key={editing.id}
+          secret={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            await onRefresh?.();
+          }}
+        />
       )}
       {confirmation && onRemove && (
         <TaskRunnerDialog

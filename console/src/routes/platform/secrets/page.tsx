@@ -228,6 +228,7 @@ export default function PlatformSecretsPage() {
           loading={store.reusableSecretsLoading}
           emptyTitle="No platform Secrets yet"
           scopeLabel="platform scope"
+          editable
           onRemove={(secret) => store.removeReusableSecret(secret.id)}
           onRefresh={() => store.refreshReusableSecrets()}
           onReveal={(secret) => store.revealReusableSecret(secret.id)}
