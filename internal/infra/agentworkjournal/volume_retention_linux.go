@@ -7,11 +7,14 @@ import (
 )
 
 // retireRecoveredVolume runs under the journal lock after validating the saved
-// successful recovery receipt. Remove forward evidence before the receipt so
+// settled recovery receipt. Remove forward evidence before the receipt so
 // an interrupted retirement can replay the same proof after a crash.
 func (journal *Journal) retireRecoveredVolume(ctx context.Context, recovery VolumeRecoveryRecord) error {
-	if recovery.Receipt == nil || recovery.Receipt.Outcome != workexecution.Succeeded || recovery.Report == nil ||
-		!recovery.Report.BoundaryCompleted(recovery.Boundary) || recovery.Source.Validate() != nil {
+	if recovery.Receipt == nil || recovery.Report == nil ||
+		!recovery.Report.Disposition(
+			recovery.Action,
+			recovery.Boundary,
+		).EffectsSettled || recovery.Source.Validate() != nil {
 		return conflict()
 	}
 	forward, err := journal.readRecord(ctx, recovery.Source.Forward.ID)

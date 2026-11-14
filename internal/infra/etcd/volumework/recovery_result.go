@@ -47,9 +47,9 @@ func (repository *InputRepository) PrepareRecoveryResult(
 			"Volume recovery observation is newer than settlement",
 		)
 	}
-	completed := report.BoundaryCompleted(captured.Boundary)
+	disposition := report.Disposition(captured.Input.Action, captured.Boundary)
 	outcome := workexecution.Failed
-	if completed {
+	if disposition.BoundaryCompleted {
 		outcome = workexecution.Succeeded
 	}
 	guards := append(captured.Conditions,
@@ -60,28 +60,28 @@ func (repository *InputRepository) PrepareRecoveryResult(
 		keyvalue.Condition{Key: workqueue.ExecutorKey(attempt.Executor), ModRevision: view.ExecutorRevision})
 	return workqueue.Change{Conditions: guards, Mutations: []keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: RecoveryResultKey(attempt.ID), Value: append([]byte(nil), raw...)},
-	}}, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: completed}, nil
+	}}, workexecution.Completion{Outcome: outcome, Evidence: evidence, EffectsSettled: disposition.EffectsSettled}, nil
 }
 
 func (repository *InputRepository) LoadRecoveryResult(
 	ctx context.Context,
 	view workqueue.ResumeView,
-) ([]byte, bool, error) {
+) ([]byte, volumeexecution.RecoveryDisposition, error) {
 	attempt := view.Attempt.Attempt
 	if attempt.FinishedAt == nil || attempt.Result == nil {
-		return nil, false, conflict("Volume recovery has no saved terminal result")
+		return nil, volumeexecution.RecoveryDisposition{}, conflict("Volume recovery has no saved terminal result")
 	}
 	captured, err := repository.LoadRecoveryInput(ctx, view.Work, attempt)
 	if err != nil {
-		return nil, false, err
+		return nil, volumeexecution.RecoveryDisposition{}, err
 	}
 	read, err := repository.read(ctx, []string{RecoveryResultKey(attempt.ID)}, view.Work.ReadRevision)
 	if err != nil {
-		return nil, false, err
+		return nil, volumeexecution.RecoveryDisposition{}, err
 	}
 	defer keyvalue.ClearValues(read.Values)
 	if read.Values[0] == nil {
-		return nil, false, conflict("Volume recovery result is unavailable")
+		return nil, volumeexecution.RecoveryDisposition{}, conflict("Volume recovery result is unavailable")
 	}
 	raw := read.Values[0].Value
 	report, evidence, err := volumeexecution.DecodeRecoveryReport(
@@ -93,12 +93,14 @@ func (repository *InputRepository) LoadRecoveryResult(
 		raw,
 	)
 	if err != nil {
-		return nil, false, err
+		return nil, volumeexecution.RecoveryDisposition{}, err
 	}
-	completed := report.BoundaryCompleted(captured.Boundary)
-	if evidence != *attempt.Result || completed != (attempt.Outcome == workexecution.Succeeded) ||
+	disposition := report.Disposition(captured.Input.Action, captured.Boundary)
+	if evidence != *attempt.Result || disposition.BoundaryCompleted != (attempt.Outcome == workexecution.Succeeded) ||
 		report.Observation.At.After(*attempt.FinishedAt) {
-		return nil, false, conflict("Volume recovery result differs from its terminal evidence")
+		return nil, volumeexecution.RecoveryDisposition{}, conflict(
+			"Volume recovery result differs from its terminal evidence",
+		)
 	}
-	return append([]byte(nil), raw...), completed, nil
+	return append([]byte(nil), raw...), disposition, nil
 }

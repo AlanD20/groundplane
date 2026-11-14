@@ -64,7 +64,7 @@ func (service *WorkReports) RecoverVolume(
 			return nil, err
 		}
 	}
-	saved, completed, err := service.records.LoadRecoveryResult(ctx, view)
+	saved, disposition, err := service.records.LoadRecoveryResult(ctx, view)
 	if err != nil {
 		return nil, err
 	}
@@ -78,5 +78,5 @@ func (service *WorkReports) RecoverVolume(
 	}
 	return &agentpb.VolumeWorkRecoveryReportAck{Attempt: proto.CloneOf(request.Attempt),
 		Evidence:          &agentpb.WorkInputReference{InputId: attempt.Result.ID, Sha256: digest},
-		BoundaryCompleted: completed, FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
+		BoundaryCompleted: disposition.BoundaryCompleted, FinishedAt: timestamppb.New(*attempt.FinishedAt)}, nil
 }

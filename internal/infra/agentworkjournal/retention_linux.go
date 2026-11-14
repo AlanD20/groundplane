@@ -332,7 +332,8 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 				!receipt.FinishedAt.Equal(*terminal.FinishedAt) || *receipt.Result != *terminal.Result {
 				return conflict()
 			}
-			if terminal.Outcome == workexecution.Succeeded {
+			if recovery.Report != nil &&
+				recovery.Report.Disposition(recovery.Action, recovery.Boundary).EffectsSettled {
 				if err := journal.retireRecoveredVolume(ctx, *recovery); err != nil {
 					return err
 				}

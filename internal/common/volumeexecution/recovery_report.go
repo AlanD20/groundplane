@@ -54,6 +54,21 @@ func (report RecoveryReport) BoundaryCompleted(boundary Progress) bool {
 	return report.HelperStopped && report.Observation.proves(boundary.Stage)
 }
 
+// RecoveryDisposition separates completion of the interrupted action from
+// proof that it left no unresolved effects. Neither changes the forward failure.
+type RecoveryDisposition struct {
+	BoundaryCompleted bool
+	EffectsSettled    bool
+}
+
+func (report RecoveryReport) Disposition(action agentpb.VolumeWorkAction, boundary Progress) RecoveryDisposition {
+	completed := report.BoundaryCompleted(boundary)
+	absentCreation := action == agentpb.VolumeWorkAction_VOLUME_WORK_ACTION_CREATE &&
+		boundary.Stage == PrepareDirectory && report.HelperStopped &&
+		report.Observation.DirectoryAbsent && report.Observation.VolumeAbsent
+	return RecoveryDisposition{BoundaryCompleted: completed, EffectsSettled: completed || absentCreation}
+}
+
 func EncodeRecoveryReport(
 	attempt workexecution.Attempt,
 	source Recovery,

@@ -10,6 +10,8 @@ that every deployment or failure scenario has been qualified.
   disconnecting unrelated Agent work.
 - Preserve Volume execution failure causes in private Agent logs, with the Task,
   work item and attempt identifiers needed for diagnosis.
+- Settle interrupted initial Volume creation when recovery proves both the
+  directory and Docker Volume absent, retaining the failed action and its history.
 
 ## 0.0.1 — 2026-11-14
 

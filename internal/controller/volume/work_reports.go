@@ -49,7 +49,7 @@ type WorkRecords interface {
 		[]byte,
 		time.Time,
 	) (workqueue.Change, workexecution.Completion, error)
-	LoadRecoveryResult(context.Context, workqueue.ResumeView) ([]byte, bool, error)
+	LoadRecoveryResult(context.Context, workqueue.ResumeView) ([]byte, volumeexecution.RecoveryDisposition, error)
 }
 
 type WorkReports struct {

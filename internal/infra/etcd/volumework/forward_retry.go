@@ -52,14 +52,14 @@ func (repository *InputRepository) PrepareForwardRetry(
 			)
 		}
 		resume := workqueue.ResumeView{Work: view, Attempt: previous}
-		_, completed, err := repository.LoadRecoveryResult(ctx, resume)
+		_, disposition, err := repository.LoadRecoveryResult(ctx, resume)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
-		if !completed {
+		if !disposition.EffectsSettled {
 			return workqueue.Change{}, errs.New(
 				errs.KindTaskNotRetryable,
-				"Volume recovery has not proved the interrupted stage",
+				"Volume recovery has not accounted for the interrupted effects",
 			)
 		}
 		source, err := repository.LoadRecoveryInput(ctx, view, attempt)

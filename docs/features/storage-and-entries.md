@@ -27,6 +27,11 @@ interrupted removal keeps its identity and recovery information; Retry does not
 repeat a physical deletion when its exact directory absence has already been
 proved.
 
+If initial Volume creation is interrupted, recovery inspects the captured
+operation before allowing conflicting work. Proving that both its directory and
+Docker Volume are absent settles its effects without marking creation successful.
+Retry or a new Apply can then create it under the usual ownership checks.
+
 ### Mount a Volume
 
 In a Service, open **Settings → Storage → Add mount**, choose an existing
