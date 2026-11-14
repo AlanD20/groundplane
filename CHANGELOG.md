@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Preserve an existing key-only secret Entry's protected value when Blueprint
+  adoption or an exposure edit changes its metadata.
 - Finish captured work revoked before assignment using a durable no-assignment
   receipt, preserving its cancelled or superseded outcome and normal retention.
 - Show embedded Script preparation, command outcome and cleanup in parent Task

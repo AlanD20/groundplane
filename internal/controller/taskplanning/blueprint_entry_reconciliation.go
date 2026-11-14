@@ -94,10 +94,16 @@ func ReconcileBlueprintEntries(
 		if persisted.Secret && persisted.Source.Kind == core.SourceLiteral {
 			persisted.Source.Literal = ""
 		}
-		changed := !found || !sameBlueprintEntryDesired(existing.Entry, persisted) ||
+		valueChanged := !found || !sameBlueprintEntryDesired(existing.Entry, persisted) ||
 			desired.Secret && desired.Source.Kind == core.SourceLiteral && desired.Source.Literal != ""
+		// Key-only secret declarations select the existing protected value.
+		// Exposure changes and direct-Entry adoption change metadata, not bytes.
+		if found && existing.Entry.Secret && existing.Entry.Source.Kind == core.SourceLiteral &&
+			desired.Secret && desired.Source.Kind == core.SourceLiteral && desired.Source.Literal == "" {
+			valueChanged = false
+		}
 		generationID := existing.CurrentValueGenerationID
-		if changed {
+		if valueChanged {
 			generationID = allocate(ids.KindConfig, "entry-generation/"+key)
 		}
 		record, err := entryrecord.NewBlueprintRecord(environmentID, key, persisted, generationID)
@@ -105,7 +111,7 @@ func ReconcileBlueprintEntries(
 			return BlueprintEntryReconciliation{}, err
 		}
 		result.Current = append(result.Current, record)
-		if changed {
+		if valueChanged {
 			result.Values = append(result.Values, BlueprintEntryValueCandidate{Record: record, Desired: desired})
 		}
 		delete(currentByKey, key)

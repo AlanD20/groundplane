@@ -158,6 +158,13 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 		}
 		adopted := current
 		adopted.BlueprintKey = record.BlueprintKey
+		if current.Entry.Secret && current.Entry.Source.Kind == core.SourceLiteral &&
+			record.Entry.Secret && record.Entry.Source.Kind == core.SourceLiteral {
+			// A key-only declaration may narrow or expand exposure without
+			// replacing the selected protected bytes. All other metadata and
+			// the generation remain compared below and in the transaction.
+			adopted.Entry.Exposure = record.Entry.Exposure
+		}
 		if current.CurrentValueGenerationID == record.CurrentValueGenerationID &&
 			!entries.EqualRecord(adopted, record) {
 			return workqueue.Change{}, errs.New(

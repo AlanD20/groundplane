@@ -569,8 +569,9 @@ x-gp-entry:
 A secret literal in a Blueprint has an empty `source.literal`; nonempty secret
 plaintext is rejected. A new key-only secret Entry creates an empty protected
 value generation. Canonical export shows its key and source kind, never the
-selected value. Reapplying the same key-only declaration preserves an existing
-generation, including one later set through the Entry action. Prefer
+selected value. A key-only declaration preserves an existing generation when
+adopting a direct Entry, changing exposure, or reapplying, including a value later
+set through the Entry action. Prefer
 `secret_ref` when the same credential should be reusable as a Secret resource.
 
 See [Storage and Entries](features/storage-and-entries.md) for lifecycle and
