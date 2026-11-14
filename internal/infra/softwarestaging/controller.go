@@ -16,8 +16,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
+	"github.com/AlanD20/groundplane/internal/common/jcs"
+	"github.com/AlanD20/groundplane/internal/infra/agentimagemetadata"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/registryimages"
@@ -130,6 +133,49 @@ func (stager *Stager) Stage(
 	metadata, err := os.ReadFile(filepath.Join(workspace, "controller-release.json"))
 	if err != nil {
 		return upgrade.Release{}, errs.Wrap(errs.KindInternal, err)
+	}
+	build, err := jcs.Decode[upgrade.BuildMetadata](metadata)
+	if err != nil {
+		return upgrade.Release{}, err
+	}
+	if build.StorageEpoch != upgrade.StorageEpoch {
+		return upgrade.Release{}, errs.New(
+			errs.KindSoftwareStorageIncompatible,
+			fmt.Sprintf(
+				"Controller storage format %d differs from installed format %d; select a compatible build",
+				build.StorageEpoch,
+				upgrade.StorageEpoch,
+			),
+		)
+	}
+	if !record.Source.Selection.IncludesAgent() && build.ChannelSchema != agentprotocol.SchemaVersion {
+		return upgrade.Release{}, errs.New(
+			errs.KindSoftwareProtocolIncompatible,
+			fmt.Sprintf(
+				"Controller-only update would change channel format %d to %d; prepare Both instead",
+				agentprotocol.SchemaVersion,
+				build.ChannelSchema,
+			),
+		)
+	}
+	if record.Source.Selection.IncludesAgent() {
+		if err := stager.StageAgent(ctx, record.Progress.Result.Agent.Artifact, build.ChannelSchema, record.TaskID); err != nil {
+			return upgrade.Release{}, err
+		}
+	}
+	agentMetadata, err := agentimagemetadata.Read(ctx, agentImage, record.TaskID)
+	if err != nil {
+		return upgrade.Release{}, err
+	}
+	if agentMetadata.ChannelSchema != build.ChannelSchema {
+		return upgrade.Release{}, errs.New(
+			errs.KindSoftwareProtocolIncompatible,
+			fmt.Sprintf(
+				"Controller channel format %d does not match selected Agent format %d; prepare Both with matching builds",
+				build.ChannelSchema,
+				agentMetadata.ChannelSchema,
+			),
+		)
 	}
 	binary, err := os.Open(filepath.Join(workspace, "controller"))
 	if err != nil {

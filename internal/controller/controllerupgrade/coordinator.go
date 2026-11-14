@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -62,17 +63,18 @@ type Dependencies struct {
 // the handoff/qualification authority; only the predecessor watchdog touches
 // the installed executable or stops/starts the Controller service.
 type Coordinator struct {
-	journal   JournalStore
-	unit      ActivationUnit
-	agents    ManagedAgent
-	work      ActiveAgentWork
-	sessions  Admission
-	readiness *Readiness
-	process   upgrade.Digest
-	logger    *slog.Logger
-	now       func() time.Time
-	mu        sync.Mutex
-	active    *nativeOperation
+	journal       JournalStore
+	unit          ActivationUnit
+	agents        ManagedAgent
+	work          ActiveAgentWork
+	sessions      Admission
+	readiness     *Readiness
+	process       upgrade.Digest
+	channelSchema int
+	logger        *slog.Logger
+	now           func() time.Time
+	mu            sync.Mutex
+	active        *nativeOperation
 }
 
 type nativeOperation struct {
@@ -94,6 +96,7 @@ func NewCoordinator(dependencies Dependencies) (*Coordinator, error) {
 		journal: dependencies.Journal, unit: dependencies.Unit, agents: dependencies.Agents,
 		work: dependencies.Work, sessions: dependencies.Sessions, readiness: dependencies.Readiness,
 		process: dependencies.ProcessDigest, logger: dependencies.Logger, now: time.Now,
+		channelSchema: agentprotocol.SchemaVersion,
 	}, nil
 }
 

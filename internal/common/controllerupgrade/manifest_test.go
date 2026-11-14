@@ -28,6 +28,15 @@ func TestManifestBoundary(t *testing.T) {
 	if err != nil || manifest.ControllerVersion != "0.1.0" {
 		t.Fatalf("valid release = %#v, %v", manifest, err)
 	}
+	paired := manifest
+	paired.ChannelSchema++
+	if err := paired.Validate(); err != nil {
+		t.Fatalf("storage-compatible pair cannot be staged: %v", err)
+	}
+	if paired.ValidateProtocol(agentprotocol.SchemaVersion) == nil ||
+		paired.ValidateProtocol(paired.ChannelSchema) != nil {
+		t.Fatal("candidate did not qualify against its own channel format")
+	}
 	for name, raw := range map[string][]byte{
 		"digest mismatch": append([]byte(" "), valid...),
 		"duplicate": []byte(strings.Replace(
@@ -42,10 +51,8 @@ func TestManifestBoundary(t *testing.T) {
 			fmt.Sprintf(`"other":1,"schema":%d`, ManifestSchema),
 			1,
 		)),
-		"tag":     []byte(strings.Replace(string(valid), "@sha256:"+strings.Repeat("a", 64), ":latest", 1)),
-		"storage": []byte(strings.Replace(string(valid), fmt.Sprintf(`"storage_epoch":%d`, StorageEpoch), `"storage_epoch":3`, 1)),
-		"protocol": []byte(strings.Replace(string(valid), fmt.Sprintf(`"channel_schema":%d`, agentprotocol.SchemaVersion),
-			fmt.Sprintf(`"channel_schema":%d`, agentprotocol.SchemaVersion+1), 1)),
+		"tag":                       []byte(strings.Replace(string(valid), "@sha256:"+strings.Repeat("a", 64), ":latest", 1)),
+		"storage":                   []byte(strings.Replace(string(valid), fmt.Sprintf(`"storage_epoch":%d`, StorageEpoch), `"storage_epoch":3`, 1)),
 		"version control character": []byte(strings.Replace(string(valid), "0.1.0", `0.1.0\n`, 1)),
 		"oversized":                 []byte(strings.Repeat(" ", MaxManifestBytes+1)),
 	} {

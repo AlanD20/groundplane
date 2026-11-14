@@ -17,6 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
+	"github.com/AlanD20/groundplane/internal/infra/agentimagemetadata"
 	"github.com/AlanD20/groundplane/internal/infra/registryimages"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -145,7 +146,7 @@ func (preparer *Preparer) Prepare(
 		return result, errs.Wrap(errs.KindRequestUnavailable, err)
 	}
 	if err := observation.Run(ctx, "software_output_check", func(ctx context.Context) error {
-		return preparer.verifyArtifacts(ctx, result)
+		return preparer.verifyArtifacts(ctx, result, input.OperationID)
 	}); err != nil {
 		return result, err
 	}
@@ -293,7 +294,7 @@ func validateArtifact(artifact Artifact, repository string) error {
 	return nil
 }
 
-func (preparer *Preparer) verifyArtifacts(ctx context.Context, result Result) error {
+func (preparer *Preparer) verifyArtifacts(ctx context.Context, result Result, owner string) error {
 	artifacts := make([]Artifact, 0, 2)
 	if result.Agent != nil {
 		artifacts = append(artifacts, result.Agent.Artifact)
@@ -312,6 +313,22 @@ func (preparer *Preparer) verifyArtifacts(ctx context.Context, result Result) er
 		if plan.Reference() != artifact.Reference || plan.ManifestDigest != artifact.ManifestDigest ||
 			plan.ConfigDigest != artifact.ConfigDigest || plan.Architecture != artifact.Platform.Architecture {
 			return errs.New(errs.KindStateConflict, "prepared registry checkpoint readback differs")
+		}
+		if result.Agent != nil && artifact.Reference == result.Agent.Artifact.Reference {
+			if _, err := (registryimages.Local{}).Fetch(ctx, plan, func(imagefetch.Progress) error { return ctx.Err() }); err != nil {
+				return err
+			}
+			metadata, err := agentimagemetadata.Read(ctx, artifact.Reference, owner)
+			if err != nil {
+				return err
+			}
+			commit, _ := componentProvenance(result.Source, SelectionAgent)
+			if metadata.Source.Kind != string(result.Source.SourceKind) || metadata.Source.Commit != commit {
+				return errs.New(
+					errs.KindSoftwareAgentMetadataInvalid,
+					"Agent build metadata does not match the selected source",
+				)
+			}
 		}
 	}
 	return nil

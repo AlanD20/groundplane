@@ -33,6 +33,10 @@ type BootstrapUnit interface{ VerifyBootstrap(context.Context) error }
 type AgentInventory interface {
 	ListHealth(context.Context) ([]localagent.Health, error)
 }
+
+type AgentImageVerifier interface {
+	Verify(context.Context, string, int) error
+}
 type UpdateTaskStore interface {
 	CreateControllerSoftwareWork(
 		context.Context,
@@ -47,6 +51,7 @@ type ServiceDependencies struct {
 	Catalog             ReleaseCatalog
 	Unit                BootstrapUnit
 	Agents              AgentInventory
+	AgentImages         AgentImageVerifier
 	Tasks               UpdateTaskStore
 	Records             *controllersoftware.Repository
 	Evidence            requestidempotency.EvidenceRepository
@@ -56,11 +61,13 @@ type ServiceDependencies struct {
 }
 
 // Service publishes frozen native Tasks and owns the current release selection.
-// It never mutates the host; only the claimed Task coordinator can activate.
+// Preflight verifies staged bytes and the stopped Agent image; only the claimed
+// Task coordinator can activate either executable.
 type Service struct {
 	catalog        ReleaseCatalog
 	unit           BootstrapUnit
 	agents         AgentInventory
+	agentImages    AgentImageVerifier
 	tasks          UpdateTaskStore
 	records        *controllersoftware.Repository
 	evidence       requestidempotency.EvidenceRepository
@@ -73,12 +80,14 @@ type Service struct {
 func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if dependencies.Unit == nil || dependencies.Agents == nil || dependencies.Tasks == nil ||
 		dependencies.Evidence == nil || dependencies.Intents == nil || dependencies.Records == nil || !dependencies.ProcessDigest.Valid() ||
-		(dependencies.BootstrapAgentImage != "" && !imageref.IsDigestPinned(dependencies.BootstrapAgentImage)) {
+		(dependencies.BootstrapAgentImage != "" && !imageref.IsDigestPinned(dependencies.BootstrapAgentImage)) ||
+		dependencies.Catalog != nil && dependencies.AgentImages == nil {
 		return nil, errs.New(errs.KindInternal, "controller update service dependencies are invalid")
 	}
 	return &Service{catalog: dependencies.Catalog, unit: dependencies.Unit, agents: dependencies.Agents,
 		tasks: dependencies.Tasks, records: dependencies.Records, evidence: dependencies.Evidence, intents: dependencies.Intents,
-		process: dependencies.ProcessDigest, bootstrapImage: dependencies.BootstrapAgentImage, now: time.Now}, nil
+		process: dependencies.ProcessDigest, bootstrapImage: dependencies.BootstrapAgentImage,
+		agentImages: dependencies.AgentImages, now: time.Now}, nil
 }
 
 func (service *Service) UpdateController(
@@ -192,6 +201,9 @@ func (service *Service) freeze(ctx context.Context, release upgrade.Digest) (upg
 		input.Agent = &upgrade.AgentPredecessor{ID: agent.ID, Image: agent.Image, Generation: agent.Generation}
 	}
 	if err := input.Validate(); err != nil {
+		return upgrade.Input{}, err
+	}
+	if err := service.agentImages.Verify(ctx, input.Manifest.AgentImage, input.Manifest.ChannelSchema); err != nil {
 		return upgrade.Input{}, err
 	}
 	return input, nil

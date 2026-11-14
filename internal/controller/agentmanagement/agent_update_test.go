@@ -32,7 +32,7 @@ func TestAgentUpdateServiceCreatesPinnedControllerTask(t *testing.T) {
 	idempotency := &fakeAgentUpdateIdempotency{
 		resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
 	}
-	service, err := NewUpdateService(targets, tasks, idempotency)
+	service, err := NewUpdateService(targets, tasks, idempotency, targets)
 	if err != nil {
 		t.Fatalf("NewUpdateService() error = %v", err)
 	}
@@ -79,6 +79,7 @@ func TestAgentUpdateServiceReplaysBeforeTargetLookup(t *testing.T) {
 				Kind: idempotentintent.ResolutionReplay, Response: want,
 			},
 		},
+		targets,
 	)
 	if err != nil {
 		t.Fatalf("NewUpdateService() error = %v", err)
@@ -112,7 +113,7 @@ func TestAgentUpdateRefusesInvalidReplacementBeforePublication(t *testing.T) {
 			tasks := &fakeAgentUpdateTasks{}
 			service, err := NewUpdateService(&fakeAgentUpdateTargets{health: localagent.Health{Agent: localagent.Agent{
 				ID: testAgentUpdateID, Image: testAgentUpdatePreviousImage, Generation: generation, Phase: localagent.PhaseReady,
-			}}}, tasks, &fakeAgentUpdateIdempotency{resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied}})
+			}}}, tasks, &fakeAgentUpdateIdempotency{resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied}}, &fakeAgentUpdateTargets{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -129,6 +130,8 @@ type fakeAgentUpdateTargets struct {
 	err    error
 	calls  int
 }
+
+func (*fakeAgentUpdateTargets) Verify(context.Context, string, int) error { return nil }
 
 func (targets *fakeAgentUpdateTargets) Health(context.Context, string) (localagent.Health, error) {
 	targets.calls++

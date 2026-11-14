@@ -32,6 +32,7 @@ func TestAgentActionsSelectCurrentReleaseImage(t *testing.T) {
 		}}},
 		updateTasks,
 		&fakeAgentUpdateIdempotency{resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied}},
+		&fakeAgentUpdateTargets{},
 	)
 	if err != nil {
 		t.Fatal(err)

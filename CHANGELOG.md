@@ -5,15 +5,20 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
-- Retry contended native execution checkpoints without disconnecting unrelated
-  Agent work, and record refused checkpoints in Task execution details.
-
-- Edit Project and Platform file Secret contents in the Console, preserving
-  stable references and guarding concurrent updates.
-
 ## 0.0.1 — 2026-11-14
 
 Initial single-host release.
+
+### Update and configuration repairs
+
+- Qualify combined Controller/Agent updates as one prepared pair, including
+  channel-format changes, with predecessor-pair rollback on failed readiness.
+  Reject mismatched single-component updates before activation. This replacement
+  uses storage epoch 47; earlier pre-release installations require a clean cutover.
+- Retry contended native execution checkpoints without disconnecting unrelated
+  Agent work, and record refused checkpoints in Task execution details.
+- Edit Project and Platform file Secret contents in the Console, preserving
+  stable references and guarding concurrent updates.
 
 ### Application hosting
 

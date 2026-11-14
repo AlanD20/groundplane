@@ -3,6 +3,7 @@ package softwarestaging
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/infra/agentimagemetadata"
 	"os"
 	"path/filepath"
 
@@ -17,6 +18,9 @@ import (
 // removes a staged immutable release or deletes an installed image.
 func (stager *Stager) Cleanup(ctx context.Context, record preparationrecord.Record) error {
 	if err := preparationrecord.ValidateRecord(record); err != nil {
+		return err
+	}
+	if err := agentimagemetadata.Cleanup(ctx, record.TaskID); err != nil {
 		return err
 	}
 	if !record.Source.Selection.IncludesController() {

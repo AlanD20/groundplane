@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/AlanD20/groundplane/internal/infra/agentimagemetadata"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,13 +17,16 @@ type Reconciliation struct {
 }
 
 // Reconcile retires only this captured operation's builder, client and scratch.
-// It may verify already-published outputs, but never downloads, builds or pushes
-// again. The caller must exclude the previous executing process first.
+// It may fetch and verify immutable published outputs, but never downloads source,
+// builds or pushes again. The caller must exclude the previous executing process first.
 func (preparer *Preparer) Reconcile(ctx context.Context, input Input, checkpoint Result) (Reconciliation, error) {
 	if err := ValidateInput(input); err != nil {
 		return Reconciliation{}, err
 	}
 	if err := ValidateResult(checkpoint, input.Source, true); err != nil {
+		return Reconciliation{}, err
+	}
+	if err := agentimagemetadata.Cleanup(ctx, input.OperationID); err != nil {
 		return Reconciliation{}, err
 	}
 	workspace := filepath.Join(preparer.workspaceRoot, ".software-preparation-"+input.OperationID)
@@ -49,7 +53,7 @@ func (preparer *Preparer) Reconcile(ctx context.Context, input Input, checkpoint
 	if ValidateResult(checkpoint, input.Source, false) != nil {
 		return result, nil
 	}
-	if err := preparer.verifyArtifacts(ctx, checkpoint); err != nil {
+	if err := preparer.verifyArtifacts(ctx, checkpoint, input.OperationID); err != nil {
 		return result, err
 	}
 	result.Verified = true

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
@@ -16,7 +15,7 @@ import (
 
 const (
 	ManifestSchema         = 2
-	StorageEpoch           = 46
+	StorageEpoch           = 47
 	MaxManifestBytes       = 4096
 	TaskTimeoutSeconds     = 600
 	DrainTimeoutSeconds    = 120
@@ -73,15 +72,40 @@ func ParseManifest(raw []byte, expected Digest) (Manifest, error) {
 	return manifest, nil
 }
 
+// Validate admits storage-compatible release records. Channel compatibility is
+// checked against the paired Agent before publication and by the candidate at
+// qualification; the predecessor must still read the journal to recover it.
 func (manifest Manifest) Validate() error {
 	if err := manifest.ValidateRecord(); err != nil {
 		return err
 	}
-	if manifest.StorageEpoch != StorageEpoch ||
-		manifest.ChannelSchema != agentprotocol.SchemaVersion {
+	if manifest.StorageEpoch != StorageEpoch {
 		return errs.New(
-			errs.KindValidationFailed,
-			"controller release has incompatible storage or protocol format",
+			errs.KindSoftwareStorageIncompatible,
+			fmt.Sprintf(
+				"Controller storage format %d does not match installed format %d; select a compatible build",
+				manifest.StorageEpoch,
+				StorageEpoch,
+			),
+		)
+	}
+	return nil
+}
+
+// ValidateProtocol qualifies a running candidate against its own compiled
+// channel. The predecessor may stage and recover a different-channel pair.
+func (manifest Manifest) ValidateProtocol(channel int) error {
+	if err := manifest.Validate(); err != nil {
+		return err
+	}
+	if channel < 1 || manifest.ChannelSchema != channel {
+		return errs.New(
+			errs.KindSoftwareProtocolIncompatible,
+			fmt.Sprintf(
+				"Controller channel format %d does not match required format %d; prepare a matching Controller and Agent pair",
+				manifest.ChannelSchema,
+				channel,
+			),
 		)
 	}
 	return nil

@@ -206,6 +206,8 @@ func (service *Service) finishedItem(
 		proof, result, err = controllersoftware.PrepareResult(capture, saved, attempt.Attempt)
 		controllerApplied = saved.Record.Result.Journal != nil &&
 			saved.Record.Result.Journal.Phase == upgrade.PhaseHealthy
+		agentApplied = controllerApplied && record.Record.Input.Preparation.Source.Selection.IncludesAgent() &&
+			saved.Record.Result.Journal.Manifest.AgentImage == record.Record.Input.Preparation.Progress.Result.Agent.Artifact.Reference
 		failure = saved.Record.Result.Failure
 	case workexecution.AgentSoftware:
 		repository := service.agentRecords

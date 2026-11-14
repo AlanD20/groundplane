@@ -2,6 +2,7 @@ package softwareactivation
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/taskprogress"
@@ -103,8 +104,12 @@ func (service *Service) Execute(ctx context.Context, delivery workqueue.Delivery
 		}
 	}
 	if selection.IncludesAgent() {
+		channel := agentprotocol.SchemaVersion
+		if result.Controller != nil {
+			channel = result.Controller.Manifest.ChannelSchema
+		}
 		if err := service.observe(ctx, delivery, "software_agent_stage", "Import verified Agent image", "Import the exact prepared image without replacing the running Agent", func(ctx context.Context) error {
-			return service.stager.StageAgent(ctx, record.Record.Input.Preparation.Progress.Result.Agent.Artifact)
+			return service.stager.StageAgent(ctx, record.Record.Input.Preparation.Progress.Result.Agent.Artifact, channel, record.Record.Input.Preparation.TaskID)
 		}); err != nil {
 			return service.failStaging(ctx, delivery, record, err)
 		}

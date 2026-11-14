@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	commandrunner "github.com/AlanD20/groundplane/internal/common/runner"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
+	"github.com/AlanD20/groundplane/internal/infra/agentimagemetadata"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/internal/infra/registryconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/registryimages"
@@ -351,6 +352,9 @@ func componentProvenance(source ResolvedSource, component Selection) (string, ti
 }
 
 func (operation *dockerOperation) cleanup(ctx context.Context) error {
+	if err := agentimagemetadata.Cleanup(ctx, operation.operationID); err != nil {
+		return err
+	}
 	if err := operation.removeBuildClient(ctx); err != nil {
 		return err
 	}

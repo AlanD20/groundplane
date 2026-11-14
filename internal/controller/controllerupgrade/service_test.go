@@ -157,7 +157,7 @@ func newServiceHarness(t *testing.T) *serviceHarness {
 	}
 	service, err := NewService(ServiceDependencies{Catalog: catalog, Unit: h.unit, Agents: h.agents,
 		Tasks: tasks, Records: records, Evidence: evidence, Intents: intents, ProcessDigest: h.input.PreviousController,
-		BootstrapAgentImage: h.input.Agent.Image})
+		BootstrapAgentImage: h.input.Agent.Image, AgentImages: catalog})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,6 +171,8 @@ type serviceCatalog struct {
 	hasSelected bool
 	failure     error
 }
+
+func (*serviceCatalog) Verify(context.Context, string, int) error { return nil }
 
 func (catalog *serviceCatalog) Current(ctx context.Context) (upgrade.Journal, bool, error) {
 	if catalog.failure != nil {

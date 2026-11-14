@@ -19,6 +19,9 @@ type Failure struct {
 }
 
 var failureSummaries = map[string]string{
+	"software_storage_incompatible":      "The selected software uses a different storage format. Select a build compatible with this installation and review the update recovery status before retrying.",
+	"software_protocol_incompatible":     "The selected Controller and Agent channel formats do not match. Prepare Both with matching builds and review the update recovery status before retrying.",
+	"software_agent_metadata_invalid":    "The Agent image has missing or invalid build metadata. Rebuild the Agent with this version of Groundplane before applying it.",
 	"step_timed_out":                     "The operation exceeded its time limit.",
 	"execution_canceled":                 "Execution was canceled before this operation completed.",
 	"permission_denied":                  "The operation was denied access to a required file or directory.",
@@ -127,6 +130,12 @@ func captureFailure(err error, exitCode int32, code string) *Failure {
 			code = "dependency_unavailable"
 		case kind == errs.KindValidationFailed:
 			code = "execution_input_rejected"
+		case kind == errs.KindSoftwareStorageIncompatible:
+			code = "software_storage_incompatible"
+		case kind == errs.KindSoftwareProtocolIncompatible:
+			code = "software_protocol_incompatible"
+		case kind == errs.KindSoftwareAgentMetadataInvalid:
+			code = "software_agent_metadata_invalid"
 		default:
 			if code == "" {
 				code = "internal_execution_error"

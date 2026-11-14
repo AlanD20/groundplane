@@ -56,7 +56,6 @@ func (record Record) Graph() (workexecution.Task, []workexecution.Item, error) {
 		Deadline:  task.Deadline,
 	}
 	items := []workexecution.Item{stage}
-	dependency := stage.ID
 	if record.ControllerWorkItemID != "" {
 		item := stage
 		item.ID, item.Operation, item.TargetID = record.ControllerWorkItemID, workexecution.ControllerSoftware, controllersoftware.TargetID()
@@ -65,7 +64,6 @@ func (record Record) Graph() (workexecution.Task, []workexecution.Item, error) {
 		}
 		item.Dependencies = []string{stage.ID}
 		items = append(items, item)
-		dependency = item.ID
 	}
 	if record.AgentWorkItemID != "" {
 		item := stage
@@ -75,7 +73,7 @@ func (record Record) Graph() (workexecution.Task, []workexecution.Item, error) {
 		}, nil, workexecution.Waiting, &workexecution.Wait{
 			Reason: workexecution.WaitInput,
 		}
-		item.Dependencies = []string{dependency}
+		item.Dependencies = []string{stage.ID}
 		items = append(items, item)
 	}
 	task.ExpectedItems = uint32(len(items))

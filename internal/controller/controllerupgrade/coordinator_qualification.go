@@ -18,6 +18,9 @@ func (coordinator *Coordinator) qualify(
 	progress Progress,
 ) (workexecution.Outcome, error) {
 	expected := operation.expected
+	if err := expected.Manifest.ValidateProtocol(coordinator.channelSchema); err != nil {
+		return coordinator.requestRollback(ctx, operation, err, progress)
+	}
 	if coordinator.process != expected.Manifest.ControllerSHA256 {
 		return coordinator.requestRollback(
 			ctx,

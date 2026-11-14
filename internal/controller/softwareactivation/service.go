@@ -54,7 +54,7 @@ type Stager interface {
 	// Stage imports the frozen preparation without changing running software.
 	// Interrupted starts use Cleanup, never repeat the import under that attempt.
 	Stage(context.Context, preparationrecord.Record, string) (upgrade.Release, error)
-	StageAgent(context.Context, preparation.Artifact) error
+	StageAgent(context.Context, preparation.Artifact, int, string) error
 	Cleanup(context.Context, preparationrecord.Record) error
 }
 
@@ -135,7 +135,9 @@ func (service *Service) Start(ctx context.Context, preparationTaskID, key string
 	}
 	stagingImage := ""
 	if prepared.Record.Source.Selection.IncludesController() {
-		if agent != nil {
+		if prepared.Record.Source.Selection.IncludesAgent() {
+			stagingImage = prepared.Record.Progress.Result.Agent.Artifact.Reference
+		} else if agent != nil {
 			stagingImage = agent.Image
 		} else {
 			stagingImage, err = service.controllerSource.DesiredAgentImage(ctx)

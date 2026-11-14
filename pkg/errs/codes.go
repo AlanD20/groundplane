@@ -26,17 +26,20 @@ const (
 	CodeRecoveryPointNotFound  Code = "recovery_point.not_found"
 
 	// --- conflict / in-flight ---
-	CodeDeployInFlight        Code = "deploy.in_flight"
-	CodeTaskNotRetryable      Code = "task.not_retryable"
-	CodeTaskNotAbortable      Code = "task.not_abortable"
-	CodeTaskRetryInFlight     Code = "task.retry_in_flight"
-	CodeSlugConflict          Code = "slug.conflict"
-	CodeNameConflict          Code = "name.conflict"
-	CodeStateConflict         Code = "state.conflict"
-	CodeAgentReadinessChanged Code = "agent.readiness_changed"
-	CodeResourceInUse         Code = "resource.in_use"
-	CodeCursorExpired         Code = "cursor.expired"
-	CodeIdempotencyInProgress Code = "idempotency.in_progress"
+	CodeDeployInFlight               Code = "deploy.in_flight"
+	CodeTaskNotRetryable             Code = "task.not_retryable"
+	CodeTaskNotAbortable             Code = "task.not_abortable"
+	CodeTaskRetryInFlight            Code = "task.retry_in_flight"
+	CodeSlugConflict                 Code = "slug.conflict"
+	CodeNameConflict                 Code = "name.conflict"
+	CodeStateConflict                Code = "state.conflict"
+	CodeSoftwareStorageIncompatible  Code = "software.storage_incompatible"
+	CodeSoftwareProtocolIncompatible Code = "software.protocol_incompatible"
+	CodeSoftwareAgentMetadataInvalid Code = "software.agent_metadata_invalid"
+	CodeAgentReadinessChanged        Code = "agent.readiness_changed"
+	CodeResourceInUse                Code = "resource.in_use"
+	CodeCursorExpired                Code = "cursor.expired"
+	CodeIdempotencyInProgress        Code = "idempotency.in_progress"
 
 	// --- malformed intent / retryable storage ---
 	CodeIdempotencyMismatch                Code = "idempotency.mismatch"
@@ -116,6 +119,9 @@ const (
 	KindSlugConflict
 	KindNameConflict
 	KindStateConflict
+	KindSoftwareStorageIncompatible
+	KindSoftwareProtocolIncompatible
+	KindSoftwareAgentMetadataInvalid
 	KindExecutionWriteContention
 	KindAgentReadinessChanged
 	KindResourceInUse
@@ -189,6 +195,9 @@ var kindDescriptors = [kindLimit]descriptor{
 	KindSlugConflict:                       {CodeSlugConflict, ClassConflict, 409},
 	KindNameConflict:                       {CodeNameConflict, ClassConflict, 409},
 	KindStateConflict:                      {CodeStateConflict, ClassConflict, 409},
+	KindSoftwareStorageIncompatible:        {CodeSoftwareStorageIncompatible, ClassConflict, 409},
+	KindSoftwareProtocolIncompatible:       {CodeSoftwareProtocolIncompatible, ClassConflict, 409},
+	KindSoftwareAgentMetadataInvalid:       {CodeSoftwareAgentMetadataInvalid, ClassValidation, 422},
 	KindExecutionWriteContention:           {CodeStateConflict, ClassConflict, 409},
 	KindAgentReadinessChanged:              {CodeAgentReadinessChanged, ClassConflict, 409},
 	KindResourceInUse:                      {CodeResourceInUse, ClassConflict, 409},

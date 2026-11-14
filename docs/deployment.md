@@ -223,9 +223,12 @@ Pulls from GP's managed registry select its installer-managed Docker credentials
 automatically, including updates of ref-built Agents. No `DOCKER_CONFIG` override
 or global Docker login is required for that registry.
 
-Updating both runs the guarded Controller update first, preserving the Agent,
-then its independent update. A failed second operation does not undo a completed
-Controller update. Inspect each Task's result.
+Updating both stages the selected Controller and Agent together, then uses one
+guarded handoff. The candidate Controller replaces the Agent and must prove the
+pair ready before the update succeeds. Failed qualification restores the previous
+Controller and Agent. A channel-format change requires Both; a persistent-format
+change still rejects an in-place update. Follow the same update Task through
+Controller restart and recovery.
 
 Controller installation or staging also preloads the selected upstream database
 and installs its independent backup tools. It does not replace an existing

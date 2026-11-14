@@ -185,7 +185,10 @@ use the captured local image id, not a mutable tag resolved again. Managed GP
 images are installation/release assets with their own immutable selection.
 Software preparation builds Groundplane source refs in Docker on this host or
 imports verified component releases. Controller, Agent and Both selections retain
-digest-pinned outputs in GP's registry; a separate Apply activates them. Host-built
+digest-pinned outputs in GP's registry; a separate Apply activates them.
+Both updates qualify the prepared Controller/Agent pair together and restore both
+predecessors if qualification fails. Single-component updates must retain channel
+compatibility; persistent-format incompatibility still rejects activation. Host-built
 development versions remain distinct from qualified published releases. See
 [update safety](features/upgrade-safety.md#prepare-software-then-apply).
 Explicit image Fetch accepts public registries and GP's managed private registry

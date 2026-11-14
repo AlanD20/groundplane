@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -126,19 +127,25 @@ type agentUpdateService struct {
 	targets     agentUpdateTargets
 	tasks       agentEnrollmentTaskRepository
 	idempotency agentUpdateIdempotency
-	now         func() time.Time
+	images      interface {
+		Verify(context.Context, string, int) error
+	}
+	now func() time.Time
 }
 
 func NewUpdateService(
 	targets agentUpdateTargets,
 	tasks agentEnrollmentTaskRepository,
 	idempotency agentUpdateIdempotency,
+	images interface {
+		Verify(context.Context, string, int) error
+	},
 ) (*agentUpdateService, error) {
-	if targets == nil || tasks == nil || idempotency == nil {
+	if targets == nil || tasks == nil || idempotency == nil || images == nil {
 		return nil, errs.New(errs.KindInternal, "Agent update service dependencies are invalid")
 	}
 	return &agentUpdateService{
-		targets: targets, tasks: tasks, idempotency: idempotency, now: time.Now,
+		targets: targets, tasks: tasks, idempotency: idempotency, images: images, now: time.Now,
 	}, nil
 }
 
@@ -201,6 +208,9 @@ func (service *agentUpdateService) UpdateAgent(ctx context.Context, agentID, ima
 		)
 	}
 
+	if err := service.images.Verify(ctx, image, agentprotocol.SchemaVersion); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	now := service.now().UTC()
 	task, err := newAgentUpdateCapture(
 		now,

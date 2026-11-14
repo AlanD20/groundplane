@@ -27,6 +27,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/softwareactivation"
 	"github.com/AlanD20/groundplane/internal/controller/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
+	"github.com/AlanD20/groundplane/internal/infra/agentimagemetadata"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
@@ -174,10 +175,11 @@ func New(
 		return nil, err
 	}
 	platform.controllerWork = controllerWork
+	agentImages := &agentimagemetadata.Verifier{}
 	platform.Upgrades, err = controllerupgrade.NewService(controllerupgrade.ServiceDependencies{
 		Catalog: catalog, Unit: unit, Agents: platform.agents, Tasks: dependencies.Tasks, Records: controllerRecords,
 		Evidence: dependencies.Idempotency, Intents: dependencies.Intents,
-		ProcessDigest: process, BootstrapAgentImage: cfg.Agent.Image,
+		ProcessDigest: process, BootstrapAgentImage: cfg.Agent.Image, AgentImages: agentImages,
 	})
 	if err != nil {
 		return nil, err
@@ -204,7 +206,12 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	updates, err := agentmanagement.NewUpdateService(platform.agents, dependencies.Tasks, updateIdempotency)
+	updates, err := agentmanagement.NewUpdateService(
+		platform.agents,
+		dependencies.Tasks,
+		updateIdempotency,
+		agentImages,
+	)
 	if err != nil {
 		return nil, err
 	}

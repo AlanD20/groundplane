@@ -69,7 +69,7 @@ def install(bundle: Path, args, manifest: dict, layout: Layout) -> None:
         missing_agent = current is None
         if not args.controller_only and not args.stage_only or missing_agent:
             next_agent = release_selection.agent_image(args.agent_tag)
-        manifest["agent_image"] = current or next_agent
+        manifest["agent_image"] = (current or next_agent) if args.controller_only or args.stage_only else next_agent
     elif args.controller_only or manifest["agent_image"] is None:
         manifest["agent_image"] = release_selection.agent_image()
     if args.config:

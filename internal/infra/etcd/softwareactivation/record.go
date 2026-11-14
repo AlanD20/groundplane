@@ -37,8 +37,8 @@ const (
 )
 
 // Input freezes the verified preparation and the enrolled Agent predecessor.
-// StagingAgentImage preserves that Agent across a Controller activation; when
-// no Agent is enrolled it is the explicit bootstrap/selected default only.
+// StagingAgentImage is the prepared Agent for Both, otherwise the preserved
+// enrolled Agent or explicit bootstrap default for Controller-only.
 type Input struct {
 	PreviousController upgrade.Digest            `json:"previous_controller,omitempty"`
 	OperationID        string                    `json:"operation_id"`
@@ -71,8 +71,14 @@ func (input Input) Validate() error {
 		return errs.New(errs.KindValidationFailed, "Agent activation requires an enrolled Agent predecessor")
 	}
 	if selection.IncludesController() {
+		expectedImage := input.StagingAgentImage
+		if selection.IncludesAgent() {
+			expectedImage = result.Agent.Artifact.Reference
+		} else if input.Agent != nil {
+			expectedImage = input.Agent.Image
+		}
 		if !input.PreviousController.Valid() || !imageref.IsDigestPinned(input.StagingAgentImage) ||
-			input.Agent != nil && input.StagingAgentImage != input.Agent.Image {
+			input.StagingAgentImage != expectedImage {
 			return errs.New(errs.KindValidationFailed, "Controller staging Agent image is invalid")
 		}
 	} else if input.StagingAgentImage != "" || input.PreviousController != "" {
@@ -110,7 +116,7 @@ func NewRecord(taskID, inputSHA256 string, input Input, at time.Time) (Record, e
 	if input.Preparation.Source.Selection.IncludesController() {
 		record.ControllerWorkItemID = ids.New(ids.KindWorkItem)
 	}
-	if input.Preparation.Source.Selection.IncludesAgent() {
+	if input.Preparation.Source.Selection == preparation.SelectionAgent {
 		record.AgentWorkItemID = ids.New(ids.KindWorkItem)
 	}
 	return record, ValidateRecord(record)
@@ -162,7 +168,7 @@ func ValidateRecord(record Record) error {
 	}
 	selection := record.Input.Preparation.Source.Selection
 	if selection.IncludesController() != (record.ControllerWorkItemID != "") ||
-		selection.IncludesAgent() != (record.AgentWorkItemID != "") ||
+		(selection == preparation.SelectionAgent) != (record.AgentWorkItemID != "") ||
 		record.ControllerWorkItemID != "" && ids.Validate(ids.KindWorkItem, record.ControllerWorkItemID) != nil ||
 		record.AgentWorkItemID != "" && ids.Validate(ids.KindWorkItem, record.AgentWorkItemID) != nil ||
 		record.WorkItemID == record.ControllerWorkItemID ||

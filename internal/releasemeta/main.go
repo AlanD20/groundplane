@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
@@ -27,6 +28,7 @@ func main() {
 func run(args []string) error {
 	flags := flag.NewFlagSet("releasemeta", flag.ContinueOnError)
 	binary := flags.String("controller", "", "built Controller executable")
+	agent := flags.String("agent", "", "built Agent executable")
 	version := flags.String("version", "", "exact Controller build version")
 	sourceKind := flags.String("source-kind", "", "release or source_ref for the compiled build")
 	sourceCommit := flags.String("source-commit", "", "exact resolved source commit used by the build")
@@ -34,8 +36,11 @@ func run(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if *binary == "" || *version == "" || *output == "" || flags.NArg() != 0 {
-		return errors.New("controller, version and output are required")
+	if (*binary == "") == (*agent == "") || *version == "" || *output == "" || flags.NArg() != 0 {
+		return errors.New("exactly one of controller or agent, version and output are required")
+	}
+	if *agent != "" {
+		*binary = *agent
 	}
 	file, err := os.Open(*binary)
 	if err != nil {
@@ -58,8 +63,14 @@ func run(args []string) error {
 	if count != info.Size() {
 		return errors.New("controller build size changed during hashing")
 	}
-	metadata, err := upgrade.DescribeBuild(upgrade.Digest(fmt.Sprintf("sha256:%x", digest.Sum(nil))), *version,
-		buildversion.BuildProvenance{Kind: *sourceKind, Commit: *sourceCommit})
+	binaryHash := fmt.Sprintf("sha256:%x", digest.Sum(nil))
+	source := buildversion.BuildProvenance{Kind: *sourceKind, Commit: *sourceCommit}
+	var metadata any
+	if *agent != "" {
+		metadata, err = agentprotocol.DescribeImage(binaryHash, *version, source)
+	} else {
+		metadata, err = upgrade.DescribeBuild(upgrade.Digest(binaryHash), *version, source)
+	}
 	if err != nil {
 		return err
 	}

@@ -10,9 +10,9 @@ not an application redeployment.
 Agent and Controller have independent releases. Fresh tagged installation uses
 `vX.Y.Z`; subsequent updates use `controller/vX.Y.Z` and `agent/vX.Y.Z`.
 Agent-only updates do not replace the Controller. Controller-only updates preserve
-the enrolled Agent. Updating both performs the Controller operation first and then
-the Agent operation. If the second fails, the completed Controller update is not
-silently undone.
+the enrolled Agent and requires a compatible channel format. Updating Both
+qualifies the prepared Controller and Agent together. A failed pair qualification
+restores the predecessor Controller and Agent before reporting the update failed.
 
 Use [installation and updates](../deployment.md) for commands and artifact
 selection. An Agent update pins its exact image digest; changing that digest with
@@ -26,17 +26,21 @@ Docker on the GP host for its architecture; host Go/Node toolchains are not
 required. Both resolves one source commit, or the matching component release
 tags. Published release inputs download verified artifacts instead of rebuilding.
 
-Controller build descriptors retain the exact source kind and resolved commit
-alongside the binary hash. Preparation checks those fields against its captured
-source selection; staging preserves them in the immutable release manifest.
+Controller and Agent build descriptors retain the source kind, resolved commit,
+binary hash and channel format. Preparation verifies the captured source and
+immutable artifacts without running candidate executables; staging checks that
+the selected pair agrees before activation.
 Candidate details show that recorded commit for source builds. A candidate is not
 the running Controller, even when their readable version labels match.
 
 **Platform Settings → Software updates** retains preparation progress and
 Task links. Prepare never activates software. Apply is a separate action using
 the verified outputs in GP's registry, pinned by manifest digest. Both completes
-both preparations before Controller-then-Agent activation. A successful
-Controller followed by a failed Agent remains a partial update, not a rollback.
+both preparations before one coordinated activation. The candidate Controller
+replaces the Agent and proves authenticated readiness before either is accepted.
+Agent-only updates must match the running Controller's channel format. Select
+Both when the channel format changes. Persistent-format changes still require
+a separate supported cutover; selecting Both does not bypass storage checks.
 
 Use `groundplane software prepare --component controller|agent|both
 --source source_ref|release --ref REF`, follow its Task, then

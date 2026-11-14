@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -70,6 +71,9 @@ func (store *Store) Selected(ctx context.Context) (upgrade.Release, bool, error)
 			if err := selected.Validate(); err != nil {
 				return upgrade.Release{}, false, err
 			}
+			if err := selected.Manifest.ValidateProtocol(agentprotocol.SchemaVersion); err != nil {
+				return upgrade.Release{}, false, err
+			}
 			return selected, true, nil
 		}
 	}
@@ -85,6 +89,9 @@ func (store *Store) Selected(ctx context.Context) (upgrade.Release, bool, error)
 		return upgrade.Release{}, false, err
 	}
 	if err := selected.Validate(); err != nil {
+		return upgrade.Release{}, false, err
+	}
+	if err := selected.Manifest.ValidateProtocol(agentprotocol.SchemaVersion); err != nil {
 		return upgrade.Release{}, false, err
 	}
 	return selected, true, nil

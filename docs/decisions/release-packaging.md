@@ -143,13 +143,17 @@ Deployment stages a root-owned immutable release directory. A bounded manifest
 pins the Controller binary digest, display version, Agent image digest,
 persistent-state epoch, and Agent-channel schema; the exact manifest bytes
 define release identity. Both manifest and binary are rechecked before use, and
-the candidate must be storage- and channel-compatible. Distribution and
+the candidate must be storage-compatible and its paired Agent must use its
+channel format. Candidate metadata and the Agent executable hash are verified
+without executing them. Distribution and
 signature policy remain deployment concerns rather than runtime upload paths.
 
 Update history checks the stored input's closed format and immutable digest,
 not its eligibility for activation under today's epochs. Completed releases
 remain readable after an epoch change; execution still requires the current
-storage and channel epochs. The shared record decoder lives in
+storage epoch and the selected pair's channel format. A predecessor reads a
+future-channel journal for rollback; only the candidate qualifies against its
+own compiled protocol. The shared record decoder lives in
 `internal/controller/controllerupgrade/task.go`.
 
 Console, CLI, and API invoke the same protected update operation. The Task
@@ -181,9 +185,11 @@ arbitrary downgrade.
 
 The last qualified manifest becomes the default Agent image for later
 enrollment. Independent Agent update requests retain their own explicit digest
-and recovery authority. A combined published upgrade performs Controller and
-Agent operations in order without making the second failure roll back an
-already qualified Controller.
+and recovery authority. Both uses one native handoff with the prepared Agent
+digest; it has no second Agent activation child. The candidate must qualify the
+pair before committing it. This permits channel-changing source-ref and published
+updates without ever accepting mismatched peers. Controller-only preserves the
+Agent and Agent-only preserves the Controller, so both require a matching channel.
 
 Bootstrap installs the recovery executable, guard, and sole persistent unit.
 After that baseline, routine deployment stages immutable bytes and invokes
