@@ -83,7 +83,12 @@ configuration are outside this host reset and remain untouched.
 
 Replace `--yes` with `--dry-run` to inspect the selected resources without changing
 them. The script selects Docker resources by GP ownership labels, not application
-names. It refuses to erase mounted directories or traverse symlink ancestors.
+names. Runner allocation labels and GP Compose ownership remain discoverable even
+after their containers are gone. GP's invocation-owned Buildx daemons and cache
+Volumes use their reserved generated builder identities; the shared Docker builder
+and cache are retained. Cleanup stops GP execution before re-reading child resources
+and tolerates only confirmed absence when a resource disappears during removal.
+It refuses to erase mounted directories or traverse symlink ancestors.
 If Docker is installed but unavailable, restore access to its local daemon and
 rerun; an unavailable daemon is not evidence that its resources are absent.
 Operator files stored outside GP-managed directories and Volume paths are not

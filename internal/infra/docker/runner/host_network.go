@@ -211,6 +211,8 @@ func ensureNetwork(ctx context.Context, engine *client.Client, plan corerunner.P
 			Subnet: plan.Network.Subnet, Gateway: plan.Network.Gateway,
 		}}},
 		Labels: map[string]string{
+			"com.groundplane.managed":   "true",
+			"com.groundplane.kind":      "runner-network",
 			"groundplane.runner.id":     plan.RunnerID,
 			"groundplane.runtime.epoch": strconv.FormatUint(plan.RuntimeEpoch, 10),
 		},

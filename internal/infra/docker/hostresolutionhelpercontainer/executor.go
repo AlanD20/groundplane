@@ -119,6 +119,10 @@ func createOptions(image string, operation Operation) client.ContainerCreateOpti
 	return client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image: image, User: "0", Cmd: []string{helperArgument, string(operation)},
+			Labels: map[string]string{
+				"com.groundplane.managed": "true",
+				"com.groundplane.kind":    "host-resolution-helper",
+			},
 			WorkingDir: "/", NetworkDisabled: true,
 		},
 		HostConfig: &container.HostConfig{

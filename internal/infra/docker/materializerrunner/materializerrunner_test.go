@@ -514,6 +514,8 @@ func assertCreatePolicy(t *testing.T, options client.ContainerCreateOptions) {
 		t.Fatalf("helper command = cmd %#v entrypoint %#v", config.Cmd, config.Entrypoint)
 	}
 	expectedLabels := map[string]string{
+		"com.groundplane.managed":                 "true",
+		"com.groundplane.kind":                    "configuration-materializer",
 		"io.groundplane.role":                     "configuration-materializer",
 		"io.groundplane.task":                     "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		"io.groundplane.stage":                    "step_01ARZ3NDEKTSV4RRFFQ69G5FAV",

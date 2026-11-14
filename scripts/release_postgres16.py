@@ -76,7 +76,9 @@ def native_configuration_digest(manifest: dict, reference: str, local_id: str) -
 def read_manifest(image_id: str, arch: str) -> dict:
     # The helper is never started to retrieve metadata. Remove only this
     # temporary stopped container and the anonymous volumes Docker created.
-    container = output("docker", "create", "--network", "none", "--entrypoint", "/not-started", image_id)
+    container = output("docker", "create", "--network", "none",
+                       "--label", "com.groundplane.managed=true", "--label", "com.groundplane.kind=backup-tools-metadata",
+                       "--entrypoint", "/not-started", image_id)
     if not re.fullmatch(r"[0-9a-f]{64}", container):
         raise ValueError("Docker did not return the temporary container identity")
     try:

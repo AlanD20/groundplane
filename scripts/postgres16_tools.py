@@ -90,7 +90,9 @@ def install(catalog: dict, architecture: str) -> Path:
     container = ""
     try:
         container = subprocess.check_output(
-            ["docker", "create", "--network", "none", "--entrypoint", "/not-started", reference],
+            ["docker", "create", "--network", "none",
+             "--label", "com.groundplane.managed=true", "--label", "com.groundplane.kind=backup-tools-extraction",
+             "--entrypoint", "/not-started", reference],
             text=True, timeout=30).strip()
         if not re.fullmatch(r"[0-9a-f]{64}", container):
             raise ValueError("backup tools extraction container identity is invalid")

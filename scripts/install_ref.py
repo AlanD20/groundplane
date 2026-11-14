@@ -45,6 +45,7 @@ def build(source: Path, output: Path, version: str, identity: str,
     socket_group = DOCKER_SOCKET.stat().st_gid
     # Both source and exported binaries are private invocation-owned directories.
     command = ["docker", "run", "--rm", "--name", client,
+               "--label", "com.groundplane.managed=true", "--label", "com.groundplane.kind=source-build-client",
                "--user", f"{os.getuid()}:{os.getgid()}", "--group-add", str(socket_group),
                "--mount", "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock",
                "--mount", f"type=bind,source={source},target={source}",

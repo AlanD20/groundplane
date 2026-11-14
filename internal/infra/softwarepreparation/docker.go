@@ -429,6 +429,7 @@ func (operation *dockerOperation) runIn(
 			workingDirectory = operation.directory
 		}
 		client := []string{"run", "--rm", "--name", operation.builder + "-client", "--network", "host",
+			"--label", "com.groundplane.managed=true", "--label", "com.groundplane.kind=software-build-client",
 			"--label", "com.groundplane.software-operation=" + operation.operationID,
 			"--mount", "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock",
 			"--mount", "type=bind,source=" + operation.directory + ",target=" + operation.directory,

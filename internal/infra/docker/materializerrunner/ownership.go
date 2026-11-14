@@ -30,6 +30,8 @@ func helperName(owner Ownership) string {
 
 func helperLabels(owner Ownership) map[string]string {
 	return map[string]string{
+		"com.groundplane.managed":                 "true",
+		"com.groundplane.kind":                    "configuration-materializer",
 		"io.groundplane.role":                     "configuration-materializer",
 		"io.groundplane.task":                     owner.TaskID,
 		"io.groundplane.stage":                    owner.StageID,

@@ -97,6 +97,8 @@ Initial single-host release.
 - Select automatic upstream Runner updates or an exact manual version, separate
   from the GP Runner image. Updates verify official checksums, wait for idle
   execution and retain captured recovery state without re-registering the Runner.
+- Expose the automatic-update checkbox under **Runner settings**. Retry a cleaned
+  registration failure with a fresh token without rejecting its accepted Task response.
 - Preserve the serving Release and data when build, push or Fetch fails.
   Registered Runners resume without a new registration token; local Runner
   removal preserves shared registry content and application images.
@@ -111,6 +113,9 @@ Initial single-host release.
   resolves the latest stable release once; `--version` pins a chosen release.
 - Reset GP with the standalone `uninstall.sh`, retaining Docker and host
   dependencies. Repeated cleanup tolerates image aliases already removed by Docker.
+- Mark Runner and temporary helper resources as GP-managed. Reset discovers owned
+  networks and Volumes independently of surviving containers and removes isolated
+  GP build caches while retaining unrelated Docker resources.
 - Install a branch, tag or commit with `install.sh --ref`, without a published
   release. Toolchains run in disposable Docker containers; temporary build
   files are cleaned up, and installation uses the same guarded upgrade path.

@@ -46,6 +46,68 @@ def selected(kind, label):
     return run(docker + [kind, "ls", "--quiet", "--filter", "label=" + label] +
                (["--all"] if kind == "container" else [])).split()
 
+def resource_present(kind, identity):
+    return identity in run(docker + [kind, "ls", "--quiet"] +
+                           (["--all"] if kind == "container" else [])).split()
+
+def inspect_resource(kind, identity):
+    try:
+        return json.loads(run(docker + [kind, "inspect", identity]))[0]
+    except subprocess.CalledProcessError:
+        if resource_present(kind, identity):
+            raise
+        return None
+
+def change_resource(kind, operation, identity, *options):
+    try:
+        run(docker + [kind, operation, *options, identity], change=True)
+    except subprocess.CalledProcessError:
+        if resource_present(kind, identity):
+            raise
+
+def resource_labels(kind, identity):
+    value = inspect_resource(kind, identity)
+    if value is None:
+        return {}
+    return (value.get("Config", {}) if kind == "container" else value).get("Labels") or {}
+
+def build_resource_owned(kind, identity):
+    value = inspect_resource(kind, identity)
+    if value is None:
+        return False
+    name = value.get("Name", "").removeprefix("/")
+    builder = r"groundplane-(?:ref-[0-9a-f]{32}|prepare-[0-9a-f]{16})"
+    if kind == "container":
+        return re.fullmatch(r"(?:buildx_buildkit_" + builder + r"0|" + builder + r"-client)", name) is not None
+    return kind == "volume" and re.fullmatch(r"buildx_buildkit_" + builder + r"0_state", name) is not None
+
+def compose_project_owned(project):
+    return project == "groundplane-infra" or re.fullmatch(r"gp-env_[a-z0-9]{26}", project) is not None
+
+def owned_resources(kind):
+    identities = set(selected(kind, "com.groundplane.managed=true"))
+    if kind == "container":
+        identities.update(selected(kind, "groundplane.registry.schema=1"))
+    if kind in ("container", "network"):
+        # Runner allocation identity is also explicit ownership evidence.
+        for identity in selected(kind, "groundplane.runner.id"):
+            labels = resource_labels(kind, identity)
+            if (re.fullmatch(r"run_[0-7][0-9A-HJKMNP-TV-Z]{25}", labels.get("groundplane.runner.id", ""))
+                    and re.fullmatch(r"[1-9][0-9]*", labels.get("groundplane.runtime.epoch", ""))):
+                identities.add(identity)
+    # This inventory remains available after every container has been removed.
+    for identity in selected(kind, "com.docker.compose.project"):
+        if compose_project_owned(resource_labels(kind, identity).get("com.docker.compose.project", "")):
+            identities.add(identity)
+    if kind in ("container", "volume"):
+        # Buildx owns its daemon/cache creation; these are GP invocation names,
+        # independent of the shared Docker builder and its cache.
+        for prefix in ("buildx_buildkit_groundplane-", "groundplane-ref-", "groundplane-prepare-"):
+            matches = run(docker + [kind, "ls", "--quiet", "--filter", "name=" + prefix] +
+                          (["--all"] if kind == "container" else [])).split()
+            identities.update(identity for identity in matches if build_resource_owned(kind, identity))
+    return identities
+
 def remove_path(path):
     path = Path(path)
     if not os.path.lexists(path):
@@ -120,25 +182,25 @@ try:
 
     if shutil.which("docker"):
         # A missing daemon is not an empty inventory; retain data and report it.
-        containers = set(selected("container", "com.groundplane.managed=true"))
-        containers.update(selected("container", "groundplane.registry.schema=1"))
-        projects = set()
-        for identity in containers:
-            observed = json.loads(run(docker + ["container", "inspect", identity]))[0]
-            project = observed.get("Config", {}).get("Labels", {}).get("com.docker.compose.project", "")
-            if project == "groundplane-infra" or re.fullmatch(r"gp-env_[a-z0-9]{26}", project):
-                projects.add(project)
+        agents = set(selected("container", "com.groundplane.managed=true")) & set(
+            selected("container", "com.groundplane.kind=agent"))
+        for identity in sorted(agents):
+            change_resource("container", "stop", identity, "--timeout", "10")
+        containers = owned_resources("container")
+        # Quiesce helpers before taking the final child-resource inventory.
+        for identity in sorted(containers - agents):
+            change_resource("container", "stop", identity, "--timeout", "10")
+        containers = owned_resources("container")
         for identity in sorted(containers):
-            run(docker + ["container", "rm", "--force", "--volumes", identity], change=True)
+            change_resource("container", "rm", identity, "--force", "--volumes")
         volume_data = set()
         for kind in ("network", "volume"):
-            identities = set(selected(kind, "com.groundplane.managed=true"))
-            # Compose may create its implicit default network with only its own labels.
-            for project in projects:
-                identities.update(selected(kind, "com.docker.compose.project=" + project))
+            identities = owned_resources(kind)
             for identity in sorted(identities):
                 if kind == "volume":
-                    volume = json.loads(run(docker + ["volume", "inspect", identity]))[0]
+                    volume = inspect_resource("volume", identity)
+                    if volume is None:
+                        continue
                     options = volume.get("Options") or {}
                     device = options.get("device", "")
                     if options.get("type") == "none" and "bind" in options.get("o", "").split(","):
@@ -146,7 +208,7 @@ try:
                         if not path.is_absolute() or ".." in path.parts or len(path.parts) < 5:
                             raise RuntimeError("Unsafe managed Volume data path: " + device)
                         volume_data.add(device)
-                run(docker + [kind, "rm", identity], change=True)
+                change_resource(kind, "rm", identity)
         for path in sorted(volume_data):
             remove_path(path)
         # Remove GP-built images, never prune shared upstream image caches.

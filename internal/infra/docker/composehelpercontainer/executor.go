@@ -226,6 +226,7 @@ func createOptions(image, command string, artifact *agentpb.ComposeArtifact) cli
 	return client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image: image, User: "0", Cmd: []string{command},
+			Labels:      map[string]string{"com.groundplane.managed": "true", "com.groundplane.kind": "compose-helper"},
 			AttachStdin: true, AttachStdout: true, AttachStderr: true,
 			OpenStdin: true, StdinOnce: true, WorkingDir: composehelper.WorkDirectory,
 			NetworkDisabled: true,

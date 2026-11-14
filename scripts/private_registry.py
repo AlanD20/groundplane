@@ -161,6 +161,7 @@ def setup(image: str, tag: str) -> None:
         for name in ("tls.crt", "tls.key", "htpasswd"):
             mounts += ["--mount", f"type=bind,src={SETTINGS / name},dst=/run/groundplane-registry/{name},readonly"]
         run("docker", "run", "--detach", "--restart", "unless-stopped", "--name", CONTAINER,
+            "--label", "com.groundplane.managed=true", "--label", "com.groundplane.kind=registry",
             "--label", LABEL + "=1", "--publish", "127.0.0.1:5000:5000", "--read-only",
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             *mounts, "--env", "REGISTRY_HTTP_TLS_CERTIFICATE=/run/groundplane-registry/tls.crt",

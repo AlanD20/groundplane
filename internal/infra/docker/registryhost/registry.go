@@ -81,7 +81,9 @@ func options(image string, address netip.Addr) client.ContainerCreateOptions {
 	}
 	return client.ContainerCreateOptions{
 		Name: name,
-		Config: &container.Config{Image: image, Labels: map[string]string{ownerLabel: "1"},
+		Config: &container.Config{Image: image, Labels: map[string]string{
+			ownerLabel: "1", "com.groundplane.managed": "true", "com.groundplane.kind": "registry",
+		},
 			ExposedPorts: network.PortSet{port: {}}, Env: registryEnvironment()},
 		HostConfig: &container.HostConfig{
 			PortBindings: network.PortMap{port: bindings}, Mounts: mounts, ReadonlyRootfs: true,

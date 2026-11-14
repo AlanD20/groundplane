@@ -204,6 +204,10 @@ func validationCreateOptions(image string, arguments []string) client.ContainerC
 	return client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image: image, Cmd: append([]string(nil), arguments...), User: "65534:65534",
+			Labels: map[string]string{
+				"com.groundplane.managed": "true",
+				"com.groundplane.kind":    "managed-config-validator",
+			},
 			AttachStdin: true, AttachStdout: true, AttachStderr: true,
 			OpenStdin: true, StdinOnce: true, WorkingDir: "/", NetworkDisabled: true,
 		},
@@ -373,6 +377,10 @@ func createOptions(image string) client.ContainerCreateOptions {
 	return client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image: image, User: "0", Cmd: []string{helperArgument},
+			Labels: map[string]string{
+				"com.groundplane.managed": "true",
+				"com.groundplane.kind":    "managed-config-helper",
+			},
 			AttachStdin: true, AttachStdout: true, AttachStderr: true,
 			OpenStdin: true, StdinOnce: true, WorkingDir: "/", NetworkDisabled: true,
 		},

@@ -222,6 +222,8 @@ func runnerContainerOptions(plan corerunner.Plan) client.ContainerCreateOptions 
 				"GROUNDPLANE_HOST=http://" + plan.Egress.ControllerEndpoint.String(),
 			},
 			Labels: map[string]string{
+				"com.groundplane.managed":   "true",
+				"com.groundplane.kind":      "runner",
 				"groundplane.runner.id":     plan.RunnerID,
 				"groundplane.runner.plan":   plan.Digest(),
 				"groundplane.runtime.epoch": strconv.FormatUint(plan.RuntimeEpoch, 10),
