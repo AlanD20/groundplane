@@ -201,17 +201,6 @@ export default function RunnerManager({
               <p className="text-sm text-destructive">{retryError}</p>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="runner-edit-auto-update"
-              checked={editAutoUpdate}
-              onChange={(event) => setEditAutoUpdate(event.target.checked)}
-              disabled={saving}
-            />
-            <Label htmlFor="runner-edit-auto-update">
-              Automatically update GitHub runner software
-            </Label>
-          </div>
           <DialogFooter>
             <Button
               type="button"
@@ -238,8 +227,8 @@ export default function RunnerManager({
         }}
       >
         <DialogHeader>
-          <DialogTitle>Edit Runner slug</DialogTitle>
-          <DialogDescription>GitHub name stays unchanged.</DialogDescription>
+          <DialogTitle>Runner settings</DialogTitle>
+          <DialogDescription>Configure the GP slug and automatic software updates.</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -267,7 +256,7 @@ export default function RunnerManager({
                 setEditError(
                   error instanceof Error
                     ? error.message
-                    : "Unable to edit Runner slug",
+                    : "Unable to save Runner settings",
                 );
               } finally {
                 setSaving(false);
@@ -291,6 +280,17 @@ export default function RunnerManager({
             {editError && (
               <p className="text-sm text-destructive">{editError}</p>
             )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="runner-edit-auto-update"
+              checked={editAutoUpdate}
+              onChange={(event) => setEditAutoUpdate(event.target.checked)}
+              disabled={saving}
+            />
+            <Label htmlFor="runner-edit-auto-update">
+              Automatically update GitHub runner software
+            </Label>
           </div>
           <DialogFooter>
             <Button
@@ -555,7 +555,7 @@ export default function RunnerManager({
                 }
               : { scope: "Tenant", name: tenant.slug }
         }
-        onRename={(runner) => {
+        onEdit={(runner) => {
           setEditing(runner);
           setSlug(runner.slug);
           setEditAutoUpdate(runner.autoUpdate);

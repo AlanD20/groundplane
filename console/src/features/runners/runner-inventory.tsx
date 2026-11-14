@@ -32,7 +32,7 @@ import type { Runner } from "@/lib/types";
 import {
   ChevronRight,
   GitBranch,
-  Pencil,
+  Settings2,
   RotateCcw,
   Trash2,
 } from "lucide-react";
@@ -54,7 +54,7 @@ export function RunnerInventory({
   loading,
   error,
   owner,
-  onRename,
+  onEdit,
   onRetry,
   onRemove,
 }: {
@@ -65,7 +65,7 @@ export function RunnerInventory({
   loading: boolean;
   error: string | null;
   owner: (runner: Runner) => { scope: string; name: string };
-  onRename: (runner: Runner) => void;
+  onEdit: (runner: Runner) => void;
   onRetry: (runner: Runner) => void;
   onRemove: (runner: Runner) => void;
 }) {
@@ -105,11 +105,11 @@ export function RunnerInventory({
         }
         onClick={() => {
           setInspectedId(null);
-          onRename(runner);
+          onEdit(runner);
         }}
-        aria-label={`Rename ${runner.slug}`}
+        aria-label={`Edit ${runner.slug} settings`}
       >
-        <Pencil className="size-3.5" /> Rename
+        <Settings2 className="size-3.5" /> Settings
       </Button>
       {runner.lifecycle === "failed" && (
         <Button
