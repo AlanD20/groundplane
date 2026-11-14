@@ -90,8 +90,7 @@ func ReadDetachSnapshot(
 	if err != nil {
 		return DetachSnapshot{}, err
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) || read.Values[0] == nil ||
-		read.Values[1] == nil {
+	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) || read.Values[0] == nil {
 		return DetachSnapshot{}, errs.New(errs.KindStateConflict, "Detach consumer state is not fully captured")
 	}
 	for index, value := range read.Values {
@@ -99,13 +98,19 @@ func ReadDetachSnapshot(
 			return DetachSnapshot{}, recordcodec.CorruptRecord()
 		}
 	}
-	state, err := services.DecodeServiceRuntimeRecord(read.Values[1].Value)
-	if err != nil || state.EnvironmentID != source.Attach.EnvironmentID || state.ServiceID != source.Attach.ServiceID {
-		return DetachSnapshot{}, recordcodec.CorruptRecord()
+	state := services.InitialServiceRuntime(source.Attach.ServiceID)
+	if value := read.Values[1]; value != nil {
+		sidecar, err := services.DecodeServiceRuntimeRecord(value.Value)
+		if err != nil || sidecar.EnvironmentID != source.Attach.EnvironmentID ||
+			sidecar.ServiceID != source.Attach.ServiceID {
+			return DetachSnapshot{}, recordcodec.CorruptRecord()
+		}
+		state = sidecar.Runtime
+		result.ServiceRuntimeRevision = value.ModRevision
 	}
-	result.EpochRevision, result.ServiceRuntimeRevision = read.Values[0].ModRevision, read.Values[1].ModRevision
-	result.RuntimeIntent = string(state.Runtime.RuntimeIntent)
-	result.LifecycleTaskID = state.Runtime.UnconfirmedLifecycleTaskID
+	result.EpochRevision = read.Values[0].ModRevision
+	result.RuntimeIntent = string(state.RuntimeIntent)
+	result.LifecycleTaskID = state.UnconfirmedLifecycleTaskID
 	if value := read.Values[3]; value != nil {
 		projection, err := releases.DecodeReleaseRecord[releasedomain.ServiceProjection](
 			value.Value,
@@ -135,8 +140,13 @@ func ReadDetachSnapshot(
 func (snapshot DetachSnapshot) Validate() error {
 	if Validate(snapshot.Source) != nil || RequireTerminal(snapshot.Source) != nil ||
 		snapshot.EpochRevision <= 0 || snapshot.EpochRevision > snapshot.Source.SnapshotRevision ||
-		snapshot.ServiceRuntimeRevision <= 0 || snapshot.ServiceRuntimeRevision > snapshot.Source.SnapshotRevision ||
+		snapshot.ServiceRuntimeRevision < 0 || snapshot.ServiceRuntimeRevision > snapshot.Source.SnapshotRevision ||
 		(snapshot.RuntimeIntent != "running" && snapshot.RuntimeIntent != "stopped" && snapshot.RuntimeIntent != "absent") {
+		return recordcodec.CorruptRecord()
+	}
+	if snapshot.ServiceRuntimeRevision == 0 &&
+		(snapshot.RuntimeIntent != string(services.InitialServiceRuntime(snapshot.Source.Attach.ServiceID).RuntimeIntent) ||
+			snapshot.LifecycleTaskID != "" || snapshot.Runtime != nil) {
 		return recordcodec.CorruptRecord()
 	}
 	if snapshot.ReleaseProjectionRevision < 0 ||

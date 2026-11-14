@@ -40,7 +40,13 @@ func Prepare(ctx context.Context, store Store, environmentID string, marker idem
 	if err != nil {
 		return Publication{}, err
 	}
-	if err := mutate(&snapshot.input.Input, &snapshot.projection); err != nil {
+	if snapshot.projection == nil {
+		return Publication{}, errs.New(
+			errs.KindStateConflict,
+			"This edit requires the Environment runtime configuration",
+		)
+	}
+	if err := mutate(&snapshot.input.Input, snapshot.projection); err != nil {
 		return Publication{}, err
 	}
 	return snapshot.stage(ctx, store, marker)
@@ -48,13 +54,15 @@ func Prepare(ctx context.Context, store Store, environmentID string, marker idem
 
 type metadataSnapshot struct {
 	input               environmentprojection.EnvironmentDesiredInput
-	projection          environmentprojection.EnvironmentComposeProjection
+	projection          *environmentprojection.EnvironmentComposeProjection
 	owned               environmentprojection.EnvironmentOwnedIdentities
 	environment         hierarchy.EnvironmentRecord
 	baseRevisionID      string
 	headRevision        int64
 	environmentRevision int64
 	readRevision        int64
+	dependencyDigest    [sha256.Size]byte
+	runtimeCondition    *keyvalue.Condition
 }
 
 func loadSnapshot(ctx context.Context, store Store, environmentID string) (metadataSnapshot, error) {
@@ -65,17 +73,26 @@ func loadSnapshot(ctx context.Context, store Store, environmentID string) (metad
 	if current.ReadRevision <= 0 {
 		return metadataSnapshot{}, errs.New(errs.KindInternal, "desired authoring snapshot is unavailable")
 	}
+	keys := []string{hierarchy.EnvironmentKey(environmentID)}
+	if found {
+		keys = append(keys, blueprints.EnvironmentBlueprintRootKey(environmentID, current.Record.RevisionID))
+		keys = append(
+			keys,
+			blueprints.EnvironmentBlueprintEffectiveProjectionKey(environmentID, current.Record.RevisionID),
+		)
+	}
 	state, err := store.GetMany(
 		ctx,
 		keyvalue.GetManyRequest{
-			Keys:     []string{hierarchy.EnvironmentKey(environmentID)},
+			Keys:     keys,
 			Revision: current.ReadRevision,
 		},
 	)
 	if err != nil {
 		return metadataSnapshot{}, err
 	}
-	if state == nil || len(state.Values) != 1 || state.Values[0] == nil {
+	if state == nil || state.ReadRevision != current.ReadRevision || len(state.Values) != len(keys) ||
+		state.Values[0] == nil {
 		return metadataSnapshot{}, errs.New(errs.KindEnvironmentNotFound, "Environment does not exist")
 	}
 	environment, err := hierarchy.DecodeEnvironment(state.Values[0].Value)
@@ -86,13 +103,25 @@ func loadSnapshot(ctx context.Context, store Store, environmentID string) (metad
 		return metadataSnapshot{}, errs.New(errs.KindResourceInUse, "Environment is not ready for desired authoring")
 	}
 	revisionID := ids.New(ids.KindTask)
-	var projection environmentprojection.EnvironmentComposeProjection
+	var projection *environmentprojection.EnvironmentComposeProjection
 	var owned environmentprojection.EnvironmentOwnedIdentities
+	var dependencyDigest [sha256.Size]byte
+	var runtimeCondition *keyvalue.Condition
 	if found {
-		previous, hasProjection, readErr := blueprints.ReadCurrentProjection(
+		if state.Values[1] == nil {
+			return metadataSnapshot{}, errs.New(errs.KindInternal, "Desired authoring seal is unavailable")
+		}
+		seal, err := blueprints.DecodeEnvironmentBlueprintSeal(state.Values[1].Value)
+		if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != current.Record.RevisionID ||
+			seal.RenderGeneration != current.Record.RenderGeneration {
+			return metadataSnapshot{}, errs.New(errs.KindInternal, "Desired authoring seal is inconsistent")
+		}
+		dependencyDigest = seal.DependencyDigest
+		previous, hasProjection, readErr := blueprints.ReadAvailableRuntimeRevision(
 			ctx,
 			store,
 			environmentID,
+			current.Record.RevisionID,
 			current.ReadRevision,
 		)
 		if readErr != nil {
@@ -107,21 +136,31 @@ func loadSnapshot(ctx context.Context, store Store, environmentID string) (metad
 		if readErr != nil {
 			return metadataSnapshot{}, readErr
 		}
-		if !hasProjection || !hasOwned || previous.Record.RevisionID != current.Record.RevisionID ||
+		if !hasOwned || hasProjection && previous.Record.RevisionID != current.Record.RevisionID ||
 			identities.Record.RevisionID != current.Record.RevisionID {
 			return metadataSnapshot{}, errs.New(
 				errs.KindStateConflict,
-				"desired authoring requires a complete current runtime projection",
+				"desired authoring identities do not match the current revision",
 			)
 		}
-		projection = environmentprojection.CloneEnvironmentComposeProjection(previous.Record)
+		if hasProjection {
+			copy := environmentprojection.CloneEnvironmentComposeProjection(previous.Record)
+			projection = &copy
+		}
+		runtimeCondition = &keyvalue.Condition{
+			Key: blueprints.EnvironmentBlueprintEffectiveProjectionKey(environmentID, current.Record.RevisionID),
+		}
+		if state.Values[2] != nil {
+			runtimeCondition.ModRevision = state.Values[2].ModRevision
+		}
 		owned = environmentprojection.CloneEnvironmentOwnedIdentities(identities.Record)
 	} else {
-		projection, err = EmptyProjection(environment, revisionID)
+		empty, err := EmptyProjection(environment, revisionID)
 		if err != nil {
 			return metadataSnapshot{}, err
 		}
-		owned, err = environmentprojection.OwnedIdentitiesFromProjection(projection)
+		projection = &empty
+		owned, err = environmentprojection.OwnedIdentitiesFromProjection(empty)
 		if err != nil {
 			return metadataSnapshot{}, err
 		}
@@ -130,11 +169,15 @@ func loadSnapshot(ctx context.Context, store Store, environmentID string) (metad
 	}
 	input := environmentprojection.CloneEnvironmentDesiredInput(current.Record)
 	baseRevisionID := input.RevisionID
-	input.RevisionID, projection.RevisionID, owned.RevisionID = revisionID, revisionID, revisionID
+	input.RevisionID, owned.RevisionID = revisionID, revisionID
+	if projection != nil {
+		projection.RevisionID = revisionID
+	}
 	return metadataSnapshot{
 		input: input, projection: projection, owned: owned, environment: environment,
 		baseRevisionID: baseRevisionID, headRevision: current.Revision,
 		environmentRevision: state.Values[0].ModRevision, readRevision: current.ReadRevision,
+		dependencyDigest: dependencyDigest, runtimeCondition: runtimeCondition,
 	}, nil
 }
 
@@ -143,6 +186,14 @@ func (snapshot metadataSnapshot) stage(
 	store Store,
 	marker idempotency.IdempotencyMarker,
 ) (Publication, error) {
+	digest := snapshot.dependencyDigest
+	if snapshot.projection != nil {
+		var err error
+		digest, err = blueprints.EnvironmentBlueprintDependencyDigest(*snapshot.projection)
+		if err != nil {
+			return Publication{}, err
+		}
+	}
 	publication, err := PrepareValues(
 		snapshot.input,
 		snapshot.projection,
@@ -151,36 +202,41 @@ func (snapshot metadataSnapshot) stage(
 		snapshot.baseRevisionID,
 		snapshot.headRevision,
 		snapshot.environmentRevision,
+		digest,
 	)
 	if err != nil {
 		return Publication{}, err
 	}
-	return stage(ctx, store, publication)
+	staged, err := stage(ctx, store, publication)
+	if err != nil {
+		return Publication{}, err
+	}
+	if snapshot.runtimeCondition != nil {
+		staged.Conditions = append(staged.Conditions, *snapshot.runtimeCondition)
+	}
+	return staged, nil
 }
 
 func PrepareValues(
 	input environmentprojection.EnvironmentDesiredInput,
-	projection environmentprojection.EnvironmentComposeProjection,
+	projection *environmentprojection.EnvironmentComposeProjection,
 	owned environmentprojection.EnvironmentOwnedIdentities,
 	marker idempotency.IdempotencyMarker,
 	baseRevisionID string,
 	headRevision, environmentRevision int64,
+	dependencyDigest [sha256.Size]byte,
 ) (Publication, error) {
 	claim := blueprints.EnvironmentBlueprintStageClaim{DescriptorID: strings.TrimPrefix(input.RevisionID, "task_"),
 		EnvironmentID: input.EnvironmentID, RevisionID: input.RevisionID, TaskID: input.RevisionID,
 		Locator: marker.Locator, Intent: marker.Intent, BaselineHeadRevision: headRevision,
 		SourceKind: blueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: input.RenderGeneration,
 		ProjectionSchema: blueprints.EnvironmentDesiredInputSchema, CreatedAt: marker.CreatedAt}
-	digest, err := blueprints.EnvironmentBlueprintDependencyDigest(projection)
-	if err != nil {
-		return Publication{}, err
-	}
 	streams, err := blueprints.BuildEnvironmentBlueprintStreams(
 		blueprints.EnvironmentBlueprintStageRequest{Claim: claim,
 			Mutation: &blueprints.EnvironmentDesiredMutationAudit{
 				Configuration: &blueprints.EnvironmentConfigurationMutationAudit{BaseRevisionID: baseRevisionID},
 			},
-			DesiredInput: input, DependencyDigest: digest},
+			DesiredInput: input, DependencyDigest: dependencyDigest},
 	)
 	if err != nil {
 		return Publication{}, err
@@ -231,9 +287,11 @@ func PrepareValues(
 	if err = add(blueprints.EnvironmentBlueprintRootKey(input.EnvironmentID, input.RevisionID), seal, err); err != nil {
 		return Publication{}, err
 	}
-	effective, err := environmentprojection.EncodePreparedEnvironmentComposeProjectionStorage(projection)
-	if err = add(blueprints.EnvironmentBlueprintEffectiveProjectionKey(input.EnvironmentID, input.RevisionID), effective, err); err != nil {
-		return Publication{}, err
+	if projection != nil {
+		effective, err := environmentprojection.EncodePreparedEnvironmentComposeProjectionStorage(*projection)
+		if err = add(blueprints.EnvironmentBlueprintEffectiveProjectionKey(input.EnvironmentID, input.RevisionID), effective, err); err != nil {
+			return Publication{}, err
+		}
 	}
 	identity, err := environmentprojection.EncodeEnvironmentOwnedIdentities(owned)
 	if err = add(blueprints.EnvironmentBlueprintOwnedIdentitiesKey(input.EnvironmentID, input.RevisionID), identity, err); err != nil {

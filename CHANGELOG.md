@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Allow Detach before first Deploy and while initial Blueprint runtime rendering
+  is pending, preserving concurrent deployment and desired-state checks.
 - Keep Attach provisioning, Release, Script and Environment-removal checkpoint
   conflicts local to their operation; retry atomic publication contention without
   disconnecting unrelated Agent work.

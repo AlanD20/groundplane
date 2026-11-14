@@ -4,24 +4,30 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 )
 
-func AttachmentMutation(
+// PrepareAttachment changes connection declarations without requiring rendered
+// runtime. Pending first-deployment inputs remain pending, never synthesized.
+func PrepareAttachment(
 	ctx context.Context,
 	store Store,
 	record attachrecord.Record,
 	oldName string,
 	remove bool,
-) func(*core.BlueprintDesiredInput, *environmentprojection.EnvironmentComposeProjection) error {
-	return func(input *core.BlueprintDesiredInput, _ *environmentprojection.EnvironmentComposeProjection) error {
-		if remove {
-			delete(input.Attachments, record.Name)
-			return nil
-		}
-		spec, err := AttachmentSpec(ctx, store, record)
+	marker idempotency.IdempotencyMarker,
+) (Publication, error) {
+	snapshot, err := loadSnapshot(ctx, store, record.EnvironmentID)
+	if err != nil {
+		return Publication{}, err
+	}
+	input := &snapshot.input.Input
+	if remove {
+		delete(input.Attachments, record.Name)
+	} else {
+		spec, err := attachmentSpec(ctx, store, record, snapshot.readRevision)
 		if err != nil {
-			return err
+			return Publication{}, err
 		}
 		if oldName != "" {
 			RenameAttachment(input, oldName, record.Name, spec)
@@ -31,6 +37,6 @@ func AttachmentMutation(
 			}
 			input.Attachments[record.Name] = spec
 		}
-		return nil
 	}
+	return snapshot.stage(ctx, store, marker)
 }

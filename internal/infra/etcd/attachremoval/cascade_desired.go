@@ -35,8 +35,7 @@ func (repository *InputRepository) prepareCascadeDesired(ctx context.Context, ta
 		ScopeKind: idempotency.IdempotencyScopeEnvironment, ScopeID: source.EnvironmentID,
 		Method: "POST", Route: "/tasks/{id}/work/{work_id}/consumer-removal", Key: item.ID,
 	}
-	desired, err := desiredauthoring.Prepare(ctx, repository.store, source.EnvironmentID, marker,
-		desiredauthoring.AttachmentMutation(ctx, repository.store, source, "", true))
+	desired, err := desiredauthoring.PrepareAttachment(ctx, repository.store, source, "", true, marker)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

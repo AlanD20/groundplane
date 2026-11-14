@@ -53,6 +53,9 @@ Metadata-only actions publish a new immutable input while retaining the exact
 Compose artifact and render generation. They stage immutable content privately,
 then atomically publish the resource change, desired head and replay result.
 Advancing desired metadata is not a Deploy and creates no extra execution Task.
+If initial rendering is pending, connection metadata edits preserve that absence;
+they do not require or invent a runtime artifact. Their publication fences the
+captured runtime presence so a concurrent completed render cannot be discarded.
 The storage owner is `internal/infra/etcd/desiredauthoring`; each resource owner
 supplies its typed mutation and concurrency guards. First-use Zone and Entry
 actions initialize a durable empty projection under the Environment fence,

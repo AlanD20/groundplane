@@ -363,7 +363,20 @@ func newNativeEntryDefinitionFixture(t *testing.T) *nativeEntryDefinitionFixture
 	seed.CreatedAt, seed.UpdatedAt = at.Add(-time.Second), at.Add(-time.Second)
 	seed.Locator = idempotency.IdempotencyLocator{ScopeKind: idempotency.IdempotencyScopeEnvironment,
 		ScopeID: environment.ID, Method: http.MethodPost, Route: "/environments/{id}/blueprint", Key: "entry-definition-baseline"}
-	baseline, err := desiredauthoring.PrepareValues(input, projection, owned, seed, "", 0, environmentRecord.Revision)
+	digest, err = blueprints.EnvironmentBlueprintDependencyDigest(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline, err := desiredauthoring.PrepareValues(
+		input,
+		&projection,
+		owned,
+		seed,
+		"",
+		0,
+		environmentRecord.Revision,
+		digest,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

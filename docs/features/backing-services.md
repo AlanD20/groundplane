@@ -154,6 +154,9 @@ credential cleanup and Custom Detach hooks still run; an undeployed consumer
 does not need a fabricated container or network transition. If GP records an
 active deployment but lacks its acknowledged runtime, it refuses the Detach
 rather than treating that missing evidence as an undeployed Service.
+Connection declarations can also be removed while a failed initial Blueprint
+Apply has not rendered runtime configuration. GP preserves unrelated desired
+state and checks for concurrent rendering or deployment before committing.
 
 Built-in adapters and Custom hooks implement the same logical input/output
 contract. Compiled adapters consume typed inputs; commands receive their

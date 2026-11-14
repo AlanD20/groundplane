@@ -12,15 +12,20 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func AttachmentSpec(ctx context.Context, store Store, record attachments.Record) (core.AttachmentSpec, error) {
-	consumer, found, err := blueprints.ReadCurrentProjection(ctx, store, record.EnvironmentID, 0)
+func attachmentSpec(
+	ctx context.Context,
+	store Store,
+	record attachments.Record,
+	revision int64,
+) (core.AttachmentSpec, error) {
+	consumer, found, err := blueprints.ReadCurrentOwnedIdentities(ctx, store, record.EnvironmentID, revision)
 	if err != nil {
 		return core.AttachmentSpec{}, err
 	}
 	if !found {
-		return core.AttachmentSpec{}, errs.New(errs.KindStateConflict, "Attach consumer projection is unavailable")
+		return core.AttachmentSpec{}, errs.New(errs.KindStateConflict, "Attach consumer identities are unavailable")
 	}
-	backing, found, err := blueprints.ReadCurrentProjection(
+	backing, found, err := blueprints.ReadCurrentOwnedIdentities(
 		ctx,
 		store,
 		record.BackingEnvironmentID,
@@ -30,17 +35,17 @@ func AttachmentSpec(ctx context.Context, store Store, record attachments.Record)
 		return core.AttachmentSpec{}, err
 	}
 	if !found {
-		return core.AttachmentSpec{}, errs.New(errs.KindStateConflict, "Attach backing projection is unavailable")
+		return core.AttachmentSpec{}, errs.New(errs.KindStateConflict, "Attach backing identities are unavailable")
 	}
 	consumerName, backingName := "", ""
-	for _, service := range consumer.Record.DesiredServices {
-		if service.Desired.ID == record.ServiceID {
-			consumerName = service.Desired.Name
+	for _, service := range consumer.Record.Services {
+		if service.ID == record.ServiceID {
+			consumerName = service.Name
 		}
 	}
-	for _, service := range backing.Record.DesiredServices {
-		if service.Desired.ID == record.BackingServiceID {
-			backingName = service.Desired.Name
+	for _, service := range backing.Record.Services {
+		if service.ID == record.BackingServiceID {
+			backingName = service.Name
 		}
 	}
 	if consumerName == "" || backingName == "" {

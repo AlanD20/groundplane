@@ -532,7 +532,7 @@ func newServiceCmd() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "detach <attach>",
-		Short: "Detach a backing service (revokes grants, drops role, optionally drops database)",
+		Short: "Detach backing access and run its configured cleanup",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := resolveAttachTarget(cmd, args[0])

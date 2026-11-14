@@ -25,15 +25,18 @@ func NewServiceRecord(environmentID string, desired core.Service, backingNetwork
 		EnvironmentID:    environmentID,
 		BackingNetworkID: backingNetworkID,
 		Desired:          desired,
-		Runtime: core.ServiceRuntime{
-			ServiceID:     desired.ID,
-			RuntimeIntent: core.ServiceRuntimeIntentRunning,
-		},
+		Runtime:          InitialServiceRuntime(desired.ID),
 	}
 	if err := ValidateServiceRecord(record); err != nil {
 		return ServiceRecord{}, err
 	}
 	return record, nil
+}
+
+// InitialServiceRuntime is the canonical intent before the first runtime write.
+// Its presence does not assert that any container has been deployed.
+func InitialServiceRuntime(serviceID string) core.ServiceRuntime {
+	return core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning}
 }
 
 // ReplaceServiceDesired applies a Blueprint or direct edit without changing

@@ -52,7 +52,7 @@ func ReadJoined(
 	if read == nil || len(read.Values) != 1 || read.ReadRevision != projection.ReadRevision {
 		return etcdstore.Versioned[ServiceRecord]{}, errs.New(errs.KindInternal, "Service runtime read is invalid")
 	}
-	runtime := core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning}
+	runtime := InitialServiceRuntime(serviceID)
 	runtimeRevision := int64(0)
 	if read.Values[0] != nil {
 		sidecar, decodeErr := DecodeServiceRuntimeRecord(read.Values[0].Value)
