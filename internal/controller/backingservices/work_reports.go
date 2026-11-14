@@ -103,8 +103,8 @@ func (service *WorkReports) CheckpointBackingProvision(
 	}
 	if !result.Succeeded {
 		return nil, errs.New(
-			errs.KindStateConflict,
-			"backing creation checkpoint ownership changed; resend the saved report",
+			errs.KindExecutionWriteContention,
+			"The execution report could not be saved because another update changed its publication snapshot",
 		)
 	}
 	service.reportProgress(ctx, view, layout, progress)

@@ -132,7 +132,10 @@ func (owner *AgentWork) Checkpoint(ctx context.Context, authorization agentregis
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Backup ownership changed before settlement")
+		return nil, errs.New(
+			errs.KindExecutionWriteContention,
+			"The Backup checkpoint could not be saved because another update changed its publication snapshot",
+		)
 	}
 	if candidate != nil && request.GetConfig().GetTransferCompleted() != nil {
 		if err := owner.configRuntime.PublishConfigRestore(ctx, candidate.SourceSeal, candidate.Projection, candidate.Identities); err != nil {

@@ -318,7 +318,7 @@ func agentChannelTransportResult(
 	case codes.Canceled, codes.DeadlineExceeded, codes.Unavailable:
 		return true, nil
 	default:
-		return false, errs.New(errs.KindInternal, message)
+		return false, errs.New(errs.KindInternal, message+": Controller channel status "+code.String())
 	}
 }
 func waitForAgentChannelReconnect(ctx context.Context, attempt uint) error {

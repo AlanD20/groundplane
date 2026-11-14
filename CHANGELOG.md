@@ -5,6 +5,9 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Retry contended native execution checkpoints without disconnecting unrelated
+  Agent work, and record refused checkpoints in Task execution details.
+
 - Edit Project and Platform file Secret contents in the Console, preserving
   stable references and guarding concurrent updates.
 

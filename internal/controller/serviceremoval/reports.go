@@ -125,8 +125,8 @@ func (service *WorkReports) CheckpointRemovalRecovery(
 	}
 	if !result.Succeeded {
 		return nil, errs.New(
-			errs.KindStateConflict,
-			"Service removal recovery ownership changed; resend the saved checkpoint",
+			errs.KindExecutionWriteContention,
+			"The execution report could not be saved because another update changed its publication snapshot",
 		)
 	}
 	digest, err := hex.DecodeString(checkpoint.Evidence.SHA256)

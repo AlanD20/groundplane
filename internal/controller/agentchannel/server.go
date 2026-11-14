@@ -27,6 +27,7 @@ type Server struct {
 	resolverReports        ResolverReporter
 	entryReports           EntryReporter
 	volumeReports          VolumeReporter
+	checkpointDiagnostics  CheckpointDiagnostics
 	lifecycleReports       LifecycleReporter
 	backupWorkReports      BackupWorkReporter
 	backupWorkSecrets      BackupWorkSecretResolver

@@ -3046,9 +3046,10 @@ func (x *WorkJournalReplayAck) GetAccountedAttemptId() string {
 	return ""
 }
 
-// A terminal result could not be settled. This response grants no execution and
-// acknowledges no effect or outcome. The Agent retains its exact report for
-// reconciliation; unrelated operations may continue on the same stream.
+// A terminal result or live checkpoint could not be accepted. This response
+// grants no execution and acknowledges no effect or outcome. Terminal results
+// remain in the Agent's durable outbox; checkpoints never enter startup replay.
+// The refusal is bound to the exact report; unrelated work keeps its stream.
 type WorkReportRejection struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Attempt       *WorkAttemptIdentity   `protobuf:"bytes,1,opt,name=attempt,proto3" json:"attempt,omitempty"`

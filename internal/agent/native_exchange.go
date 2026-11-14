@@ -28,11 +28,12 @@ type nativeResponse struct {
 	err     error
 }
 type nativeWaiter struct {
-	terminalReport *agentpb.AgentMessage
-	identity       *agentpb.WorkAttemptIdentity
-	executionID    string
-	response       chan nativeResponse
-	abandoned      bool
+	reportableRequest *agentpb.AgentMessage
+	terminalReport    *agentpb.AgentMessage
+	identity          *agentpb.WorkAttemptIdentity
+	executionID       string
+	response          chan nativeResponse
+	abandoned         bool
 }
 
 // nativeExchange is scoped to one authenticated stream. Only the session writer
@@ -113,6 +114,16 @@ func (exchange *nativeExchange) request(
 			return nil, errs.New(errs.KindStateConflict, "terminal report lacks its durable delivery owner")
 		}
 		waiter.terminalReport = proto.CloneOf(message)
+	}
+	_, checkpointKind, checkpoint, checkpointErr := workreceipt.DescribeCheckpoint(message)
+	if checkpointErr != nil {
+		return nil, checkpointErr
+	}
+	if checkpoint && checkpointKind != kind {
+		return nil, errs.New(errs.KindStateConflict, "checkpoint does not match its pending exchange")
+	}
+	if terminal || checkpoint {
+		waiter.reportableRequest = proto.CloneOf(message)
 	}
 	exchange.mu.Lock()
 	if _, err := workexecution.DecodeAgentAttempt(identity, exchange.identity); err != nil {

@@ -137,8 +137,8 @@ func (service *WorkReports) CheckpointLifecycle(ctx context.Context, authorizati
 	}
 	if !result.Succeeded {
 		return nil, errs.New(
-			errs.KindStateConflict,
-			"Service lifecycle checkpoint ownership changed; resend the saved report",
+			errs.KindExecutionWriteContention,
+			"The execution report could not be saved because another update changed its publication snapshot",
 		)
 	}
 	service.reportProgress(ctx, view, input, progress)

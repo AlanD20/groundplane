@@ -1,5 +1,6 @@
-// Package workreceipt defines the closed, replay-only terminal report boundary.
-// It grants no execution, input delivery, checkpoint or hook permission.
+// Package workreceipt defines terminal-result replay and exact live report
+// refusals. Only terminal results enter replay; neither path grants execution,
+// input delivery, checkpoint acknowledgement or hook permission.
 package workreceipt
 
 import (

@@ -222,9 +222,12 @@ Unknown effects retain only the necessary conflict claims, not an unrelated
 host-wide execution lock. Host-wide faults may legitimately block the host and
 must be reported as such.
 
-A correctly authenticated terminal report that cannot be settled receives an
-exact-report rejection, not a successful receipt or a stream disconnect. The
-Agent retains its durable report and returns the refusal to that operation;
+A correctly authenticated terminal report or native checkpoint that cannot be
+accepted receives an exact-report rejection, not a successful receipt or a
+stream disconnect. Failed checkpoint publication retries bounded atomic-write
+contention against fresh authority; it does not retry revoked permission or
+execute host actions. Only terminal results enter the durable replay journal.
+The Agent retains its terminal report and returns the refusal to that operation;
 unrelated reports can continue. A refusal releases no resource claim, grants no
 effect and cannot be used to retire the retained result. Malformed frames and
 foreign executor identities remain protocol errors. The

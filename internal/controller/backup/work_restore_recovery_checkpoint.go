@@ -81,7 +81,10 @@ func (owner *AgentWork) restoreRecoveryCheckpoint(ctx context.Context,
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Restore recovery ownership changed before settlement")
+		return nil, errs.New(
+			errs.KindExecutionWriteContention,
+			"The Restore checkpoint could not be saved because another update changed its publication snapshot",
+		)
 	}
 	ack, err := owner.inputs.ReadRestoreRecoveryCheckpointAcknowledgement(ctx, request, admitted.Recovery,
 		authorization.Identity(), result.Revision)

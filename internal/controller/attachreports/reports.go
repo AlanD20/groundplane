@@ -110,7 +110,10 @@ func (service *Reports) commit(ctx context.Context, guards []keyvalue.Condition,
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Attach execution ownership changed; resend the saved report")
+		return errs.New(
+			errs.KindExecutionWriteContention,
+			"The execution report could not be saved because another update changed its publication snapshot",
+		)
 	}
 	return nil
 }

@@ -472,6 +472,9 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err := platform.dependencies.Channel.ConfigureVolumeWork(owners.volumeReports); err != nil {
 		return nil, err
 	}
+	if err := platform.dependencies.Channel.ConfigureCheckpointDiagnostics(owners.diagnostics); err != nil {
+		return nil, err
+	}
 	if err := platform.dependencies.Channel.ConfigureServiceLifecycle(owners.memberReports); err != nil {
 		return nil, err
 	}

@@ -9,10 +9,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Reject identifies a refused terminal report without acknowledging its outcome
+// Reject identifies a refused terminal or live checkpoint report without acknowledging its outcome
 // or releasing any durable ownership. Codes/details must be public error text.
 func Reject(request *agentpb.AgentMessage, code, detail string) (*agentpb.ControllerMessage, error) {
-	identity, kind, supported, err := Describe(request)
+	identity, kind, supported, err := describeRejection(request)
 	if err != nil {
 		return nil, err
 	}

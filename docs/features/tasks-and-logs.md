@@ -34,6 +34,14 @@ Stage timestamps describe recorded observations. Assignment and Start permission
 are not measurements of process startup. A disconnected Agent, lost response or
 quiet event stream does not prove that execution stopped.
 
+Checkpoint publication retries bounded transaction contention against fresh
+execution state. A refused native checkpoint stops its operation without closing
+the shared Agent connection. When diagnostic storage remains available, the
+attempt shows a failed **Save execution checkpoint** step with the public reason
+and recovery guidance. This reports a missing acknowledgement, not proof that a
+host action failed or was undone. Controller logs include its Task, work item and
+attempt identifiers; private inputs and raw command output remain excluded.
+
 Task and Activity lists show newest-created actions first. Scope, action, status
 and resource-kind filters apply to the full journal. Cursor pages retain their
 storage revision; refresh to obtain current membership. Task details use the same

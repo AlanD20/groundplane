@@ -200,7 +200,7 @@ func TestNativeVolumeCheckpointFencesConcurrentAuthority(t *testing.T) {
 					f.authorization,
 					&agentpb.VolumeWorkCheckpointRequest{Attempt: identity, Progress: raw},
 				)
-				if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || f.store.beforeCommit != nil {
+				if !errors.Is(err, errs.New(errs.KindExecutionWriteContention, "")) || f.store.beforeCommit != nil {
 					t.Fatalf("concurrent %s did not fence the actual grant: %v", source, err)
 				}
 				report, err := f.store.Get(t.Context(), volumework.ReportKey(view.Attempt.Attempt.ID, 1))

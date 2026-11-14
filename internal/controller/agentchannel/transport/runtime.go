@@ -36,6 +36,7 @@ type Runtime struct {
 	resolverReports        agentchannel.ResolverReporter
 	entryReports           agentchannel.EntryReporter
 	volumeReports          agentchannel.VolumeReporter
+	checkpointDiagnostics  agentchannel.CheckpointDiagnostics
 	environmentProvision   agentchannel.EnvironmentProvisionReporter
 	lifecycleReports       agentchannel.LifecycleReporter
 	removalRecoveryReports agentchannel.RemovalRecoveryReporter
@@ -66,6 +67,10 @@ func New(
 			return nil, errs.New(errs.KindInternal, "native Volume reporting is not configured")
 		}
 		channel.ConfigureVolumeWork(runtime.volumeReports)
+		if runtime.checkpointDiagnostics == nil {
+			return nil, errs.New(errs.KindInternal, "checkpoint refusal diagnostics are not configured")
+		}
+		channel.ConfigureCheckpointDiagnostics(runtime.checkpointDiagnostics)
 		if runtime.networkReports == nil {
 			return nil, errs.New(errs.KindInternal, "native Network reporting is not configured")
 		}

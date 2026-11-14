@@ -116,6 +116,7 @@ const (
 	KindSlugConflict
 	KindNameConflict
 	KindStateConflict
+	KindExecutionWriteContention
 	KindAgentReadinessChanged
 	KindResourceInUse
 	KindCursorExpired
@@ -188,6 +189,7 @@ var kindDescriptors = [kindLimit]descriptor{
 	KindSlugConflict:                       {CodeSlugConflict, ClassConflict, 409},
 	KindNameConflict:                       {CodeNameConflict, ClassConflict, 409},
 	KindStateConflict:                      {CodeStateConflict, ClassConflict, 409},
+	KindExecutionWriteContention:           {CodeStateConflict, ClassConflict, 409},
 	KindAgentReadinessChanged:              {CodeAgentReadinessChanged, ClassConflict, 409},
 	KindResourceInUse:                      {CodeResourceInUse, ClassConflict, 409},
 	KindCursorExpired:                      {CodeCursorExpired, ClassConflict, 409},

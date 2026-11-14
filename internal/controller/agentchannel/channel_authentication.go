@@ -1,6 +1,7 @@
 package agentchannel
 
 import (
+	"errors"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,18 +18,27 @@ func taskStoreStatus(err error) error {
 	if status.Code(err) != codes.Unknown {
 		return err
 	}
-	slog.Error("controller: Agent task operation failed", slog.Any("error", err))
 	kind, ok := errs.KindOf(err)
 	if !ok {
+		slog.Error("controller: Agent task operation failed", slog.Any("error", err))
 		return status.Error(codes.Internal, "agent task operation failed")
 	}
+	detail := "agent task state does not match"
+	var productError *errs.Error
+	if errors.As(err, &productError) {
+		detail = productError.ToProblem().Detail
+	}
+	if kind == errs.KindExecutionWriteContention {
+		return status.Error(codes.Aborted, detail)
+	}
+	slog.Error("controller: Agent task operation failed", slog.Any("error", err))
 	switch kind {
 	case errs.KindValidationFailed:
 		return status.Error(codes.InvalidArgument, "agent task message is invalid")
 	case errs.KindTaskNotFound:
 		return status.Error(codes.NotFound, "agent task was not found")
 	case errs.KindStateConflict:
-		return status.Error(codes.FailedPrecondition, "agent task state does not match")
+		return status.Error(codes.FailedPrecondition, detail)
 	case errs.KindStorageUnavailable:
 		return status.Error(codes.Unavailable, "agent task storage is unavailable")
 	default:

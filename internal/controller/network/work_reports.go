@@ -118,7 +118,10 @@ func (service *WorkReports) CheckpointNetwork(ctx context.Context, authorization
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Network checkpoint ownership changed; resend the saved report")
+		return nil, errs.New(
+			errs.KindExecutionWriteContention,
+			"The execution report could not be saved because another update changed its publication snapshot",
+		)
 	}
 	service.reportProgress(ctx, view, input, progress)
 	digest, err := hex.DecodeString(checkpoint.Evidence.SHA256)
