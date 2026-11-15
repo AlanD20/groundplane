@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -135,7 +136,7 @@ func (repository *ScriptRepository) PrepareGroupPreflightWork(
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	sourceConditions, err := manualScriptSourceConditions(sources)
+	sourceConditions, err := groupPreflightSourceConditions(sources)
 	if err != nil {
 		return workqueue.Change{}, err
 	}
@@ -205,4 +206,19 @@ func (repository *ScriptRepository) PrepareGroupPreflightWork(
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key},
 	)
 	return change, nil
+}
+
+// Group captures cross a durable boundary. Their Service view's private read
+// bookkeeping is not stored authority: the captured Environment head fences the
+// current Service, and the immutable projection independently fences hook input.
+func groupPreflightSourceConditions(sources scriptsourcequeries.ScriptExecutionSources) ([]keyvalue.Condition, error) {
+	if sources.Service.Revision <= 0 || sources.Service.Revision != sources.DesiredHead.Revision ||
+		sources.Service.Record.EnvironmentID != sources.Environment.Record.ID ||
+		sources.DesiredHead.Record.EnvironmentID != sources.Environment.Record.ID {
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"Group preflight Service and Environment source revisions disagree",
+		)
+	}
+	return resourcePublicationConditions(scriptExecutionProjectionConditions(sources))
 }

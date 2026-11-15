@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Publish Group preflight Scripts using their captured Environment and immutable
+  projection fences, preserving authority across durable capture and resume.
 - Deliver captured network prerequisites for direct Service and Group releases
   using their own resource identity, while retaining parent-scope and ensure-only guards.
 - Settle expired Network assignments that never obtained a Start grant, using
