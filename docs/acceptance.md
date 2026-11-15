@@ -1986,6 +1986,29 @@ non-executable `/tmp`, helper-copy failures and arm64 installed runtime remain
 unqualified. Candidate installation is not proof of the later public tagged
 installer journey. Private deployment identities and raw captures stay ignored.
 
+## Fresh backing configuration and repeatable preparation
+
+**H125 — selected initial-create and rerun variants, 2026-11-16.** On the
+fresh Ubuntu 24.04 amd64 candidate used by H124, ordinary GP requests created
+eleven Project file Secrets, three protected Environment literal Entries,
+seven Zones, PostgreSQL 16, Valkey 9 and a shared Custom scanner backing.
+An exact preparation rerun preserved resource identities, Secret revisions,
+Entry sources/exposures and all fifteen retained Task identities; it accepted
+no new work and created no ordinary application Services.
+
+Independent Docker inspection confirmed the scanner's first runtime enforced
+1,610,612,736 bytes of memory, one CPU and a persistent signatures mount.
+The initial Custom request was rejected before acceptance because the recovery
+script combined a tag and digest; its corrected input selected the authored
+tag after Fetch. The rejected request/evidence was retained, not rewritten into
+a successful operation. No product validation was weakened.
+
+This qualifies the named fresh preparation and no-op rerun, not full application
+reconstruction, browser Secret import, backing cleanup/recovery, external ingress
+or arm64 runtime. Application images were not transferred or deployed during
+this check. Private values and deployment-specific recipes remain outside this
+public product repository.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
