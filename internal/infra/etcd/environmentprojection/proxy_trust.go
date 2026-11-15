@@ -40,7 +40,7 @@ func ServiceProxyTrustedCIDRs(projection EnvironmentComposeProjection, serviceID
 	}
 	var result []string
 	for _, zone := range projection.DesiredZones {
-		if slices.Contains(zones, zone.Desired.ID) && slices.Contains(routerZones, zone.Desired.ID) &&
+		if slices.Contains(zones, zone.Desired.Name) && slices.Contains(routerZones, zone.Desired.ID) &&
 			zone.EnvironmentID == projection.EnvironmentID && zone.Desired.OwnerKind == core.ZoneOwnerEnvironment &&
 			zone.Desired.OwnerID == projection.EnvironmentID {
 			result = append(result, zone.Desired.Subnet)

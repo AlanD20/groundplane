@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Resolve captured Service network names through the frozen Zone identities
+  when selecting trusted ingress networks for native Caddy forwarding.
 - Accept exact captured serving-proxy configurations during blue-green and
   rolling rendering, validating their hash, engine, Release and generation.
 - Preserve trusted ingress HTTPS headers through native Caddy Service proxies
