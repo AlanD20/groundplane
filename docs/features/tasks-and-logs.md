@@ -130,8 +130,10 @@ stream or completed-stage count, determines whether the action finished.
 
 ## Logs
 
-Service and Environment log actions read current workload stdout/stderr through
-the Controller, including provisioned Backing Service containers. Use the
+Service and Environment log actions read workload stdout/stderr through the
+Controller, including provisioned Backing Service containers. During deployment,
+logs include the latest published candidate as well as the serving Release, so
+first-start failures are visible before the candidate becomes healthy. Use the
 tail/follow controls and stop the stream when finished.
 These logs are not persisted as Task events and cannot be resumed from a durable
 cursor. An empty stream may mean the selected workload has emitted no output.

@@ -86,10 +86,10 @@ func TestNativeReadinessRequiresExactSelectedReplicas(t *testing.T) {
 		{"missing replica", func(v *agentpb.ObservedProject) { v.Containers = v.Containers[:1] }, false, false},
 		{"unhealthy", func(v *agentpb.ObservedProject) {
 			v.Containers[0].Health = agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_UNHEALTHY
-		}, false, false},
+		}, false, true},
 		{"stopped", func(v *agentpb.ObservedProject) {
 			v.Containers[0].State = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED
-		}, false, false},
+		}, false, true},
 		{"wrong image", func(v *agentpb.ObservedProject) { v.Containers[0].ImageReference = "foreign" }, false, true},
 		{"wrong actual image", func(v *agentpb.ObservedProject) { v.Containers[0].ImageId = "sha256:" + strings.Repeat("c", 64) }, false, true},
 		{"missing actual image", func(v *agentpb.ObservedProject) { v.Containers[0].ImageId = "" }, false, true},

@@ -5,6 +5,11 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Include a pending deployment candidate in Service and Environment logs, using
+  its captured workload ownership alongside the serving Release.
+- Fail deployment readiness when a candidate exits, restarts or exhausts its
+  healthcheck retries, instead of waiting for the whole Blueprint deadline.
+
 - Allow Entry creation, edits and bulk updates before runtime configuration is
   prepared when no acknowledged workload exists; retain prior files until Deploy.
   Read selected values consistently from authored state and retain normal host

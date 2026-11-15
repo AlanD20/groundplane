@@ -74,11 +74,37 @@ func Readiness(input Input, progress Progress, observed *agentpb.ObservedProject
 				)
 			}
 			count++
+			if container.State == agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED ||
+				container.State == agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_DEAD {
+				if container.ExitCode != nil {
+					return false, errs.Newf(
+						errs.KindStateConflict,
+						"service %s container %s exited with code %d before becoming ready; inspect Service logs",
+						service.ComposeName,
+						container.Name,
+						*container.ExitCode,
+					)
+				}
+				return false, errs.Newf(
+					errs.KindStateConflict,
+					"service %s container %s stopped before becoming ready; inspect Service logs",
+					service.ComposeName,
+					container.Name,
+				)
+			}
 			if container.State != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING {
 				ready = false
 				continue
 			}
 			if service.HasHealthcheck {
+				if container.Health == agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_UNHEALTHY {
+					return false, errs.Newf(
+						errs.KindStateConflict,
+						"service %s container %s failed its healthcheck; inspect Service logs",
+						service.ComposeName,
+						container.Name,
+					)
+				}
 				if detail := healthcheckfailure.Detail(container.HealthcheckDiagnostic); detail != "" {
 					return false, errs.Newf(
 						errs.KindValidationFailed,

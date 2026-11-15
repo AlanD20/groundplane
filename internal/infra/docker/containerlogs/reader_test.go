@@ -73,10 +73,9 @@ func TestOpenRejectsInvalidAndDuplicateTargetsBeforeDocker(t *testing.T) {
 			request.Targets[0].ServiceName = string([]byte{0xff})
 			return request
 		}},
-		{name: "duplicate service target", request: func() *agentpb.LogSubscribe {
+		{name: "duplicate Release source", request: func() *agentpb.LogSubscribe {
 			request := validSubscribe()
 			duplicate := proto.CloneOf(request.Targets[0])
-			duplicate.Runtime.ReleaseId = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 			request.Targets = append(request.Targets, duplicate)
 			return request
 		}},

@@ -32,6 +32,11 @@ Start without creating containers. Deploy or Blueprint Apply creates its first
 runtime. There is no standalone Restart action; the `restart` configuration
 field controls Docker's automatic restart policy.
 
+A candidate that exits or restarts before readiness, or whose Docker healthcheck
+exhausts its retries, fails the deployment with its container identity and exit
+code when available. Inspect Service logs for the startup error. A container that
+is still starting continues within the captured deployment deadline.
+
 ## Editing configuration
 
 The Console, CLI and API edit the same authored desired state. Command and

@@ -78,21 +78,22 @@ func (reader *Reader) Open(ctx context.Context, request *agentpb.LogSubscribe) (
 		return nil, fmt.Errorf("invalid log subscription")
 	}
 	targets := make(map[string]*agentpb.LogTarget, len(request.GetTargets()))
-	seenServices := make(map[string]struct{}, len(request.GetTargets()))
+	seenSources := make(map[string]struct{}, len(request.GetTargets()))
 	for _, target := range request.GetTargets() {
 		if target == nil || serviceobservation.ValidateTarget(target.GetRuntime()) != nil ||
 			target.GetServiceName() == "" ||
 			!utf8.ValidString(target.GetServiceName()) {
 			return nil, fmt.Errorf("invalid log target")
 		}
-		if _, exists := seenServices[target.Runtime.ServiceId]; exists {
+		sourceKey := target.Runtime.ServiceId + "/" + target.Runtime.ReleaseId
+		if _, exists := seenSources[sourceKey]; exists {
 			return nil, fmt.Errorf("duplicate log target")
 		}
 		if target.Runtime.EnvironmentId != request.Targets[0].Runtime.EnvironmentId {
 			return nil, fmt.Errorf("log targets must share one Environment")
 		}
-		seenServices[target.Runtime.ServiceId] = struct{}{}
-		targets[target.Runtime.ServiceId] = target
+		seenSources[sourceKey] = struct{}{}
+		targets[sourceKey] = target
 	}
 
 	containers, err := reader.docker.ContainerList(ctx, client.ContainerListOptions{All: true})
@@ -107,12 +108,12 @@ func (reader *Reader) Open(ctx context.Context, request *agentpb.LogSubscribe) (
 		if labels["com.groundplane.managed"] != "true" || labels["com.groundplane.kind"] != "service" {
 			continue
 		}
-		target := targets[labels["com.groundplane.service-id"]]
+		target := targets[labels["com.groundplane.service-id"]+"/"+labels["com.groundplane.release-id"]]
 		if target == nil || !serviceobservation.SelectsWorkload(labels, target.Runtime) {
 			continue
 		}
 		replica, valid := serviceobservation.WorkloadReplica(labels, target.Runtime)
-		key := target.Runtime.ServiceId + "\x00" + strconv.FormatUint(replica, 10)
+		key := target.Runtime.ServiceId + "/" + target.Runtime.ReleaseId + "\x00" + strconv.FormatUint(replica, 10)
 		if !valid || candidate.ID == "" || seenContainers[candidate.ID] || seenReplicas[key] {
 			return nil, fmt.Errorf("log container ownership does not match its runtime")
 		}
@@ -150,7 +151,7 @@ func (reader *Reader) Open(ctx context.Context, request *agentpb.LogSubscribe) (
 			set.Close()
 			return nil, fmt.Errorf("managed log container %s unexpectedly enables TTY", candidate.ID)
 		}
-		target := targets[candidate.Labels["com.groundplane.service-id"]]
+		target := targets[candidate.Labels["com.groundplane.service-id"]+"/"+candidate.Labels["com.groundplane.release-id"]]
 		replica, valid := serviceobservation.WorkloadReplica(labels, target.Runtime)
 		selectedReplica, selectedValid := serviceobservation.WorkloadReplica(candidate.Labels, target.Runtime)
 		if !valid || !selectedValid || replica != selectedReplica {

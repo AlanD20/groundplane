@@ -112,7 +112,7 @@ func (registry *Registry) OpenLogs(
 		(scope.ServiceID != "" && ids.Validate(ids.KindService, scope.ServiceID) != nil) {
 		return nil, errs.New(errs.KindValidationFailed, "log subscription scope is invalid")
 	}
-	seenServices := make(map[string]struct{}, len(targets))
+	seenSources := make(map[string]struct{}, len(targets))
 	for _, target := range targets {
 		if serviceobservation.ValidateTarget(target.Runtime) != nil ||
 			target.Runtime.EnvironmentId != scope.EnvironmentID ||
@@ -123,10 +123,11 @@ func (registry *Registry) OpenLogs(
 		if scope.ServiceID != "" && target.Runtime.ServiceId != scope.ServiceID {
 			return nil, errs.New(errs.KindValidationFailed, "log subscription target is outside its scope")
 		}
-		if _, exists := seenServices[target.Runtime.ServiceId]; exists {
-			return nil, errs.New(errs.KindValidationFailed, "log subscription has a duplicate Service target")
+		sourceKey := target.Runtime.ServiceId + "/" + target.Runtime.ReleaseId
+		if _, exists := seenSources[sourceKey]; exists {
+			return nil, errs.New(errs.KindValidationFailed, "log subscription has a duplicate Release source")
 		}
-		seenServices[target.Runtime.ServiceId] = struct{}{}
+		seenSources[sourceKey] = struct{}{}
 	}
 	requestID, err := newLogRequestID()
 	if err != nil {

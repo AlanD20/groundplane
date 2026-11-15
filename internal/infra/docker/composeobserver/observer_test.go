@@ -102,6 +102,13 @@ func TestContainerStateNormalizesTransientDockerStates(t *testing.T) {
 			if err != nil {
 				t.Fatalf("containerState() error = %v", err)
 			}
+			if status == container.StateRestarting {
+				if state != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED || exitCode == nil ||
+					*exitCode != 0 {
+					t.Fatalf("restarting process lost its exit result: %v/%v", state, exitCode)
+				}
+				return
+			}
 			if state != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_CREATED || exitCode != nil {
 				t.Fatalf("containerState() = %v/%v, want created/nil", state, exitCode)
 			}

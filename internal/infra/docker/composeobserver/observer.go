@@ -340,11 +340,13 @@ func containerState(
 ) (agentpb.ObservedContainerState, *int32, error) {
 	var observed agentpb.ObservedContainerState
 	switch state.Status {
-	case container.StateCreated, container.StatePaused, container.StateRestarting, container.StateRemoving:
+	case container.StateCreated, container.StatePaused, container.StateRemoving:
 		observed = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_CREATED
 	case container.StateRunning:
 		observed = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING
-	case container.StateExited:
+	// A restarting container has already lost its process. Preserve that exit
+	// result so readiness does not mistake a crash loop for initial creation.
+	case container.StateExited, container.StateRestarting:
 		observed = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED
 	case container.StateDead:
 		observed = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_DEAD
