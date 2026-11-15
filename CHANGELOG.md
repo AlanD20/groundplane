@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Allow manual and rollback Scripts alongside deploy hooks during Blueprint
+  Service preparation without treating them as missing or extra deploy hooks.
 - Use one shared horizontal scrollbar for unwrapped container logs instead of a
   separate scrollbar on every log line.
 - Keep router request-policy edits from redeploying unchanged application

@@ -264,6 +264,12 @@ func (service *Service) validateServiceUnitScripts(
 		}
 		actual[script.Desired.ID] = struct{}{}
 	}
+	// The captured Script set includes manual and rollback Scripts. Only deploy
+	// hooks participate in this release's hook-membership comparison.
+	clear(actual)
+	for _, script := range deployScriptsByService(scripts)[serviceID] {
+		actual[script.Desired.ID] = struct{}{}
+	}
 	if len(expected) != len(actual) {
 		return errs.New(errs.KindStateConflict, "Blueprint Service unit Script membership changed")
 	}
