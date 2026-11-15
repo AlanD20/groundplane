@@ -103,9 +103,11 @@ No zone. Selecting an item highlights related memberships; selecting again
 clears the highlight. Lists provide filtering, sortable columns and a visible
 sort direction.
 
-Zones & topology offers SVG and PNG export of all Services or a selected set,
-including their connected Routes, Backing Services and Volumes. Export uses the
-enabled connection layers and crops the drawn diagram with 16 px margins,
+Zones & topology offers an Export menu with SVG and PNG downloads. Click a Service
+on the diagram to select it; Shift/Ctrl/Cmd-click adds or removes Services from
+the selection. Export includes the selected Services, or all Services when none
+are selected, with their connected Routes, Backing Services and Volumes. Export
+uses the enabled connection layers and crops the drawn diagram with 16 px margins,
 independently of pan, zoom and highlighting. SVG retains vector shapes and text;
 large PNGs are scaled to stay within browser image limits. This browser-local
 download does not change Environment configuration. Right-click empty board space

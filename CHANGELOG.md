@@ -5,7 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
-- Export topology diagrams as standalone SVG or PNG for all or selected Services,
+- Export topology diagrams from a simple SVG/PNG menu for all Services or those
+  selected directly on the diagram with Shift/Ctrl/Cmd-click,
   cropped to the diagram with 16 px margins. Share view controls with the empty-space
   context menu and preserve resource-specific node menus.
 - Give Service card footer actions consistent padding and click areas.

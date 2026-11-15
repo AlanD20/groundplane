@@ -3,7 +3,8 @@ import { useId, useMemo, useState } from "react";
 import { TopologyCanvas } from "@/components/common/topology-canvas";
 import { Button } from "@/components/ui/button";
 import { Layers } from "lucide-react";
-import { TopologyExportDialog } from "./topology-export-dialog";
+import { TopologyExportMenu } from "./topology-export-menu";
+import { topologyImage, type TopologyImageFormat } from "./topology-export";
 import { TopologyViewControls } from "./topology-view-controls";
 import { useStore } from "@/lib/store";
 import type { Environment } from "@/lib/types";
@@ -40,16 +41,22 @@ export function BlueprintTopology({
     () => buildTopology(env, backingProjects),
     [env, backingProjects],
   );
-  const [exportOpen, setExportOpen] = useState(false);
-  const [selection, setSelection] = useState<string | null>(null);
-  const selected = graph.nodes.some((n) => n.id === selection)
-    ? selection
-    : null;
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string>();
+  const [selection, setSelection] = useState<string[]>([]);
+  const selected = selection.filter((id) =>
+    graph.nodes.some((n) => n.id === id),
+  );
+  const selectedServices = selected.filter((id) =>
+    env.services.some((service) => service.id === id),
+  );
   const [layers, setLayers] = useState<TopologyLayer[]>([...topologyLayers]);
   const [highlightKind, setHighlightKind] = useState<string | null>(null);
   const focused = new Set(
     graph.nodes
-      .filter((n) => (selected ? n.id === selected : n.kind === highlightKind))
+      .filter((n) =>
+        selected.length ? selected.includes(n.id) : n.kind === highlightKind,
+      )
       .map((n) => n.id),
   );
   const hasFocus = focused.size > 0;
@@ -67,7 +74,65 @@ export function BlueprintTopology({
     ...focused,
     ...highlighted.flatMap((e) => [e.from, e.to]),
   ]);
-  const active = graph.nodes.find((n) => n.id === selected);
+  const active =
+    selected.length === 1
+      ? graph.nodes.find((n) => n.id === selected[0])
+      : undefined;
+  const download = async (format: TopologyImageFormat) => {
+    setExporting(true);
+    setExportError(undefined);
+    try {
+      const source = selectedServices.length
+        ? {
+            ...env,
+            services: env.services.filter((service) =>
+              selectedServices.includes(service.id),
+            ),
+            routes: env.routes.filter((route) =>
+              selectedServices.includes(route.targetServiceId),
+            ),
+            attaches: env.attaches.filter((attach) =>
+              selectedServices.includes(attach.serviceId),
+            ),
+          }
+        : env;
+      const exported = buildTopology(source, backingProjects);
+      exported.edges = exported.edges.filter((edge) =>
+        layers.includes(edge.kind),
+      );
+      const blob = await topologyImage(
+        exported,
+        `${env.name} topology`,
+        document.documentElement,
+        now,
+        format,
+      );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${env.name.replace(/[^a-zA-Z0-9_-]/g, "-")}-topology-${selectedServices.length ? "selected" : "all"}.${format}`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (cause) {
+      setExportError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to export the diagram.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+  const exportControl = (context = false) => (
+    <TopologyExportMenu
+      context={context}
+      busy={exporting}
+      selectedCount={selectedServices.length}
+      onExport={(format) => void download(format)}
+    />
+  );
   const viewControls = (context = false) => (
     <TopologyViewControls
       context={context}
@@ -75,14 +140,14 @@ export function BlueprintTopology({
       onLayersChange={setLayers}
       highlightKind={highlightKind}
       onHighlightChange={(kind) => {
-        setSelection(null);
+        setSelection([]);
         setHighlightKind(kind);
       }}
       onlyRelated={onlyRelated}
       onOnlyRelatedChange={setOnlyRelated}
       hasFocus={hasFocus}
-      selected={!!selected}
-      onClearSelection={() => setSelection(null)}
+      selected={!!selected.length}
+      onClearSelection={() => setSelection([])}
       counts={{
         Routes: graph.edges.filter((edge) => edge.kind === "Routes").length,
         Dependencies: graph.edges.filter((edge) => edge.kind === "Dependencies")
@@ -109,7 +174,8 @@ export function BlueprintTopology({
         height={graph.height}
         controls={viewControls()}
         contextControls={viewControls(true)}
-        onExport={() => setExportOpen(true)}
+        exportControl={exportControl()}
+        exportContextControl={exportControl(true)}
       >
         <defs>
           {topologyLayers.map((layer) => (
@@ -216,10 +282,25 @@ export function BlueprintTopology({
               <TopologyNodeMenu node={node}>
                 <button
                   type="button"
-                  aria-pressed={selected === node.id}
-                  onClick={() => {
+                  aria-pressed={selected.includes(node.id)}
+                  onClick={(event) => {
                     setHighlightKind(null);
-                    setSelection(selected === node.id ? null : node.id);
+                    if (
+                      node.kind === "Service" &&
+                      (event.shiftKey || event.ctrlKey || event.metaKey)
+                    ) {
+                      setSelection(
+                        selectedServices.includes(node.id)
+                          ? selectedServices.filter((id) => id !== node.id)
+                          : [...selectedServices, node.id],
+                      );
+                    } else {
+                      setSelection(
+                        selected.length === 1 && selected[0] === node.id
+                          ? []
+                          : [node.id],
+                      );
+                    }
                   }}
                   className="h-[72px] w-full cursor-pointer rounded-lg border bg-card px-3 py-2 text-left text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   style={{
@@ -259,15 +340,16 @@ export function BlueprintTopology({
           );
         })}
       </TopologyCanvas>
-      {exportOpen && (
-        <TopologyExportDialog
-          env={env}
-          backingProjects={backingProjects}
-          layers={layers}
-          selected={selected}
-          now={now}
-          onClose={() => setExportOpen(false)}
-        />
+      <p className="text-xs text-muted-foreground" role="status">
+        {selectedServices.length
+          ? `${selectedServices.length} Services selected for export. `
+          : "No Services selected: export includes everything. "}
+        Shift/Ctrl/Cmd-click Services to select more.
+      </p>
+      {exportError && (
+        <p role="alert" className="text-sm text-destructive">
+          {exportError}
+        </p>
       )}
       {active && (
         <div className="space-y-3 rounded-lg border border-border bg-card p-4">
@@ -279,11 +361,7 @@ export function BlueprintTopology({
                 now={now}
               />
             )}
-            <Button
-              size="xs"
-              variant="ghost"
-              onClick={() => setSelection(null)}
-            >
+            <Button size="xs" variant="ghost" onClick={() => setSelection([])}>
               Close details
             </Button>
           </div>

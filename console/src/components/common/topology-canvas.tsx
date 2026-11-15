@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Download, Maximize, Minimize, Minus, Plus, Scan } from "lucide-react";
+import { Maximize, Minimize, Minus, Plus, Scan } from "lucide-react";
 import { useWorkspaceFullscreen } from "./use-workspace-fullscreen";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,14 +17,16 @@ export function TopologyCanvas({
   children,
   controls,
   contextControls,
-  onExport,
+  exportControl,
+  exportContextControl,
 }: {
   width: number;
   height: number;
   children: ReactNode;
   controls?: ReactNode;
   contextControls?: ReactNode;
-  onExport?: () => void;
+  exportControl?: ReactNode;
+  exportContextControl?: ReactNode;
 }) {
   const board = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useWorkspaceFullscreen(undefined, () =>
@@ -144,11 +146,7 @@ export function TopologyCanvas({
             {index === 0 && action.label}
           </Button>
         ))}
-        {onExport && (
-          <Button variant="outline" size="sm" onClick={onExport}>
-            <Download /> Export
-          </Button>
-        )}
+        {exportControl}
         {controls}
       </div>
       <ContextMenu>
@@ -290,13 +288,10 @@ export function TopologyCanvas({
               {action.label}
             </ContextMenuItem>
           ))}
-          {onExport && (
+          {exportContextControl && (
             <>
               <ContextMenuSeparator />
-              <ContextMenuItem onClick={onExport}>
-                <Download />
-                Export topology…
-              </ContextMenuItem>
+              {exportContextControl}
             </>
           )}
           {contextControls && (
