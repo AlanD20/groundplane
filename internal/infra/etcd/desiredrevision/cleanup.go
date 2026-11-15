@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredauthoring"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -368,6 +369,8 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 			Type: etcdstore.MutationDelete, Key: blueprintattachinputs.ParentPrefix(stored.Claim.TaskID), Prefix: true,
 		})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: descriptorKey})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete,
+			Key: blueprintunits.CapturedGraphKey(stored.Claim.EnvironmentID, stored.Claim.TaskID)})
 	} else {
 		stored.UpdatedAt = now
 		if !stored.UpdatedAt.After(descriptor.UpdatedAt) {

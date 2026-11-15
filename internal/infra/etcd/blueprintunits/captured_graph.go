@@ -38,7 +38,8 @@ func CapturedGraphKey(environmentID, taskID string) string {
 	return recordPrefix + environmentID + "/captured/" + taskID
 }
 
-// PrepareCapturedGraph must join Task admission and operation input publication.
+// PrepareCapturedGraph creates immutable input for Task admission. A staged
+// graph cannot execute until its parent and accepted head are published.
 // There is no overwrite operation: changed intent always has a new Task identity.
 func PrepareCapturedGraph(task workexecution.Task, graph CapturedGraph) (workqueue.Change, error) {
 	if task.PublicationComplete || task.Progress.Total() != 0 || validateCapturedGraph(task, graph) != nil {

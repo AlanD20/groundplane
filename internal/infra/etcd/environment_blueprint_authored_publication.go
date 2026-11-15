@@ -375,9 +375,17 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
 	}
 	conditions = append(conditions, input.RetainedAttachConditions...)
-	result, publicationErr := queue.Commit(ctx, work, graph,
+	acceptance, err := workqueue.JoinChanges(work, graph,
 		workqueue.Change{Conditions: markerConditions, Mutations: markerMutations},
 		workqueue.Change{Conditions: conditions, Mutations: mutations})
+	if err != nil {
+		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
+	}
+	acceptance, err = repository.stageBlueprintAcceptanceRecords(ctx, input, acceptance)
+	if err != nil {
+		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
+	}
+	result, publicationErr := queue.Commit(ctx, acceptance)
 	return attachInputs.finish(ctx, repository.store, parent.ID, result, publicationErr)
 }
 

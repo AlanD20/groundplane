@@ -5,6 +5,9 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Stage immutable Blueprint acceptance records under their existing revision
+  owner, keeping Task and desired-state publication within the atomic operation
+  limit. Retire abandoned captures without activating work or relaxing guards.
 - Keep Runner registration files private while using normal file permissions
   for workflow jobs and Docker build contexts.
 - Include a pending deployment candidate in Service and Environment logs, using
