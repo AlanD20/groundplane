@@ -86,6 +86,12 @@ registration cannot be proved complete, report that a fresh token is required;
 do not replay an uncertain token delivery. Removal remains local and does not
 deregister the Runner in GitHub.
 
+The [Runner entrypoint](../../release/runner/entrypoint.sh) creates registration
+files with a private umask, then restores the normal workflow umask before
+starting GitHub's listener. Carrying the credential umask into jobs changes
+checked-out file permissions and can make root-owned files unreadable to a
+non-root application after a Docker build.
+
 ## Upstream software maintenance
 
 The upstream GitHub runner package is independently maintained in its registered

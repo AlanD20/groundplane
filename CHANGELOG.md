@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Keep Runner registration files private while using normal file permissions
+  for workflow jobs and Docker build contexts.
 - Include a pending deployment candidate in Service and Environment logs, using
   its captured workload ownership alongside the serving Release.
 - Fail deployment readiness when a candidate exits, restarts or exhausts its

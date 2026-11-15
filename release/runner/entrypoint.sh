@@ -34,4 +34,6 @@ fi
 
 registration_token=
 exec 0</dev/null
+# Registration credentials stay private; trusted jobs use normal file modes.
+umask 022
 exec ./run.sh
