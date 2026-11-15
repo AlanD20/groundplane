@@ -67,7 +67,10 @@ func PrepareControllerDNSSettlement(snapshot Snapshot, unit Unit, operationID st
 	if err != nil {
 		return MutationPlan{}, err
 	}
-	if !slices.Contains(selection.Ready, blueprintreconcile.ResourceKey{Kind: unit.Target.Kind, ID: unit.Target.ID}) {
+	// An unchanged answer is already satisfied. The caller still supplies and
+	// fences the current resolver acknowledgement before this Task adopts it.
+	target := blueprintreconcile.ResourceKey{Kind: unit.Target.Kind, ID: unit.Target.ID}
+	if !slices.Contains(selection.Ready, target) && !slices.Contains(selection.Satisfied, target) {
 		return MutationPlan{}, errs.New(errs.KindStateConflict, "Blueprint DNS unit is not ready")
 	}
 	state := Applied

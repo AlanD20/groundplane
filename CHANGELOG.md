@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Allow pre-deploy Scripts on Services with phase-specific dependencies by
+  consuming recognized dependency metadata before closed runner validation.
+- Complete Blueprint reapply for unchanged DNS records after confirming the
+  existing resolver acknowledgement.
 - Stage immutable Blueprint acceptance records under their existing revision
   owner, keeping Task and desired-state publication within the atomic operation
   limit. Keep staged prerequisites usable during runtime preparation and retire

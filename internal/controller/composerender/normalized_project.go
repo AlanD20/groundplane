@@ -221,7 +221,7 @@ func loadNormalizedEnvironmentProjectInput(
 
 func stripControllerServiceExtensions(extensions composetypes.Extensions) composetypes.Extensions {
 	consumed := false
-	for _, key := range []string{composeResourceExtension, "x-gp-release"} {
+	for _, key := range []string{composeResourceExtension, "x-gp-release", "x-gp-depends_on"} {
 		if _, recognized := extensions[key]; recognized {
 			delete(extensions, key)
 			consumed = true

@@ -131,6 +131,9 @@ func TestStripControllerServiceExtensionsConsumesRecognizedMetadataOnly(t *testi
 	service := normalize(composetypes.Extensions{
 		"x-gp-resource": map[string]any{"id": "svc_exact"},
 		"x-gp-release":  map[string]any{"default_strategy": "recreate"},
+		"x-gp-depends_on": map[string]any{
+			"callback": map[string]any{"condition": "service_healthy", "phases": []string{"deploy"}},
+		},
 	})
 	if service.Extensions != nil {
 		t.Fatalf("normalized extensions = %#v, want nil", service.Extensions)
