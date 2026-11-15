@@ -82,6 +82,16 @@ frozen Environment projection, not from a caller's default. Stored render inputs
 must match that choice. Backing containers serve their declared ports directly
 through their Attach network; they do not receive the Environment's HTTP proxy.
 
+Native Caddy forwarding captures the owning Zone CIDRs shared by the Service and
+the enabled Environment Caddy router. This keeps an ingress-provided HTTPS scheme
+through the second proxy while excluding backing networks and unrelated Zones.
+Peers within a selected Zone share that trust boundary. An empty captured list
+trusts no forwarding headers; it never reads a later router configuration.
+All listeners use the same canonical policy, including rolling traffic changes.
+Before promotion, blue-green and rolling retain the exact acknowledged prior
+proxy bytes; recovery restores those same bytes, including their trust policy.
+The strict Agent reader validates the policy with the listeners and upstreams.
+
 Blueprint Service fingerprints include the captured engine, so an engine change
 cannot skip an otherwise unchanged Service and leave its old proxy applied.
 Blueprint Route receipts acknowledge authored metadata before the router runs;

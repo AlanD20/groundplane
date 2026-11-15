@@ -35,6 +35,10 @@ func selectBlueprintProxy(render *releaserender.ReleaseRenderInput, exposures []
 	}
 	render.ProxyPorts = ports
 	render.ProxyImplementation, err = projectionrecord.ServiceProxyImplementation(render.Projection)
+	if err != nil {
+		return err
+	}
+	render.ProxyTrustedCIDRs, err = projectionrecord.ServiceProxyTrustedCIDRs(render.Projection, render.ServiceID)
 	return err
 }
 
@@ -56,6 +60,8 @@ func sealBlueprintProxy(render *releaserender.ReleaseRenderInput) error {
 		render.CandidateTarget,
 		render.ProxyGeneration,
 		render.ProxyPorts,
+
+		render.ProxyTrustedCIDRs,
 	)
 	if err != nil {
 		return err

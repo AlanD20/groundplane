@@ -3,6 +3,7 @@ package serviceproxy
 import (
 	"cmp"
 	"fmt"
+	"net/netip"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -35,14 +36,28 @@ type Port struct {
 // Configuration describes one exact, complete routing set. An empty upstream
 // set is intentional: an initial rollout must not send traffic to unready work.
 type Configuration struct {
-	Implementation Implementation
-	ReleaseID      string
-	Generation     uint64
-	Ports          []Port
-	Upstreams      []string
+	Implementation    Implementation
+	ReleaseID         string
+	Generation        uint64
+	Ports             []Port
+	Upstreams         []string
+	TrustedProxyCIDRs []string
 }
 
 func (configuration Configuration) Validate() error {
+	if configuration.Implementation != Caddy && len(configuration.TrustedProxyCIDRs) != 0 {
+		return errs.New(errs.KindValidationFailed, "HTTP forwarding trust is invalid for this Service proxy")
+	}
+	for index, value := range configuration.TrustedProxyCIDRs {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil || !prefix.Addr().Is4() || prefix.Bits() == 0 || prefix.Masked().String() != value ||
+			index > 0 && configuration.TrustedProxyCIDRs[index-1] >= value {
+			return errs.New(
+				errs.KindValidationFailed,
+				"Service proxy trusted networks must be canonical, sorted IPv4 CIDRs",
+			)
+		}
+	}
 	if ids.Validate(ids.KindDeployment, configuration.ReleaseID) != nil || configuration.Generation == 0 ||
 		len(configuration.Upstreams) > MaximumUpstreams {
 		return errs.New(errs.KindValidationFailed, "Service proxy release, generation or upstream count is invalid")

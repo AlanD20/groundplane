@@ -59,16 +59,19 @@ func PriorProxyConfiguration(
 	}, nil
 }
 
-// A rolling predecessor cannot be reconstructed from one workload name.
-// Preserve its exact serving proxy config while the blue-green slot starts.
+// Preserve the exact serving proxy until promotion. Candidate forwarding trust
+// must not silently change the retained listener's predecessor configuration.
 func InitialProxyConfiguration(member ReleaseTaskRenderMember) (*domain.ProxyConfig, error) {
-	if member.Render.Strategy != domain.StrategyBlueGreen || member.Render.PriorTarget != domain.WorkloadRolling {
+	if member.Render.Strategy == domain.StrategyRecreate || len(member.Render.ProxyPorts) == 0 {
 		return nil, nil
 	}
 	if member.Render.PriorRuntime == nil {
+		if member.Render.PriorWorkload == nil && member.Render.PriorArtifactID == "" {
+			return nil, nil
+		}
 		return nil, errs.New(
 			errs.KindStateConflict,
-			"rolling-to-blue-green requires the acknowledged predecessor runtime",
+			"retaining a Service proxy requires the acknowledged predecessor runtime",
 		)
 	}
 	artifact := &agentpb.ComposeArtifact{}

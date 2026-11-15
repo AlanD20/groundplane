@@ -13,6 +13,7 @@ import (
 )
 
 type RollingForwardPlanInput struct {
+	ProxyTrustedCIDRs   []string
 	ProxyImplementation serviceproxy.Implementation
 	Plan                rollingrelease.Plan
 	Artifacts           []*agentpb.ComposeArtifact
@@ -80,6 +81,8 @@ func BuildRollingForwardPlan(input RollingForwardPlanInput) (RollingForwardPlan,
 				change.Ordinal,
 				captured.ProxyGeneration,
 				input.ProxyPorts,
+
+				input.ProxyTrustedCIDRs,
 			)
 			if err != nil {
 				return RollingForwardPlan{}, err

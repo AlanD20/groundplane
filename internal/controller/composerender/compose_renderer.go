@@ -61,6 +61,7 @@ const (
 )
 
 type ComposeReleaseIdentity struct {
+	ProxyTrustedCIDRs      []string
 	ProxyImplementation    serviceproxy.Implementation
 	ProxyAddresses         map[string]string
 	ProxyImage             *domain.ProxyImage

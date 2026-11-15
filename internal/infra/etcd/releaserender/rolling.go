@@ -61,6 +61,8 @@ func SealRollingProxy(input *ReleaseRenderInput, firstGeneration uint64) error {
 		uint32(len(changes)),
 		input.ProxyGeneration,
 		input.ProxyPorts,
+
+		input.ProxyTrustedCIDRs,
 	)
 	if err != nil {
 		return err
@@ -223,6 +225,8 @@ func validateRollingRenderInput(input ReleaseRenderInput) error {
 		uint32(len(changes)),
 		input.ProxyGeneration,
 		input.ProxyPorts,
+
+		input.ProxyTrustedCIDRs,
 	)
 	if err != nil {
 		return err

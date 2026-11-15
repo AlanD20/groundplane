@@ -208,6 +208,12 @@ Environment-owned Routes and exact recovery authority. Selected HTTP-only
 switching is qualified; other switching and recovery variants remain open. See
 [Components](features/components.md).
 
+Native Caddy Service proxies preserve forwarding headers only from the
+Environment-owned Zones shared by that Service and its captured enabled Caddy
+router. Those Zones are the forwarding trust boundary; attached backing networks
+and other Environments never grant that authority. The policy is sealed with the
+Release. Applications remain responsible for trusting their own proxy peers.
+
 ### Credentials and configuration
 
 Secrets are encrypted at rest and excluded from public metadata and Task events.

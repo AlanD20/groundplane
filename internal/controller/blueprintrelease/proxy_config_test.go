@@ -44,6 +44,8 @@ func TestBlueprintProxyConfigSealsFirstAndSuccessor(t *testing.T) {
 		domain.WorkloadSingleton,
 		1,
 		render.ProxyPorts,
+
+		nil,
 	)
 	if err != nil || render.ProxyConfigDigest != hex.EncodeToString(first.SHA256[:]) {
 		t.Fatalf("first config digest = %q, %v", render.ProxyConfigDigest, err)

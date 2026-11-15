@@ -35,6 +35,10 @@ func configureReleaseProxy(
 	if err != nil {
 		return err
 	}
+	render.ProxyTrustedCIDRs, err = projectionrecord.ServiceProxyTrustedCIDRs(render.Projection, render.ServiceID)
+	if err != nil {
+		return err
+	}
 	if err := domain.ValidateProxyForwarding(render.ProxyImplementation, ports); err != nil {
 		return err
 	}
@@ -61,6 +65,8 @@ func configureReleaseProxy(
 			render.CandidateTarget,
 			render.ProxyGeneration,
 			ports,
+
+			render.ProxyTrustedCIDRs,
 		)
 		if err != nil {
 			return err

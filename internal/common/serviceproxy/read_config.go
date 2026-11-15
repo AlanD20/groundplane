@@ -60,6 +60,21 @@ func readCaddy(document caddyDocument) (Configuration, error) {
 		return Configuration{}, invalidConfiguration()
 	}
 	for name, server := range servers {
+		var trusted []string
+		if server.TrustedProxies != nil {
+			if server.TrustedProxies.Source != "static" || len(server.TrustedProxies.Ranges) == 0 ||
+				server.TrustedProxiesStrict != 1 {
+				return Configuration{}, invalidConfiguration()
+			}
+			trusted = server.TrustedProxies.Ranges
+		} else if server.TrustedProxiesStrict != 0 {
+			return Configuration{}, invalidConfiguration()
+		}
+		if len(configuration.Ports) == 0 {
+			configuration.TrustedProxyCIDRs = slices.Clone(trusted)
+		} else if !slices.Equal(configuration.TrustedProxyCIDRs, trusted) {
+			return Configuration{}, invalidConfiguration()
+		}
 		port, err := readListenerIdentity(&configuration, name)
 		if err != nil || len(server.Listen) != 1 || server.Listen[0] != fmt.Sprintf(":%d", port.Number) ||
 			len(server.Routes) != 1 || len(server.Routes[0].Handle) != 1 {

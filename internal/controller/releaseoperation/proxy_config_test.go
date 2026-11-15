@@ -59,6 +59,8 @@ func TestConfigureReleaseProxyFirstRecreateHasNoPriorAuthority(t *testing.T) {
 		domain.WorkloadSingleton,
 		2,
 		[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -94,6 +96,8 @@ func TestConfigureReleaseProxyFirstBlueGreenHasNoPriorAuthority(t *testing.T) {
 		domain.WorkloadBlue,
 		2,
 		[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -124,6 +128,8 @@ func TestConfigureReleaseProxyPreservesServingPredecessor(t *testing.T) {
 		domain.WorkloadSingleton,
 		7,
 		[]domain.ProxyPort{{Port: 8080, Protocol: serviceports.TCP}},
+
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)

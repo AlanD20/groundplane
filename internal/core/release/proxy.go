@@ -22,6 +22,7 @@ func RenderProxyConfig(
 	target WorkloadTarget,
 	generation uint64,
 	ports []ProxyPort,
+	trustedProxyCIDRs []string,
 ) (ProxyConfig, error) {
 	if serviceName == "" || strings.ContainsAny(serviceName, "/\\\x00") ||
 		target.Validate() != nil || generation == 0 || releaseID == "" {
@@ -34,7 +35,7 @@ func RenderProxyConfig(
 	if err != nil {
 		return ProxyConfig{}, err
 	}
-	return renderProxyUpstreams(implementation, releaseID, generation, ports, []string{workloadName})
+	return renderProxyUpstreams(implementation, releaseID, generation, ports, []string{workloadName}, trustedProxyCIDRs)
 }
 
 // RenderRollingProxyConfig seals one mixed old/new routing set. Readiness and
@@ -45,6 +46,7 @@ func RenderRollingProxyConfig(
 	changeOrdinal uint32,
 	generation uint64,
 	ports []ProxyPort,
+	trustedProxyCIDRs []string,
 ) (ProxyConfig, error) {
 	changes, err := plan.Changes()
 	if err != nil {
@@ -62,7 +64,7 @@ func RenderRollingProxyConfig(
 		names[index] = replica.RoutingName()
 	}
 	slices.Sort(names)
-	return renderProxyUpstreams(implementation, plan.ReleaseID, generation, ports, names)
+	return renderProxyUpstreams(implementation, plan.ReleaseID, generation, ports, names, trustedProxyCIDRs)
 }
 
 // RenderRollingInitialProxyConfig does not make an unproven first candidate
@@ -72,6 +74,7 @@ func RenderRollingInitialProxyConfig(
 	plan rollingrelease.Plan,
 	generation uint64,
 	ports []ProxyPort,
+	trustedProxyCIDRs []string,
 ) (ProxyConfig, error) {
 	if err := plan.Validate(); err != nil {
 		return ProxyConfig{}, err
@@ -87,7 +90,7 @@ func RenderRollingInitialProxyConfig(
 		names[index] = replica.RoutingName()
 	}
 	slices.Sort(names)
-	return renderProxyUpstreams(implementation, plan.ReleaseID, generation, ports, names)
+	return renderProxyUpstreams(implementation, plan.ReleaseID, generation, ports, names, trustedProxyCIDRs)
 }
 
 func renderProxyUpstreams(
@@ -96,6 +99,7 @@ func renderProxyUpstreams(
 	generation uint64,
 	ports []ProxyPort,
 	names []string,
+	trustedProxyCIDRs []string,
 ) (ProxyConfig, error) {
 	if len(names) > rollingrelease.MaximumReplicas {
 		return ProxyConfig{}, errs.New(
@@ -105,7 +109,7 @@ func renderProxyUpstreams(
 	}
 	encoded, err := serviceproxy.Render(serviceproxy.Configuration{
 		Implementation: implementation, ReleaseID: releaseID, Generation: generation,
-		Ports: proxyConfigurationPorts(ports), Upstreams: names,
+		Ports: proxyConfigurationPorts(ports), Upstreams: names, TrustedProxyCIDRs: slices.Clone(trustedProxyCIDRs),
 	})
 	if err != nil {
 		return ProxyConfig{}, err

@@ -219,6 +219,8 @@ func newSourceFixture(
 			target,
 			5,
 			proxyPorts,
+
+			nil,
 		)
 		if proxyErr != nil {
 			t.Fatal(proxyErr)

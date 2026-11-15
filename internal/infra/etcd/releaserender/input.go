@@ -24,6 +24,7 @@ const TaskReleasePublicationParam = "release_publication_id"
 // candidate. It is staged before publication and never re-reads mutable labels,
 // Blueprint projection, image identity, or selected slot at dispatch time.
 type ReleaseRenderInput struct {
+	ProxyTrustedCIDRs    []string                    `json:"proxy_trusted_cidrs,omitempty"`
 	ProxyImplementation  serviceproxy.Implementation `json:"proxy_implementation,omitempty"`
 	ProxyAddresses       map[string]string           `json:"proxy_addresses,omitempty"`
 	ReleaseID            string                      `json:"release_id"`
@@ -96,6 +97,18 @@ func DecodeReleaseRenderInput(value []byte) (ReleaseRenderInput, error) {
 }
 
 func ValidateReleaseRenderInput(input ReleaseRenderInput) error {
+	if len(input.ProxyPorts) == 0 && len(input.ProxyTrustedCIDRs) != 0 {
+		return errs.New(errs.KindValidationFailed, "portless Service cannot capture HTTP forwarding trust")
+	}
+	if len(input.ProxyTrustedCIDRs) != 0 {
+		trusted, err := projectionrecord.ServiceProxyTrustedCIDRs(input.Projection, input.ServiceID)
+		if err != nil || !slices.Equal(trusted, input.ProxyTrustedCIDRs) {
+			return errs.New(
+				errs.KindValidationFailed,
+				"Service proxy forwarding trust differs from its captured shared Zones",
+			)
+		}
+	}
 	if err := validateProxyAddresses(input); err != nil {
 		return err
 	}
@@ -201,7 +214,7 @@ func ValidateReleaseRenderInput(input ReleaseRenderInput) error {
 		return errs.New(errs.KindValidationFailed, "release render dependency plans do not match the frozen projection")
 	}
 	if len(input.ProxyPorts) != 0 && input.Strategy != domain.StrategyRolling {
-		if _, err := domain.RenderProxyConfig(input.ProxyImplementation, input.ServiceName, input.ReleaseID, input.CandidateTarget, input.ProxyGeneration, input.ProxyPorts); err != nil {
+		if _, err := domain.RenderProxyConfig(input.ProxyImplementation, input.ServiceName, input.ReleaseID, input.CandidateTarget, input.ProxyGeneration, input.ProxyPorts, input.ProxyTrustedCIDRs); err != nil {
 			return err
 		}
 	}
@@ -242,6 +255,7 @@ func releaseRenderTargetsGeneratedService(components []componentrecord.Record, s
 }
 
 func CloneReleaseRenderInput(input ReleaseRenderInput) ReleaseRenderInput {
+	input.ProxyTrustedCIDRs = slices.Clone(input.ProxyTrustedCIDRs)
 	if input.Rolling != nil {
 		plan := rollingrelease.ClonePlan(*input.Rolling)
 		input.Rolling = &plan

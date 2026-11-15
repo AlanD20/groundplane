@@ -194,9 +194,9 @@ func renderServiceProxyTopology(
 			proxyConfig = *identity.ServingProxyConfig
 			proxyConfig.JSON = slices.Clone(proxyConfig.JSON)
 		} else if identity.Strategy == domain.StrategyRolling {
-			proxyConfig, err = domain.RenderRollingInitialProxyConfig(identity.ProxyImplementation, *identity.Rolling, activeGeneration, ports)
+			proxyConfig, err = domain.RenderRollingInitialProxyConfig(identity.ProxyImplementation, *identity.Rolling, activeGeneration, ports, identity.ProxyTrustedCIDRs)
 		} else {
-			proxyConfig, err = domain.RenderProxyConfig(identity.ProxyImplementation, name, activeRelease, activeTarget, activeGeneration, ports)
+			proxyConfig, err = domain.RenderProxyConfig(identity.ProxyImplementation, name, activeRelease, activeTarget, activeGeneration, ports, identity.ProxyTrustedCIDRs)
 		}
 		if err != nil {
 			return nil, err

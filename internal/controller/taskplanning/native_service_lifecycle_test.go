@@ -149,7 +149,7 @@ func nativeLifecycleCaptureFixture(
 		}
 	}
 	configuration, err := domain.RenderProxyConfig(prior.ProxyImplementation, prior.ServiceName, prior.ReleaseID,
-		prior.CandidateTarget, prior.ProxyGeneration, prior.ProxyPorts)
+		prior.CandidateTarget, prior.ProxyGeneration, prior.ProxyPorts, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

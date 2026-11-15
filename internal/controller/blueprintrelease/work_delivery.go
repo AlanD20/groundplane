@@ -174,6 +174,8 @@ func BuildCapturedReleaseInput(
 					uint32(index+1),
 					first+uint64(index),
 					render.ProxyPorts,
+
+					render.ProxyTrustedCIDRs,
 				)
 				if err != nil {
 					return nil, err
@@ -181,7 +183,7 @@ func BuildCapturedReleaseInput(
 				input.TrafficConfigurations = append(input.TrafficConfigurations, configuration.JSON)
 			}
 		} else {
-			configuration, err := domain.RenderProxyConfig(render.ProxyImplementation, render.ServiceName, render.ReleaseID, render.CandidateTarget, render.ProxyGeneration, render.ProxyPorts)
+			configuration, err := domain.RenderProxyConfig(render.ProxyImplementation, render.ServiceName, render.ReleaseID, render.CandidateTarget, render.ProxyGeneration, render.ProxyPorts, render.ProxyTrustedCIDRs)
 			if err != nil {
 				return nil, err
 			}

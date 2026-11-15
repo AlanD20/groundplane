@@ -5,6 +5,12 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Preserve trusted ingress HTTPS headers through native Caddy Service proxies
+  using Release-captured, shared Environment Zone networks, with strict routing
+  validation and exact predecessor configuration during rollout and recovery.
+- Advance storage epoch to 49 and Controller/Agent channel to 54 for the captured
+  HTTP forwarding policy; both components must be updated together.
+
 - Authorize Group preflight Script checkpoints through the same captured
   membership checks used for delivery and standalone Script execution.
 - Settle cancelled or expired Group preflight Scripts before assignment using

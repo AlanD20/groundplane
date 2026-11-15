@@ -3,6 +3,7 @@ package serviceproxy
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -22,8 +23,14 @@ type caddyHTTP struct {
 	Servers map[string]caddyServer `json:"servers"`
 }
 type caddyServer struct {
-	Listen []string     `json:"listen"`
-	Routes []caddyRoute `json:"routes"`
+	Listen               []string             `json:"listen"`
+	Routes               []caddyRoute         `json:"routes"`
+	TrustedProxies       *caddyTrustedProxies `json:"trusted_proxies,omitempty"`
+	TrustedProxiesStrict int                  `json:"trusted_proxies_strict,omitempty"`
+}
+type caddyTrustedProxies struct {
+	Source string   `json:"source"`
+	Ranges []string `json:"ranges"`
 }
 type caddyRoute struct {
 	Handle []caddyHandler `json:"handle"`
@@ -48,10 +55,18 @@ func renderCaddy(configuration Configuration) ([]byte, error) {
 		if len(upstreams) == 0 {
 			handler = caddyHandler{Handler: "static_response", StatusCode: 503}
 		}
-		servers[listenerName(configuration, port)] = caddyServer{
+		server := caddyServer{
 			Listen: []string{fmt.Sprintf(":%d", port.Number)},
 			Routes: []caddyRoute{{Handle: []caddyHandler{handler}}},
 		}
+		if len(configuration.TrustedProxyCIDRs) != 0 {
+			server.TrustedProxies = &caddyTrustedProxies{
+				Source: "static",
+				Ranges: slices.Clone(configuration.TrustedProxyCIDRs),
+			}
+			server.TrustedProxiesStrict = 1
+		}
+		servers[listenerName(configuration, port)] = server
 	}
 	encoded, err := json.Marshal(caddyDocument{Admin: caddyAdmin{Listen: "127.0.0.1:2019"},
 		Apps: caddyApps{HTTP: caddyHTTP{Servers: servers}}})

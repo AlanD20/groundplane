@@ -35,7 +35,8 @@ func RenderServiceReleaseArtifact(
 		return nil, err
 	}
 	identity := composerender.ComposeReleaseIdentity{
-		ProxyAddresses: render.ProxyAddresses, ProxyImage: render.ProxyImage,
+		ProxyTrustedCIDRs: render.ProxyTrustedCIDRs,
+		ProxyAddresses:    render.ProxyAddresses, ProxyImage: render.ProxyImage,
 		ProxyImplementation: render.ProxyImplementation,
 		ReleaseID:           intent.ID, Target: render.CandidateTarget,
 		Image: render.CandidateWorkload.LocalImageID, ServingReleaseID: intent.PriorServingReleaseID,
