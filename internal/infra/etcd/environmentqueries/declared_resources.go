@@ -74,7 +74,12 @@ func readDeclaredSources(ctx context.Context, store snapshotReader,
 	owned keyvalue.Versioned[environmentprojection.EnvironmentOwnedIdentities], found bool,
 ) (keyvalue.Versioned[DeclaredResources], bool, error) {
 	environmentID := input.Record.EnvironmentID
-	if !found || owned.Revision != input.Revision || owned.Record.RevisionID != input.Record.RevisionID ||
+	// The root is sealed before atomic admission publishes owned identities.
+	// Physical write revisions can differ; both records must name the same
+	// immutable declaration and be read from the same MVCC snapshot.
+	if !found || input.Revision <= 0 || owned.Revision <= 0 ||
+		input.Revision > input.ReadRevision || owned.Revision > input.ReadRevision ||
+		owned.ReadRevision != input.ReadRevision || owned.Record.RevisionID != input.Record.RevisionID ||
 		owned.Record.RenderGeneration != input.Record.RenderGeneration ||
 		owned.Record.EnvironmentID != input.Record.EnvironmentID {
 		return keyvalue.Versioned[DeclaredResources]{}, false, errs.New(

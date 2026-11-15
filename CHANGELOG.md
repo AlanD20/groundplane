@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Size Group publication batches against the actual atomic byte and operation
+  budgets, including the Task progress write, so larger environments can deploy.
+- Read retained Blueprint declarations by their sealed identity and common
+  snapshot rather than assuming staged records share a physical write revision.
 - Publish Blueprint Release Groups in bounded, guarded batches before opening
   execution, preserving group identities across publication retries and restarts.
 - Keep deployment and recovery stages visible after embedded Scripts by

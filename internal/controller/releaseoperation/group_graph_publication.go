@@ -34,6 +34,18 @@ func (owner *GraphPublication) prepareGroupPublication(ctx context.Context, task
 		if ready {
 			continue
 		}
+		fits, err := owner.groupPreparationFits(ctx, task, staged, part, at)
+		if err != nil || !fits {
+			keyvalue.ZeroMutationBytes(part.Mutations)
+			if err != nil {
+				return workdispatch.PublicationBatch{}, err
+			}
+			if prepared == 0 {
+				return workdispatch.PublicationBatch{}, errs.New(errs.KindValidationFailed,
+					"One captured Group member exceeds the atomic publication limit")
+			}
+			return owner.commitGroupPreparation(ctx, task, staged, at)
+		}
 		staged.Conditions = append(staged.Conditions, part.Conditions...)
 		staged.Mutations = append(staged.Mutations, part.Mutations...)
 		prepared++
@@ -93,6 +105,18 @@ func (owner *GraphPublication) prepareGroupPublication(ctx context.Context, task
 		if ready {
 			continue
 		}
+		fits, err := owner.groupPreparationFits(ctx, task, staged, part, at)
+		if err != nil || !fits {
+			keyvalue.ZeroMutationBytes(part.Mutations)
+			if err != nil {
+				return workdispatch.PublicationBatch{}, err
+			}
+			if prepared == 0 {
+				return workdispatch.PublicationBatch{}, errs.New(errs.KindValidationFailed,
+					"One captured Group network exceeds the atomic publication limit")
+			}
+			return owner.commitGroupPreparation(ctx, task, staged, at)
+		}
 		staged.Conditions = append(staged.Conditions, part.Conditions...)
 		staged.Mutations = append(staged.Mutations, part.Mutations...)
 		prepared++
@@ -109,18 +133,12 @@ func (owner *GraphPublication) prepareGroupPublication(ctx context.Context, task
 func (owner *GraphPublication) commitGroupPreparation(ctx context.Context, task workqueue.TaskSnapshot,
 	staged workqueue.Change, at time.Time,
 ) (workdispatch.PublicationBatch, error) {
-	next := workexecution.CloneTask(task.Task)
-	next.UpdatedAt = at
-	value, err := workqueue.EncodeTask(next)
+	progress, err := groupPublicationProgress(task, at)
 	if err != nil {
 		return workdispatch.PublicationBatch{}, err
 	}
-	defer clear(value)
-	staged.Mutations = append(
-		staged.Mutations,
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: workqueue.TaskKey(task.Task.ID), Value: value},
-	)
-	result, err := owner.queue.Commit(ctx, staged)
+	defer keyvalue.ZeroMutationBytes(progress.Mutations)
+	result, err := owner.queue.Commit(ctx, staged, progress)
 	keyvalue.ClearValues(result.FailureReads)
 	if err != nil {
 		return workdispatch.PublicationBatch{}, err

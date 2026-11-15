@@ -9,6 +9,20 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// Measure reports the complete physical request cost without writing. Owners
+// use it to batch independent immutable inputs; Commit still enforces the same
+// ceilings after joining all execution and operation authority.
+func (repository *Repository) Measure(ctx context.Context, changes ...Change) (keyvalue.TransactionBudget, error) {
+	if err := keyvalue.ValidateContext(ctx); err != nil {
+		return keyvalue.TransactionBudget{}, err
+	}
+	joined, err := JoinChanges(changes...)
+	if err != nil {
+		return keyvalue.TransactionBudget{}, err
+	}
+	return repository.store.MeasureTransaction(ctx, joined.Conditions, joined.Mutations)
+}
+
 // Commit joins execution and operation-owned changes into one transaction. It
 // never divides an oversized decision or retries a failed comparison using new
 // state. A transport error may have committed; callers reconcile durable IDs
