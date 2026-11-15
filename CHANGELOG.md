@@ -5,6 +5,9 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Render only visible container log rows while retaining the full rolling buffer
+  for search and copy. Reuse timestamp formatting, preserve row styling and full
+  Service names, and distinguish received lines from the newest 1,000 retained.
 - Group Environment deployments by their triggering Task, with complete
   expandable Service releases, Task outcomes and direct execution links.
 - Allow manual and rollback Scripts alongside deploy hooks during Blueprint

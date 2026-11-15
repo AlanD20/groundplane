@@ -2,6 +2,14 @@ import { CopyButton } from "@/components/common/copy-button";
 import { buttonVariants } from "@/components/ui/button";
 import { Popover } from "@base-ui/react/popover";
 import type { TransientLogEvent } from "@/lib/transient-logs";
+import { memo } from "react";
+
+const logTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
 
 export function LogSource({ event }: { event: TransientLogEvent }) {
   const name = event.container_name;
@@ -12,11 +20,13 @@ export function LogSource({ event }: { event: TransientLogEvent }) {
           variant: "ghost",
           size: "content",
           className:
-            "min-w-0 max-w-full justify-start gap-1.5 truncate px-1 text-xs text-primary",
+            "min-w-0 max-w-full flex-wrap justify-start gap-1.5 px-1 text-xs text-primary",
         })}
         aria-label={`Container details: ${name}`}
       >
-        <span className="min-w-0 truncate">{event.service_name}</span>
+        <span className="min-w-0 break-words text-left">
+          {event.service_name}
+        </span>
         <span aria-hidden="true" className="shrink-0 text-muted-foreground/60">
           |
         </span>
@@ -47,27 +57,27 @@ export function LogSource({ event }: { event: TransientLogEvent }) {
   );
 }
 
-export function LogLine({
+export const LogLine = memo(function LogLine({
   event,
   wrap,
   showSource,
+  alternate = false,
 }: {
   event: TransientLogEvent;
   wrap: boolean;
   showSource: boolean;
+  alternate?: boolean;
 }) {
   return (
     <div
-      className={`grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)_3rem] items-start gap-x-2 xl:gap-x-3 gap-y-1 border-l-2 px-2 py-1 even:bg-[var(--log-row-alternate)] hover:bg-[var(--log-row-hover)] ${event.stream === "stderr" ? "border-destructive/50" : "border-transparent"} ${showSource ? "xl:grid-cols-[6rem_12rem_3.5rem_minmax(0,1fr)]" : "xl:grid-cols-[6rem_3.5rem_minmax(0,1fr)]"}`}
+      className={`grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)_3rem] items-start gap-x-2 xl:gap-x-3 gap-y-1 border-l-2 px-2 py-1 ${alternate ? "bg-[var(--log-row-alternate)]" : ""} hover:bg-[var(--log-row-hover)] ${event.stream === "stderr" ? "border-destructive/50" : "border-transparent"} ${showSource ? "xl:grid-cols-[6rem_16rem_3.5rem_minmax(0,1fr)]" : "xl:grid-cols-[6rem_3.5rem_minmax(0,1fr)]"}`}
     >
       <time
         dateTime={event.timestamp}
         title={event.timestamp}
         className="whitespace-nowrap text-xs tabular-nums leading-5 text-muted-foreground"
       >
-        {new Date(event.timestamp).toLocaleTimeString(undefined, {
-          hour12: false,
-        })}
+        {logTimeFormatter.format(new Date(event.timestamp))}
       </time>
       {showSource ? (
         <LogSource event={event} />
@@ -87,4 +97,4 @@ export function LogLine({
       </span>
     </div>
   );
-}
+});

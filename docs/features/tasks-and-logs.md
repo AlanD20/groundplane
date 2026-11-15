@@ -130,6 +130,14 @@ stream or completed-stage count, determines whether the action finished.
 
 ## Logs
 
+The Console keeps the newest 1,000 received lines in a rolling buffer. Incoming
+lines replace the oldest ones; reaching the limit does not stop live streaming.
+The counters distinguish received, retained and filtered lines. Search and copy
+use all retained matching lines, while only rows near the viewport are rendered.
+Scroll away from the bottom to read older output; **Jump to latest** resumes
+following the end. Pause stops the current stream; Resume / reload starts a new
+read using the selected per-container tail.
+
 Service and Environment log actions read workload stdout/stderr through the
 Controller, including provisioned Backing Service containers. During deployment,
 logs include the latest published candidate as well as the serving Release, so

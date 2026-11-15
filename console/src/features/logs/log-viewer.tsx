@@ -1,5 +1,6 @@
 import { EmptyState } from "@/components/common/empty-state";
-import { LogLine, LogSource } from "./log-line";
+import { LogSource } from "./log-line";
+import { LogRows } from "./log-rows";
 ("use client");
 
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { useStore } from "@/lib/store";
 import type { LogTarget, TransientLogEvent } from "@/lib/transient-logs";
 import { ScrollText } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function LogViewer({
   target,
@@ -58,6 +59,7 @@ export function LogStream({ target }: { target: LogTarget }) {
   const [tail, setTail] = useState(200);
   const [follow, setFollow] = useState(true);
   const [events, setEvents] = useState<TransientLogEvent[]>([]);
+  const [received, setReceived] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [started, setStarted] = useState(false);
@@ -76,6 +78,7 @@ export function LogStream({ target }: { target: LogTarget }) {
     pendingEvents.current = [];
     if (batch.length > 0) {
       setEvents((current) => [...current, ...batch].slice(-1000));
+      setReceived((current) => current + batch.length);
     }
   };
 
@@ -91,6 +94,7 @@ export function LogStream({ target }: { target: LogTarget }) {
     const controller = new AbortController();
     abortRef.current = controller;
     setEvents([]);
+    setReceived(0);
     setStarted(true);
     pinnedToEnd.current = true;
     setAtEnd(true);
@@ -131,22 +135,24 @@ export function LogStream({ target }: { target: LogTarget }) {
     // A new target owns a new stream; filters never restart it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target.kind, target.id]);
-  useEffect(() => {
-    if (follow && pinnedToEnd.current && outputRef.current)
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
-  }, [events, follow]);
-
-  const visible = events.filter(
-    (event) =>
-      (container === "all" || event.container_id === container) &&
-      (stream === "all" || event.stream === stream) &&
-      event.line.toLowerCase().includes(query.toLowerCase()),
+  const visible = useMemo(
+    () =>
+      events.filter(
+        (event) =>
+          (container === "all" || event.container_id === container) &&
+          (stream === "all" || event.stream === stream) &&
+          event.line.toLowerCase().includes(query.toLowerCase()),
+      ),
+    [events, container, stream, query],
   );
-  const containers = [
-    ...new Map(
-      events.map((event) => [event.container_id, event.container_name]),
-    ).entries(),
-  ];
+  const containers = useMemo(
+    () => [
+      ...new Map(
+        events.map((event) => [event.container_id, event.container_name]),
+      ).entries(),
+    ],
+    [events],
+  );
   return (
     <section
       aria-label="Container logs"
@@ -248,7 +254,9 @@ export function LogStream({ target }: { target: LogTarget }) {
                 : "Ready"}
         </span>
         <span>
-          {visible.length} shown · {events.length} / 1,000 loaded lines
+          {visible.length} shown · {events.length.toLocaleString()} retained ·{" "}
+          {received.toLocaleString()} received
+          {received > events.length && " · oldest lines discarded"}
         </span>
       </div>
       {container !== "all" &&
@@ -307,16 +315,14 @@ export function LogStream({ target }: { target: LogTarget }) {
             }
           />
         ) : (
-          <div className={wrap ? "min-w-0" : "w-max min-w-full"}>
-            {visible.map((event) => (
-              <LogLine
-                key={event.sequence}
-                event={event}
-                wrap={wrap}
-                showSource={container === "all"}
-              />
-            ))}
-          </div>
+          <LogRows
+            events={visible}
+            wrap={wrap}
+            showSource={container === "all"}
+            viewport={outputRef}
+            pinned={pinnedToEnd}
+            follow={follow}
+          />
         )}
       </div>
     </section>
