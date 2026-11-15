@@ -22,6 +22,7 @@ export function EntryRow({
   label,
   value,
   source,
+  environmentName,
   exposure,
   file,
   secret,
@@ -36,7 +37,8 @@ export function EntryRow({
   label: string;
   value?: string;
   source: string;
-  exposure: string;
+  environmentName: string;
+  exposure: string[];
   file?: boolean;
   secret?: boolean;
   emptySecretValue?: boolean;
@@ -46,6 +48,16 @@ export function EntryRow({
   editing?: boolean;
   onRemove?: () => void;
 }) {
+  const exposureLabel = exposure.includes("all")
+    ? "All Services"
+    : exposure.length === 1
+      ? `Only ${exposure[0]}`
+      : exposure.length
+        ? `Shared · ${exposure.length} Services`
+        : "No Services";
+  const exposureDescription = exposure.includes("all")
+    ? "all Services"
+    : exposure.join(", ") || "no Services";
   const preview = (
     <div className="flex min-w-0 items-start gap-2">
       <code className="block min-h-9 min-w-0 max-h-40 flex-1 overflow-auto whitespace-pre-wrap rounded-md bg-muted/60 px-3 py-2 font-mono text-sm [overflow-wrap:anywhere]">
@@ -91,8 +103,22 @@ export function EntryRow({
             {secret && <Badge variant="muted">Encrypted</Badge>}
             {secret && <EmptySecretValueBadge empty={emptySecretValue} />}
           </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge
+              variant="outline"
+              title="Definition owned by this Environment"
+            >
+              Environment: {environmentName}
+            </Badge>
+            <Badge
+              variant="muted"
+              title={`Available to ${exposureDescription}`}
+            >
+              {exposureLabel}
+            </Badge>
+          </div>
           <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-            {source} · Available to {exposure}
+            {source}
           </p>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">

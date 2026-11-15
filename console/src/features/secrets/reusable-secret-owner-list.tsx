@@ -120,6 +120,12 @@ export function ReusableSecretOwnerList({
                       >
                         {secret.kind === "file" ? "File" : "Variable"}
                       </Badge>
+                      <Badge
+                        variant="outline"
+                        className="ml-1 font-sans font-normal md:hidden"
+                      >
+                        {scopeLabel}
+                      </Badge>
                     </TableCell>
                     <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
                       {scopeLabel}

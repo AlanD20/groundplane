@@ -262,7 +262,7 @@ export default function ProjectSecretsPage() {
           loading={store.reusableSecretsLoading}
           emptyTitle="No project Secrets"
           emptyDescription="Resolution falls back to matching platform Secrets."
-          scopeLabel="defined here"
+          scopeLabel="Project"
           editable
           onRemove={(secret) => store.removeReusableSecret(secret.id)}
           onRefresh={() => store.refreshReusableSecrets()}
@@ -284,7 +284,7 @@ export default function ProjectSecretsPage() {
           secrets={fallbacks}
           loading={store.reusableSecretsLoading}
           emptyTitle="No platform fallback Secrets"
-          scopeLabel="platform fallback"
+          scopeLabel="Platform fallback"
           onReveal={(secret) => store.revealReusableSecret(secret.id)}
         />
       </ResourcePanel>

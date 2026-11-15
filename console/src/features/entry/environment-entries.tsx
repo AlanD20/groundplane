@@ -30,6 +30,7 @@ import { useSearchParams } from "react-router-dom";
 import { BulkEntryDrawer } from "./bulk-entry-drawer";
 import { EntryProtection } from "./entry-protection";
 import { EntryRow } from "./entry-row";
+import { entrySourceLabel } from "./entry-source-label";
 // ---- Variables (env vars + env files) ----
 
 export function EnvVarsCard({
@@ -459,18 +460,14 @@ export function EnvVarsCard({
         editing={open && editing?.id === entry.id}
         editor={open && editing?.id === entry.id ? editor : undefined}
         file={entry.type === "file"}
-        source={
-          entry.source.kind === "literal"
-            ? "Entered value"
-            : entry.source.kind === "fact"
-              ? "Connection value"
-              : "Secret reference"
-        }
-        exposure={
-          entry.exposure.includes("all")
-            ? "All Services"
-            : entry.exposure.join(", ") || "No Services"
-        }
+        environmentName={env.name}
+        source={entrySourceLabel(
+          entry,
+          env,
+          store.reusableSecrets,
+          project?.id,
+        )}
+        exposure={entry.exposure}
         secret={entry.secret}
         emptySecretValue={entry.emptySecretValue}
         value={entry.secret ? undefined : (literal ?? "Resolved on apply")}
@@ -522,8 +519,9 @@ export function EnvVarsCard({
 
         {service && (
           <p className="text-xs text-muted-foreground">
-            Entries exposed to {service.name}, including shared Entries. Editing
-            a shared Entry affects every Service in its exposure.
+            Environment Entries available to {service.name}. Shared Entries are
+            the same definitions shown in Environment Variables & files; editing
+            one affects all listed Services.
           </p>
         )}
         <ListToolbar

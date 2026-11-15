@@ -57,6 +57,11 @@ An Entry can use a literal value, a reusable Secret or an Attach fact. Exposure 
 explicit: it applies to all Services or the selected Services. GP does not inject
 every backing-service credential automatically.
 
+Environment and Service lists show the same Entry definitions. Each row identifies
+the owning Environment, its Service exposure and value source. A Service-only
+Entry is still Environment-owned; Project and Platform Secret references do not
+change that ownership or create a second definition in the Service.
+
 Entry type, destination, secret storage class and file ownership cannot change
 through edit. Source and exposure can change. File Entries require numeric `uid`
 and `gid`, including explicit zero; environment-variable Entries have neither.
