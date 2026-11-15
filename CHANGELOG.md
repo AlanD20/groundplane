@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Use the shared strict Caddy observation codec for continuous Service health,
+  preventing false degraded status after trusted forwarding is deployed.
 - Verify live and restart Caddy routing with the sealed configuration encoding,
   so admin API key ordering cannot falsely time out a trusted proxy promotion.
 - Resolve captured Service network names through the frozen Zone identities

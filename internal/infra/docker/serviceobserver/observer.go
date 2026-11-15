@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/internal/common/serviceobservation"
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -245,7 +244,7 @@ func (observer *Observer) proxyConfigMatches(ctx context.Context, containerID st
 		matching, err := serviceproxy.VerifyEnvoyObservation(observed, expected)
 		return matching, err == nil
 	}
-	canonical, err := jcs.Canonicalize(observed)
+	canonical, err := serviceproxy.NormalizeCaddyObservation(observed)
 	if err != nil {
 		return false, false
 	}

@@ -13,7 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/internal/common/serviceobservation"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/moby/moby/api/types/container"
@@ -149,15 +151,32 @@ func proxyLabels(target *agentpb.ServiceObservationTarget) map[string]string {
 // Rationale: OBS-05; healthy serving replicas cannot hide a missing, stopped,
 // or wrong-target stable proxy, while an exact live Caddy config remains usable.
 func TestObservationIncludesStableProxyServingProof(t *testing.T) {
-	expectedConfig := []byte(`{"apps":{"http":{"servers":{"gp":{"listen":[":8080"]}}}}}`)
-	wrongConfig := []byte(`{"apps":{"http":{"servers":{"gp":{"listen":[":8081"]}}}}}`)
+	configuration := serviceproxy.Configuration{
+		Implementation: serviceproxy.Caddy,
+		ReleaseID:      "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", Generation: 1,
+		Ports:     []serviceproxy.Port{{Number: 8080, Protocol: serviceproxy.TCP}},
+		Upstreams: []string{"api"}, TrustedProxyCIDRs: []string{"10.90.30.0/24"},
+	}
+	expectedConfig, err := serviceproxy.Render(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observedConfig, err := jcs.Canonicalize(expectedConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration.Upstreams = []string{"other-api"}
+	wrongConfig, err := serviceproxy.Render(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, test := range []struct {
 		name       string
 		proxyState *container.State
 		output     []byte
 		want       agentpb.ServiceProxyObservationState
 	}{
-		{name: "matching", proxyState: &container.State{Status: container.StateRunning, Running: true}, output: expectedConfig,
+		{name: "matching", proxyState: &container.State{Status: container.StateRunning, Running: true}, output: observedConfig,
 			want: agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MATCHING},
 		{name: "wrong target", proxyState: &container.State{Status: container.StateRunning, Running: true}, output: wrongConfig,
 			want: agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_CONFIG_MISMATCH},
