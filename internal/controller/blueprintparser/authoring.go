@@ -69,6 +69,7 @@ func MarshalAuthoringDocument(input AuthoringDocument) ([]byte, error) {
 		case "services", "networks", "volumes", "configs", "secrets":
 			omitGeneratedResourceMetadata(native.Content[index+1], key == "volumes")
 		}
+		escapeComposeValues(native.Content[index+1])
 		root.Content = append(root.Content, native.Content[index], native.Content[index+1])
 	}
 	if len(input.Requires) != 0 {
@@ -125,6 +126,26 @@ func MarshalAuthoringDocument(input AuthoringDocument) ([]byte, error) {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint authoring projection failed")
 	}
 	return encoded, nil
+}
+
+// Native Compose has already been interpolated. Escape its literal dollars
+// when returning it to an authoring input, which will be interpolated again.
+// Mapping keys and the separately authored GP extensions are not Compose values.
+func escapeComposeValues(node *yaml.Node) {
+	switch node.Kind {
+	case yaml.MappingNode:
+		for index := 1; index < len(node.Content); index += 2 {
+			escapeComposeValues(node.Content[index])
+		}
+	case yaml.SequenceNode:
+		for _, value := range node.Content {
+			escapeComposeValues(value)
+		}
+	case yaml.ScalarNode:
+		if node.Tag == "!!str" {
+			node.Value = strings.ReplaceAll(node.Value, "$", "$$")
+		}
+	}
 }
 
 // Direct resource mutations share runtime artifact builders. Their generated

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasework"
 )
 
@@ -31,33 +32,16 @@ func (service *ReleaseCheckpointService) reportRecovery(
 	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	attempt := input.Input.Attempt
-	needsStart := false
+	var started *workexecution.Stage
 	if err == nil && !report.Progress.InFlight && before != nil {
-		snapshot, readErr := service.diagnostics.Read(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, 0)
-		err = readErr
-		needsStart = snapshot.Record == nil || snapshot.Record.Sequence < report.Sequence
-	}
-	if err == nil && needsStart {
-		// Recreate only a retained, real Begin observation, never an inferred
-		// time or effect. A failed diagnostic write must not veto settlement.
-		started, startErr := releaseexecution.RecoveryStage(input, nil, *before)
+		value, startErr := releaseexecution.RecoveryStage(input, nil, *before)
 		if startErr == nil {
-			startErr = service.diagnostics.Report(
-				bounded,
-				attempt.TaskID,
-				attempt.WorkItemID,
-				attempt.ID,
-				attempt.Executor,
-				before.Sequence,
-				started,
-				before.Progress.UpdatedAt,
-			)
+			started = &value
 		}
 		err = startErr
 	}
 	if err == nil {
-		err = service.diagnostics.Report(bounded, attempt.TaskID, attempt.WorkItemID, attempt.ID, attempt.Executor,
-			report.Sequence, stage, report.Progress.UpdatedAt)
+		err = service.reportDiagnosticStage(bounded, attempt, stage, started, report.Progress.UpdatedAt)
 	}
 	if err != nil {
 		service.logger.WarnContext(ctx, "recovery diagnostics are incomplete", "attempt_id", attempt.ID, "error", err)

@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Keep deployment and recovery stages visible after embedded Scripts by
+  appending to their shared diagnostic sequence without reopening completed stages.
+- Preserve literal runtime variables in Blueprint exports and direct edits,
+  so reapplying authoring input cannot expand protected Entry references to empty.
 - Preserve failed Release and recovery execution causes in private Agent logs,
   correlated with their Task, work item and attempt identifiers.
 - Allow pre-deploy Scripts on Services with phase-specific dependencies by
