@@ -5,6 +5,12 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+## 0.0.1 — 2026-11-16
+
+Initial single-host release.
+
+### Console, hosting and operator refinements
+
 - Open container shells from Service and Backing Service details with an exact
   container selector, user, command arguments and working directory, sharing the
   existing terminal tabs and bounded session lifetime.
@@ -41,8 +47,8 @@ that every deployment or failure scenario has been qualified.
 - Preserve trusted ingress HTTPS headers through native Caddy Service proxies
   using Release-captured, shared Environment Zone networks, with strict routing
   validation and exact predecessor configuration during rollout and recovery.
-- Advance storage epoch to 49 and Controller/Agent channel to 54 for the captured
-  HTTP forwarding policy; both components must be updated together.
+- Capture strict HTTP forwarding policy in matching Controller and Agent artifacts;
+  both components must be updated together when the channel format changes.
 
 - Authorize Group preflight Script checkpoints through the same captured
   membership checks used for delivery and standalone Script execution.
@@ -93,10 +99,6 @@ that every deployment or failure scenario has been qualified.
   details. Read retained hook outcomes without requiring the Agent's local
   delivery journal or storing Script output.
 
-## 0.0.1 — 2026-11-14
-
-Initial single-host release.
-
 ### Lifecycle cleanup repairs
 
 - Reconcile omitted connections from retained Blueprint declarations, with native
@@ -105,8 +107,8 @@ Initial single-host release.
   path; keep loaded process environments until the next Deploy.
 - Preserve completion evidence for work cancelled before input creation, and
   allow DNS withdrawal with a stopped or never-published resolver.
-- The new cleanup receipts use storage epoch 48; this replacement format requires
-  a clean cutover from epoch 47, with no compatibility reader.
+- Use captured cleanup receipts with a clean cutover from development state;
+  no compatibility reader is provided.
 
 - Allow Detach before first Deploy and while initial Blueprint runtime rendering
   is pending, preserving concurrent deployment and desired-state checks.
@@ -123,7 +125,7 @@ Initial single-host release.
 - Qualify combined Controller/Agent updates as one prepared pair, including
   channel-format changes, with predecessor-pair rollback on failed readiness.
   Reject mismatched single-component updates before activation. This replacement
-  uses storage epoch 48; earlier pre-release installations require a clean cutover.
+  uses storage epoch 1; earlier development installations require a clean cutover.
 - Retry contended native execution checkpoints without disconnecting unrelated
   Agent work, and record refused checkpoints in Task execution details.
 - Edit Project and Platform file Secret contents in the Console, preserving
@@ -267,10 +269,10 @@ Initial single-host release.
 
 - Runner upstream updates, reusable Secret bulk editing and create-time Backing
   limits/storage are implemented but have not received live qualification.
-- This replacement advances storage epoch to 46. Existing epoch-45 installations
-  reject in-place activation; no automatic data migration or compatibility path
-  is provided. A fresh installation deletes prior GP-managed local state only
-  when the operator explicitly runs the destructive reset procedure.
+- This replacement establishes storage epoch 1 and Agent channel schema 1.
+  Existing development installations require an explicit clean reinstall;
+  no automatic data migration or compatibility path is provided. Reset deletes
+  prior GP-managed local state only when the operator explicitly requests it.
 - Config, Volume, PostgreSQL and MySQL Backup/Restore have selected live capture,
   restore, key-era, retention and interruption proof on Ubuntu amd64. Full Gate B,
   other provider/archive/checkpoint and arm64 variants remain unqualified.

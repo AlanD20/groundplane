@@ -1953,6 +1953,39 @@ This was a real Docker cleanup test inside an isolated container, not a full
 supported-OS/systemd or host-DNS uninstall qualification. No production host
 was modified by the test.
 
+## Container shells and Console presentation
+
+**H124 — selected HOST-19 variants, 2026-11-16.** Signed source
+`4656c6d4f` passed full local CI and GitHub CI. Its matching Controller/Agent
+candidate was installed on a newly created Ubuntu 24.04 amd64 QA VM.
+An isolated nginx Service executed literal arguments as UID 65534 in `/tmp`;
+output and exit code 7 remained available after the command ended before
+WebSocket attachment. Missing executable, user and directory failed startup
+promptly. Interactive input, resize to 117×39, foreign-owner refusal and the
+shared limit of three container sessions plus one host session passed.
+Termination removed a background child, independently checked through `/proc`,
+left no temporary helper directories and preserved the application container's
+exact identity and running state. The actual interactive Service CLI returned
+the requested UID and directory; its completion now displays the exit code.
+The Backing Service CLI selected the exact observed PostgreSQL container and
+ran a read-only UID/directory command as its `postgres` user, returning UID 70,
+`/tmp` and exit code 3 without accessing database contents.
+The isolated QA Service remains available for subsequent release checks.
+
+The real Console preview verified the shared container selector and command/user
+dialog without executing a command on the pre-existing workload. Shared Entry
+rows showed definition ownership, exposure and referenced value sources.
+A 1,000-line log buffer rendered 44 rows with 762 DOM elements; search covered
+the full buffer, Service names remained readable and scrollback/follow worked.
+These observations do not qualify clipboard contents, global UI latency or
+all route changes. Environment refresh still reads full Release history, and
+Task detail may fan out to 25 attempt reads; larger-history latency is unmeasured.
+
+Container replacement/disconnect races, read-only or
+non-executable `/tmp`, helper-copy failures and arm64 installed runtime remain
+unqualified. Candidate installation is not proof of the later public tagged
+installer journey. Private deployment identities and raw captures stay ignored.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,

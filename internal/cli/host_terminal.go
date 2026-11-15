@@ -136,13 +136,13 @@ func readCLITerminal(
 	for {
 		kind, body, err := conn.Read(ctx)
 		if err != nil {
-			result <- cliTerminalResult{err: hostTerminalConnectionError(ctx)}
+			result <- cliTerminalResult{err: terminalConnectionError(ctx)}
 			return
 		}
 		switch kind {
 		case websocket.MessageBinary:
 			if len(body) < 8 {
-				result <- cliTerminalResult{err: errors.New("host terminal returned an invalid output frame")}
+				result <- cliTerminalResult{err: errors.New("terminal returned an invalid output frame")}
 				return
 			}
 			_ = binary.BigEndian.Uint64(body[:8])
@@ -159,20 +159,23 @@ func readCLITerminal(
 			switch status.Type {
 			case "activity":
 			case "output_truncated":
-				_, _ = io.WriteString(stdout, "\r\n[earlier host terminal output was truncated]\r\n")
+				_, _ = io.WriteString(stdout, "\r\n[earlier terminal output was truncated]\r\n")
 			case "terminated":
 				reason := "terminated"
 				if status.Session != nil && status.Session.Reason != "" {
 					reason = status.Session.Reason
 				}
+				if status.Session != nil && status.Session.ExitCode != nil {
+					reason = fmt.Sprintf("%s, exit %d", reason, *status.Session.ExitCode)
+				}
 				result <- cliTerminalResult{reason: reason}
 				return
 			default:
-				result <- cliTerminalResult{err: errors.New("host terminal returned an invalid status frame")}
+				result <- cliTerminalResult{err: errors.New("terminal returned an invalid status frame")}
 				return
 			}
 		default:
-			result <- cliTerminalResult{err: errors.New("host terminal returned an invalid frame type")}
+			result <- cliTerminalResult{err: errors.New("terminal returned an invalid frame type")}
 			return
 		}
 	}
@@ -186,17 +189,17 @@ func writeCLIControl(ctx context.Context, conn *websocket.Conn, control cliTermi
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := conn.Write(writeCtx, websocket.MessageText, body); err != nil {
-		return hostTerminalConnectionError(ctx)
+		return terminalConnectionError(ctx)
 	}
 	return nil
 }
 
-func hostTerminalConnectionError(ctx context.Context) error {
+func terminalConnectionError(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	return errs.New(
 		errs.KindRequestUnavailable,
-		"host terminal connection closed; check whether the Controller restarted or became unreachable before opening another terminal. Commands were not replayed",
+		"terminal connection closed; check whether the Controller restarted or became unreachable before opening another terminal. Commands were not replayed",
 	)
 }
