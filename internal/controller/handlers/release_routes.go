@@ -183,7 +183,8 @@ func releaseSummary(view releasequeries.ReleaseView) apiTypes.ReleaseSummary {
 	return apiTypes.ReleaseSummary{
 		ID: view.Intent.ID, EnvironmentID: view.Intent.EnvironmentID, ServiceID: view.Intent.ServiceID,
 		OperationID: view.Intent.OperationID, OperationKind: string(view.Intent.OperationKind),
-		GroupOperationID: view.Intent.GroupOperationID, GroupMemberOrdinal: view.Intent.GroupMemberOrdinal,
+		OriginatingTaskID: view.Intent.OriginatingTaskID,
+		GroupOperationID:  view.Intent.GroupOperationID, GroupMemberOrdinal: view.Intent.GroupMemberOrdinal,
 		Image: view.Intent.CandidateWorkload.RequestedReference, Tag: view.Intent.Tag,
 		Strategy: string(view.Intent.Strategy), Slot: string(view.Intent.Slot),
 		OnFailure: apiTypes.OnFailure(view.Intent.OnFailure), State: apiTypes.ReleaseState(view.Checkpoint.State),
@@ -208,7 +209,7 @@ func releaseDetail(view releasequeries.ReleaseView) apiTypes.ReleaseDetail {
 		ReleaseSummary: releaseSummary(view), RollbackSourceReleaseID: view.Intent.RollbackSourceReleaseID,
 		PriorServingReleaseID:    view.Intent.PriorServingReleaseID,
 		PriorSuccessfulReleaseID: view.Intent.PriorSuccessfulReleaseID,
-		RenderInputDigest:        view.Intent.RenderInputDigest, OriginatingTaskID: view.Intent.OriginatingTaskID,
-		RollbackMaterial: material,
+		RenderInputDigest:        view.Intent.RenderInputDigest,
+		RollbackMaterial:         material,
 	}
 }

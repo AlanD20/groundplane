@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Group Environment deployments by their triggering Task, with complete
+  expandable Service releases, Task outcomes and direct execution links.
 - Allow manual and rollback Scripts alongside deploy hooks during Blueprint
   Service preparation without treating them as missing or extra deploy hooks.
 - Use one shared horizontal scrollbar for unwrapped container logs instead of a

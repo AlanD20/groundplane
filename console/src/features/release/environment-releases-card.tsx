@@ -1,6 +1,7 @@
 import { EmptyState } from "@/components/common/empty-state";
-import { ReleaseHistoryRow } from "./release-history-row";
-import { useState } from "react";
+import { DeploymentGroupRow } from "./deployment-group-row";
+import { groupDeployments } from "./deployment-groups";
+import { useMemo, useState } from "react";
 ("use client");
 
 import { History } from "lucide-react";
@@ -18,25 +19,26 @@ export function ReleasesCard({ env }: { env: Environment }) {
   const [service, setService] = useState("all");
   const [state, setState] = useState("all");
   const [strategy, setStrategy] = useState("all");
+  const groups = useMemo(() => groupDeployments(env.deploys), [env.deploys]);
   const table = useTableView(
-    env.deploys.filter(
-      (release) =>
-        (service === "all" || release.service === service) &&
-        (state === "all" ||
-          (state === "serving"
-            ? release.status === "active"
-            : release.state === state)) &&
-        (strategy === "all" || release.strategy === strategy) &&
-        `${release.service} ${release.tag} ${release.digest}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
+    groups.filter((group) =>
+      group.releases.some(
+        (release) =>
+          (service === "all" || release.service === service) &&
+          (state === "all" ||
+            (state === "serving"
+              ? release.status === "active"
+              : release.state === state)) &&
+          (strategy === "all" || release.strategy === strategy) &&
+          `${group.taskId} ${release.service} ${release.tag} ${release.digest}`
+            .toLowerCase()
+            .includes(query.toLowerCase()),
+      ),
     ),
     {
-      service: (d) => d.service,
-      tag: (d) => d.tag,
-      strategy: (d) => d.strategy,
-      when: (d) => Date.parse(d.when) || 0,
-      status: (d) => d.state,
+      when: (group) => Date.parse(group.when) || 0,
+      services: (group) =>
+        new Set(group.releases.map((release) => release.service)).size,
     },
     "when",
     "desc",
@@ -56,11 +58,8 @@ export function ReleasesCard({ env }: { env: Environment }) {
           onQueryChange={setQuery}
           sort={table}
           fields={[
-            { value: "service", label: "Service" },
-            { value: "tag", label: "Tag" },
-            { value: "strategy", label: "Strategy" },
             { value: "when", label: "Time" },
-            { value: "status", label: "Status" },
+            { value: "services", label: "Service count" },
           ]}
         />
         <div className="flex flex-wrap items-center gap-2">
@@ -77,11 +76,11 @@ export function ReleasesCard({ env }: { env: Environment }) {
             ]}
           />
           <Select
-            aria-label="Filter deployment state"
+            aria-label="Filter Service release state"
             value={state}
             onValueChange={setState}
             options={[
-              { value: "all", label: "All states" },
+              { value: "all", label: "All release states" },
               { value: "serving", label: "Serving" },
               ...[...new Set(env.deploys.map((release) => release.state))]
                 .filter((value) => value !== "serving")
@@ -110,8 +109,8 @@ export function ReleasesCard({ env }: { env: Environment }) {
           </span>
         </div>
         <div className="space-y-3">
-          {table.rows.map((release) => (
-            <ReleaseHistoryRow key={release.id} release={release} env={env} />
+          {table.rows.map((group) => (
+            <DeploymentGroupRow key={group.taskId} group={group} env={env} />
           ))}
           {!table.total && (
             <EmptyState

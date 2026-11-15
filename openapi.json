@@ -6078,11 +6078,11 @@
         },
         "required": [
           "render_input_digest",
-          "originating_task_id",
           "id",
           "environment_id",
           "service_id",
           "operation_id",
+          "originating_task_id",
           "operation_kind",
           "image",
           "tag",
@@ -6471,6 +6471,9 @@
           "operation_kind": {
             "type": "string"
           },
+          "originating_task_id": {
+            "type": "string"
+          },
           "service_id": {
             "type": "string"
           },
@@ -6495,6 +6498,7 @@
           "environment_id",
           "service_id",
           "operation_id",
+          "originating_task_id",
           "operation_kind",
           "image",
           "tag",

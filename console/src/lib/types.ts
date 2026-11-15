@@ -217,6 +217,8 @@ export type { Script, ScriptHook } from "@/features/script/types";
 
 export type DeployRecord = {
   id: string; // stable id — deploy history and rollback reference deployments by id
+  taskId: string;
+  operationKind: string;
   service: string; // which service this deployment released
   tag: string; // Selected image tag; the Release records the resolved digest.
   digest: string;

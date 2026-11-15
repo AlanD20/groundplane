@@ -3959,6 +3959,7 @@ export interface components {
             on_failure: string;
             operation_id: string;
             operation_kind: string;
+            originating_task_id: string;
             service_id: string;
             serving: boolean;
             slot?: string;

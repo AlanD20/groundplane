@@ -31,6 +31,7 @@ type ReleaseSummary struct {
 	EnvironmentID      string       `json:"environment_id"`
 	ServiceID          string       `json:"service_id"`
 	OperationID        string       `json:"operation_id"`
+	OriginatingTaskID  string       `json:"originating_task_id"`
 	OperationKind      string       `json:"operation_kind"`
 	GroupOperationID   string       `json:"group_operation_id,omitempty"`
 	GroupMemberOrdinal uint32       `json:"group_member_ordinal,omitempty"`
@@ -59,7 +60,6 @@ type ReleaseDetail struct {
 	PriorServingReleaseID    string                   `json:"prior_serving_release_id,omitempty"`
 	PriorSuccessfulReleaseID string                   `json:"prior_successful_release_id,omitempty"`
 	RenderInputDigest        string                   `json:"render_input_digest"`
-	OriginatingTaskID        string                   `json:"originating_task_id"`
 	RollbackMaterial         *ReleaseRollbackMaterial `json:"rollback_material,omitempty"`
 }
 

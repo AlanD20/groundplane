@@ -4184,6 +4184,7 @@ type ReleaseSummary struct {
 	OnFailure          string  `json:"on_failure"`
 	OperationId        string  `json:"operation_id"`
 	OperationKind      string  `json:"operation_kind"`
+	OriginatingTaskId  string  `json:"originating_task_id"`
 	ServiceId          string  `json:"service_id"`
 	Serving            bool    `json:"serving"`
 	Slot               *string `json:"slot,omitempty"`
