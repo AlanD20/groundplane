@@ -57,7 +57,10 @@ func (service *Service) loadAuthoredRuntimeRequirements(
 	if err != nil {
 		return core.BlueprintRequirements{}, err
 	}
-	if authority.Revision != expectedHeadRevision ||
+	// The immutable, Task-keyed authority is staged before head acceptance.
+	// The runtime seal fences that accepted head again; a later authority write
+	// is invalid, but equal modification revisions are not an ownership proof.
+	if expectedHeadRevision <= 0 || authority.Revision > expectedHeadRevision ||
 		!sameAuthoredRequirements(authority.Record.Requirements.Authored, desired.Record.Input.Requires) {
 		return core.BlueprintRequirements{}, errs.New(
 			errs.KindStateConflict, "Blueprint prerequisite authority changed",
