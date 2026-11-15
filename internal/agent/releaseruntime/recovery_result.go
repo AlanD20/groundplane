@@ -2,6 +2,7 @@ package releaseruntime
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
@@ -54,6 +55,9 @@ func (executor *RecoveryExecutor) Execute(
 	if saved != nil && saved.Progress.Phase == releaseexecution.RecoveryComplete {
 		return RecoveryResult{Report: saved}, executionErr
 	}
+	slog.ErrorContext(ctx, "Release recovery execution failed", "task_id", input.Input.Attempt.TaskID,
+		"work_id", input.Input.Attempt.WorkItemID, "attempt_id", input.Input.Attempt.ID,
+		"direction", input.Input.Attempt.Direction, "error", executionErr)
 	reason := releaseexecution.ExecutionFailed
 	if !time.Now().Before(input.Input.Attempt.Deadline) {
 		reason = releaseexecution.DeadlineExpired

@@ -2,6 +2,7 @@ package releaseruntime
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
@@ -65,6 +66,9 @@ func (executor *Executor) Execute(
 	if completed != nil {
 		return ExecutionResult{Report: &completed.Report}, err
 	}
+	slog.ErrorContext(ctx, "Release execution failed", "task_id", input.Attempt.TaskID,
+		"work_id", input.Attempt.WorkItemID, "attempt_id", input.Attempt.ID,
+		"direction", input.Attempt.Direction, "error", err)
 	reason := releaseexecution.ExecutionFailed
 	if !time.Now().Before(input.Attempt.Deadline) {
 		reason = releaseexecution.DeadlineExpired

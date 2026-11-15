@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Preserve failed Release and recovery execution causes in private Agent logs,
+  correlated with their Task, work item and attempt identifiers.
 - Allow pre-deploy Scripts on Services with phase-specific dependencies by
   consuming recognized dependency metadata before closed runner validation.
 - Complete Blueprint reapply for unchanged DNS records after confirming the
