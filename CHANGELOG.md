@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Authorize Group preflight Script checkpoints through the same captured
+  membership checks used for delivery and standalone Script execution.
+- Settle cancelled or expired Group preflight Scripts before assignment using
+  their retained membership and no-execution evidence.
 - Publish Group preflight Scripts using their captured Environment and immutable
   projection fences, preserving authority across durable capture and resume.
 - Deliver captured network prerequisites for direct Service and Group releases

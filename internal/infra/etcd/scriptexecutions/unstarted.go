@@ -29,13 +29,19 @@ type UnstartedResult struct {
 func PrepareUnstartedStop(task workqueue.TaskSnapshot, item workqueue.ItemSnapshot,
 	execution ScriptExecutionRecord, at time.Time,
 ) (workqueue.Change, error) {
-	if task.Task.Action != workexecution.ActionScript || item.Item.Operation != workexecution.Script ||
+	standalone := task.Task.Action == workexecution.ActionScript && task.Task.TargetID == execution.ScriptID
+	group := (task.Task.Action == workexecution.ActionDeploy || task.Task.Action == workexecution.ActionRollback) &&
+		ids.Validate(ids.KindReleaseGroup, task.Task.TargetID) == nil
+	parentMatches := standalone || group
+	// The caller has loaded retained work, including captured Group membership.
+	if !parentMatches || item.Item.Operation != workexecution.Script || item.Item.TargetID != execution.ScriptID ||
 		item.Item.TaskID != task.Task.ID || item.Item.AttemptNumber != 0 || item.Item.Input == nil ||
 		ValidateScriptExecutionRecord(execution) != nil || execution.CurrentTaskID != task.Task.ID ||
 		execution.WorkItemID != item.Item.ID || execution.Input != *item.Item.Input ||
 		execution.State != ScriptExecutionNotStarted || execution.StartAuthorized || execution.AttemptID != "" ||
 		execution.Executor != nil || execution.Recovery != nil || execution.ReconciliationRequired ||
-		at.IsZero() || at.Location() != time.UTC || at.Before(execution.UpdatedAt) {
+		at.IsZero() || at.Location() != time.UTC ||
+		at.Before(execution.UpdatedAt) {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Script cannot settle as never started")
 	}
 	outcome := workexecution.Failed

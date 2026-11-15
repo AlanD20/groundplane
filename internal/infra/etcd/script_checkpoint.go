@@ -206,10 +206,27 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	}
 	switch item.Operation {
 	case workexecution.Script:
-		if task.Action != workexecution.ActionScript || item.TargetID != execution.ScriptID ||
-			*item.Input != execution.Input {
+		if item.TargetID != execution.ScriptID || *item.Input != execution.Input {
 			return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script work input changed")
 		}
+		// Delivery and checkpoints share the same parent authority: either an
+		// exact standalone Script Task or this Group's captured preflight member.
+		captured, err := repository.LoadScriptWork(ctx, workqueue.View{
+			Task:         workqueue.TaskSnapshot{Task: task, Revision: read.Values[1].ModRevision},
+			Item:         workqueue.ItemSnapshot{Item: item, Revision: read.Values[2].ModRevision},
+			ReadRevision: read.ReadRevision,
+		})
+		if err != nil {
+			return scriptCheckpointAnchor{}, err
+		}
+		defer captured.Execution.Clear()
+		if captured.Execution.ID != execution.ID {
+			return scriptCheckpointAnchor{}, errs.New(
+				errs.KindStateConflict,
+				"Script checkpoint belongs to another execution",
+			)
+		}
+		conditions = append(conditions, captured.Conditions...)
 	case workexecution.Release:
 		if item.TargetID != execution.ServiceID ||
 			(task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback && task.Action != workexecution.ActionApply) {
