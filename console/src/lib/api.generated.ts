@@ -1584,6 +1584,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/services/{id}/terminal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open a shell in an exact running Service container */
+        post: operations["service.terminal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/software/activations/{task}": {
         parameters: {
             query?: never;
@@ -2737,6 +2754,23 @@ export interface components {
             source?: components["schemas"]["BuildProvenance"];
             version?: string;
         };
+        ContainerTerminalOpen: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ContainerTerminalOpen.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            columns: number;
+            command: string[] | null;
+            container_id: string;
+            /** Format: int64 */
+            rows: number;
+            /** @default root */
+            user: string;
+            working_directory?: string;
+        };
         ControllerConfigDocument: {
             /**
              * Format: uri
@@ -3389,26 +3423,6 @@ export interface components {
             columns: number;
             /** Format: int64 */
             rows: number;
-        };
-        HostTerminalSession: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/v1/HostTerminalSession.json
-             */
-            readonly $schema?: string;
-            /** Format: date-time */
-            expires_at: string;
-            host: string;
-            id: string;
-            /** Format: int64 */
-            input_inactivity_seconds: number;
-            reason?: string;
-            resumed: boolean;
-            /** @enum {string} */
-            state: "active" | "terminated";
-            stream_path: string;
-            user: string;
         };
         ImageContainer: {
             id: string;
@@ -5147,6 +5161,33 @@ export interface components {
              */
             readonly $schema?: string;
             slug: string;
+        };
+        TerminalSession: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TerminalSession.json
+             */
+            readonly $schema?: string;
+            container_id?: string;
+            container_name?: string;
+            /** Format: int64 */
+            exit_code?: number;
+            /** Format: date-time */
+            expires_at: string;
+            host: string;
+            id: string;
+            /** Format: int64 */
+            input_inactivity_seconds: number;
+            /** @enum {string} */
+            kind: "host" | "container";
+            reason?: string;
+            resumed: boolean;
+            service_id?: string;
+            /** @enum {string} */
+            state: "active" | "terminated";
+            stream_path: string;
+            user: string;
         };
         TunnelCheckRequest: {
             /**
@@ -8087,7 +8128,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HostTerminalSession"];
+                    "application/json": components["schemas"]["TerminalSession"];
                 };
             };
             /** @description Error */
@@ -10175,6 +10216,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "service.terminal": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContainerTerminalOpen"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSession"];
                 };
             };
             /** @description Error */

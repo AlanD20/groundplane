@@ -224,7 +224,12 @@ export function ServiceOverview({
           </p>
         )}
       </ResourcePanel>
-      <ServiceContainers observation={observation} onOpenLogs={onOpenLogs} />
+      <ServiceContainers
+        serviceId={service.id}
+        serviceName={service.name}
+        observation={observation}
+        onOpenLogs={onOpenLogs}
+      />
       <div className="grid gap-5 lg:grid-cols-2">
         <ResourcePanel
           title="Storage"

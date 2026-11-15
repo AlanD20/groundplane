@@ -931,24 +931,6 @@ func (e EnvironmentDNSWriteScope) Valid() bool {
 	}
 }
 
-// Defines values for HostTerminalSessionState.
-const (
-	Active     HostTerminalSessionState = "active"
-	Terminated HostTerminalSessionState = "terminated"
-)
-
-// Valid indicates whether the value is a known member of the HostTerminalSessionState enum.
-func (e HostTerminalSessionState) Valid() bool {
-	switch e {
-	case Active:
-		return true
-	case Terminated:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ImageFetchRecordStatus.
 const (
 	ImageFetchRecordStatusAborted   ImageFetchRecordStatus = "aborted"
@@ -1930,6 +1912,42 @@ func (e TaskWorkPhase) Valid() bool {
 	}
 }
 
+// Defines values for TerminalSessionKind.
+const (
+	TerminalSessionKindContainer TerminalSessionKind = "container"
+	TerminalSessionKindHost      TerminalSessionKind = "host"
+)
+
+// Valid indicates whether the value is a known member of the TerminalSessionKind enum.
+func (e TerminalSessionKind) Valid() bool {
+	switch e {
+	case TerminalSessionKindContainer:
+		return true
+	case TerminalSessionKindHost:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TerminalSessionState.
+const (
+	Active     TerminalSessionState = "active"
+	Terminated TerminalSessionState = "terminated"
+)
+
+// Valid indicates whether the value is a known member of the TerminalSessionState enum.
+func (e TerminalSessionState) Valid() bool {
+	switch e {
+	case Active:
+		return true
+	case Terminated:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ZoneOwnerKind.
 const (
 	ZoneOwnerKindBackingProject ZoneOwnerKind = "backing_project"
@@ -2896,6 +2914,20 @@ type ContainerIdentity struct {
 	Version      *string          `json:"version,omitempty"`
 }
 
+// ContainerTerminalOpen defines model for ContainerTerminalOpen.
+type ContainerTerminalOpen struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ContainerTerminalOpen.json
+	Schema           *string   `json:"$schema,omitempty"`
+	Columns          int64     `json:"columns"`
+	Command          *[]string `json:"command"`
+	ContainerId      string    `json:"container_id"`
+	Rows             int64     `json:"rows"`
+	User             string    `json:"user"`
+	WorkingDirectory *string   `json:"working_directory,omitempty"`
+}
+
 // ControllerConfigDocument defines model for ControllerConfigDocument.
 type ControllerConfigDocument struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -3585,26 +3617,6 @@ type HostTerminalOpen struct {
 	Columns int64   `json:"columns"`
 	Rows    int64   `json:"rows"`
 }
-
-// HostTerminalSession defines model for HostTerminalSession.
-type HostTerminalSession struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/HostTerminalSession.json
-	Schema                 *string                  `json:"$schema,omitempty"`
-	ExpiresAt              time.Time                `json:"expires_at"`
-	Host                   string                   `json:"host"`
-	Id                     string                   `json:"id"`
-	InputInactivitySeconds int64                    `json:"input_inactivity_seconds"`
-	Reason                 *string                  `json:"reason,omitempty"`
-	Resumed                bool                     `json:"resumed"`
-	State                  HostTerminalSessionState `json:"state"`
-	StreamPath             string                   `json:"stream_path"`
-	User                   string                   `json:"user"`
-}
-
-// HostTerminalSessionState defines model for HostTerminalSession.State.
-type HostTerminalSessionState string
 
 // ImageContainer defines model for ImageContainer.
 type ImageContainer struct {
@@ -5401,6 +5413,34 @@ type TenantRename struct {
 	Slug   string  `json:"slug"`
 }
 
+// TerminalSession defines model for TerminalSession.
+type TerminalSession struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TerminalSession.json
+	Schema                 *string              `json:"$schema,omitempty"`
+	ContainerId            *string              `json:"container_id,omitempty"`
+	ContainerName          *string              `json:"container_name,omitempty"`
+	ExitCode               *int64               `json:"exit_code,omitempty"`
+	ExpiresAt              time.Time            `json:"expires_at"`
+	Host                   string               `json:"host"`
+	Id                     string               `json:"id"`
+	InputInactivitySeconds int64                `json:"input_inactivity_seconds"`
+	Kind                   TerminalSessionKind  `json:"kind"`
+	Reason                 *string              `json:"reason,omitempty"`
+	Resumed                bool                 `json:"resumed"`
+	ServiceId              *string              `json:"service_id,omitempty"`
+	State                  TerminalSessionState `json:"state"`
+	StreamPath             string               `json:"stream_path"`
+	User                   string               `json:"user"`
+}
+
+// TerminalSessionKind defines model for TerminalSession.Kind.
+type TerminalSessionKind string
+
+// TerminalSessionState defines model for TerminalSession.State.
+type TerminalSessionState string
+
 // TunnelCheckRequest defines model for TunnelCheckRequest.
 type TunnelCheckRequest struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -6197,6 +6237,11 @@ type ServiceStopParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ServiceTerminalParams defines parameters for ServiceTerminal.
+type ServiceTerminalParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // SoftwarePreparationsParams defines parameters for SoftwarePreparations.
 type SoftwarePreparationsParams struct {
 	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -6536,6 +6581,9 @@ type ServiceDeployJSONRequestBody = DeployRequest
 
 // ServiceRollbackJSONRequestBody defines body for ServiceRollback for application/json ContentType.
 type ServiceRollbackJSONRequestBody = RollbackRequest
+
+// ServiceTerminalJSONRequestBody defines body for ServiceTerminal for application/json ContentType.
+type ServiceTerminalJSONRequestBody = ContainerTerminalOpen
 
 // SoftwarePrepareJSONRequestBody defines body for SoftwarePrepare for application/json ContentType.
 type SoftwarePrepareJSONRequestBody = SoftwarePreparationRequest
@@ -8926,6 +8974,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
 	ServiceStop(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceTerminalWithBody Open a shell in an exact running Service container
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /services/{id}/terminal (the `ServiceTerminal` operationId).
+	ServiceTerminalWithBody(ctx context.Context, id string, params *ServiceTerminalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceTerminal Open a shell in an exact running Service container
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /services/{id}/terminal (the `ServiceTerminal` operationId).
+	ServiceTerminal(ctx context.Context, id string, params *ServiceTerminalParams, body ServiceTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SoftwareActivationShow Inspect component activation outcomes
 	//
@@ -12296,6 +12358,40 @@ func (c *Client) ServiceStart(ctx context.Context, id string, params *ServiceSta
 // Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
 func (c *Client) ServiceStop(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewServiceStopRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceTerminalWithBody Open a shell in an exact running Service container
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /services/{id}/terminal (the `ServiceTerminal` operationId).
+func (c *Client) ServiceTerminalWithBody(ctx context.Context, id string, params *ServiceTerminalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceTerminalRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceTerminal Open a shell in an exact running Service container
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /services/{id}/terminal (the `ServiceTerminal` operationId).
+func (c *Client) ServiceTerminal(ctx context.Context, id string, params *ServiceTerminalParams, body ServiceTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceTerminalRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -20717,6 +20813,66 @@ func NewServiceStopRequest(server string, id string, params *ServiceStopParams) 
 	return req, nil
 }
 
+// NewServiceTerminalRequest calls the generic ServiceTerminal builder with application/json body
+func NewServiceTerminalRequest(server string, id string, params *ServiceTerminalParams, body ServiceTerminalJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewServiceTerminalRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewServiceTerminalRequestWithBody constructs an http.Request for the ServiceTerminal method, with any body, and a specified content type
+func NewServiceTerminalRequestWithBody(server string, id string, params *ServiceTerminalParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/terminal", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewSoftwareActivationShowRequest constructs an http.Request for the SoftwareActivationShow method
 func NewSoftwareActivationShowRequest(server string, task string) (*http.Request, error) {
 	var err error
@@ -24295,6 +24451,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
 	ServiceStopWithResponse(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*ServiceStopResponse, error)
+
+	// ServiceTerminalWithBodyWithResponse Open a shell in an exact running Service container
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/terminal (the `ServiceTerminal` operationId).
+	ServiceTerminalWithBodyWithResponse(ctx context.Context, id string, params *ServiceTerminalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceTerminalResponse, error)
+
+	// ServiceTerminalWithResponse Open a shell in an exact running Service container
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/terminal (the `ServiceTerminal` operationId).
+	ServiceTerminalWithResponse(ctx context.Context, id string, params *ServiceTerminalParams, body ServiceTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceTerminalResponse, error)
 
 	// SoftwareActivationShowWithResponse Inspect component activation outcomes
 	//
@@ -28712,7 +28882,7 @@ type HostTerminalResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *HostTerminalSession
+	JSON201 *TerminalSession
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 	// Headers201 the parsed response headers for an HTTP 201 response
@@ -28720,7 +28890,7 @@ type HostTerminalResponse struct {
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r HostTerminalResponse) GetJSON201() *HostTerminalSession {
+func (r HostTerminalResponse) GetJSON201() *TerminalSession {
 	return r.JSON201
 }
 
@@ -31870,6 +32040,62 @@ func (r ServiceStopResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ServiceStopResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ServiceTerminalResponse201Headers the declared response headers of an HTTP 201 response for ServiceTerminal
+type ServiceTerminalResponse201Headers struct {
+	CacheControl *string
+	SetCookie    *string
+}
+
+type ServiceTerminalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *TerminalSession
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *ServiceTerminalResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ServiceTerminalResponse) GetJSON201() *TerminalSession {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceTerminalResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceTerminalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceTerminalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceTerminalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceTerminalResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -36158,6 +36384,32 @@ func (c *ClientWithResponses) ServiceStopWithResponse(ctx context.Context, id st
 	return ParseServiceStopResponse(rsp)
 }
 
+// ServiceTerminalWithBodyWithResponse Open a shell in an exact running Service container
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/terminal (the `ServiceTerminal` operationId).
+func (c *ClientWithResponses) ServiceTerminalWithBodyWithResponse(ctx context.Context, id string, params *ServiceTerminalParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceTerminalResponse, error) {
+	rsp, err := c.ServiceTerminalWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceTerminalResponse(rsp)
+}
+
+// ServiceTerminalWithResponse Open a shell in an exact running Service container
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/terminal (the `ServiceTerminal` operationId).
+func (c *ClientWithResponses) ServiceTerminalWithResponse(ctx context.Context, id string, params *ServiceTerminalParams, body ServiceTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceTerminalResponse, error) {
+	rsp, err := c.ServiceTerminal(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceTerminalResponse(rsp)
+}
+
 // SoftwareActivationShowWithResponse Inspect component activation outcomes
 //
 // Returns a wrapper object for the known response body format(s).
@@ -39942,7 +40194,7 @@ func ParseHostTerminalResponse(rsp *http.Response) (*HostTerminalResponse, error
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest HostTerminalSession
+		var dest TerminalSession
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -42403,6 +42655,59 @@ func ParseServiceStopResponse(rsp *http.Response) (*ServiceStopResponse, error) 
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseServiceTerminalResponse parses an HTTP response from a ServiceTerminalWithResponse call
+func ParseServiceTerminalResponse(rsp *http.Response) (*ServiceTerminalResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceTerminalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest TerminalSession
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers ServiceTerminalResponse201Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("Set-Cookie"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Set-Cookie", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.SetCookie = &value
+		}
+		response.Headers201 = &headers
 	}
 
 	return response, nil

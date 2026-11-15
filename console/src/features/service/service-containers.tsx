@@ -8,12 +8,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Boxes, ExternalLink, Terminal } from "lucide-react";
 import type { ServiceObservation } from "./service-observation";
+import { ContainerShellButton } from "@/features/host-terminal/container-shell-button";
 
 export function ServiceContainers({
   observation,
+  serviceId,
+  serviceName,
   onOpenLogs,
 }: {
   observation: ServiceObservation;
+  serviceId: string;
+  serviceName: string;
   onOpenLogs?: () => void;
 }) {
   const table = useTableView(
@@ -31,11 +36,20 @@ export function ServiceContainers({
     <ResourcePanel
       title="Containers"
       actions={
-        onOpenLogs ? (
-          <Button variant="link" size="sm" onClick={onOpenLogs}>
-            Open logs <ExternalLink className="size-3.5" />
-          </Button>
-        ) : undefined
+        <div className="flex flex-wrap items-center gap-2">
+          <ContainerShellButton
+            serviceId={serviceId}
+            serviceName={serviceName}
+            containers={
+              observation.state === "unavailable" ? [] : observation.containers
+            }
+          />
+          {onOpenLogs ? (
+            <Button variant="link" size="sm" onClick={onOpenLogs}>
+              Open logs <ExternalLink className="size-3.5" />
+            </Button>
+          ) : null}
+        </div>
       }
     >
       {observation.state === "unavailable" ? (

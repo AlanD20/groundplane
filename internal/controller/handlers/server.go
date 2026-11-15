@@ -13,6 +13,7 @@ import (
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	"github.com/AlanD20/groundplane/internal/controller/hostterminal"
 	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
+	"github.com/AlanD20/groundplane/internal/controller/serviceterminal"
 	"github.com/AlanD20/groundplane/internal/controller/taskalerts"
 	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -113,6 +114,7 @@ type Server struct {
 	agentTaskWake           func()
 	console                 fs.FS
 	logs                    *servicelogs.Service
+	serviceTerminals        *serviceterminal.Service
 	routePolicies           map[string]routePolicy
 }
 
@@ -122,6 +124,7 @@ type Options struct {
 	StorageAdmission        StorageAdmission
 	Host                    HostReader
 	HostTerminals           *hostterminal.Manager
+	ServiceTerminals        *serviceterminal.Service
 	ControllerConfig        NativeConfigStore
 	TaskAlerts              *taskalerts.Service
 	EtcdConfig              NativeConfigStore
@@ -217,6 +220,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		storageAdmission:        options.StorageAdmission,
 		host:                    options.Host,
 		hostTerminals:           options.HostTerminals,
+		serviceTerminals:        options.ServiceTerminals,
 		controllerConfig:        options.ControllerConfig,
 		taskAlerts:              options.TaskAlerts,
 		etcdConfig:              options.EtcdConfig,

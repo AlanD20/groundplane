@@ -95,7 +95,7 @@ export function HostTerminalPanel() {
         {!terminal.maximized ? (
           <div
             role="separator"
-            aria-label="Resize host terminal"
+            aria-label="Resize terminal"
             aria-orientation="horizontal"
             tabIndex={0}
             className="group flex h-2 cursor-row-resize touch-none items-center justify-center bg-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400"
@@ -126,11 +126,19 @@ export function HostTerminalPanel() {
         ) : null}
         <div className="flex h-11 items-center gap-3 border-b border-white/10 px-3 text-xs">
           <SquareTerminal className="size-4 text-amber-400" aria-hidden />
-          <span className="font-medium">Host terminal</span>
+          <span className="font-medium">
+            {terminal.session?.kind === "container"
+              ? "Container shell"
+              : "Host terminal"}
+          </span>
           {terminal.session ? (
             <>
               <span className="rounded bg-white/10 px-2 py-1 font-mono text-[11px]">
-                {terminal.session.user}@{terminal.session.host}
+                {terminal.session.user}@
+                {terminal.session.kind === "container"
+                  ? terminal.session.container_name ||
+                    terminal.session.container_id?.slice(0, 12)
+                  : terminal.session.host}
               </span>
               <span className="flex items-center gap-1.5 text-zinc-400">
                 <span
@@ -140,6 +148,10 @@ export function HostTerminalPanel() {
                   )}
                 />
                 {status}
+                {terminal.session.state === "terminated" &&
+                terminal.session.exit_code != null
+                  ? ` · exit ${terminal.session.exit_code}`
+                  : null}
               </span>
               {terminal.session.state === "active" ? (
                 <span className="ml-auto text-zinc-400">

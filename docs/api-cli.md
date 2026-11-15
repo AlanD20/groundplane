@@ -282,11 +282,11 @@ including its Task id. Changed input under the same key returns
 `idempotency.mismatch`. Terminal replay evidence is retained for 90 days;
 keys are not permanent operation ids.
 
-Host Terminal Open is the transient exception to that durable retention. Its
+Host and container Terminal Open are transient exceptions to that durable retention. Their
 required key can replay only while the Controller process retains the terminal
 session record; it can also restore the internal owner cookie after a lost
 response. Controller restart terminates the shell and its replay evidence.
-Replay never resurrects a root shell, and changed initial terminal geometry
+Replay never resurrects a shell; changed target, command, user or initial geometry
 under the same key returns `idempotency.mismatch`.
 
 After a timeout or lost response, preserve the original key, stable target,

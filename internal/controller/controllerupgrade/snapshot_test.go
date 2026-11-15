@@ -14,9 +14,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Rationale: advancing the storage epoch must not hide completed upgrade history
-// or disable compatible new upgrades, but the old input must remain unexecutable.
-func TestControllerUpdateSnapshotReadsPreviousEpochWithoutAuthorizingExecution(t *testing.T) {
+// Rationale: an epoch mismatch must not hide completed upgrade history or
+// disable compatible new upgrades, but the mismatched input stays unexecutable.
+func TestControllerUpdateSnapshotReadsDifferentEpochWithoutAuthorizingExecution(t *testing.T) {
 	h := newServiceHarness(t)
 	ctx := context.Background()
 	if _, err := h.service.UpdateController(ctx, string(h.input.Release), "snapshot-recorded-epoch-0001"); err != nil {
@@ -28,7 +28,7 @@ func TestControllerUpdateSnapshotReadsPreviousEpochWithoutAuthorizingExecution(t
 		t.Fatalf("published activation: %v, %v", found, err)
 	}
 	capture := current.Record.Capture
-	capture.Input.Manifest.StorageEpoch--
+	capture.Input.Manifest.StorageEpoch++
 	manifest, err := json.Marshal(capture.Input.Manifest)
 	if err != nil {
 		t.Fatal(err)

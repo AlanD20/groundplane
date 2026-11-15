@@ -2611,6 +2611,67 @@
         ],
         "type": "object"
       },
+      "ContainerTerminalOpen": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ContainerTerminalOpen.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "columns": {
+            "format": "int64",
+            "maximum": 500,
+            "minimum": 20,
+            "type": "integer"
+          },
+          "command": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "container_id": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "rows": {
+            "format": "int64",
+            "maximum": 300,
+            "minimum": 5,
+            "type": "integer"
+          },
+          "user": {
+            "default": "root",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "working_directory": {
+            "maxLength": 4096,
+            "type": "string"
+          }
+        },
+        "required": [
+          "container_id",
+          "user",
+          "command",
+          "columns",
+          "rows"
+        ],
+        "type": "object"
+      },
       "ControllerConfigDocument": {
         "additionalProperties": false,
         "properties": {
@@ -4715,64 +4776,6 @@
         "required": [
           "columns",
           "rows"
-        ],
-        "type": "object"
-      },
-      "HostTerminalSession": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "/api/v1/HostTerminalSession.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "expires_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "host": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "input_inactivity_seconds": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "resumed": {
-            "type": "boolean"
-          },
-          "state": {
-            "enum": [
-              "active",
-              "terminated"
-            ],
-            "type": "string"
-          },
-          "stream_path": {
-            "type": "string"
-          },
-          "user": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "host",
-          "user",
-          "state",
-          "input_inactivity_seconds",
-          "expires_at",
-          "stream_path",
-          "resumed"
         ],
         "type": "object"
       },
@@ -10115,6 +10118,85 @@
         ],
         "type": "object"
       },
+      "TerminalSession": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/TerminalSession.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string"
+          },
+          "container_name": {
+            "type": "string"
+          },
+          "exit_code": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "input_inactivity_seconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "host",
+              "container"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "resumed": {
+            "type": "boolean"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "terminated"
+            ],
+            "type": "string"
+          },
+          "stream_path": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "host",
+          "user",
+          "kind",
+          "state",
+          "input_inactivity_seconds",
+          "expires_at",
+          "stream_path",
+          "resumed"
+        ],
+        "type": "object"
+      },
       "TunnelCheckRequest": {
         "additionalProperties": false,
         "properties": {
@@ -15380,7 +15462,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HostTerminalSession"
+                  "$ref": "#/components/schemas/TerminalSession"
                 }
               }
             },
@@ -18992,6 +19074,81 @@
           }
         },
         "summary": "Stop a service",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/services/{id}/terminal": {
+      "post": {
+        "operationId": "service.terminal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContainerTerminalOpen"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalSession"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Open a shell in an exact running Service container",
         "tags": [
           "Service"
         ]

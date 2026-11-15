@@ -1105,6 +1105,7 @@ message AgentMessage {
     ResolverWorkFailureRequest resolver_work_failure_request = 111;
     ResolverWorkRecoveryRequest resolver_work_recovery_request = 112;
     WorkJournalReplayRequest work_journal_replay_request = 113;
+    ContainerTerminalEvent container_terminal_event = 114;
   }
 }
 
@@ -1540,12 +1541,59 @@ message ControllerMessage {
     ResolverWorkResultAck resolver_work_result_ack = 133;
     WorkJournalReplayAck work_journal_replay_ack = 134;
     WorkReportRejection work_report_rejection = 135;
+    ContainerTerminalOpen container_terminal_open = 136;
+    ContainerTerminalControl container_terminal_control = 137;
   }
 }
 
 message LogTarget {
   ServiceObservationTarget runtime = 1;
   string service_name = 2;
+}
+
+// Interactive sessions are transient, explicitly selected container operations.
+// They never allocate a Task or survive an authenticated Agent connection.
+message ContainerTerminalOpen {
+  string session_id = 1;
+  repeated ServiceObservationTarget sources = 2;
+  string container_id = 3;
+  string user = 4;
+  repeated string command = 5;
+  string working_directory = 6;
+  uint32 columns = 7;
+  uint32 rows = 8;
+  uint32 input_inactivity_seconds = 9;
+  uint32 initial_credit = 10;
+}
+
+message ContainerTerminalSize {
+  uint32 columns = 1;
+  uint32 rows = 2;
+}
+
+message ContainerTerminalControl {
+  string session_id = 1;
+  oneof control {
+    bytes input = 2;
+    ContainerTerminalSize size = 3;
+    bool terminate = 4;
+    uint32 credit = 5;
+  }
+}
+
+message ContainerTerminalClosed {
+  string reason = 1;
+  int32 exit_code = 2;
+  string failure_detail = 3;
+}
+
+message ContainerTerminalEvent {
+  string session_id = 1;
+  oneof event {
+    bool ready = 2;
+    bytes output = 3;
+    ContainerTerminalClosed closed = 4;
+  }
 }
 
 message LogSubscribe {

@@ -27,8 +27,8 @@ type cliTerminalControl struct {
 }
 
 type cliTerminalStatus struct {
-	Type    string                        `json:"type"`
-	Session *apiTypes.HostTerminalSession `json:"session,omitempty"`
+	Type    string                    `json:"type"`
+	Session *apiTypes.TerminalSession `json:"session,omitempty"`
 }
 
 type cliTerminalResult struct {
@@ -61,17 +61,17 @@ func newHostTerminalCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			conn, err := app.Client.DialHostTerminal(cmd.Context(), session, 0)
+			conn, err := app.Client.DialTerminal(cmd.Context(), session, 0)
 			if err != nil {
 				return err
 			}
 			defer conn.CloseNow()
-			return runInteractiveHostTerminal(cmd.Context(), stdin, cmd.OutOrStdout(), conn)
+			return runInteractiveTerminal(cmd.Context(), stdin, cmd.OutOrStdout(), conn)
 		},
 	}
 }
 
-func runInteractiveHostTerminal(
+func runInteractiveTerminal(
 	ctx context.Context,
 	stdin *os.File,
 	stdout io.Writer,
@@ -92,7 +92,7 @@ func runInteractiveHostTerminal(
 			return ctx.Err()
 		case terminalResult := <-result:
 			if terminalResult.reason != "" {
-				_, _ = fmt.Fprintf(stdout, "\r\n[host terminal closed: %s]\r\n", terminalResult.reason)
+				_, _ = fmt.Fprintf(stdout, "\r\n[terminal closed: %s]\r\n", terminalResult.reason)
 			}
 			return terminalResult.err
 		case err := <-inputErr:

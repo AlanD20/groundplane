@@ -166,6 +166,13 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				return err
 			}
 			command.result <- nil
+		case connectTerminalCommand:
+			command := event.terminal
+			if err := stream.Send(command.message); err != nil {
+				command.result <- errs.New(errs.KindRequestUnavailable, "Agent terminal command delivery failed")
+				return err
+			}
+			command.result <- nil
 		case connectDispatchWake:
 			capacity, ready := session.dispatchCapacity()
 			if !ready || capacity == 0 {
@@ -287,6 +294,12 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if observations.active != nil &&
 					result.message.GetServiceObservationResult().RequestId == observations.active.request.RequestId {
 					observations.active = nil
+				}
+				continue
+			}
+			if event := result.message.GetContainerTerminalEvent(); event != nil {
+				if err := session.RecordContainerTerminal(event); err != nil {
+					return status.Error(codes.InvalidArgument, "agent container terminal event is invalid")
 				}
 				continue
 			}

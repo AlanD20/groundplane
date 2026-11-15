@@ -6,7 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
-	"github.com/AlanD20/groundplane/internal/controller/serviceobservation"
+	"github.com/AlanD20/groundplane/internal/controller/serviceruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -117,34 +117,17 @@ func (service *Service) OpenService(
 	)
 }
 
-// Serving observations and candidate logs have different authority: a pending
-// captured Release may be inspected without claiming it is running or healthy.
 func (service *Service) captureSources(
 	ctx context.Context,
 	record etcdstore.Versioned[servicerecord.ServiceRecord],
 ) ([]agentchannel.LogTarget, error) {
-	targets := make([]agentchannel.LogTarget, 0, 2)
-	serving, err := serviceobservation.CaptureLogSource(ctx, service.releases, record)
+	sources, err := serviceruntime.CaptureSources(ctx, service.releases, record)
 	if err != nil {
 		return nil, err
 	}
-	if serving != nil {
-		targets = append(targets, agentchannel.LogTarget{Runtime: serving, ServiceName: record.Record.Desired.Name})
-	}
-	if record.Record.BackingNetworkID != "" {
-		return targets, nil
-	}
-	candidate, err := service.releases.CaptureCandidateLogSource(
-		ctx,
-		record.Record.EnvironmentID,
-		record.Record.Desired.ID,
-		record.ReadRevision,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if candidate != nil && (serving == nil || candidate.ReleaseId != serving.ReleaseId) {
-		targets = append(targets, agentchannel.LogTarget{Runtime: candidate, ServiceName: record.Record.Desired.Name})
+	targets := make([]agentchannel.LogTarget, 0, len(sources))
+	for _, source := range sources {
+		targets = append(targets, agentchannel.LogTarget{Runtime: source, ServiceName: record.Record.Desired.Name})
 	}
 	return targets, nil
 }

@@ -35,7 +35,7 @@ type hostTerminalOpenInput struct {
 type hostTerminalOpenOutput struct {
 	SetCookie    string `header:"Set-Cookie"`
 	CacheControl string `header:"Cache-Control"`
-	Body         apiTypes.HostTerminalSession
+	Body         apiTypes.TerminalSession
 }
 
 type terminalClientMessage struct {
@@ -46,8 +46,8 @@ type terminalClientMessage struct {
 }
 
 type terminalServerMessage struct {
-	Type    string                        `json:"type"`
-	Session *apiTypes.HostTerminalSession `json:"session,omitempty"`
+	Type    string                    `json:"type"`
+	Session *apiTypes.TerminalSession `json:"session,omitempty"`
 }
 
 func (s *Server) registerHostTerminal() {
@@ -58,7 +58,14 @@ func (s *Server) registerHostTerminal() {
 		Middlewares: huma.Middlewares{s.ownHostTerminalRequest},
 	}, s.openHostTerminal)
 	s.setRoutePolicy("POST /api/v1/host/terminal", routePolicy{body: jsonBody})
-	s.upgradeRoute("GET /api/v1/host/terminal/{id}/stream", s.streamHostTerminal)
+	s.upgradeRoute("GET /api/v1/terminals/{id}/stream", s.streamHostTerminal)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "service.terminal", Method: http.MethodPost, Path: "/services/{id}/terminal",
+		Summary: "Open a shell in an exact running Service container",
+		Tags:    []string{"Service"}, DefaultStatus: http.StatusCreated,
+		Middlewares: huma.Middlewares{s.ownHostTerminalRequest},
+	}, s.openServiceTerminal)
+	s.setRoutePolicy("POST /api/v1/services/{id}/terminal", routePolicy{body: jsonBody})
 }
 
 func (s *Server) ownHostTerminalRequest(ctx huma.Context, next func(huma.Context)) {
@@ -95,7 +102,7 @@ func (s *Server) openHostTerminal(
 	}
 	return &hostTerminalOpenOutput{
 		SetCookie: (&http.Cookie{
-			Name: terminalOwnerCookie, Value: owner, Path: "/api/v1/host/terminal",
+			Name: terminalOwnerCookie, Value: owner, Path: "/api/v1",
 			HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode,
 		}).String(),
 		CacheControl: "no-store",

@@ -1,16 +1,16 @@
 import type { components } from "@/lib/api.generated";
 
-export type HostTerminalSession = components["schemas"]["HostTerminalSession"];
+export type TerminalSession = components["schemas"]["TerminalSession"];
 
 export type TerminalConnectionState = {
-  session: HostTerminalSession;
+  session: TerminalSession;
   connected: boolean;
   error: string | null;
 };
 
 type ServerStatus = {
   type: "activity" | "terminated" | "output_truncated";
-  session?: HostTerminalSession;
+  session?: TerminalSession;
 };
 
 // One connection belongs to one shell, independently of which tab is visible.
@@ -21,10 +21,11 @@ export class TerminalConnection {
   private retry: number | null = null;
   private disposed = false;
   private terminatePending = false;
+  private replayComplete = false;
   private listeners = new Set<() => void>();
   private outputListeners = new Set<(data: Uint8Array) => void>();
 
-  constructor(session: HostTerminalSession) {
+  constructor(session: TerminalSession) {
     this.state = { session, connected: false, error: null };
   }
 
@@ -38,8 +39,10 @@ export class TerminalConnection {
   subscribeOutput = (listener: (data: Uint8Array) => void) => {
     // A fresh xterm viewport has no scrollback, including a StrictMode remount.
     // Its next connection must replay the retained buffer, not a stale cursor.
-    if (this.outputListeners.size === 0 && this.socket === null)
+    if (this.outputListeners.size === 0 && this.socket === null) {
       this.sequence = 0;
+      this.replayComplete = false;
+    }
     this.outputListeners.add(listener);
     return () => this.outputListeners.delete(listener);
   };
@@ -52,7 +55,8 @@ export class TerminalConnection {
   connect = () => {
     this.disposed = false;
     const current = this.state.session;
-    if (this.socket || current.state !== "active") return;
+    if (this.socket || (current.state !== "active" && this.replayComplete))
+      return;
     if (this.retry !== null) window.clearTimeout(this.retry);
     this.retry = null;
     const target = new URL(current.stream_path, window.location.href);
@@ -81,11 +85,14 @@ export class TerminalConnection {
         if (status.type === "output_truncated") {
           this.output(
             new TextEncoder().encode(
-              "\r\n[earlier host terminal output was truncated]\r\n",
+              "\r\n[earlier terminal output was truncated]\r\n",
             ),
           );
         } else if (status.session?.id === current.id) {
-          if (status.type === "terminated") this.terminatePending = false;
+          if (status.type === "terminated") {
+            this.terminatePending = false;
+            this.replayComplete = true;
+          }
           this.update({
             session: status.session,
             connected: status.session.state === "active",
@@ -93,13 +100,13 @@ export class TerminalConnection {
         }
       } catch {
         this.update({
-          error: "Host terminal returned an invalid status frame.",
+          error: "Terminal returned an invalid status frame.",
         });
       }
     };
     socket.onerror = () => {
       if (this.socket === socket)
-        this.update({ error: "Host terminal connection was interrupted." });
+        this.update({ error: "Terminal connection was interrupted." });
     };
     socket.onclose = (event) => {
       if (this.socket !== socket) return;
@@ -156,6 +163,7 @@ export class TerminalConnection {
   };
 
   sendResize = (columns: number, rows: number) => {
+    if (this.state.session.state !== "active") return;
     this.send({ type: "resize", columns, rows });
   };
 

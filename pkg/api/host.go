@@ -64,14 +64,28 @@ type HostTerminalOpen struct {
 	Rows    int `json:"rows" minimum:"5" maximum:"300"`
 }
 
-// HostTerminalSession is the safe, content-free projection of one transient
-// host shell. Ownership is carried only by an HttpOnly browser-session cookie.
-type HostTerminalSession struct {
+type ContainerTerminalOpen struct {
+	ContainerID      string   `json:"container_id" minLength:"64" maxLength:"64" pattern:"^[0-9a-f]{64}$"`
+	User             string   `json:"user" default:"root" minLength:"1" maxLength:"128"`
+	Command          []string `json:"command" minItems:"1" maxItems:"64"`
+	WorkingDirectory string   `json:"working_directory,omitempty" maxLength:"4096"`
+	Columns          int      `json:"columns" minimum:"20" maximum:"500"`
+	Rows             int      `json:"rows" minimum:"5" maximum:"300"`
+}
+
+// TerminalSession is the content-free projection of one transient shell.
+// Ownership is carried only by an HttpOnly browser-session cookie.
+type TerminalSession struct {
 	ID                     string    `json:"id"`
 	Host                   string    `json:"host"`
 	User                   string    `json:"user"`
+	Kind                   string    `json:"kind" enum:"host,container"`
+	ServiceID              string    `json:"service_id,omitempty"`
+	ContainerID            string    `json:"container_id,omitempty"`
+	ContainerName          string    `json:"container_name,omitempty"`
 	State                  string    `json:"state" enum:"active,terminated"`
 	Reason                 string    `json:"reason,omitempty"`
+	ExitCode               *int      `json:"exit_code,omitempty"`
 	InputInactivitySeconds int       `json:"input_inactivity_seconds"`
 	ExpiresAt              time.Time `json:"expires_at"`
 	StreamPath             string    `json:"stream_path"`

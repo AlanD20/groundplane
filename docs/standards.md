@@ -84,7 +84,12 @@ logging and cancellation. Raw execution exceptions are limited to:
 - validated staged-binary handoff;
 - the fixed [PostgreSQL helper](../internal/postgres16helper) and its command,
   where closed child execution and Linux process-control operations cannot be
-  represented by Runner.
+  represented by Runner;
+- the fixed [container terminal supervisor](../internal/containerterminalhelper),
+  where an interactive PTY, requested container credentials and descendant
+  cleanup require direct Linux process control. It runs inside the selected
+  container, never on the Agent host. Its framed pipe protocol does not expose
+  arbitrary host execution to callers.
 
 These exceptions do not extend to callers. A new exception needs an explicit
 reason recorded with the change, not an undocumented bypass.

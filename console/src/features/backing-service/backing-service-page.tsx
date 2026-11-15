@@ -247,6 +247,8 @@ export default function BackingServiceDetailPage() {
               </ResourcePanel>
             </div>
             <ServiceContainers
+              serviceId={svc.id}
+              serviceName={g.name}
               observation={observation}
               onOpenLogs={() => setTab("logs")}
             />

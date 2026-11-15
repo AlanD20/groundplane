@@ -1,3 +1,4 @@
+import type { components } from "@/lib/api.generated";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { newULID } from "@/lib/utils";
@@ -14,16 +15,22 @@ import {
 } from "react";
 import {
   TerminalConnection,
-  type HostTerminalSession,
+  type TerminalSession,
 } from "./terminal-connection";
 
-export type { HostTerminalSession } from "./terminal-connection";
+export type { TerminalSession } from "./terminal-connection";
 
 type TerminalTab = { id: string; name: string; connection: TerminalConnection };
-type SavedTab = { name: string; session: HostTerminalSession };
-type PendingOpen = { idempotencyKey: string; columns: number; rows: number };
-const storageKey = "groundplane-host-terminal-tabs";
-const pendingOpenStorageKey = "groundplane-host-terminal-new-tab";
+type SavedTab = { name: string; session: TerminalSession };
+type ContainerOptions = components["schemas"]["ContainerTerminalOpen"];
+type OpenTarget = {
+  path: string;
+  body: ContainerOptions | { columns: number; rows: number };
+  name: string;
+};
+type PendingOpen = OpenTarget & { idempotencyKey: string };
+const storageKey = "groundplane-terminal-tabs";
+const pendingOpenStorageKey = "groundplane-terminal-new-tab";
 
 type TerminalWorkspace = {
   tabs: TerminalTab[];
@@ -35,6 +42,11 @@ type TerminalWorkspace = {
   openError: string | null;
   open: () => Promise<void>;
   newTab: () => Promise<void>;
+  openContainer: (
+    serviceID: string,
+    name: string,
+    options: ContainerOptions,
+  ) => Promise<void>;
   selectTab: (id: string) => void;
   renameTab: (id: string, name: string) => void;
   closeTab: (id: string) => void;
@@ -81,26 +93,34 @@ export function HostTerminalProvider({
     [],
   );
 
-  const newTab = useCallback(async () => {
+  const openTab = useCallback(async (target: OpenTarget) => {
     setVisible(true);
-    if (openingRef.current) return;
+    if (openingRef.current) throw new Error("A terminal is already opening");
     openingRef.current = true;
     setOpening(true);
     setOpenError(null);
-    const pending = pendingOpenRef.current ?? {
-      idempotencyKey: newULID(),
-      columns: 100,
-      rows: 28,
-    };
+    const previous = pendingOpenRef.current;
+    if (
+      previous &&
+      (previous.path !== target.path ||
+        JSON.stringify(previous.body) !== JSON.stringify(target.body))
+    ) {
+      openingRef.current = false;
+      setOpening(false);
+      throw new Error(
+        "Retry the previous terminal request before opening a different shell; its outcome is still unknown.",
+      );
+    }
+    const pending = previous ?? { ...target, idempotencyKey: newULID() };
     pendingOpenRef.current = pending;
     saveOptional(pendingOpenStorageKey, pending);
     try {
-      const session = await controllerRequest<HostTerminalSession>(
-        "/host/terminal",
+      const session = await controllerRequest<TerminalSession>(
+        pending.path,
         201,
         {
           method: "POST",
-          body: { columns: pending.columns, rows: pending.rows },
+          body: pending.body,
           idempotencyKey: pending.idempotencyKey,
         },
       );
@@ -113,7 +133,7 @@ export function HostTerminalProvider({
               ...current,
               {
                 id: session.id,
-                name: `Terminal ${current.length + 1}`,
+                name: pending.name,
                 connection: new TerminalConnection(session),
               },
             ],
@@ -131,15 +151,38 @@ export function HostTerminalProvider({
         saveOptional(pendingOpenStorageKey, null);
       }
       setOpenError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to open host terminal.",
+        cause instanceof Error ? cause.message : "Unable to open terminal.",
       );
+      throw cause;
     } finally {
       openingRef.current = false;
       setOpening(false);
     }
   }, []);
+
+  const newTab = useCallback(async () => {
+    try {
+      await openTab({
+        path: "/host/terminal",
+        body: { columns: 100, rows: 28 },
+        name: "Host shell",
+      });
+    } catch (cause) {
+      setOpenError(
+        cause instanceof Error ? cause.message : "Unable to open terminal.",
+      );
+    }
+  }, [openTab]);
+  const openContainer = useCallback(
+    async (serviceID: string, name: string, options: ContainerOptions) => {
+      await openTab({
+        path: "/services/" + serviceID + "/terminal",
+        body: options,
+        name: name.slice(0, 40),
+      });
+    },
+    [openTab],
+  );
 
   const open = useCallback(async () => {
     setVisible(true);
@@ -199,6 +242,7 @@ export function HostTerminalProvider({
       openError,
       open,
       newTab,
+      openContainer,
       selectTab,
       renameTab,
       closeTab,
@@ -217,6 +261,7 @@ export function HostTerminalProvider({
       openError,
       open,
       newTab,
+      openContainer,
       selectTab,
       renameTab,
       closeTab,
@@ -323,10 +368,16 @@ function restorePendingOpen(): PendingOpen | null {
     if (!raw) return null;
     const pending = JSON.parse(raw) as PendingOpen;
     return /^[A-Za-z0-9._:-]{16,128}$/.test(pending.idempotencyKey) &&
-      pending.columns >= 20 &&
-      pending.columns <= 500 &&
-      pending.rows >= 5 &&
-      pending.rows <= 300
+      (pending.path === "/host/terminal" ||
+        /^\/services\/svc_[0-9A-HJKMNP-TV-Z]{26}\/terminal$/.test(
+          pending.path,
+        )) &&
+      typeof pending.name === "string" &&
+      pending.body &&
+      pending.body.columns >= 20 &&
+      pending.body.columns <= 500 &&
+      pending.body.rows >= 5 &&
+      pending.body.rows <= 300
       ? pending
       : null;
   } catch {

@@ -120,7 +120,7 @@ The bottom panel can be resized or maximized within the browser tab. Its tabs
 hold independent shells; use New tab to open another, select a tab to switch,
 and right-click a tab (or long-press on touch) for Rename, Close tab and
 Terminate session. Each tab also has its own close button. The host permits four active sessions
-total, shared by Console and CLI operators.
+total, shared by host and container shells from Console and CLI operators.
 
 The panel's Close terminal button offers Keep in background or Terminate all
 sessions. The latter ends all shells in this browser's terminal panel and closes
@@ -143,6 +143,29 @@ only a bounded in-memory output buffer supports reconnect.
 CLI: `groundplane host terminal` requires an interactive TTY. It uses the same
 terminal backend. The API's Open request returns its WebSocket continuation;
 see [request replay](../api-cli.md#protected-requests-and-uncertain-outcomes) for its transient boundary.
+
+### Container shells
+
+Service and Backing Service Overview → Containers offers **Open shell** when a
+running container is observed. Choose the exact container, user (default `root`),
+working directory and command. The command defaults to `/bin/sh`; each item in
+the argument editor is passed literally, without implicit shell parsing.
+The selected image must contain that executable, and its `/tmp` must be writable
+and allow execution of the temporary GP supervisor. A missing executable, user
+or directory fails startup rather than leaving a connected empty terminal.
+
+Container shells use the same bottom panel, independent tabs, owner session,
+output buffer and inactivity setting as host shells. The Agent validates the
+selected container against captured Service runtime identity. A redeploy never
+moves an existing shell into a replacement container; open a new shell explicitly.
+Host/shared PID namespaces cannot be selected. Termination ends the shell and
+its descendant processes, not the application container.
+
+CLI: `groundplane service exec NAME --container FULL_ID --user root -- /bin/sh`
+or `groundplane backing-service exec SLUG -- /bin/sh`. The container flag may be
+omitted only when exactly one running container is observed. `--workdir PATH`
+overrides the container default. The API uses `POST /services/{id}/terminal`;
+both host and container sessions return `/api/v1/terminals/{id}/stream`.
 
 ## etcd configuration
 

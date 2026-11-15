@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
 	"github.com/AlanD20/groundplane/internal/agent/backingruntime"
 	"github.com/AlanD20/groundplane/internal/agent/componentruntime"
+	"github.com/AlanD20/groundplane/internal/agent/containerterminal"
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
@@ -105,6 +106,7 @@ type Client struct {
 	dnsChecks               DNSConnectionChecker
 	edgeChecks              EdgeConnectionChecker
 	logs                    *logstream.Subscriptions
+	containerTerminals      containerterminal.Opener
 	stagingJournal          *agentstagingjournal.Journal
 	staging                 *backupStagingState
 }

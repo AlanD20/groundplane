@@ -41,6 +41,11 @@ and `groundplane service logs SERVICE_ID --id`. Reopen a stream after Start or
 runtime replacement to select the current containers. Workloads must not print
 credentials; GP does not redact arbitrary container output.
 
+Overview → Containers also offers **Open shell** for exact running containers.
+It shares the Service shell selector, command/user options and terminal tabs;
+see [container shells](platform.md#container-shells). Automation can use
+`groundplane backing-service exec SLUG -- /bin/sh`.
+
 ### Creation and lifecycle
 
 The display name describes the shared instance, not its consumers. For example,

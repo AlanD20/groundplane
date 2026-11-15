@@ -17,6 +17,7 @@ import (
 // and api-cli.md's resource map.
 func newServiceCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "service", Aliases: []string{"svc"}, Short: "Services — one container or shared runtime"}
+	cmd.AddCommand(newContainerTerminalCmd(resolveServiceTarget))
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",

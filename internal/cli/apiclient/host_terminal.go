@@ -20,10 +20,10 @@ func (c *Client) OpenHostTerminal(
 	ctx context.Context,
 	columns int,
 	rows int,
-) (apiTypes.HostTerminalSession, error) {
+) (apiTypes.TerminalSession, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.HostTerminalSession{}, err
+		return apiTypes.TerminalSession{}, err
 	}
 	const path = "/api/v1/host/terminal"
 	key := ids.NewULID()
@@ -38,35 +38,31 @@ func (c *Client) OpenHostTerminal(
 			break
 		}
 		if ctx.Err() != nil || attempt == 1 {
-			return apiTypes.HostTerminalSession{}, generatedCallError(ctx, http.MethodPost, path, err)
+			return apiTypes.TerminalSession{}, generatedCallError(ctx, http.MethodPost, path, err)
 		}
 	}
 	if err := generatedResponseError(
 		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusCreated,
 	); err != nil {
-		return apiTypes.HostTerminalSession{}, err
+		return apiTypes.TerminalSession{}, err
 	}
 	parsed := response.JSON201
 	if parsed == nil {
-		parsed = &generated.HostTerminalSession{}
+		parsed = &generated.TerminalSession{}
 		if err := decodeSingleJSON(http.MethodPost, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.HostTerminalSession{}, err
+			return apiTypes.TerminalSession{}, err
 		}
 	}
-	reason := ""
-	if parsed.Reason != nil {
-		reason = *parsed.Reason
+	var session apiTypes.TerminalSession
+	if err := decodeSingleJSON(http.MethodPost, path, bytes.NewReader(response.Body), &session); err != nil {
+		return session, err
 	}
-	return apiTypes.HostTerminalSession{
-		ID: parsed.Id, Host: parsed.Host, User: parsed.User, State: string(parsed.State), Reason: reason,
-		InputInactivitySeconds: int(parsed.InputInactivitySeconds), ExpiresAt: parsed.ExpiresAt,
-		StreamPath: parsed.StreamPath, Resumed: parsed.Resumed,
-	}, nil
+	return session, nil
 }
 
-func (c *Client) DialHostTerminal(
+func (c *Client) DialTerminal(
 	ctx context.Context,
-	session apiTypes.HostTerminalSession,
+	session apiTypes.TerminalSession,
 	after uint64,
 ) (*websocket.Conn, error) {
 	base, err := url.Parse(c.BaseURL)
@@ -84,7 +80,7 @@ func (c *Client) DialHostTerminal(
 			"apiclient: terminal requires an http or https Controller address",
 		)
 	}
-	if !strings.HasPrefix(session.StreamPath, "/api/v1/host/terminal/") {
+	if !strings.HasPrefix(session.StreamPath, "/api/v1/terminals/") {
 		return nil, errs.New(errs.KindInternal, "apiclient: terminal stream path is invalid")
 	}
 	base.Path = session.StreamPath

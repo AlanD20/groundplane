@@ -1,12 +1,14 @@
 // Package hostterminal owns transient, content-free metadata and the bounded
-// byte transport for interactive host PTYs. Sessions are deliberately not
+// byte transport for interactive host and container processes. Sessions are deliberately not
 // Tasks and are never written to the durable store or application logs.
 package hostterminal
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
-	"io"
+	"github.com/AlanD20/groundplane/internal/common/terminalsession"
 	"os"
 	"sync"
 	"time"
@@ -46,7 +48,7 @@ type Event struct {
 	Kind     EventKind
 	Sequence uint64
 	Data     []byte
-	Session  apiTypes.HostTerminalSession
+	Session  apiTypes.TerminalSession
 }
 
 type Attachment struct {
@@ -71,22 +73,52 @@ type Manager struct {
 	hostname    string
 	closed      bool
 	byID        map[string]*session
-	replays     map[string]terminalReplay
+	replays     map[string]*terminalReplay
+	opening     int
 	replayOrder []string
 }
 
 type terminalReplay struct {
-	owner   string
-	columns uint16
-	rows    uint16
-	session *session
+	owner       string
+	fingerprint [32]byte
+	done        chan struct{}
+	session     *session
+	err         error
+}
+
+type Target struct {
+	Kind             string
+	ServiceID        string
+	ContainerID      string
+	ContainerName    string
+	User             string
+	Command          []string
+	WorkingDirectory string
+	Columns          uint16
+	Rows             uint16
+}
+
+type hostProcess struct{ *runner.HostPTY }
+
+func (p hostProcess) Result() terminalsession.Exit {
+	code := 0
+	if p.Wait() != nil {
+		code = -1
+	}
+	return terminalsession.Exit{Reason: "command_exited", Code: code}
+}
+
+func (p hostProcess) Resize(size terminalsession.Size) error {
+	return p.HostPTY.Resize(runner.HostShellSize{Columns: size.Columns, Rows: size.Rows})
 }
 
 type session struct {
 	manager *Manager
 	owner   string
 	id      string
-	pty     *runner.HostPTY
+	pty     terminalsession.Process
+	target  Target
+	cancel  context.CancelFunc
 
 	mu                 sync.Mutex
 	expiresAt          time.Time
@@ -95,6 +127,8 @@ type session struct {
 	frameBytes         int
 	sequence           uint64
 	closed             bool
+	terminationDone    chan struct{}
+	exitCode           *int
 	reason             string
 	attachment         chan Event
 	lastActivityNotice time.Time
@@ -115,87 +149,135 @@ func New(launcher shellLauncher, inactivity time.Duration) (*Manager, error) {
 	return &Manager{
 		ctx: ctx, cancel: cancel, launcher: launcher, inactivity: inactivity,
 		hostname: hostname, byID: make(map[string]*session),
-		replays: make(map[string]terminalReplay),
+		replays: make(map[string]*terminalReplay),
 	}, nil
 }
 
 func (m *Manager) Open(
-	ctx context.Context,
-	owner string,
-	idempotencyKey string,
-	columns uint16,
-	rows uint16,
-) (apiTypes.HostTerminalSession, string, error) {
+	ctx context.Context, owner, idempotencyKey string, columns, rows uint16,
+) (apiTypes.TerminalSession, string, error) {
+	target := Target{Kind: "host", User: "root", Columns: columns, Rows: rows}
+	return m.OpenProcess(
+		ctx,
+		owner,
+		idempotencyKey,
+		target,
+		func(ctx context.Context, id string) (terminalsession.Process, error) {
+			process, err := m.launcher.StartHostShell(ctx, id, runner.HostShellSize{Columns: columns, Rows: rows})
+			if err != nil {
+				return nil, err
+			}
+			return hostProcess{process}, nil
+		},
+	)
+}
+
+// OpenProcess reserves shared capacity before launching without holding the
+// manager lock. Concurrent retries wait for the same captured startup result.
+func (m *Manager) OpenProcess(
+	ctx context.Context, owner, key string, target Target,
+	start func(context.Context, string) (terminalsession.Process, error),
+) (apiTypes.TerminalSession, string, error) {
 	if err := ctx.Err(); err != nil {
-		return apiTypes.HostTerminalSession{}, "", err
+		return apiTypes.TerminalSession{}, "", err
 	}
-	if idempotencyKey == "" {
-		return apiTypes.HostTerminalSession{}, "", errs.New(
+	if key == "" || start == nil {
+		return apiTypes.TerminalSession{}, "", errs.New(
 			errs.KindMalformedRequest,
 			"terminal request identity is unavailable",
 		)
 	}
+	if err := (terminalsession.Size{Columns: target.Columns, Rows: target.Rows}).Validate(); err != nil {
+		return apiTypes.TerminalSession{}, "", err
+	}
+	encoded, err := json.Marshal(target)
+	if err != nil {
+		return apiTypes.TerminalSession{}, "", errs.Wrap(errs.KindInternal, err)
+	}
+	fingerprint := sha256.Sum256(encoded)
 	m.mu.Lock()
-	if replay, ok := m.replays[idempotencyKey]; ok {
-		if replay.columns != columns || replay.rows != rows || owner != "" && replay.owner != owner {
-			m.mu.Unlock()
-			return apiTypes.HostTerminalSession{}, "", errs.New(
+	if replay, ok := m.replays[key]; ok {
+		m.mu.Unlock()
+		if replay.fingerprint != fingerprint || owner != "" && replay.owner != owner {
+			return apiTypes.TerminalSession{}, "", errs.New(
 				errs.KindIdempotencyMismatch,
-				"Idempotency-Key was already used for a different host terminal request",
+				"Idempotency-Key was already used for a different terminal request",
 			)
 		}
-		m.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return apiTypes.TerminalSession{}, "", ctx.Err()
+		case <-replay.done:
+		}
+		if replay.err != nil {
+			return apiTypes.TerminalSession{}, "", replay.err
+		}
 		return replay.session.projection(true), replay.owner, nil
 	}
-	if m.closed {
+	if m.closed || !m.ensureReplayCapacityLocked() || len(m.byID)+m.opening >= MaxSessions {
 		m.mu.Unlock()
-		return apiTypes.HostTerminalSession{}, "", errs.New(
-			errs.KindRequestUnavailable,
-			"host terminal service is shutting down",
-		)
-	}
-	if !m.ensureReplayCapacityLocked() {
-		m.mu.Unlock()
-		return apiTypes.HostTerminalSession{}, "", errs.New(
+		return apiTypes.TerminalSession{}, "", errs.New(
 			errs.KindStateConflict,
-			"host terminal request replay limit reached",
+			"terminal session or request limit reached",
 		)
 	}
 	if owner == "" {
 		owner = ids.NewULID()
 	}
-	if len(m.byID) >= MaxSessions {
-		m.mu.Unlock()
-		return apiTypes.HostTerminalSession{}, "", errs.New(
-			errs.KindStateConflict,
-			"host terminal session limit reached",
-		)
-	}
-
-	id := ids.New(ids.KindTerminal)
-	ptyProcess, err := m.launcher.StartHostShell(m.ctx, id, runner.HostShellSize{Columns: columns, Rows: rows})
-	if err != nil {
-		m.mu.Unlock()
-		return apiTypes.HostTerminalSession{}, "", err
-	}
-	s := &session{manager: m, owner: owner, id: id, pty: ptyProcess}
-	s.expiresAt = time.Now().UTC().Add(m.inactivity)
-	s.timer = time.AfterFunc(m.inactivity, s.expireInputInactivity)
-	m.byID[s.id] = s
-	m.recordReplayLocked(idempotencyKey, terminalReplay{
-		owner: owner, columns: columns, rows: rows, session: s,
-	})
+	replay := &terminalReplay{owner: owner, fingerprint: fingerprint, done: make(chan struct{})}
+	m.recordReplayLocked(key, replay)
+	m.opening++
 	m.mu.Unlock()
 
+	id := ids.New(ids.KindTerminal)
+	processContext, cancel := context.WithCancel(m.ctx)
+	stopRequestCancellation := context.AfterFunc(ctx, cancel)
+	process, err := start(processContext, id)
+	requestStopped := stopRequestCancellation()
+	if err == nil && (!requestStopped || ctx.Err() != nil) {
+		err = ctx.Err()
+		if err == nil {
+			err = context.Canceled
+		}
+	}
+	m.mu.Lock()
+	m.opening--
+	if err == nil && m.closed {
+		err = errs.New(errs.KindRequestUnavailable, "terminal service is shutting down")
+	}
+	if err != nil {
+		replay.err = err
+		close(replay.done)
+		m.mu.Unlock()
+		cancel()
+		if process != nil {
+			_ = process.Terminate()
+		}
+		return apiTypes.TerminalSession{}, "", err
+	}
+	target.Command = append([]string(nil), target.Command...)
+	s := &session{
+		manager:         m,
+		owner:           owner,
+		id:              id,
+		pty:             process,
+		target:          target,
+		cancel:          cancel,
+		terminationDone: make(chan struct{}),
+	}
+	s.expiresAt = time.Now().UTC().Add(m.inactivity)
+	s.timer = time.AfterFunc(m.inactivity, s.expireInputInactivity)
+	m.byID[id] = s
+	replay.session = s
+	close(replay.done)
+	m.mu.Unlock()
 	go s.readOutput()
-	go func() {
-		_ = ptyProcess.Wait()
-		s.terminate("shell_exited")
-	}()
 	return s.projection(false), owner, nil
 }
 
-func (m *Manager) recordReplayLocked(key string, replay terminalReplay) {
+func (m *Manager) InputInactivitySeconds() int { return int(m.inactivity / time.Second) }
+
+func (m *Manager) recordReplayLocked(key string, replay *terminalReplay) {
 	if key == "" || len(m.replayOrder) >= maxReplayKeys {
 		return
 	}
@@ -214,7 +296,12 @@ func (m *Manager) ensureReplayCapacityLocked() bool {
 	}
 	for index, key := range m.replayOrder {
 		replay := m.replays[key]
-		if !replay.session.isClosed() {
+		select {
+		case <-replay.done:
+		default:
+			continue
+		}
+		if replay.session != nil && !replay.session.isClosed() {
 			continue
 		}
 		delete(m.replays, key)
@@ -227,7 +314,7 @@ func (m *Manager) ensureReplayCapacityLocked() bool {
 
 func (m *Manager) Attach(owner, id string, after uint64) (Attachment, error) {
 	m.mu.Lock()
-	s := m.byID[id]
+	s := m.findSessionLocked(id)
 	m.mu.Unlock()
 	if s == nil || s.owner != owner {
 		return Attachment{}, errs.New(errs.KindRequestNotFound, "host terminal session was not found")
@@ -235,18 +322,30 @@ func (m *Manager) Attach(owner, id string, after uint64) (Attachment, error) {
 	return s.attach(after)
 }
 
-func (m *Manager) Input(owner, id string, data []byte) (apiTypes.HostTerminalSession, error) {
+func (m *Manager) findSessionLocked(id string) *session {
+	if s := m.byID[id]; s != nil {
+		return s
+	}
+	for _, replay := range m.replays {
+		if replay.session != nil && replay.session.id == id {
+			return replay.session
+		}
+	}
+	return nil
+}
+
+func (m *Manager) Input(owner, id string, data []byte) (apiTypes.TerminalSession, error) {
 	s, err := m.owned(owner, id)
 	if err != nil {
-		return apiTypes.HostTerminalSession{}, err
+		return apiTypes.TerminalSession{}, err
 	}
-	if len(data) == 0 || len(data) > 32<<10 {
-		return apiTypes.HostTerminalSession{}, errs.New(errs.KindMalformedRequest, "terminal input size is invalid")
+	if len(data) == 0 || len(data) > terminalsession.MaximumFrameBytes {
+		return apiTypes.TerminalSession{}, errs.New(errs.KindMalformedRequest, "terminal input size is invalid")
 	}
 	projection := s.markInput()
 	if _, err := s.pty.Write(data); err != nil {
 		s.terminate("shell_exited")
-		return apiTypes.HostTerminalSession{}, errs.Wrap(errs.KindRequestFailed, err)
+		return apiTypes.TerminalSession{}, errs.Wrap(errs.KindRequestFailed, err)
 	}
 	return projection, nil
 }
@@ -256,7 +355,7 @@ func (m *Manager) Resize(owner, id string, columns, rows uint16) error {
 	if err != nil {
 		return err
 	}
-	return s.pty.Resize(runner.HostShellSize{Columns: columns, Rows: rows})
+	return s.pty.Resize(terminalsession.Size{Columns: columns, Rows: rows})
 }
 
 func (m *Manager) Terminate(owner, id, reason string) error {
@@ -285,6 +384,7 @@ func (m *Manager) Close() error {
 		return nil
 	}
 	m.closed = true
+	m.cancel()
 	sessions := make([]*session, 0, len(m.byID))
 	for _, s := range m.byID {
 		sessions = append(sessions, s)
@@ -305,7 +405,7 @@ func (m *Manager) release(s *session) {
 	m.mu.Unlock()
 }
 
-func (s *session) projection(resumed bool) apiTypes.HostTerminalSession {
+func (s *session) projection(resumed bool) apiTypes.TerminalSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.projectionLocked(resumed)
@@ -317,19 +417,20 @@ func (s *session) isClosed() bool {
 	return s.closed
 }
 
-func (s *session) projectionLocked(resumed bool) apiTypes.HostTerminalSession {
+func (s *session) projectionLocked(resumed bool) apiTypes.TerminalSession {
 	state := "active"
 	if s.closed {
 		state = "terminated"
 	}
-	return apiTypes.HostTerminalSession{
-		ID: s.id, Host: s.manager.hostname, User: "root", State: state, Reason: s.reason,
+	return apiTypes.TerminalSession{
+		ID: s.id, Host: s.manager.hostname, User: s.target.User, State: state, Reason: s.reason, ExitCode: s.exitCode,
+		Kind: s.target.Kind, ServiceID: s.target.ServiceID, ContainerID: s.target.ContainerID, ContainerName: s.target.ContainerName,
 		InputInactivitySeconds: int(s.manager.inactivity / time.Second), ExpiresAt: s.expiresAt,
-		StreamPath: "/api/v1/host/terminal/" + s.id + "/stream", Resumed: resumed,
+		StreamPath: "/api/v1/terminals/" + s.id + "/stream", Resumed: resumed,
 	}
 }
 
-func (s *session) markInput() apiTypes.HostTerminalSession {
+func (s *session) markInput() apiTypes.TerminalSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -365,9 +466,6 @@ func (s *session) expireInputInactivity() {
 func (s *session) attach(after uint64) (Attachment, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closed {
-		return Attachment{}, errs.New(errs.KindRequestNotFound, "host terminal session was not found")
-	}
 	if s.attachment != nil {
 		close(s.attachment)
 	}
@@ -382,6 +480,12 @@ func (s *session) attach(after uint64) (Attachment, error) {
 				Event{Kind: EventOutput, Sequence: frame.Sequence, Data: append([]byte(nil), frame.Data...)},
 			)
 		}
+	}
+	if s.closed {
+		replay = append(replay, Event{Kind: EventTerminated, Session: s.projectionLocked(true)})
+		close(events)
+		s.attachment = nil
+		return Attachment{Replay: replay, Events: events, Truncated: truncated}, nil
 	}
 	return Attachment{
 		Replay: replay, Events: events, Truncated: truncated,
@@ -406,9 +510,8 @@ func (s *session) readOutput() {
 			s.publish(buffer[:count])
 		}
 		if err != nil {
-			if !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) {
-				s.terminate("shell_exited")
-			}
+			_ = s.pty.Wait()
+			s.terminate("shell_exited")
 			return
 		}
 	}
@@ -448,11 +551,26 @@ func (s *session) terminate(reason string) {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
+		<-s.terminationDone
 		return
 	}
 	s.closed = true
 	s.reason = reason
 	s.timer.Stop()
+	s.mu.Unlock()
+	cleanupErr := s.pty.Terminate()
+	result := s.pty.Result()
+	s.cancel()
+	s.mu.Lock()
+	if cleanupErr != nil {
+		s.reason = "cleanup_failed"
+	} else if reason == "shell_exited" {
+		s.reason = result.Reason
+	}
+	if result.Code >= 0 {
+		code := result.Code
+		s.exitCode = &code
+	}
 	projection := s.projectionLocked(false)
 	if s.attachment != nil {
 		for len(s.attachment) > 0 {
@@ -462,9 +580,7 @@ func (s *session) terminate(reason string) {
 		close(s.attachment)
 		s.attachment = nil
 	}
-	s.frames = nil
-	s.frameBytes = 0
 	s.mu.Unlock()
-	_ = s.pty.Terminate()
 	s.manager.release(s)
+	close(s.terminationDone)
 }

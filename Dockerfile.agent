@@ -13,6 +13,8 @@ RUN printf '%s\n' "${AGENT_VERSION}" | grep -Eq '^(dev|(agent/)?v?[0-9]+\.[0-9]+
     && CGO_ENABLED=0 GOOS=linux GOAMD64=v1 GOARM64=v8.0 GOMAXPROCS=2 go build -p=2 -trimpath -buildvcs=false \
         -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=${AGENT_VERSION} -X github.com/AlanD20/groundplane/internal/common/version.SourceKind=${SOURCE_KIND} -X github.com/AlanD20/groundplane/internal/common/version.SourceCommit=${SOURCE_COMMIT}" \
         -o /out/groundplane-agent ./cmd/agent \
+    && CGO_ENABLED=0 GOOS=linux GOAMD64=v1 GOARM64=v8.0 GOMAXPROCS=2 go build -p=2 -trimpath -buildvcs=false \
+        -ldflags="-s -w -buildid=" -o /out/container-terminal-helper ./cmd/container-terminal-helper \
     && GOMAXPROCS=2 go run -p=2 ./internal/releasemeta --agent /out/groundplane-agent \
         --version "${AGENT_VERSION}" --source-kind "${SOURCE_KIND}" --source-commit "${SOURCE_COMMIT}" \
         --output /out/groundplane-agent-release.json
@@ -38,6 +40,7 @@ COPY --from=dockercli /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certi
 COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=compose /docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 COPY --from=build /out/groundplane-agent /usr/local/bin/groundplane-agent
+COPY --from=build /out/container-terminal-helper /usr/local/libexec/groundplane/container-terminal-helper
 COPY --from=build /out/groundplane-agent-release.json /groundplane-agent-release.json
 USER 0:0
 WORKDIR /root

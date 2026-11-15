@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/agent/containerterminal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
@@ -175,6 +176,8 @@ func (c *Client) runSession(
 	defer dnsChecks.close()
 	edgeChecks := newEdgeCheckSession(c.edgeChecks)
 	defer edgeChecks.close()
+	terminals := containerterminal.New(streamCtx, c.containerTerminals)
+	defer terminals.Close()
 	receiveNext(streamCtx, stream, received)
 	for {
 		// Reopen staging only after native workers have drained and joined.
@@ -193,6 +196,7 @@ func (c *Client) runSession(
 			ticker.C,
 			native.outgoing,
 			releases.outputs,
+			terminals.Outputs(),
 		)
 		switch event.kind {
 		case sessionNativeResult:
@@ -541,6 +545,20 @@ func (c *Client) runSession(
 				continue
 			}
 
+			if request := result.message.GetContainerTerminalOpen(); request != nil {
+				if err := terminals.Open(request); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if control := result.message.GetContainerTerminalControl(); control != nil {
+				if err := terminals.Control(control); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			shutdown, err := c.handleControllerMessage(streamCtx, result.message)
 			if err != nil {
 				return false, err
@@ -552,6 +570,10 @@ func (c *Client) runSession(
 		case sessionLog:
 			if err := stream.Send(event.log); err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send log message", false)
+			}
+		case sessionTerminal:
+			if err := stream.Send(event.terminal); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: send container terminal message", false)
 			}
 		}
 	}

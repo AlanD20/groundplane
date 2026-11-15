@@ -30,6 +30,7 @@ type Registry struct {
 	lifecycle        map[string]*lifecycleFence
 	ready            map[readyKey]map[uint64]*readySubscription
 	logs             map[string]*LogSubscription
+	terminals        map[string]*containerProcess
 }
 
 type lifecycleFence struct {
@@ -70,6 +71,7 @@ func NewRegistry() *Registry {
 		lifecycle: make(map[string]*lifecycleFence),
 		ready:     make(map[readyKey]map[uint64]*readySubscription),
 		logs:      make(map[string]*LogSubscription),
+		terminals: make(map[string]*containerProcess),
 	}
 }
 

@@ -17,6 +17,7 @@ func newBackingServiceCmd() *cobra.Command {
 		Aliases: []string{"bs"},
 		Short:   "Backing services — shared datastores/caches/queues",
 	}
+	cmd.AddCommand(newContainerTerminalCmd(resolveBackingAdapterServiceTarget))
 	cmd.AddCommand(
 		&cobra.Command{
 			Use:   "adapters",

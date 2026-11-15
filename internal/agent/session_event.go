@@ -21,6 +21,7 @@ const (
 	sessionLog
 	sessionNative
 	sessionNativeResult
+	sessionTerminal
 )
 
 type sessionEvent struct {
@@ -34,6 +35,7 @@ type sessionEvent struct {
 	log           *agentpb.AgentMessage
 	native        *agentpb.AgentMessage
 	nativeResult  executionOutput
+	terminal      *agentpb.AgentMessage
 }
 
 // One stream writer multiplexes native operations and read-only services.
@@ -51,6 +53,7 @@ func nextSessionEvent(
 	ticks <-chan time.Time,
 	native <-chan *agentpb.AgentMessage,
 	nativeResults <-chan executionOutput,
+	terminals <-chan *agentpb.AgentMessage,
 ) sessionEvent {
 	select {
 	case <-ctx.Done():
@@ -75,5 +78,7 @@ func nextSessionEvent(
 		return sessionEvent{kind: sessionNativeResult, nativeResult: result}
 	case message := <-logs:
 		return sessionEvent{kind: sessionLog, log: message}
+	case message := <-terminals:
+		return sessionEvent{kind: sessionTerminal, terminal: message}
 	}
 }

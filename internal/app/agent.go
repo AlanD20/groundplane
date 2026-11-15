@@ -40,6 +40,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelpercontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composeobserver"
 	"github.com/AlanD20/groundplane/internal/infra/docker/containerlogs"
+	"github.com/AlanD20/groundplane/internal/infra/docker/containerterminal"
 	"github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"
 	"github.com/AlanD20/groundplane/internal/infra/docker/hostresolutionhelpercontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
@@ -319,6 +320,13 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	}
 	runtimeResources.dockerReads, err = agentplatform.ConfigureDockerReads(ctx, client, componentActions)
 	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	containerTerminals, err := containerterminal.New(runtimeResources.dockerReads)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetContainerTerminalOpener(containerTerminals); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	backingCommands, err := backingcommand.New(runtimeResources.dockerReads)

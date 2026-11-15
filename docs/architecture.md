@@ -1,5 +1,15 @@
 # Architecture
 
+Container terminal transport is transient Agent-channel traffic, separate from
+durable Tasks. The Controller captures exact Service runtime authority and a
+container ID; the Agent verifies both against the running container. A static
+supervisor supplied by the Agent owns the in-container PTY and descendant
+cleanup, because detaching Docker Exec does not terminate its process. Framed
+input/output, bounded credit and connection fencing prevent terminal traffic
+from blocking workload scheduling. A disconnected session is never retargeted
+to a replacement container. The shared terminal owner governs host and container
+session limits, browser ownership, replay buffers and inactivity.
+
 Groundplane is a modular monolith with three Go binaries: Controller, Agent and
 CLI. The Console is a React/Vite SPA embedded in the Controller. One product
 decision has one owner, regardless of which client invokes it.

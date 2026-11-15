@@ -5,6 +5,14 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Open container shells from Service and Backing Service details with an exact
+  container selector, user, command arguments and working directory, sharing the
+  existing terminal tabs and bounded session lifetime.
+- Establish storage epoch 1 and Agent channel schema 1 for the replacement
+  0.0.1 clean-install baseline; older development installations require a reset.
+- Identify Entry ownership, Service exposure and value references consistently
+  in Environment and Service Variables & files, and keep Secret owner labels
+  visible on narrow screens.
 - Render only visible container log rows while retaining the full rolling buffer
   for search and copy. Reuse timestamp formatting, preserve row styling and full
   Service names, and distinguish received lines from the newest 1,000 retained.

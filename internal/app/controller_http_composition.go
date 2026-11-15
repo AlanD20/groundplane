@@ -18,6 +18,7 @@ import (
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/serviceterminal"
 	"github.com/AlanD20/groundplane/internal/controller/taskalerts"
 	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
@@ -268,6 +269,12 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 	}
 	server := handlers.New(dependencies.store, dependencies.bootstrap.logger, handlers.Options{
 		Host: dependencies.platform.Host, HostTerminals: hostTerminals,
+		ServiceTerminals: serviceterminal.New(
+			serviceReads.services,
+			dependencies.authority.releaseLedger,
+			dependencies.agentRuntime.Registry,
+			hostTerminals,
+		),
 		ControllerConfig: dependencies.bootstrap.controllerConfig,
 		EtcdConfig:       dependencies.bootstrap.etcdLifecycle.Configuration(), EtcdConfigApplier: dependencies.platform.EtcdConfig,
 		ControllerUpdates: dependencies.platform.Upgrades,
