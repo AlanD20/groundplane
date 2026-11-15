@@ -141,11 +141,11 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
                       : "Connect backing service"}
                   </Button>
                 </div>
-                <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border px-2 py-2">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="gap-1 px-0 text-xs text-muted-foreground"
+                    className="h-8 gap-1.5 px-3 text-xs text-muted-foreground"
                     onClick={() => inspect(s.id, "logs")}
                   >
                     <Terminal className="size-3" />
@@ -154,7 +154,7 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="gap-1 px-0 text-xs text-muted-foreground"
+                    className="h-8 gap-1.5 px-3 text-xs text-muted-foreground"
                     onClick={() => inspect(s.id, "configuration")}
                   >
                     Runtime & image
@@ -162,7 +162,7 @@ export function ServiceCards({ env, now }: { env: Environment; now: number }) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="gap-1 px-0 text-xs text-primary"
+                    className="h-8 gap-1.5 px-3 text-xs text-primary"
                     disabled={deployService !== null}
                     onClick={() => setDeployService(s.id)}
                   >

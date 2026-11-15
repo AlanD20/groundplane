@@ -103,6 +103,15 @@ No zone. Selecting an item highlights related memberships; selecting again
 clears the highlight. Lists provide filtering, sortable columns and a visible
 sort direction.
 
+Zones & topology offers SVG and PNG export of all Services or a selected set,
+including their connected Routes, Backing Services and Volumes. Export uses the
+enabled connection layers and crops the drawn diagram with 16 px margins,
+independently of pan, zoom and highlighting. SVG retains vector shapes and text;
+large PNGs are scaled to stay within browser image limits. This browser-local
+download does not change Environment configuration. Right-click empty board space
+for the same view, layer, highlight and export controls as the toolbar; Service
+and Backing Service nodes retain their resource navigation menus.
+
 ## Editing documents
 
 The shared editor supports YAML, JSON and shell highlighting plus read-only

@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Export topology diagrams as standalone SVG or PNG for all or selected Services,
+  cropped to the diagram with 16 px margins. Share view controls with the empty-space
+  context menu and preserve resource-specific node menus.
+- Give Service card footer actions consistent padding and click areas.
 - Use the shared strict Caddy observation codec for continuous Service health,
   preventing false degraded status after trusted forwarding is deployed.
 - Verify live and restart Caddy routing with the sealed configuration encoding,

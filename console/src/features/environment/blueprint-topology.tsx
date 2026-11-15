@@ -2,16 +2,9 @@ import { EmptyState } from "@/components/common/empty-state";
 import { useId, useMemo, useState } from "react";
 import { TopologyCanvas } from "@/components/common/topology-canvas";
 import { Button } from "@/components/ui/button";
-import { Layers, Highlighter, X } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+import { Layers } from "lucide-react";
+import { TopologyExportDialog } from "./topology-export-dialog";
+import { TopologyViewControls } from "./topology-view-controls";
 import { useStore } from "@/lib/store";
 import type { Environment } from "@/lib/types";
 import { TopologyRuntimeStatus } from "./topology-runtime-status";
@@ -47,6 +40,7 @@ export function BlueprintTopology({
     () => buildTopology(env, backingProjects),
     [env, backingProjects],
   );
+  const [exportOpen, setExportOpen] = useState(false);
   const [selection, setSelection] = useState<string | null>(null);
   const selected = graph.nodes.some((n) => n.id === selection)
     ? selection
@@ -74,6 +68,32 @@ export function BlueprintTopology({
     ...highlighted.flatMap((e) => [e.from, e.to]),
   ]);
   const active = graph.nodes.find((n) => n.id === selected);
+  const viewControls = (context = false) => (
+    <TopologyViewControls
+      context={context}
+      layers={layers}
+      onLayersChange={setLayers}
+      highlightKind={highlightKind}
+      onHighlightChange={(kind) => {
+        setSelection(null);
+        setHighlightKind(kind);
+      }}
+      onlyRelated={onlyRelated}
+      onOnlyRelatedChange={setOnlyRelated}
+      hasFocus={hasFocus}
+      selected={!!selected}
+      onClearSelection={() => setSelection(null)}
+      counts={{
+        Routes: graph.edges.filter((edge) => edge.kind === "Routes").length,
+        Dependencies: graph.edges.filter((edge) => edge.kind === "Dependencies")
+          .length,
+        Backing: graph.edges.filter((edge) => edge.kind === "Backing").length,
+        Storage: graph.edges.filter((edge) => edge.kind === "Storage").length,
+      }}
+      total={graph.edges.length}
+      visible={edges.length}
+    />
+  );
   if (!graph.nodes.length)
     return (
       <EmptyState
@@ -87,109 +107,9 @@ export function BlueprintTopology({
       <TopologyCanvas
         width={graph.width}
         height={graph.height}
-        controls={
-          <>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button variant="outline" size="sm" />}
-              >
-                <Layers />
-                Show
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuLabel>Connections</DropdownMenuLabel>
-                {topologyLayers.map((layer) => (
-                  <DropdownMenuCheckboxItem
-                    key={layer}
-                    checked={layers.includes(layer)}
-                    closeOnClick={false}
-                    onCheckedChange={(checked) =>
-                      setLayers((current) =>
-                        checked
-                          ? [...current, layer]
-                          : current.filter((l) => l !== layer),
-                      )
-                    }
-                  >
-                    {layer}
-                    <span className="ml-auto text-muted-foreground">
-                      {graph.edges.filter((e) => e.kind === layer).length}
-                    </span>
-                  </DropdownMenuCheckboxItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuCheckboxItem
-                  checked={onlyRelated}
-                  disabled={!hasFocus}
-                  closeOnClick={false}
-                  onCheckedChange={setOnlyRelated}
-                >
-                  Highlighted connections only
-                </DropdownMenuCheckboxItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant={highlightKind ? "secondary" : "outline"}
-                    size="sm"
-                  />
-                }
-              >
-                <Highlighter />
-                {highlightKind
-                  ? `Highlight: ${highlightKind === "Backing" ? "Backing services" : highlightKind + "s"}`
-                  : "Highlight"}
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuLabel>Highlight resources</DropdownMenuLabel>
-                {[
-                  { kind: "Service", label: "Services" },
-                  { kind: "Route", label: "Routes" },
-                  { kind: "Backing", label: "Backing services" },
-                  { kind: "Volume", label: "Volumes" },
-                ].map(({ kind, label }) => (
-                  <DropdownMenuCheckboxItem
-                    key={kind}
-                    checked={highlightKind === kind}
-                    onCheckedChange={(checked) => {
-                      setSelection(null);
-                      setHighlightKind(checked ? kind : null);
-                    }}
-                  >
-                    {label}
-                  </DropdownMenuCheckboxItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSelection(null);
-                    setHighlightKind(null);
-                  }}
-                >
-                  Clear highlight
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {selected && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSelection(null)}
-              >
-                <X />
-                Clear selection
-              </Button>
-            )}
-            <span
-              role="status"
-              className="ml-auto px-1 text-xs text-muted-foreground"
-            >
-              {edges.length} / {graph.edges.length} connections
-            </span>
-          </>
-        }
+        controls={viewControls()}
+        contextControls={viewControls(true)}
+        onExport={() => setExportOpen(true)}
       >
         <defs>
           {topologyLayers.map((layer) => (
@@ -286,6 +206,7 @@ export function BlueprintTopology({
           return (
             <foreignObject
               key={node.id}
+              onContextMenu={(event) => event.stopPropagation()}
               x={p.x}
               y={p.y}
               width="240"
@@ -338,6 +259,16 @@ export function BlueprintTopology({
           );
         })}
       </TopologyCanvas>
+      {exportOpen && (
+        <TopologyExportDialog
+          env={env}
+          backingProjects={backingProjects}
+          layers={layers}
+          selected={selected}
+          now={now}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
       {active && (
         <div className="space-y-3 rounded-lg border border-border bg-card p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
