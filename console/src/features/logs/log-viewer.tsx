@@ -285,7 +285,7 @@ export function LogStream({ target }: { target: LogTarget }) {
             el.scrollHeight - el.clientHeight - el.scrollTop < 32;
           setAtEnd(pinnedToEnd.current);
         }}
-        className="h-[60vh] min-h-72 overflow-auto rounded-xl border border-border bg-card p-3 font-mono text-sm"
+        className="h-[60vh] min-h-72 min-w-0 max-w-full overflow-auto overscroll-contain rounded-xl border border-border bg-card p-3 font-mono text-sm"
       >
         {visible.length === 0 ? (
           <EmptyState
@@ -307,14 +307,16 @@ export function LogStream({ target }: { target: LogTarget }) {
             }
           />
         ) : (
-          visible.map((event) => (
-            <LogLine
-              key={event.sequence}
-              event={event}
-              wrap={wrap}
-              showSource={container === "all"}
-            />
-          ))
+          <div className={wrap ? "min-w-0" : "w-max min-w-full"}>
+            {visible.map((event) => (
+              <LogLine
+                key={event.sequence}
+                event={event}
+                wrap={wrap}
+                showSource={container === "all"}
+              />
+            ))}
+          </div>
         )}
       </div>
     </section>

@@ -80,7 +80,7 @@ export function LogLine({
         {event.stream}
       </span>
       <span
-        className={`col-span-3 min-w-0 leading-5 xl:col-span-1 ${wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "overflow-x-auto whitespace-pre"}`}
+        className={`col-span-3 min-w-0 leading-5 xl:col-span-1 ${wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "whitespace-pre"}`}
       >
         {event.line || "\u00a0"}
         {event.truncated ? " [truncated]" : ""}

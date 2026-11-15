@@ -5,6 +5,11 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Use one shared horizontal scrollbar for unwrapped container logs instead of a
+  separate scrollbar on every log line.
+- Keep router request-policy edits from redeploying unchanged application
+  Services. Acknowledge already-applied Blueprint work without Agent execution,
+  and prevent router health reports from falsely rejecting Route edits.
 - Export topology diagrams from a simple SVG/PNG menu for all Services or those
   selected directly on the diagram with Shift/Ctrl/Cmd-click,
   cropped to the diagram with 16 px margins. Share view controls with the empty-space
