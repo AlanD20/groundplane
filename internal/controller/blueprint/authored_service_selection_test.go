@@ -261,12 +261,26 @@ func authoredServiceFixtureIdentities(
 			ID: volume.ID, Name: volume.Name, Slug: volume.Name, BirthRevisionID: parentID,
 		})
 	}
+	for _, name := range sortedAuthoredMapKeys(parsed.Extensions.Components) {
+		result.Components = append(result.Components, testenvironmentprojection.OwnedIdentity{
+			ID:   ids.DeriveAt(ids.KindComponent, at, "authored-service-selection", name),
+			Name: name, BirthRevisionID: parentID,
+		})
+	}
+	for _, name := range sortedAuthoredMapKeys(parsed.Extensions.Entries) {
+		result.Entries = append(result.Entries, testenvironmentprojection.OwnedIdentity{
+			ID:   ids.DeriveAt(ids.KindEnvEntry, at, "authored-service-selection", name),
+			Name: name, BirthRevisionID: parentID,
+			ValueGenerationID: ids.DeriveAt(ids.KindConfig, at, "authored-service-selection-entry", name),
+		})
+	}
 	return result, changes.Current
 }
 
 func selectAuthoredServiceFixture(
 	t *testing.T,
 	before, after authoredServiceFixturePlan,
+	acknowledged ...blueprintunits.Unit,
 ) blueprintreconcile.Selection {
 	t.Helper()
 	snapshot := blueprintunits.Snapshot{
@@ -280,6 +294,11 @@ func selectAuthoredServiceFixture(
 	// evidence that a child execution ran in this fixture.
 	appliedTargets := make(map[blueprintunits.ResourceKey]bool, len(before.units))
 	for _, unit := range before.units {
+		for _, settled := range acknowledged {
+			if settled.Target == unit.Target {
+				unit.Fingerprint = settled.Fingerprint
+			}
+		}
 		appliedTargets[unit.Target] = true
 		snapshot.Applied = append(snapshot.Applied, testkeyvalue.Versioned[blueprintunits.AppliedRecord]{
 			Revision: 1,

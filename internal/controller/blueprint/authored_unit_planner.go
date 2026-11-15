@@ -232,7 +232,7 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 			planner.serviceRuntimeFiles(service), planner.serviceEntryNames(name),
 			planner.serviceAttachments(name), planner.serviceReleaseGroups(name),
 			planner.serviceScripts(name),
-			dnsUpstreams, planner.input.desired.Input.Components[string(core.ComponentCapabilityHTTPRouter)],
+			dnsUpstreams, planner.serviceRouterTopology(),
 		})
 		if err != nil {
 			return nil, false, err
@@ -330,6 +330,11 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		}
 		planner.addUnit(identity, fingerprint, reads, after)
 	}
+	serviceInputsComplete, err := planner.fingerprintServiceInputs()
+	if err != nil {
+		return nil, false, err
+	}
+	complete = complete && serviceInputsComplete
 	units := make([]blueprintunits.Unit, 0, len(planner.units))
 	for _, unit := range planner.units {
 		units = append(units, unit)

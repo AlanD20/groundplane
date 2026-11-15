@@ -52,6 +52,9 @@ func (owner *InputPreparation) Prepare(ctx context.Context, taskID, workID strin
 		return err
 	}
 	if current {
+		if acknowledged, err := owner.acknowledgeApplied(ctx, view); acknowledged || err != nil {
+			return err
+		}
 		// The planner still compares its own fixed snapshot when publishing.
 		return owner.owner.Prepare(ctx, taskID, workID)
 	}

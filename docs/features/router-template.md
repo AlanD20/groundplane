@@ -35,7 +35,13 @@ Shared product, API and desired-state rules remain in [mvp.md](../mvp.md),
   also precedes reload. Invalid output retains the old serving configuration;
   failed restoration is never reported as successful application.
 - File-only template and Route edits reload Caddy and retain unchanged Component
-  and Tunnel runtime ownership. A read-only configuration-directory bind makes
+  and Tunnel runtime ownership. Request-policy-only template edits do not select
+  new application Releases. Router enablement, implementation and network
+  placement remain Service forwarding inputs. Health observations do not change
+  the router definition used to validate a Route edit.
+  Unchanged resources are acknowledged from their existing applied receipts
+  without Agent execution; changed or uncertain resources retain normal planning.
+  A read-only configuration-directory bind makes
   atomic file replacements visible. Image, mount, user or network changes still
   reconcile the affected container; migration from the former file bind is such
   a runtime change, not an interruption-free reload.

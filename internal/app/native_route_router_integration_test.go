@@ -50,6 +50,27 @@ func TestNativeRouteRemovalPublishesOnlyItsEnabledRouter(t *testing.T) {
 	}
 	f.checkDefinition(t, created.TaskID, created.Route.ID, true)
 	componentID, routerID := seedNativeRouteRouter(t, f)
+	// Health reports may advance after the applied configuration snapshot.
+	// They do not change the router definition used by a Route mutation.
+	currentComponent, err := f.base.store.Get(t.Context(), components.RecordKey(componentID))
+	if err != nil || currentComponent.Entry == nil {
+		t.Fatalf("router observation source: %v", err)
+	}
+	observed, err := components.DecodeRecord(currentComponent.Entry.Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed.Runtime.Healthy = true
+	changed := observed
+	changed.Desired.Enabled = false
+	nativeVolumePut(t, f.base.store, components.RecordKey(componentID), changed, components.EncodeRecord)
+	if _, err := f.network.RemoveRoute(t.Context(), created.Route.ID, "native-router-changed-definition"); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
+	) {
+		t.Fatalf("changed router definition was not fenced: %v", err)
+	}
+	nativeVolumePut(t, f.base.store, components.RecordKey(componentID), observed, components.EncodeRecord)
 	removed, err := f.network.RemoveRoute(t.Context(), created.Route.ID, "native-router-removal")
 	if err != nil {
 		t.Fatal(err)

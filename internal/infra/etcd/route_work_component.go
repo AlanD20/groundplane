@@ -46,10 +46,14 @@ func (repository *HierarchyRepository) ReadRouteWorkComponent(
 	if err != nil {
 		return keyvalue.Versioned[components.Record]{}, err
 	}
+	// Health is an observation, not authored configuration or runtime identity.
+	// It may advance after the projection was sealed without invalidating a Route
+	// edit. Retain every other comparison and the captured Component revision.
+	expected.Runtime.Healthy = record.Runtime.Healthy
 	if !components.EqualRecord(record, expected) {
 		return keyvalue.Versioned[components.Record]{}, errs.New(
 			errs.KindStateConflict,
-			"Route router definition changed from its captured desired state",
+			"Router configuration changed while preparing this Route; reload and retry",
 		)
 	}
 	return keyvalue.Versioned[components.Record]{

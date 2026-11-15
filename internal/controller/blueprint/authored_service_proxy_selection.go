@@ -6,6 +6,15 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 )
 
+// A router's enabled state, implementation and network placement can change a
+// Service proxy's forwarding trust. The router's native request policy belongs
+// only to the Component: changing a Caddyfile must not redeploy applications.
+func (planner *authoredUnitPlanner) serviceRouterTopology() core.ComponentSpec {
+	router := planner.input.desired.Input.Components[string(core.ComponentCapabilityHTTPRouter)]
+	router.ImplementationConfig = core.ComponentImplementationConfig{}
+	return router
+}
+
 // The router unit serializes changes to its shared forwarding choice against
 // these Service resources. Claims survive cancellation/recovery; acquiring them
 // does not authorize this Component child to mutate a Service workload.
