@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,6 +20,36 @@ const MaximumConfigurationBytes = 1024 * 1024
 // It checks the actual listeners and upstreams, not merely a generation label.
 // The returned routing set is evidence from these bytes, never current intent.
 func Read(implementation Implementation, value []byte) (Configuration, error) {
+	configuration, err := readConfiguration(implementation, value)
+	if err != nil {
+		return Configuration{}, err
+	}
+	canonical, err := Render(configuration)
+	if err != nil || !bytes.Equal(canonical, value) {
+		return Configuration{}, invalidConfiguration()
+	}
+	return configuration, nil
+}
+
+// NormalizeCaddyObservation opens a complete live or restart document and emits
+// the same stable representation used by sealed inputs. Caddy's admin API may
+// reorder object keys; that must not change the identity of the routing policy.
+func NormalizeCaddyObservation(value []byte) ([]byte, error) {
+	if len(value) == 0 || len(value) > MaximumConfigurationBytes {
+		return nil, invalidConfiguration()
+	}
+	canonical, err := jcs.Canonicalize(value)
+	if err != nil {
+		return nil, invalidConfiguration()
+	}
+	configuration, err := readConfiguration(Caddy, canonical)
+	if err != nil {
+		return nil, err
+	}
+	return Render(configuration)
+}
+
+func readConfiguration(implementation Implementation, value []byte) (Configuration, error) {
 	if len(value) == 0 || len(value) > MaximumConfigurationBytes {
 		return Configuration{}, invalidConfiguration()
 	}
@@ -46,10 +77,6 @@ func Read(implementation Implementation, value []byte) (Configuration, error) {
 		return Configuration{}, invalidConfiguration()
 	}
 	slices.SortFunc(configuration.Ports, comparePorts)
-	canonical, err := Render(configuration)
-	if err != nil || !bytes.Equal(canonical, value) {
-		return Configuration{}, invalidConfiguration()
-	}
 	return configuration, nil
 }
 

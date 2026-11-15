@@ -14,7 +14,15 @@ import (
 // Rationale: REL-02/SVC-15. Live routing can match while restart bytes are stale
 // or absent. Neither probe nor recovery may acknowledge that split state.
 func TestRestorationRequiresLiveAndRestartProxyConfig(t *testing.T) {
-	config := []byte(`{"apps":{}}`)
+	config, err := serviceproxy.Render(serviceproxy.Configuration{
+		Implementation: serviceproxy.Caddy,
+		ReleaseID:      "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", Generation: 1,
+		Ports:     []serviceproxy.Port{{Number: 8080, Protocol: serviceproxy.TCP}},
+		Upstreams: []string{"api"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	digest := sha256.Sum256(config)
 	for _, test := range []struct {
 		name    string

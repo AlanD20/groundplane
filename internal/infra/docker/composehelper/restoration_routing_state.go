@@ -83,7 +83,7 @@ func readRestorationRouting(ctx context.Context, taskRunner runner.Runner, conta
 	if err != nil || result.ExitCode != 0 {
 		return nil, errs.New(errs.KindRequestFailed, "restoration routing could not be read")
 	}
-	return canonicalProxyJSON(result.Stdout)
+	return canonicalProxyJSON(implementation, result.Stdout)
 }
 
 // Activation can be interrupted between restart-file publication and live
@@ -108,7 +108,7 @@ func repairRestorationPosition(ctx context.Context, taskRunner runner.Runner,
 			hash := sha256.Sum256(manifest)
 			digest = hash[:]
 		}
-		if !proxyBytesMatch(observed, digest) {
+		if !proxyBytesMatch(implementation, observed, digest) {
 			continue
 		}
 		failure, err := activateCapturedProxy(ctx, taskRunner, containerID, proxy.GetProxyImplementation(), manifest)

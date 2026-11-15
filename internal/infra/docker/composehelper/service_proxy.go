@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -90,7 +91,10 @@ func runWithComposeBase(
 	return result, nil, nil
 }
 
-func canonicalProxyJSON(value []byte) ([]byte, error) {
+func canonicalProxyJSON(implementation serviceproxy.Implementation, value []byte) ([]byte, error) {
+	if implementation == serviceproxy.Caddy {
+		return serviceproxy.NormalizeCaddyObservation(value)
+	}
 	return jcs.Canonicalize(value)
 }
 

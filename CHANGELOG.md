@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Verify live and restart Caddy routing with the sealed configuration encoding,
+  so admin API key ordering cannot falsely time out a trusted proxy promotion.
 - Resolve captured Service network names through the frozen Zone identities
   when selecting trusted ingress networks for native Caddy forwarding.
 - Accept exact captured serving-proxy configurations during blue-green and

@@ -79,7 +79,7 @@ func observeRestorationProxy(
 	if err != nil || result.ExitCode != 0 {
 		return false, errs.New(errs.KindRequestFailed, "restoration proxy observation failed")
 	}
-	if !proxyBytesMatch(result.Stdout, digest) {
+	if !proxyBytesMatch(selected, result.Stdout, digest) {
 		return false, nil
 	}
 	command, err := taskRunner.Run(ctx, runner.RunCmdOpts{
@@ -100,11 +100,11 @@ func observeRestorationProxy(
 	if err != nil || stored.ExitCode != 0 {
 		return false, errs.New(errs.KindRequestFailed, "restoration proxy restart observation failed")
 	}
-	return proxyBytesMatch(stored.Stdout, digest), nil
+	return proxyBytesMatch(selected, stored.Stdout, digest), nil
 }
 
-func proxyBytesMatch(value, digest []byte) bool {
-	canonical, err := canonicalProxyJSON(value)
+func proxyBytesMatch(implementation serviceproxy.Implementation, value, digest []byte) bool {
+	canonical, err := canonicalProxyJSON(implementation, value)
 	if err != nil {
 		return false
 	}
