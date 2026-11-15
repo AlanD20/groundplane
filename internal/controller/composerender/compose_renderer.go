@@ -262,12 +262,19 @@ func validateComposeRenderInput(input ComposeRenderInput) error {
 		return errs.New(errs.KindInternal, "compose authorized volume directory is invalid")
 	}
 	for serviceID, release := range input.Releases {
-		if release.ServingProxyConfig != nil &&
-			(release.Strategy != domain.StrategyBlueGreen || release.ServingTarget != domain.WorkloadRolling) {
-			return errs.New(
-				errs.KindInternal,
-				"captured initial proxy configuration requires a rolling-to-blue-green transition",
-			)
+		if captured := release.ServingProxyConfig; captured != nil {
+			configuration, err := serviceproxy.Read(captured.Implementation, captured.JSON)
+			if err != nil ||
+				(release.Strategy != domain.StrategyBlueGreen && release.Strategy != domain.StrategyRolling) ||
+				captured.Implementation != release.ProxyImplementation ||
+				sha256.Sum256(captured.JSON) != captured.SHA256 ||
+				configuration.ReleaseID != release.ServingReleaseID ||
+				configuration.Generation != release.ServingProxyGeneration {
+				return errs.New(
+					errs.KindInternal,
+					"captured initial proxy configuration does not match the serving Release",
+				)
+			}
 		}
 		if release.Strategy == domain.StrategyRolling {
 			if err := validateRollingRenderIdentity(input, serviceID, release); err != nil {

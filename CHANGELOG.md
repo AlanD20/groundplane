@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Accept exact captured serving-proxy configurations during blue-green and
+  rolling rendering, validating their hash, engine, Release and generation.
 - Preserve trusted ingress HTTPS headers through native Caddy Service proxies
   using Release-captured, shared Environment Zone networks, with strict routing
   validation and exact predecessor configuration during rollout and recovery.
