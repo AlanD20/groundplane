@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Deliver captured network prerequisites for direct Service and Group releases
+  using their own resource identity, while retaining parent-scope and ensure-only guards.
+- Settle expired Network assignments that never obtained a Start grant, using
+  captured failure evidence and atomic checks against a concurrent start.
 - Size Group publication batches against the actual atomic byte and operation
   budgets, including the Task progress write, so larger environments can deploy.
 - Read retained Blueprint declarations by their sealed identity and common

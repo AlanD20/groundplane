@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/networkexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -117,7 +118,7 @@ func (owner *AgentWork) capturedAssignment(
 		return nil, nil, err
 	}
 	if input.EnvironmentId != task.Scope.EnvironmentID || input.NetworkId != item.TargetID ||
-		(task.Action != workexecution.ActionApply && item.TargetID != task.TargetID) {
+		!networkAssignmentParentMatches(task, item, input) {
 		return nil, nil, errs.New(errs.KindStateConflict, "Network assignment targets different captured resources")
 	}
 	owned, err := executionplan.OpenNetworkWorkInput(attempt, input)
@@ -129,4 +130,22 @@ func (owner *AgentWork) capturedAssignment(
 		return nil, nil, err
 	}
 	return &agentpb.NetworkWorkAssignment{Attempt: identity, Input: owned}, guards, nil
+}
+
+// A prerequisite belongs to its captured Work item; its parent names the
+// application Service or Group. Direct network actions still name the network,
+// and a Release can only ensure a bridge, never authorize its removal.
+func networkAssignmentParentMatches(task workexecution.Task, item workexecution.Item,
+	input *agentpb.NetworkWorkInput,
+) bool {
+	switch task.Action {
+	case workexecution.ActionApply:
+		return task.TargetID == task.Scope.EnvironmentID
+	case workexecution.ActionDeploy, workexecution.ActionRollback:
+		return input.Action == agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_ENSURE &&
+			(ids.Validate(ids.KindService, task.TargetID) == nil ||
+				ids.Validate(ids.KindReleaseGroup, task.TargetID) == nil)
+	default:
+		return item.TargetID == task.TargetID
+	}
 }

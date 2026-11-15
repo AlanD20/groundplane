@@ -178,6 +178,27 @@ func (delivery *AgentDeliveries) Dispatch(
 			delete(delivered, workID)
 		}
 	}
+	// An assignment without a durable Start grant cannot have run host effects.
+	// Settle expired Network assignments even when all Agent slots are occupied;
+	// repeatedly delivering an already expired attempt cannot obtain Start.
+	for _, assignment := range assignments {
+		attempt := assignment.Attempt.Attempt
+		at := time.Now().UTC()
+		if assignment.Item.Item.Operation != workexecution.Network || attempt.StartedAt != nil ||
+			at.Before(attempt.Deadline) {
+			continue
+		}
+		view, err := delivery.queue.ReadResume(ctx, attempt.TaskID, attempt.WorkItemID, attempt.ID, identity)
+		if err != nil {
+			return issues, err
+		}
+		if !view.ActiveAttempt || view.Attempt.Attempt.StartedAt != nil {
+			continue
+		}
+		if err := delivery.networks.ExpireUnstarted(ctx, view, authorization, at); err != nil {
+			issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
+		}
+	}
 	// Cancel hints use no worker capacity and must be sent even when every slot
 	// is occupied. Durable Stop/revocation remains the authority; a hint cannot
 	// release claims or cancel a captured recovery attempt.

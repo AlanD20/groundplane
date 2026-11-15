@@ -2,6 +2,7 @@ package workdispatch
 
 import (
 	"context"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
@@ -61,6 +62,7 @@ type AttachDeliveryOwner interface {
 
 type NetworkDeliveryOwner interface {
 	LoadWorkAssignment(context.Context, workqueue.ResumeView) (*agentpb.NetworkWorkAssignment, error)
+	ExpireUnstarted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization, time.Time) error
 	ReconcileInterrupted(context.Context, workqueue.ResumeView, agentregistration.WorkAuthorization) error
 }
 
