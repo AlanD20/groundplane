@@ -73,11 +73,23 @@ func (publications *Publications) Advance(ctx context.Context, taskID string, at
 		return err
 	}
 	if batch.Planning {
-		if batch.Rejected || len(batch.Graph) != 0 || len(batch.Authority.Conditions) != 0 ||
-			len(batch.Authority.Mutations) != 0 {
+		if batch.Rejected || len(batch.Graph) != 0 {
 			return errs.New(errs.KindInternal, "planning publication cannot also publish execution work")
 		}
-		return nil
+		if len(batch.Authority.Conditions) == 0 && len(batch.Authority.Mutations) == 0 {
+			return nil
+		}
+		if len(batch.Authority.Conditions) == 0 || len(batch.Authority.Mutations) == 0 {
+			return errs.New(errs.KindInternal, "planning publication requires guarded metadata changes")
+		}
+		guard := workqueue.Change{Conditions: []keyvalue.Condition{{
+			Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision,
+		}}}
+		result, err := publications.queue.Commit(ctx, guard, batch.Authority)
+		if err == nil && !result.Succeeded {
+			err = errs.New(errs.KindStateConflict, "task or metadata changed during publication planning")
+		}
+		return err
 	}
 	if len(batch.Authority.Conditions) == 0 {
 		return errs.New(errs.KindInternal, "task publication requires captured-plan authority comparisons")

@@ -100,6 +100,11 @@ func (repository *Preparer) PrepareReleaseGroupBlueprintMutation(
 	mutations := []etcdstore.Mutation{collectionMutation}
 	for _, id := range currentIDs {
 		versioned := currentByID[id]
+		// Every definition writer advances the collection epoch. Unchanged
+		// members need no per-key comparisons in a bounded publication batch.
+		if next, retained := desiredByID[id]; retained && domain.Equal(versioned.Group, next) {
+			continue
+		}
 		indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
 				ReleaseGroupOwnerKey(environmentID, id),
@@ -215,6 +220,10 @@ func (repository *Preparer) PrepareReleaseGroupBlueprintMutation(
 				Value: []byte(id),
 			},
 		)
+	}
+	if len(mutations) == 1 {
+		// A read-only completion guard must not churn the collection epoch.
+		mutations = nil
 	}
 	return newReleaseGroupBlueprintPreparedMutation(
 		environmentID,

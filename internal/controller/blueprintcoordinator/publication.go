@@ -11,13 +11,20 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type Publication struct{ records *blueprintunits.Repository }
+type ReleaseGroupPublication interface {
+	PrepareReleaseGroupPublication(context.Context, workqueue.TaskSnapshot, int64) (workqueue.Change, bool, error)
+}
 
-func NewPublication(records *blueprintunits.Repository) (*Publication, error) {
-	if records == nil {
+type Publication struct {
+	records *blueprintunits.Repository
+	groups  ReleaseGroupPublication
+}
+
+func NewPublication(records *blueprintunits.Repository, groups ReleaseGroupPublication) (*Publication, error) {
+	if records == nil || groups == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint publication requires captured work storage")
 	}
-	return &Publication{records: records}, nil
+	return &Publication{records: records, groups: groups}, nil
 }
 
 func (publication *Publication) PreparePublication(ctx context.Context, task workqueue.TaskSnapshot,
@@ -33,13 +40,23 @@ func (publication *Publication) PreparePublication(ctx context.Context, task wor
 	if err != nil {
 		return workdispatch.PublicationBatch{}, err
 	}
+	metadata, pending, err := publication.groups.PrepareReleaseGroupPublication(ctx, task, revision)
+	if err != nil {
+		return workdispatch.PublicationBatch{}, err
+	}
+	if pending {
+		return workdispatch.PublicationBatch{Planning: true, Authority: metadata}, nil
+	}
 	// Even a superseded Task finishes publishing its captured membership so the
 	// stop walker can settle it. Dispatch independently checks the stop boundary.
+	metadata.Conditions = append(metadata.Conditions, keyvalue.Condition{
+		Key: blueprintunits.CapturedGraphKey(
+			graph.Record.EnvironmentID,
+			graph.Record.TaskID,
+		), ModRevision: graph.Revision,
+	})
 	return workdispatch.PublicationBatch{
-		Graph: graph.Record.Items,
-		Authority: workqueue.Change{Conditions: []keyvalue.Condition{{
-			Key:         blueprintunits.CapturedGraphKey(graph.Record.EnvironmentID, graph.Record.TaskID),
-			ModRevision: graph.Revision,
-		}}},
+		Graph:     graph.Record.Items,
+		Authority: metadata,
 	}, nil
 }

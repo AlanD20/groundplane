@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Publish Blueprint Release Groups in bounded, guarded batches before opening
+  execution, preserving group identities across publication retries and restarts.
 - Keep deployment and recovery stages visible after embedded Scripts by
   appending to their shared diagnostic sequence without reopening completed stages.
 - Preserve literal runtime variables in Blueprint exports and direct edits,

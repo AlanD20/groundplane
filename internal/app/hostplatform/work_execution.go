@@ -282,7 +282,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	blueprintPublication, err := blueprintcoordinator.NewPublication(owners.blueprintLedger)
+	blueprintPublication, err := blueprintcoordinator.NewPublication(owners.blueprintLedger, dependencies.Blueprints)
 	if err != nil {
 		return nil, err
 	}

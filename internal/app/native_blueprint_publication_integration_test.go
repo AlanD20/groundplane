@@ -382,7 +382,7 @@ func (f *nativeBlueprintPublicationFixture) publisher(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := blueprintcoordinator.NewPublication(records)
+	owner, err := blueprintcoordinator.NewPublication(records, nativeBlueprintPublicationMetadata{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,6 +393,15 @@ func (f *nativeBlueprintPublicationFixture) publisher(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// This fixture exercises captured membership only; it authors no Release Groups.
+type nativeBlueprintPublicationMetadata struct{}
+
+func (nativeBlueprintPublicationMetadata) PrepareReleaseGroupPublication(
+	context.Context, workqueue.TaskSnapshot, int64,
+) (workqueue.Change, bool, error) {
+	return workqueue.Change{}, false, nil
 }
 
 func (f *nativeBlueprintPublicationFixture) commit(t *testing.T, changes ...workqueue.Change) {

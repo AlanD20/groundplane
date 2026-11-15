@@ -48,51 +48,6 @@ func NewReleaseGroupBlueprintPlanner(
 	return &ReleaseGroupBlueprintPlanner{groups: groups, mutations: mutations}, nil
 }
 
-// Prepare returns one opaque persistence fragment for the parent Blueprint
-// publication transaction.
-func (planner *ReleaseGroupBlueprintPlanner) Prepare(
-	ctx context.Context,
-	environmentID string,
-	specs map[string]core.ReleaseGroupSpec,
-	services []core.Service,
-	allocate ReleaseGroupIDAllocator,
-) (groupstore.ReleaseGroupBlueprintPreparedMutation, error) {
-	current, readRevision, err := planner.snapshot(ctx, environmentID)
-	if err != nil {
-		return groupstore.ReleaseGroupBlueprintPreparedMutation{}, err
-	}
-	previous := make([]ReleaseGroupIdentity, len(current))
-	snapshot := make([]groupstore.ReleaseGroupSnapshotEntry, len(current))
-	for index, versioned := range current {
-		previous[index] = ReleaseGroupIdentity{
-			ID:   versioned.Group.ID,
-			Name: versioned.Group.Name,
-		}
-		snapshot[index] = groupstore.ReleaseGroupSnapshotEntry{
-			Group:        versioned.Group,
-			Revision:     versioned.Revision,
-			ReadRevision: versioned.ReadRevision,
-		}
-	}
-	reconciled, err := ReconcileBlueprintReleaseGroups(
-		environmentID,
-		specs,
-		services,
-		previous,
-		allocate,
-	)
-	if err != nil {
-		return groupstore.ReleaseGroupBlueprintPreparedMutation{}, err
-	}
-	return planner.mutations.PrepareReleaseGroupBlueprintMutation(
-		ctx,
-		environmentID,
-		readRevision,
-		snapshot,
-		reconciled.Desired,
-	)
-}
-
 func (planner *ReleaseGroupBlueprintPlanner) snapshot(
 	ctx context.Context,
 	environmentID string,
