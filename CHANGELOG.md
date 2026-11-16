@@ -14,6 +14,8 @@ Initial single-host release.
 - Keep disabled Cloudflare Tunnels valid without a token throughout Component
   storage and Blueprint preparation; enabling a Tunnel still requires a valid
   Secret reference.
+- Preserve the applied configuration receipt for disabled authored Components,
+  so Blueprint Service preparation can proceed after their runtime stops.
 - Show bounded input-preparation issues in Task details and CLI output instead
   of leaving waiting work unexplained. Repeated identical issues do not add
   writes or manufacture execution attempts.

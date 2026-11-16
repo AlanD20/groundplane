@@ -105,7 +105,9 @@ func (repository *Repository) PrepareComponentCompletionReceipt(
 		ids.KindComponent,
 		workexecution.Component,
 		resourceReceiptEvidence{
-			direction: workexecution.Forward, result: checkpoint.Evidence, removal: removed, absent: disabled,
+			// A disabled authored Component is applied configuration. Only
+			// removal retires its declaration and clears its fingerprint.
+			direction: workexecution.Forward, result: checkpoint.Evidence, removal: removed, absent: removed,
 		},
 	)
 }
