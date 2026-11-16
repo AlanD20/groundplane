@@ -109,6 +109,7 @@ func (adapter *localAgentRuntimeAdapter) Materialize(
 	runtimeConfig.Storage.VolumeRoot = adapter.volumeRoot
 	runtimeConfig.Runtime.PullIntervalSeconds = material.Config.PullIntervalSeconds
 	runtimeConfig.Runtime.MaxConcurrentTasks = material.Config.MaxConcurrentTasks
+	runtimeConfig.Runtime.MaxParallelOperationsPerTask = material.Config.MaxParallelOperationsPerTask
 	runtimeConfig.Runtime.Labels = cloneRuntimeLabels(material.Config.Labels)
 
 	ciphertext := append([]byte(nil), material.EncryptedToken...)

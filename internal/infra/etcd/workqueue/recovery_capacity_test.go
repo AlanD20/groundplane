@@ -50,7 +50,8 @@ func TestNativeStoppedRecoveryRetainsClaimsAndRetryIdentity(t *testing.T) {
 		request := Assignment{Task: task, Item: item, Executor: initial.Executor,
 			Claims: recoveryClaims(t, store, item.Item), HostEffect: host,
 			QueueRevision: store.values[QueueKey(item.Item)].ModRevision, Slot: slot,
-			AttemptID: ids.New(ids.KindAttempt), Direction: direction,
+			AdmissionRevision: store.values[AdmissionFenceKey(initial.Executor.Record.Identity)].ModRevision,
+			AttemptID:         ids.New(ids.KindAttempt), Direction: direction,
 			At: at.Add(time.Duration(second) * time.Second), Deadline: item.Item.Deadline}
 		change, attempt, err := PrepareAssignment(request)
 		if err != nil {

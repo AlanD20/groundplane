@@ -201,8 +201,8 @@ func sizedControllerMessage(t *testing.T, target int) *agentpb.ControllerMessage
 	message := &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ConfigUpdate{
 		ConfigUpdate: &agentpb.ConfigUpdate{AgentConfig: &agentpb.AgentConfig{
 			PullIntervalSeconds: 1,
-			MaxConcurrentTasks:  1,
-			Labels:              []*agentpb.AgentLabel{{Key: "payload", Value: payload}},
+			MaxConcurrentTasks:  1, MaxParallelOperationsPerTask: 1,
+			Labels: []*agentpb.AgentLabel{{Key: "payload", Value: payload}},
 		}},
 	}}
 	for proto.Size(message) > target {

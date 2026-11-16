@@ -24,6 +24,10 @@ func ExecutorKey(identity workexecution.Identity) string {
 	return root + "executors/" + placement(identity.Executor, identity.HostID)
 }
 
+func AdmissionFenceKey(identity workexecution.Identity) string {
+	return root + "admission-fences/" + placement(identity.Executor, identity.HostID)
+}
+
 func QueuePrefix(target workexecution.Placement) string {
 	return root + "ready/" + placement(target.Executor, target.HostID) + "/"
 }

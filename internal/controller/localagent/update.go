@@ -68,7 +68,7 @@ func (manager *Manager) update(ctx context.Context, request UpdateRequest) error
 		ctx,
 		stored.Record.ID,
 		stored.Record.Generation,
-		stored.Record.Config.MaxConcurrentTasks,
+		stored.Record.Config.MaxConcurrentTasks*stored.Record.Config.MaxParallelOperationsPerTask,
 	); err != nil {
 		return safePortError(ctx, err, "local agent must be idle before update")
 	}

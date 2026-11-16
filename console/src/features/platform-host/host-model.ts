@@ -31,7 +31,8 @@ export type HostInfo = {
   agent: {
     status: HealthState;
     pullInterval: string;
-    maxConcurrent: number;
+    maxConcurrentTasks: number;
+    maxParallelOperationsPerTask: number;
     labels: string[];
   };
 };
@@ -77,7 +78,8 @@ export function hostFromAPI(host: HostResponse): HostInfo {
     agent: {
       status: health(host.agent.status),
       pullInterval: host.agent.pull_interval,
-      maxConcurrent: host.agent.max_concurrent,
+      maxConcurrentTasks: host.agent.max_concurrent_tasks,
+      maxParallelOperationsPerTask: host.agent.max_parallel_operations_per_task,
       labels: [...(host.agent.labels ?? [])],
     },
   };

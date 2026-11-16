@@ -15,7 +15,7 @@ func (manager *Manager) resumeDelete(ctx context.Context, stored StoredRecord) e
 		ctx,
 		record.ID,
 		record.Generation,
-		record.Config.MaxConcurrentTasks,
+		record.Config.MaxConcurrentTasks*record.Config.MaxParallelOperationsPerTask,
 		RemovedTaskReason,
 	); err != nil {
 		return safePortError(ctx, err, "local agent active task abortion failed")

@@ -2029,10 +2029,11 @@ type AgentConfig struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/AgentConfig.json
-	Schema              *string           `json:"$schema,omitempty"`
-	Labels              map[string]string `json:"labels"`
-	MaxConcurrentTasks  int64             `json:"max_concurrent_tasks"`
-	PullIntervalSeconds int64             `json:"pull_interval_seconds"`
+	Schema                       *string           `json:"$schema,omitempty"`
+	Labels                       map[string]string `json:"labels"`
+	MaxConcurrentTasks           int64             `json:"max_concurrent_tasks"`
+	MaxParallelOperationsPerTask int64             `json:"max_parallel_operations_per_task"`
+	PullIntervalSeconds          int64             `json:"pull_interval_seconds"`
 }
 
 // AgentConfigReplacement defines model for AgentConfigReplacement.
@@ -2040,10 +2041,11 @@ type AgentConfigReplacement struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/AgentConfigReplacement.json
-	Schema              *string           `json:"$schema,omitempty"`
-	Labels              map[string]string `json:"labels"`
-	MaxConcurrentTasks  int64             `json:"max_concurrent_tasks"`
-	PullIntervalSeconds int64             `json:"pull_interval_seconds"`
+	Schema                       *string           `json:"$schema,omitempty"`
+	Labels                       map[string]string `json:"labels"`
+	MaxConcurrentTasks           int64             `json:"max_concurrent_tasks"`
+	MaxParallelOperationsPerTask int64             `json:"max_parallel_operations_per_task"`
+	PullIntervalSeconds          int64             `json:"pull_interval_seconds"`
 }
 
 // AgentUpdate defines model for AgentUpdate.
@@ -3543,10 +3545,11 @@ type Host struct {
 
 // HostAgent defines model for HostAgent.
 type HostAgent struct {
-	Labels        *[]string `json:"labels"`
-	MaxConcurrent int64     `json:"max_concurrent"`
-	PullInterval  string    `json:"pull_interval"`
-	Status        string    `json:"status"`
+	Labels                       *[]string `json:"labels"`
+	MaxConcurrentTasks           int64     `json:"max_concurrent_tasks"`
+	MaxParallelOperationsPerTask int64     `json:"max_parallel_operations_per_task"`
+	PullInterval                 string    `json:"pull_interval"`
+	Status                       string    `json:"status"`
 }
 
 // HostCPU defines model for HostCPU.

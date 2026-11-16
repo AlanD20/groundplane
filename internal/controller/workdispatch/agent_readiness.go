@@ -18,10 +18,10 @@ import (
 func (delivery *AgentDeliveries) Ready(
 	ctx context.Context,
 	authorization agentregistration.WorkAuthorization,
-	capacity uint16,
+	limits workexecution.AgentConcurrency,
 	stagingReady bool,
 ) ([]Issue, error) {
-	if delivery == nil || ctx == nil || capacity == 0 || capacity > 256 {
+	if delivery == nil || ctx == nil || limits.Validate() != nil {
 		return nil, errs.New(errs.KindInternal, "Agent readiness requires configured capacity")
 	}
 	guards, err := authorization.Conditions()
@@ -51,7 +51,9 @@ func (delivery *AgentDeliveries) Ready(
 			}
 		}
 	}
-	if current.Record.Ready && current.Record.Capacity == capacity &&
+	if current.Record.Ready && current.Record.Capacity == limits.Capacity() &&
+		current.Record.MaxConcurrentTasks == limits.Tasks &&
+		current.Record.MaxParallelOperationsPerTask == limits.OperationsPerTask &&
 		slices.Equal(current.Record.UnavailableOperations, unavailable) {
 		return nil, nil
 	}
@@ -408,7 +410,9 @@ func (delivery *AgentDeliveries) Ready(
 			return issues, err
 		}
 	}
-	change, err := workqueue.PrepareAvailability(current, identity, true, capacity, unavailable)
+	current.Record.MaxConcurrentTasks = limits.Tasks
+	current.Record.MaxParallelOperationsPerTask = limits.OperationsPerTask
+	change, err := workqueue.PrepareAvailability(current, identity, true, limits.Capacity(), unavailable)
 	if err != nil {
 		return issues, err
 	}

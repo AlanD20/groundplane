@@ -11358,12 +11358,13 @@ func (x *Authenticate) GetChannelSchema() uint32 {
 }
 
 type AgentConfig struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	PullIntervalSeconds int32                  `protobuf:"varint,1,opt,name=pull_interval_seconds,json=pullIntervalSeconds,proto3" json:"pull_interval_seconds,omitempty"`
-	MaxConcurrentTasks  int32                  `protobuf:"varint,2,opt,name=max_concurrent_tasks,json=maxConcurrentTasks,proto3" json:"max_concurrent_tasks,omitempty"`
-	Labels              []*AgentLabel          `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty"` // sorted by unique key
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"open.v1"`
+	PullIntervalSeconds          int32                  `protobuf:"varint,1,opt,name=pull_interval_seconds,json=pullIntervalSeconds,proto3" json:"pull_interval_seconds,omitempty"`
+	MaxConcurrentTasks           int32                  `protobuf:"varint,2,opt,name=max_concurrent_tasks,json=maxConcurrentTasks,proto3" json:"max_concurrent_tasks,omitempty"`
+	Labels                       []*AgentLabel          `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty"` // sorted by unique key
+	MaxParallelOperationsPerTask int32                  `protobuf:"varint,4,opt,name=max_parallel_operations_per_task,json=maxParallelOperationsPerTask,proto3" json:"max_parallel_operations_per_task,omitempty"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *AgentConfig) Reset() {
@@ -11415,6 +11416,13 @@ func (x *AgentConfig) GetLabels() []*AgentLabel {
 		return x.Labels
 	}
 	return nil
+}
+
+func (x *AgentConfig) GetMaxParallelOperationsPerTask() int32 {
+	if x != nil {
+		return x.MaxParallelOperationsPerTask
+	}
+	return 0
 }
 
 type AgentLabel struct {
@@ -49153,11 +49161,12 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x15execution_plan_schema\x18\x03 \x01(\rR\x13executionPlanSchema\x12-\n" +
 	"\x12process_generation\x18\x04 \x01(\fR\x11processGeneration\x12I\n" +
 	"!postgres16_managed_release_sha256\x18\x05 \x01(\fR\x1epostgres16ManagedReleaseSha256\x12%\n" +
-	"\x0echannel_schema\x18\x06 \x01(\rR\rchannelSchema\"\xad\x01\n" +
+	"\x0echannel_schema\x18\x06 \x01(\rR\rchannelSchema\"\xf5\x01\n" +
 	"\vAgentConfig\x122\n" +
 	"\x15pull_interval_seconds\x18\x01 \x01(\x05R\x13pullIntervalSeconds\x120\n" +
 	"\x14max_concurrent_tasks\x18\x02 \x01(\x05R\x12maxConcurrentTasks\x128\n" +
-	"\x06labels\x18\x03 \x03(\v2 .groundplane.agent.v1.AgentLabelR\x06labels\"4\n" +
+	"\x06labels\x18\x03 \x03(\v2 .groundplane.agent.v1.AgentLabelR\x06labels\x12F\n" +
+	" max_parallel_operations_per_task\x18\x04 \x01(\x05R\x1cmaxParallelOperationsPerTask\"4\n" +
 	"\n" +
 	"AgentLabel\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

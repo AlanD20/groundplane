@@ -132,6 +132,7 @@ type executionWorkers struct {
 	exchange        executionExchange
 	ownership       *agentownership.Lease
 	limit           int
+	limits          workexecution.AgentConcurrency
 	closed          bool
 	active          map[string]activeExecution
 	outputs         chan executionOutput
@@ -139,7 +140,7 @@ type executionWorkers struct {
 
 func newExecutionWorkers(
 	ctx context.Context,
-	limit int,
+	limits workexecution.AgentConcurrency,
 	identity workexecution.Identity,
 	executor *releaseruntime.Executor,
 	recovery *releaseruntime.RecoveryExecutor,
@@ -172,7 +173,8 @@ func newExecutionWorkers(
 	if removalRecovery == nil || lifecycles == nil || components == nil || entries == nil || attachProvision == nil {
 		return nil, errs.New(errs.KindInternal, "Agent Component executor is required")
 	}
-	if ctx == nil || limit < 1 || limit > 256 || identity.Validate() != nil ||
+	limit := int(limits.Capacity())
+	if ctx == nil || limits.Validate() != nil || identity.Validate() != nil ||
 		identity.Executor != workexecution.Agent ||
 		executor == nil ||
 		recovery == nil ||
@@ -213,6 +215,7 @@ func newExecutionWorkers(
 		entries:         entries,
 		attachProvision: attachProvision,
 		limit:           limit,
+		limits:          limits,
 		ownership:       ownership,
 		active:          make(map[string]activeExecution),
 		outputs:         make(chan executionOutput, limit),
@@ -238,7 +241,7 @@ func (workers *executionWorkers) submit(delivery *agentpb.ReleaseWorkAssignment,
 		}
 		return nil
 	}
-	if available <= 0 || len(workers.active) >= workers.limit {
+	if available <= 0 || !workers.canAdmit(attempt.TaskID) {
 		return errs.New(errs.KindStateConflict, "Release execution capacity is exhausted")
 	}
 	owned := proto.CloneOf(delivery)
@@ -595,4 +598,16 @@ func (workers *executionWorkers) close() {
 		attachexecution.ClearProvision(active.provision.GetProvision())
 		attachexecution.ClearRecoveryAssignment(active.attachRecovery)
 	}
+}
+
+// canAdmit is called under mu before an execution acquires host ownership.
+func (workers *executionWorkers) canAdmit(taskID string) bool {
+	if len(workers.active) >= workers.limit {
+		return false
+	}
+	counts := make(map[string]int)
+	for _, active := range workers.active {
+		counts[active.attempt.TaskID]++
+	}
+	return counts[taskID] < int(workers.limits.OperationsPerTask) && (counts[taskID] > 0 || len(counts) < int(workers.limits.Tasks))
 }

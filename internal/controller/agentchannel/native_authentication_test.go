@@ -36,7 +36,7 @@ func TestNativeConnectAuthenticationFailsClosed(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			server, peer, request := nativeConnectFixture(t)
 			auth := &fakeAuthenticator{authorization: Authorization{Generation: 1,
-				Config: &agentpb.AgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 1}}}
+				Config: &agentpb.AgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}}}
 			server.auth = auth
 			messages := []*agentpb.AgentMessage{request}
 			switch test.name {
@@ -82,7 +82,7 @@ func TestNativeConnectDoesNotResurrectRevokedAuthentication(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	auth := &pausedAuthenticator{authorization: Authorization{Generation: 1,
-		Config: &agentpb.AgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 1}},
+		Config: &agentpb.AgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}},
 		entered: make(chan struct{}), release: make(chan struct{}),
 	}
 	server.auth = auth

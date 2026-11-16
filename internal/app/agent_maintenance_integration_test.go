@@ -146,7 +146,7 @@ func seedAgentMaintenanceWork(t *testing.T, store *memoryHierarchyStore, queue *
 	at := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	executor := workqueue.ExecutorRecord{Identity: workexecution.Identity{Executor: workexecution.Agent,
 		HostID: binding.HostID, AgentID: agentID, Generation: 1}, ProcessGeneration: [16]byte{1},
-		Ready: true, Capacity: 1, Operations: []workexecution.Operation{workexecution.Release}}
+		Ready: true, Capacity: 1, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1, Operations: []workexecution.Operation{workexecution.Release}}
 	item := workexecution.Item{ID: ids.New(ids.KindWorkItem), TaskID: ids.New(ids.KindTask),
 		TargetID: ids.New(ids.KindService), Operation: workexecution.Release,
 		Placement: workexecution.Placement{Executor: workexecution.Agent, HostID: binding.HostID},

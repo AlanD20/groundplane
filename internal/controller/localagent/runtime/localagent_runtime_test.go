@@ -60,7 +60,7 @@ func TestLocalAgentRuntimeAdapterMaterializesCompleteRuntime(t *testing.T) {
 	material := localagent.RuntimeMaterial{
 		AgentID:        runtimeAdapterAgentID,
 		Generation:     7,
-		Config:         localagent.Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, Labels: labels},
+		Config:         localagent.Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1, Labels: labels},
 		EncryptedToken: []byte("stored-ciphertext"),
 	}
 	if err := adapter.Materialize(context.Background(), material); err != nil {

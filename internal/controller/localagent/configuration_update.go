@@ -21,8 +21,8 @@ func (manager *Manager) UpdateConfig(
 	if err := validateAgentID(agentID); err != nil {
 		return nil, err
 	}
-	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks <= 0 {
-		return nil, errs.New(errs.KindValidationFailed, "agent runtime config limits must be positive")
+	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 || config.MaxParallelOperationsPerTask < 1 || config.MaxParallelOperationsPerTask > 256 || config.MaxConcurrentTasks*config.MaxParallelOperationsPerTask > 256 {
+		return nil, errs.New(errs.KindValidationFailed, "agent runtime config pull interval must be positive and task limits must be 1..256 with at most 256 total operations")
 	}
 	if !validLabels(config.Labels) {
 		return nil, errs.New(errs.KindValidationFailed, "agent labels must contain valid NUL-free UTF-8")
@@ -66,7 +66,7 @@ func (manager *Manager) UpdateConfig(
 
 func equalConfig(left Config, right Config) bool {
 	if left.PullIntervalSeconds != right.PullIntervalSeconds ||
-		left.MaxConcurrentTasks != right.MaxConcurrentTasks || len(left.Labels) != len(right.Labels) {
+		left.MaxConcurrentTasks != right.MaxConcurrentTasks || left.MaxParallelOperationsPerTask != right.MaxParallelOperationsPerTask || len(left.Labels) != len(right.Labels) {
 		return false
 	}
 	for key, value := range left.Labels {

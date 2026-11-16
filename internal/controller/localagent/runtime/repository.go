@@ -208,8 +208,8 @@ func localAgentRecordToDurable(record localagent.Record) (localagentrecord.Local
 		Build: record.Build,
 		Config: localagentrecord.LocalAgentConfig{
 			PullIntervalSeconds: record.Config.PullIntervalSeconds,
-			MaxConcurrentTasks:  record.Config.MaxConcurrentTasks,
-			Labels:              cloneLocalAgentLabels(record.Config.Labels),
+			MaxConcurrentTasks:  record.Config.MaxConcurrentTasks, MaxParallelOperationsPerTask: record.Config.MaxParallelOperationsPerTask,
+			Labels: cloneLocalAgentLabels(record.Config.Labels),
 		},
 		EncryptedToken: append([]byte(nil), record.Credential.EncryptedToken...),
 		TokenDigest:    record.Credential.Digest,
@@ -235,8 +235,8 @@ func localAgentRecordFromDurable(
 			Generation: stored.Record.Generation, Phase: phase,
 			Config: localagent.Config{
 				PullIntervalSeconds: stored.Record.Config.PullIntervalSeconds,
-				MaxConcurrentTasks:  stored.Record.Config.MaxConcurrentTasks,
-				Labels:              cloneLocalAgentLabels(stored.Record.Config.Labels),
+				MaxConcurrentTasks:  stored.Record.Config.MaxConcurrentTasks, MaxParallelOperationsPerTask: stored.Record.Config.MaxParallelOperationsPerTask,
+				Labels: cloneLocalAgentLabels(stored.Record.Config.Labels),
 			},
 			Credential: localagent.Credential{
 				EncryptedToken: append([]byte(nil), stored.Record.EncryptedToken...),

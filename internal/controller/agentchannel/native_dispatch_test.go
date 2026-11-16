@@ -38,7 +38,7 @@ func (*nativeDispatchPeer) AccountJournal(context.Context, agentregistration.Wor
 }
 
 func (peer *nativeDispatchPeer) Ready(context.Context, agentregistration.WorkAuthorization,
-	uint16, bool,
+	workexecution.AgentConcurrency, bool,
 ) ([]workdispatch.Issue, error) {
 	if peer.readiness != nil {
 		return nil, peer.readiness()
@@ -59,17 +59,17 @@ func TestNativeDispatchDefersOnlyReadinessPublicationConflict(t *testing.T) {
 	defer payloads.close()
 	delivered := map[string]string{}
 	peer.readiness = func() error { return errs.New(errs.KindAgentReadinessChanged, "lost publication CAS") }
-	if err := server.dispatchWork(stream, session, 1, 1, 1, false, delivered, payloads); err != nil ||
+	if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, false, delivered, payloads); err != nil ||
 		peer.calls != 0 || len(stream.messages) != 0 {
 		t.Fatalf("publication conflict disconnected or granted work: %v", err)
 	}
 	peer.readiness = func() error { return errs.New(errs.KindStateConflict, "foreign executor") }
-	if kind, _ := errs.KindOf(server.dispatchWork(stream, session, 1, 1, 1, false, delivered, payloads)); kind != errs.KindStateConflict ||
+	if kind, _ := errs.KindOf(server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, false, delivered, payloads)); kind != errs.KindStateConflict ||
 		peer.calls != 0 {
 		t.Fatal("ordinary ownership refusal was swallowed")
 	}
 	peer.readiness = nil
-	if err := server.dispatchWork(stream, session, 1, 1, 1, false, delivered, payloads); err != nil ||
+	if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, false, delivered, payloads); err != nil ||
 		peer.calls != 1 || len(stream.messages) != 1 || len(delivered) != 1 {
 		t.Fatalf("fresh request did not deliver the exact saved attempt: %v", err)
 	}
@@ -143,7 +143,7 @@ func nativeDispatchFixture(t *testing.T) (*Server, *Session, *nativeDispatchPeer
 		ID: agentID, EnrollmentTaskID: ids.New(ids.KindTask), Generation: 1,
 		Image:          "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
 		Phase:          localagents.LocalAgentPhaseProvisioning,
-		Config:         localagents.LocalAgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 1},
+		Config:         localagents.LocalAgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1},
 		EncryptedToken: []byte("supplied-ciphertext"), TokenDigest: base64.RawURLEncoding.EncodeToString(digest[:]),
 		CreatedAt: at, TokenUpdatedAt: at,
 	})
@@ -151,7 +151,7 @@ func nativeDispatchFixture(t *testing.T) (*Server, *Session, *nativeDispatchPeer
 		t.Fatal(err)
 	}
 	process := [16]byte{1}
-	identity, err := identities.RegisterWorkProcess(t.Context(), agentID, 1, process, 1,
+	identity, err := identities.RegisterWorkProcess(t.Context(), agentID, 1, process, workexecution.AgentConcurrency{Tasks: 1, OperationsPerTask: 1},
 		[]workexecution.Operation{workexecution.Script})
 	if err != nil {
 		t.Fatal(err)
@@ -207,7 +207,9 @@ func TestNativeDispatchFencesPreparedDelivery(t *testing.T) {
 			}()
 			peer.prepare = func() { close(entered); <-release }
 			result := make(chan error, 1)
-			go func() { result <- server.dispatchWork(stream, session, 1, 1, 1, true, delivered, payloads) }()
+			go func() {
+				result <- server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, true, delivered, payloads)
+			}()
 			select {
 			case <-entered:
 			case <-ctx.Done():
@@ -278,7 +280,7 @@ func TestNativeDispatchFencesPreparedDelivery(t *testing.T) {
 					t.Fatal("pause did not finish after preparation drained")
 				}
 			}
-			if err := server.dispatchWork(stream, session, 1, 1, 1, true, delivered, payloads); err != nil {
+			if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, true, delivered, payloads); err != nil {
 				t.Fatal(err)
 			}
 			if mode == "pause" {

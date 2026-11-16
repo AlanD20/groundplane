@@ -42,7 +42,7 @@ func TestAgentChannelAuthenticatorTranslatesDurableAuthorization(t *testing.T) {
 	resolver := &fakeAgentChannelResolver{authorization: testlocalagents.LocalAgentChannelAuthorization{
 		AgentID: "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV", Generation: 7,
 		Config: testlocalagents.LocalAgentConfig{
-			PullIntervalSeconds: 3, MaxConcurrentTasks: 2,
+			PullIntervalSeconds: 3, MaxConcurrentTasks: 2, MaxParallelOperationsPerTask: 1,
 			Labels: map[string]string{"role": "local"},
 		},
 	}}

@@ -135,7 +135,7 @@ func (coordinator *Coordinator) validateAndDrain(ctx context.Context, operation 
 		agents[0].Agent.Phase != localagent.PhaseReady {
 		return errs.New(errs.KindStateConflict, "native update predecessor Agent changed")
 	}
-	maximum := agents[0].Agent.Config.MaxConcurrentTasks
+	maximum := agents[0].Agent.Config.MaxConcurrentTasks * agents[0].Agent.Config.MaxParallelOperationsPerTask
 	deadline := minTime(expected.CandidateDeadline(), coordinator.now().Add(upgrade.DrainTimeoutSeconds*time.Second))
 	for {
 		err := coordinator.work.RequireIdle(ctx, expected.Agent.ID, expected.Agent.Generation, maximum)

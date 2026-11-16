@@ -31,7 +31,7 @@ func (workers *executionWorkers) submitAttachRemoval(delivery *agentpb.AttachRem
 		}
 		return nil
 	}
-	if available <= 0 || len(workers.active) >= workers.limit {
+	if available <= 0 || !workers.canAdmit(input.Attempt.TaskID) {
 		return errs.New(errs.KindStateConflict, "Agent execution capacity is exhausted")
 	}
 	execution, err := workers.ownership.Begin(input.Attempt)

@@ -66,6 +66,7 @@ func TestMaterializeRecreatesExactRuntimeFromStoredCiphertext(t *testing.T) {
 		"runtime:\n" +
 		"    pull_interval_seconds: 2\n" +
 		"    max_concurrent_tasks: 3\n" +
+		"    max_parallel_operations_per_task: 1\n" +
 		"    labels:\n" +
 		"        arch: arm64\n" +
 		"        role: local\n" +
@@ -428,6 +429,7 @@ func testRuntimeConfig() config.AgentConfig {
 	runtimeConfig.AgentID = testAgentID
 	runtimeConfig.Runtime.PullIntervalSeconds = 2
 	runtimeConfig.Runtime.MaxConcurrentTasks = 3
+	runtimeConfig.Runtime.MaxParallelOperationsPerTask = 1
 	runtimeConfig.Runtime.Labels = map[string]string{"role": "local", "arch": "arm64"}
 	return runtimeConfig
 }

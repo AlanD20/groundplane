@@ -27,8 +27,8 @@ func TestLocalAgentReadServiceProjectsDurableAndLiveState(t *testing.T) {
 			Build:            buildversion.BuildIdentity{Version: "v0.4.2"},
 			Config: localagent.Config{
 				PullIntervalSeconds: 2,
-				MaxConcurrentTasks:  3,
-				Labels:              map[string]string{"arch": "arm64"},
+				MaxConcurrentTasks:  3, MaxParallelOperationsPerTask: 1,
+				Labels: map[string]string{"arch": "arm64"},
 			},
 		},
 		Healthy:   true,
@@ -76,8 +76,8 @@ func TestLocalAgentReadServiceReplacesConfig(t *testing.T) {
 	}
 	desired := apiTypes.AgentConfig{
 		PullIntervalSeconds: 5,
-		MaxConcurrentTasks:  2,
-		Labels:              map[string]string{"zone": "edge"},
+		MaxConcurrentTasks:  2, MaxParallelOperationsPerTask: 1,
+		Labels: map[string]string{"zone": "edge"},
 	}
 	response, err := service.UpdateAgentConfig(
 		context.Background(),
@@ -121,12 +121,12 @@ func (reader *fakeLocalAgentHealthReader) UpdateConfig(
 ) ([]byte, error) {
 	reader.updated = localagent.Config{
 		PullIntervalSeconds: config.PullIntervalSeconds,
-		MaxConcurrentTasks:  config.MaxConcurrentTasks,
-		Labels:              copyAgentLabels(config.Labels),
+		MaxConcurrentTasks:  config.MaxConcurrentTasks, MaxParallelOperationsPerTask: config.MaxParallelOperationsPerTask,
+		Labels: copyAgentLabels(config.Labels),
 	}
 	reader.key = key
 	if reader.responseBody == nil {
-		reader.responseBody = []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"labels":{"zone":"edge"}}`)
+		reader.responseBody = []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"labels":{"zone":"edge"}}`)
 	}
 	return append([]byte(nil), reader.responseBody...), nil
 }

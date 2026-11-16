@@ -156,6 +156,14 @@ typed authority and unknown-effect protection. There is no legacy execution
 fallback; this decision does not authorize deletion of workload
 data. The following rules still apply to current execution and its replacement.
 
+Agent execution has two independent configured limits: **Concurrent Tasks** bounds
+distinct in-flight Task IDs, while **Parallel operations per Task** bounds native
+operations belonging to each Task. Both are integers from 1 to 256, and their
+product cannot exceed 256. Defaults are three Tasks and three operations per Task,
+allowing at most nine operations in total. Sequential stages of one operation do
+not consume extra slots; dependencies and resource authority can further restrict
+parallel execution.
+
 Workload effects run through typed Agent Tasks. Native Controller Tasks own
 bootstrap, Runner, connection-check and persistence orchestration. Bootstrap
 and persistence-only operations do not require an Agent; a Backing access check

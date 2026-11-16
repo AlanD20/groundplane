@@ -41,7 +41,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		return status.Error(codes.Internal, "agent authorization generation is not available")
 	}
 	if authorization.Config.PullIntervalSeconds <= 0 ||
-		authorization.Config.MaxConcurrentTasks <= 0 {
+		agentConcurrency(authorization.Config).Validate() != nil {
 		return status.Error(codes.Internal, "agent configuration is invalid")
 	}
 	authorization.Config = proto.Clone(authorization.Config).(*agentpb.AgentConfig)
@@ -62,12 +62,12 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		session.ctx,
 		session,
 		authorization.Generation,
-		authorization.Config.MaxConcurrentTasks,
+		authorization.Config,
 	)
 	if err != nil {
 		return taskStoreStatus(err)
 	}
-	workDelivered := make(map[string]string, authorization.Config.MaxConcurrentTasks)
+	workDelivered := make(map[string]string, agentConcurrency(authorization.Config).Capacity())
 
 	config := proto.Clone(authorization.Config).(*agentpb.AgentConfig)
 	if err := stream.Send(&agentpb.ControllerMessage{
@@ -81,7 +81,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_WorkExecutorRegistration{WorkExecutorRegistration: registration}}); err != nil {
 		return err
 	}
-	payloads := newAssignmentPayloadDelivery(session.ctx, authorization.Config.MaxConcurrentTasks)
+	payloads := newAssignmentPayloadDelivery(session.ctx, int32(agentConcurrency(authorization.Config).Capacity()))
 	defer payloads.close()
 	received := make(chan agentReceiveResult, 1)
 	go receiveAgentMessages(stream, session, received)
@@ -178,7 +178,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			if !ready || capacity == 0 {
 				continue
 			}
-			if err := s.dispatchWork(stream, session, authorization.Generation, capacity, authorization.Config.MaxConcurrentTasks, staging.ready && reportedStagingReady, workDelivered, payloads); err != nil {
+			if err := s.dispatchWork(stream, session, authorization.Generation, capacity, authorization.Config, staging.ready && reportedStagingReady, workDelivered, payloads); err != nil {
 				return taskStoreStatus(err)
 			}
 		case connectReceived:
@@ -347,7 +347,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if err != nil {
 					return status.Error(codes.InvalidArgument, "agent Ready build provenance is invalid")
 				}
-				if ready.Capacity > authorization.Config.MaxConcurrentTasks {
+				if ready.Capacity > int32(agentConcurrency(authorization.Config).Capacity()) {
 					return status.Error(
 						codes.InvalidArgument,
 						"agent Ready capacity exceeds configuration",
@@ -376,7 +376,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					return taskStoreStatus(err)
 				}
 				if currentConfig == nil || currentConfig.PullIntervalSeconds <= 0 ||
-					currentConfig.MaxConcurrentTasks <= 0 {
+					agentConcurrency(currentConfig).Validate() != nil {
 					return status.Error(codes.Internal, "agent configuration is invalid")
 				}
 				if !proto.Equal(currentConfig, authorization.Config) {
@@ -386,8 +386,8 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					if !session.invalidateReady() {
 						return status.Error(codes.FailedPrecondition, "agent session is not current")
 					}
-					if ready.Capacity != authorization.Config.MaxConcurrentTasks ||
-						!payloads.resize(currentConfig.MaxConcurrentTasks) {
+					if ready.Capacity != int32(agentConcurrency(authorization.Config).Capacity()) ||
+						!payloads.resize(int32(agentConcurrency(currentConfig).Capacity())) {
 						continue
 					}
 					nextConfig := proto.Clone(currentConfig).(*agentpb.AgentConfig)
@@ -403,7 +403,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					authorization.Config = nextConfig
 					continue
 				}
-				if err := s.dispatchWork(stream, session, authorization.Generation, ready.Capacity, authorization.Config.MaxConcurrentTasks, staging.ready && reportedStagingReady, workDelivered, payloads); err != nil {
+				if err := s.dispatchWork(stream, session, authorization.Generation, ready.Capacity, authorization.Config, staging.ready && reportedStagingReady, workDelivered, payloads); err != nil {
 					return taskStoreStatus(err)
 				}
 				continue

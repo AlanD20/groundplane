@@ -216,7 +216,7 @@ func newCoordinatorHarness(t *testing.T) *coordinatorHarness {
 		unit:  &coordinatorUnit{}, work: &coordinatorWork{},
 		agents: &coordinatorAgents{agent: localagent.Agent{ID: input.Agent.ID, Image: input.Agent.Image,
 			Generation: input.Agent.Generation, Phase: localagent.PhaseReady,
-			Config: localagent.Config{MaxConcurrentTasks: 1, PullIntervalSeconds: 5}}},
+			Config: localagent.Config{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1, PullIntervalSeconds: 5}}},
 	}
 }
 

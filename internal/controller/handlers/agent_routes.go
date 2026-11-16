@@ -64,9 +64,10 @@ type agentUpdateInput struct {
 }
 
 type agentConfigReplacement struct {
-	PullIntervalSeconds int               `json:"pull_interval_seconds" minimum:"1" maximum:"2147483647"`
-	MaxConcurrentTasks  int               `json:"max_concurrent_tasks"  minimum:"1" maximum:"2147483647"`
-	Labels              map[string]string `json:"labels"`
+	PullIntervalSeconds          int               `json:"pull_interval_seconds" minimum:"1" maximum:"2147483647"`
+	MaxConcurrentTasks           int               `json:"max_concurrent_tasks" minimum:"1" maximum:"256"`
+	MaxParallelOperationsPerTask int               `json:"max_parallel_operations_per_task" minimum:"1" maximum:"256"`
+	Labels                       map[string]string `json:"labels"`
 }
 
 type agentConfigUpdateInput struct {
@@ -236,9 +237,10 @@ func (s *Server) replaceAgentConfig(
 		labels[key] = value
 	}
 	response, err := s.agents.UpdateAgentConfig(ctx, request.ID, apiTypes.AgentConfig{
-		PullIntervalSeconds: request.Body.PullIntervalSeconds,
-		MaxConcurrentTasks:  request.Body.MaxConcurrentTasks,
-		Labels:              labels,
+		PullIntervalSeconds:          request.Body.PullIntervalSeconds,
+		MaxConcurrentTasks:           request.Body.MaxConcurrentTasks,
+		MaxParallelOperationsPerTask: request.Body.MaxParallelOperationsPerTask,
+		Labels:                       labels,
 	}, request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)

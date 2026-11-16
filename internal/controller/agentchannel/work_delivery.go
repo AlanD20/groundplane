@@ -3,6 +3,7 @@ package agentchannel
 import (
 	"log/slog"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -11,7 +12,8 @@ func (server *Server) dispatchWork(
 	stream agentpb.AgentChannel_ConnectServer,
 	session *Session,
 	generation uint64,
-	capacity, configuredCapacity int32,
+	capacity int32,
+	config *agentpb.AgentConfig,
 	stagingReady bool,
 	delivered map[string]string,
 	payloads *assignmentPayloadDelivery,
@@ -19,7 +21,8 @@ func (server *Server) dispatchWork(
 	if server.workDispatch == nil {
 		return errs.New(errs.KindInternal, "native Agent dispatch is not configured")
 	}
-	if configuredCapacity < 1 || configuredCapacity > 256 || capacity < 0 || capacity > configuredCapacity {
+	limits := agentConcurrency(config)
+	if limits.Validate() != nil || capacity < 0 || capacity > int32(limits.Capacity()) {
 		return errs.New(errs.KindValidationFailed, "Agent dispatch capacity exceeds its configuration")
 	}
 	release, allowed := session.beginDispatch()
@@ -34,7 +37,7 @@ func (server *Server) dispatchWork(
 	readinessIssues, err := server.workDispatch.Ready(
 		stream.Context(),
 		authorization,
-		uint16(configuredCapacity),
+		limits,
 		stagingReady,
 	)
 	for _, issue := range readinessIssues {
@@ -115,4 +118,11 @@ func (server *Server) dispatchWork(
 		)
 	}
 	return err
+}
+
+func agentConcurrency(config *agentpb.AgentConfig) workexecution.AgentConcurrency {
+	if config == nil || config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 || config.MaxParallelOperationsPerTask < 1 || config.MaxParallelOperationsPerTask > 256 {
+		return workexecution.AgentConcurrency{}
+	}
+	return workexecution.AgentConcurrency{Tasks: uint16(config.MaxConcurrentTasks), OperationsPerTask: uint16(config.MaxParallelOperationsPerTask)}
 }

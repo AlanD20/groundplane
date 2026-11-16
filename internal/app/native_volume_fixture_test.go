@@ -110,7 +110,7 @@ func newNativeVolumeFixture(t *testing.T) *nativeVolumeFixture {
 		record.ID,
 		1,
 		[16]byte{1},
-		2,
+		workexecution.AgentConcurrency{Tasks: 2, OperationsPerTask: 1},
 		[]workexecution.Operation{workexecution.Volume, workexecution.Network},
 	)
 	if err != nil {

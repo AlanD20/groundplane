@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -32,7 +34,7 @@ func TestNativeBackupCredentialGrantFencesConcurrentChanges(t *testing.T) {
 				f.store.before = func() { f.rewrite(t, workqueue.TaskKey(f.attempt.TaskId)) }
 			case "Agent process":
 				f.store.before = func() {
-					if _, err := f.agents.RegisterWorkProcess(t.Context(), f.agentID, 1, [16]byte{2}, 1, f.operations); err != nil {
+					if _, err := f.agents.RegisterWorkProcess(t.Context(), f.agentID, 1, [16]byte{2}, workexecution.AgentConcurrency{Tasks: 1, OperationsPerTask: 1}, f.operations); err != nil {
 						t.Fatal(err)
 					}
 				}

@@ -131,8 +131,8 @@ func enrollment(capture agentoperations.Capture) localagent.EnrollRequest {
 	return localagent.EnrollRequest{AgentID: capture.AgentID, EnrollmentTaskID: capture.TaskID, Image: capture.Image,
 		Config: localagent.Config{
 			PullIntervalSeconds: config.PullIntervalSeconds,
-			MaxConcurrentTasks:  config.MaxConcurrentTasks,
-			Labels:              config.Labels,
+			MaxConcurrentTasks:  config.MaxConcurrentTasks, MaxParallelOperationsPerTask: config.MaxParallelOperationsPerTask,
+			Labels: config.Labels,
 		}}
 }
 

@@ -30,9 +30,10 @@ const (
 // Config is the durable, Controller-owned runtime configuration served to the
 // authenticated Agent. Durations are stored as seconds to match the wire contract.
 type Config struct {
-	PullIntervalSeconds int32             `json:"pull_interval_seconds"`
-	MaxConcurrentTasks  int32             `json:"max_concurrent_tasks"`
-	Labels              map[string]string `json:"labels,omitempty"`
+	PullIntervalSeconds          int32             `json:"pull_interval_seconds"`
+	MaxConcurrentTasks           int32             `json:"max_concurrent_tasks"`
+	MaxParallelOperationsPerTask int32             `json:"max_parallel_operations_per_task"`
+	Labels                       map[string]string `json:"labels,omitempty"`
 }
 
 // Credential contains only the durable-safe representation of the channel token.

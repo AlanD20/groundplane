@@ -185,7 +185,7 @@ func New(
 		return nil, err
 	}
 	defaults := localagent.Config{PullIntervalSeconds: cfg.Agent.Runtime.PullIntervalSeconds,
-		MaxConcurrentTasks: cfg.Agent.Runtime.MaxConcurrentTasks, Labels: cfg.Agent.Runtime.Labels}
+		MaxConcurrentTasks: cfg.Agent.Runtime.MaxConcurrentTasks, MaxParallelOperationsPerTask: cfg.Agent.Runtime.MaxParallelOperationsPerTask, Labels: cfg.Agent.Runtime.Labels}
 	enrollmentIdempotency, err := agentmanagement.NewEnrollmentIdempotency(
 		dependencies.Intents,
 		dependencies.Idempotency,

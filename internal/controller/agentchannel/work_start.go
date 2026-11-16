@@ -22,7 +22,7 @@ type WorkIdentityResolver interface {
 		string,
 		uint64,
 		[16]byte,
-		uint16,
+		workexecution.AgentConcurrency,
 		[]workexecution.Operation,
 	) (workexecution.Identity, error)
 }
@@ -74,7 +74,7 @@ type HierarchyReporter interface {
 
 type WorkDispatcher interface {
 	AccountJournal(context.Context, agentregistration.WorkAuthorization, string, *agentpb.WorkAttemptIdentity) error
-	Ready(context.Context, agentregistration.WorkAuthorization, uint16, bool) ([]workdispatch.Issue, error)
+	Ready(context.Context, agentregistration.WorkAuthorization, workexecution.AgentConcurrency, bool) ([]workdispatch.Issue, error)
 	Dispatch(
 		context.Context,
 		agentregistration.WorkAuthorization,
@@ -160,12 +160,13 @@ func (server *Server) registerWorkProcess(
 	ctx context.Context,
 	session *Session,
 	generation uint64,
-	capacity int32,
+	config *agentpb.AgentConfig,
 ) (*agentpb.WorkExecutorRegistration, error) {
 	if server.workIdentities == nil || server.workStarts == nil {
 		return nil, errs.New(errs.KindInternal, "native Agent work services are not configured")
 	}
-	if capacity < 1 || capacity > 256 {
+	limits := agentConcurrency(config)
+	if limits.Validate() != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Agent execution capacity must be between 1 and 256")
 	}
 	process, err := session.ProcessAuthentication()
@@ -173,7 +174,7 @@ func (server *Server) registerWorkProcess(
 		return nil, err
 	}
 	identity, err := server.workIdentities.RegisterWorkProcess(ctx, session.agentID, generation,
-		process.ProcessGeneration, uint16(capacity), server.workStarts.Operations())
+		process.ProcessGeneration, limits, server.workStarts.Operations())
 	if err != nil {
 		return nil, err
 	}

@@ -546,8 +546,8 @@ func testRequest(agentID string) EnrollRequest {
 		Image:            testImage,
 		Config: Config{
 			PullIntervalSeconds: 10,
-			MaxConcurrentTasks:  2,
-			Labels:              map[string]string{"host": "local"},
+			MaxConcurrentTasks:  2, MaxParallelOperationsPerTask: 1,
+			Labels: map[string]string{"host": "local"},
 		},
 	}
 }
@@ -724,7 +724,7 @@ func (repository *fakeRepository) UpdateConfig(
 	return ConfigUpdateResult{
 		Applied:      true,
 		Stored:       cloneStored(repository.record),
-		ResponseBody: []byte(`{"pull_interval_seconds":1,"max_concurrent_tasks":1,"labels":{}}`),
+		ResponseBody: []byte(`{"pull_interval_seconds":1,"max_concurrent_tasks":1,"max_parallel_operations_per_task":1,"labels":{}}`),
 	}, nil
 }
 

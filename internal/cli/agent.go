@@ -79,15 +79,16 @@ func newAgentCmd() *cobra.Command {
 				return err
 			}
 			fields := map[string]any{
-				"pull_interval_seconds": config.PullIntervalSeconds,
-				"max_concurrent_tasks":  config.MaxConcurrentTasks,
-				"labels":                config.Labels,
+				"pull_interval_seconds":            config.PullIntervalSeconds,
+				"max_concurrent_tasks":             config.MaxConcurrentTasks,
+				"max_parallel_operations_per_task": config.MaxParallelOperationsPerTask,
+				"labels":                           config.Labels,
 			}
 			headers, rows := tabulateVia(app, []map[string]any{fields})
 			return app.Out.Render(headers, rows, config)
 		},
 	})
-	var pullInterval, maxConcurrent int
+	var pullInterval, maxConcurrent, maxParallel int
 	var labels []string
 	set := &cobra.Command{
 		Use:   "set <id>",
@@ -100,24 +101,27 @@ func newAgentCmd() *cobra.Command {
 			}
 			app := fromContext(cmd)
 			updated, err := app.Client.SetAgentConfig(cmd.Context(), target(app, args[0]), apiTypes.AgentConfig{
-				PullIntervalSeconds: pullInterval,
-				MaxConcurrentTasks:  maxConcurrent,
-				Labels:              parsedLabels,
+				PullIntervalSeconds:          pullInterval,
+				MaxConcurrentTasks:           maxConcurrent,
+				MaxParallelOperationsPerTask: maxParallel,
+				Labels:                       parsedLabels,
 			})
 			if err != nil {
 				return err
 			}
 			fields := map[string]any{
-				"pull_interval_seconds": updated.PullIntervalSeconds,
-				"max_concurrent_tasks":  updated.MaxConcurrentTasks,
-				"labels":                updated.Labels,
+				"pull_interval_seconds":            updated.PullIntervalSeconds,
+				"max_concurrent_tasks":             updated.MaxConcurrentTasks,
+				"max_parallel_operations_per_task": updated.MaxParallelOperationsPerTask,
+				"labels":                           updated.Labels,
 			}
 			headers, rows := tabulateVia(app, []map[string]any{fields})
 			return app.Out.Render(headers, rows, updated)
 		},
 	}
 	set.Flags().IntVar(&pullInterval, "pull-interval", 0, "seconds between idle Ready heartbeats")
-	set.Flags().IntVar(&maxConcurrent, "max-concurrent", 0, "worker pool size")
+	set.Flags().IntVar(&maxConcurrent, "max-concurrent-tasks", 0, "maximum distinct in-flight Tasks (1..256)")
+	set.Flags().IntVar(&maxParallel, "max-parallel-operations-per-task", 0, "maximum parallel operations per Task (1..256; product with Tasks at most 256)")
 	set.Flags().
 		StringSliceVar(&labels, "label", nil, "repeatable: key=value, for targeted dispatch")
 	config.AddCommand(set)

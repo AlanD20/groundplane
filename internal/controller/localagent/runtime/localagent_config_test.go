@@ -62,7 +62,7 @@ func (idempotency *fakeLocalAgentConfigIdempotency) ResolveUnknown(
 func TestLocalAgentConfigReplayDoesNotReadTheAgent(t *testing.T) {
 	t.Parallel()
 
-	want := []byte(`{"labels":{"zone":"edge"},"max_concurrent_tasks":2,"pull_interval_seconds":5}`)
+	want := []byte(`{"labels":{"zone":"edge"},"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"pull_interval_seconds":5}`)
 	repository := &fakeLocalAgentRecords{}
 	idempotency := &fakeLocalAgentConfigIdempotency{
 		found: true,
@@ -79,8 +79,8 @@ func TestLocalAgentConfigReplayDoesNotReadTheAgent(t *testing.T) {
 	}
 	result, err := adapter.UpdateConfig(context.Background(), runtimeAdapterAgentID, localagent.Config{
 		PullIntervalSeconds: 5,
-		MaxConcurrentTasks:  2,
-		Labels:              map[string]string{"zone": "edge"},
+		MaxConcurrentTasks:  2, MaxParallelOperationsPerTask: 1,
+		Labels: map[string]string{"zone": "edge"},
 	}, "agent-config-key-0001")
 	if err != nil {
 		t.Fatalf("UpdateConfig() error = %v", err)

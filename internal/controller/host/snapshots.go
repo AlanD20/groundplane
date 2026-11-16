@@ -198,10 +198,11 @@ func hostAgentConfigSnapshot(status apiTypes.HealthState, config localagent.Conf
 	}
 	sort.Strings(labels)
 	return AgentSnapshot{
-		Status:        status,
-		PullInterval:  (time.Duration(config.PullIntervalSeconds) * time.Second).String(),
-		MaxConcurrent: int(config.MaxConcurrentTasks),
-		Labels:        labels,
+		Status:                       status,
+		PullInterval:                 (time.Duration(config.PullIntervalSeconds) * time.Second).String(),
+		MaxConcurrentTasks:           int(config.MaxConcurrentTasks),
+		MaxParallelOperationsPerTask: int(config.MaxParallelOperationsPerTask),
+		Labels:                       labels,
 	}
 }
 

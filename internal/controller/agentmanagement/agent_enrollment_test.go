@@ -28,7 +28,7 @@ func TestAgentEnrollmentServiceCreatesControllerTaskFromBootstrapInput(t *testin
 	service, err := NewEnrollmentService(
 		fixedAgentImage(testAppAgentImage),
 		localagent.Config{
-			PullIntervalSeconds: 2, MaxConcurrentTasks: 3,
+			PullIntervalSeconds: 2, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1,
 			Labels: map[string]string{"arch": "arm64"},
 		},
 		tasks,
@@ -75,7 +75,7 @@ func TestAgentEnrollmentServiceReturnsExactReplay(t *testing.T) {
 	}
 	service, err := NewEnrollmentService(
 		fixedAgentImage(testAppAgentImage),
-		localagent.Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, Labels: map[string]string{}},
+		localagent.Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1, Labels: map[string]string{}},
 		&fakeAgentEnrollmentTasks{},
 		&fakeAgentEnrollmentIdempotency{resolution: idempotentintent.Resolution{
 			Kind: idempotentintent.ResolutionReplay, Response: want,
@@ -97,7 +97,7 @@ func TestAgentEnrollmentReferenceBindsLabelsNotMapOrder(t *testing.T) {
 	capture := agentoperations.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
 		PlanID: ids.New(ids.KindPlan), AgentID: ids.New(ids.KindAgent), Action: workexecution.ActionCreate,
 		Image: testAppAgentImage, CreatedAt: at, Enrollment: &agentoperations.Enrollment{
-			PullIntervalSeconds: 2, MaxConcurrentTasks: 3, Labels: map[string]string{"b": "2", "a": "1"},
+			PullIntervalSeconds: 2, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1, Labels: map[string]string{"b": "2", "a": "1"},
 		}}
 	first, err := capture.Reference()
 	if err != nil {

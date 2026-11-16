@@ -6,6 +6,7 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/agent/backupruntime"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"io"
 	"log/slog"
 	"math/rand/v2"
@@ -204,7 +205,7 @@ func (c *Client) Run(ctx context.Context) error {
 }
 
 func validRuntimeConfig(config *agentpb.AgentConfig) bool {
-	if config == nil || config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks <= 0 {
+	if config == nil || config.PullIntervalSeconds <= 0 || runtimeConcurrency(config).Validate() != nil {
 		return false
 	}
 	seen := make(map[string]struct{}, len(config.Labels))
@@ -347,4 +348,11 @@ func agentChannelReconnectDelay(attempt uint, jitter uint64) time.Duration {
 	minimum := ceiling / 2
 	window := ceiling - minimum
 	return minimum + time.Duration(jitter%uint64(window+1))
+}
+
+func runtimeConcurrency(config *agentpb.AgentConfig) workexecution.AgentConcurrency {
+	if config == nil || config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 || config.MaxParallelOperationsPerTask < 1 || config.MaxParallelOperationsPerTask > 256 {
+		return workexecution.AgentConcurrency{}
+	}
+	return workexecution.AgentConcurrency{Tasks: uint16(config.MaxConcurrentTasks), OperationsPerTask: uint16(config.MaxParallelOperationsPerTask)}
 }

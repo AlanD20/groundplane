@@ -141,7 +141,7 @@ func (scheduler *Scheduler) Schedule(
 	if page.More {
 		result.Next = page.LastID
 	}
-	for _, entry := range page.Entries {
+	for _, entry := range interleaveTasks(page.Entries) {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
@@ -259,6 +259,29 @@ func (scheduler *Scheduler) Schedule(
 		}
 	}
 	return result, nil
+}
+
+// Each Task gets an admission turn before another operation from the same
+// Task. The persisted cursor still advances over the original bounded page.
+func interleaveTasks(entries []workqueue.QueueEntry) []workqueue.QueueEntry {
+	groups := make(map[string][]workqueue.QueueEntry)
+	var order []string
+	for _, entry := range entries {
+		if _, exists := groups[entry.TaskID]; !exists {
+			order = append(order, entry.TaskID)
+		}
+		groups[entry.TaskID] = append(groups[entry.TaskID], entry)
+	}
+	result := make([]workqueue.QueueEntry, 0, len(entries))
+	for len(result) < len(entries) {
+		for _, taskID := range order {
+			if group := groups[taskID]; len(group) > 0 {
+				result = append(result, group[0])
+				groups[taskID] = group[1:]
+			}
+		}
+	}
+	return result
 }
 
 func (decision Decision) validate(at, deadline time.Time) error {

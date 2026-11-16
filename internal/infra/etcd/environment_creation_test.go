@@ -222,7 +222,7 @@ func completeNativeEnvironmentWork(t *testing.T, store *memoryHierarchyStore, qu
 			HostID:   input.HostID,
 			AgentID:  agentID,
 		},
-		ProcessGeneration: [16]byte{1}, Capacity: 1, Operations: []workexecution.Operation{workexecution.Environment}})
+		ProcessGeneration: [16]byte{1}, Capacity: 1, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1, Operations: []workexecution.Operation{workexecution.Environment}})
 	if err != nil {
 		t.Fatal(err)
 	}

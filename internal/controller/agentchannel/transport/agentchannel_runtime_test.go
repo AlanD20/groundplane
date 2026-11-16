@@ -293,7 +293,7 @@ func sizedAgentConfig(t *testing.T, target int) *agentpb.AgentConfig {
 }
 
 func transportTestAgentConfig() *agentpb.AgentConfig {
-	return &agentpb.AgentConfig{PullIntervalSeconds: 1, MaxConcurrentTasks: 1}
+	return &agentpb.AgentConfig{PullIntervalSeconds: 1, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}
 }
 
 // These tests exercise the production gRPC transport factory, not operation

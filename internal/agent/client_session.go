@@ -123,7 +123,7 @@ func (c *Client) runSession(
 	}()
 	releases, err := newExecutionWorkers(
 		streamCtx,
-		int(config.MaxConcurrentTasks),
+		runtimeConcurrency(config),
 		native.identity,
 		c.releaseExecutor,
 		c.releaseRecoveryExecutor,
@@ -181,7 +181,7 @@ func (c *Client) runSession(
 	receiveNext(streamCtx, stream, received)
 	for {
 		// Reopen staging only after native workers have drained and joined.
-		if staging != nil && staging.reinspect.Load() && c.availableWorkCapacity() == int(config.MaxConcurrentTasks) {
+		if staging != nil && staging.reinspect.Load() && c.availableWorkCapacity() == int(runtimeConcurrency(config).Capacity()) {
 			return true, nil
 		}
 		event := nextSessionEvent(
@@ -496,7 +496,7 @@ func (c *Client) runSession(
 				if !validRuntimeConfig(next) {
 					return false, errs.New(errs.KindInternal, "agent: Controller sent invalid live configuration")
 				}
-				if c.availableWorkCapacity() != int(config.MaxConcurrentTasks) {
+				if c.availableWorkCapacity() != int(runtimeConcurrency(config).Capacity()) {
 					return false, errs.New(
 						errs.KindStateConflict,
 						"agent: live configuration arrived before native executions drained",
@@ -506,7 +506,7 @@ func (c *Client) runSession(
 				config = proto.Clone(next).(*agentpb.AgentConfig)
 				releases, err = newExecutionWorkers(
 					streamCtx,
-					int(config.MaxConcurrentTasks),
+					runtimeConcurrency(config),
 					native.identity,
 					c.releaseExecutor,
 					c.releaseRecoveryExecutor,

@@ -201,11 +201,11 @@ func TestAgentConfigShowUsesConfigSingleton(t *testing.T) {
 		"/api/v1/agents/agt_1/config",
 		"",
 		http.StatusOK,
-		`{"pull_interval_seconds":2,"max_concurrent_tasks":3,"labels":{"arch":"arm64"}}`,
+		`{"pull_interval_seconds":2,"max_concurrent_tasks":3,"max_parallel_operations_per_task":1,"labels":{"arch":"arm64"}}`,
 	)
 	defer server.Close()
 
-	want := "{\n  \"pull_interval_seconds\": 2,\n  \"max_concurrent_tasks\": 3,\n  \"labels\": {\n" +
+	want := "{\n  \"pull_interval_seconds\": 2,\n  \"max_concurrent_tasks\": 3,\n  \"max_parallel_operations_per_task\": 1,\n  \"labels\": {\n" +
 		"    \"arch\": \"arm64\"\n  }\n}\n"
 	if output := executeNoun(
 		t,
@@ -230,9 +230,9 @@ func TestAgentConfigSetSendsKeyedLabels(t *testing.T) {
 		t,
 		http.MethodPut,
 		"/api/v1/agents/agt_1/config",
-		`{"labels":{"arch":"arm64","zone":"edge"},"max_concurrent_tasks":3,"pull_interval_seconds":2}`,
+		`{"labels":{"arch":"arm64","zone":"edge"},"max_concurrent_tasks":3,"max_parallel_operations_per_task":1,"pull_interval_seconds":2}`,
 		http.StatusOK,
-		`{}`,
+		`{"pull_interval_seconds":2,"max_concurrent_tasks":3,"max_parallel_operations_per_task":1,"labels":{"arch":"arm64","zone":"edge"}}`,
 	)
 	defer server.Close()
 
@@ -246,8 +246,10 @@ func TestAgentConfigSetSendsKeyedLabels(t *testing.T) {
 		"agt_1",
 		"--pull-interval",
 		"2",
-		"--max-concurrent",
+		"--max-concurrent-tasks",
 		"3",
+		"--max-parallel-operations-per-task",
+		"1",
 		"--label",
 		"arch=arm64",
 		"--label",

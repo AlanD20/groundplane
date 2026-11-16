@@ -177,7 +177,7 @@ func (repository *Repository) ReadCandidate(
 		}
 	}
 	if item.Placement.Executor == workexecution.Agent {
-		keys = append(keys, HostEffectKey(item.Placement.HostID, item.ID), HostForwardFenceKey(item.Placement.HostID))
+		keys = append(keys, HostEffectKey(item.Placement.HostID, item.ID), HostForwardFenceKey(item.Placement.HostID), AdmissionFenceKey(identity))
 	}
 	read, err := repository.read(ctx, keys, view.ReadRevision)
 	if err != nil {
@@ -229,6 +229,9 @@ func (repository *Repository) ReadCandidate(
 	}
 	offset := len(dependencies) + len(item.Claims)
 	if item.Placement.Executor == workexecution.Agent {
+		if fence := read.Values[offset+maximumExecutorCapacity+2]; fence != nil {
+			request.AdmissionRevision = fence.ModRevision
+		}
 		if direction == workexecution.Forward && read.Values[offset+maximumExecutorCapacity+1] != nil {
 			return waiting(workexecution.Wait{Reason: workexecution.WaitExecutor}), nil
 		}
@@ -242,6 +245,7 @@ func (repository *Repository) ReadCandidate(
 		}
 	}
 	occupied := 0
+	activeTasks := make(map[string]int)
 	for _, value := range read.Values[offset : offset+maximumExecutorCapacity] {
 		if value == nil {
 			continue
@@ -252,6 +256,12 @@ func (repository *Repository) ReadCandidate(
 			return Candidate{}, corrupt()
 		}
 		occupied++
+		activeTasks[slot.TaskID]++
+	}
+	if identity.Executor == workexecution.Agent &&
+		(activeTasks[item.TaskID] >= int(executor.MaxParallelOperationsPerTask) ||
+			activeTasks[item.TaskID] == 0 && len(activeTasks) >= int(executor.MaxConcurrentTasks)) {
+		return waiting(workexecution.Wait{Reason: workexecution.WaitCapacity}), nil
 	}
 	if occupied >= int(executor.Capacity) {
 		return waiting(workexecution.Wait{Reason: workexecution.WaitCapacity}), nil

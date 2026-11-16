@@ -21,6 +21,12 @@ listen:
   # internal_http: 172.17.0.1:8080
   http:
     - 127.0.0.1:8080
+agent:
+  runtime:
+    pull_interval_seconds: 2
+    max_concurrent_tasks: 3
+    max_parallel_operations_per_task: 3
+    labels: {}
 scheduler:
   tick_interval: 30s
 storage:

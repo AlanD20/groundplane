@@ -33,7 +33,7 @@ func nativeConnectFixture(t *testing.T) (*Server, *nativeDispatchPeer, *agentpb.
 	server, session, peer, _ := nativeDispatchFixture(t)
 	agentID := session.agentID
 	session.Close()
-	configuration := &agentpb.AgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 1}
+	configuration := &agentpb.AgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}
 	server.auth = &fakeAuthenticator{authorization: Authorization{Generation: 1, Config: configuration}}
 	server.workStarts = nativeConnectStarter{}
 	return server, peer, &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Authenticate{

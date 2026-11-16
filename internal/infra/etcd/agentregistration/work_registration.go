@@ -19,9 +19,9 @@ import (
 // stopped. A receipt makes uncertain-response retry and reconnect idempotent,
 // while a retired process cannot become current again.
 func (repository *Repository) RegisterWorkProcess(ctx context.Context, agentID string,
-	credentialGeneration uint64, process [16]byte, capacity uint16, operations []workexecution.Operation,
+	credentialGeneration uint64, process [16]byte, limits workexecution.AgentConcurrency, operations []workexecution.Operation,
 ) (workexecution.Identity, error) {
-	if credentialGeneration == 0 || process == [16]byte{} {
+	if credentialGeneration == 0 || process == [16]byte{} || limits.Validate() != nil {
 		return workexecution.Identity{}, agentCredentialNotFound()
 	}
 	binding, err := hostbindings.Read(ctx, repository.store, agentID, 0)
@@ -97,11 +97,13 @@ func (repository *Repository) RegisterWorkProcess(ctx context.Context, agentID s
 		}
 		// A reconnect preserves the process generation, but admission waits for
 		// the new channel to reconcile its durable deliveries before dispatch.
+		previous.Record.MaxConcurrentTasks = limits.Tasks
+		previous.Record.MaxParallelOperationsPerTask = limits.OperationsPerTask
 		change, err := workqueue.PrepareAvailability(
 			previous,
 			saved,
 			false,
-			capacity,
+			limits.Capacity(),
 			previous.Record.UnavailableOperations,
 		)
 		if err != nil {
@@ -119,7 +121,8 @@ func (repository *Repository) RegisterWorkProcess(ctx context.Context, agentID s
 		return saved, nil
 	}
 	change, registered, err := workqueue.PrepareRegistration(previous, workqueue.ExecutorRecord{
-		Identity: identity, ProcessGeneration: process, Capacity: capacity, Operations: operations,
+		Identity: identity, ProcessGeneration: process, Capacity: limits.Capacity(), Operations: operations,
+		MaxConcurrentTasks: limits.Tasks, MaxParallelOperationsPerTask: limits.OperationsPerTask,
 	})
 	if err != nil {
 		return workexecution.Identity{}, err

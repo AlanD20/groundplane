@@ -244,6 +244,19 @@ and delivers the local channel token privately; the operator does not exchange
 certificates or tokens, and there is no separate approval state.
 
 The Agent detail at `/platform/host/agents/{id}` owns runtime settings.
+**Concurrent Tasks** limits distinct in-flight Tasks, and **Parallel operations per
+Task** limits each Task's native operations. Each is 1–256; their product must be
+at most 256. The default 3 × 3 allows up to nine operations, subject to dependencies
+and resource authority. Pull interval remains the idle Ready heartbeat interval.
+
+The CLI replaces the complete runtime configuration with `agent config set`,
+using `--max-concurrent-tasks`, `--max-parallel-operations-per-task`,
+`--pull-interval` and repeatable `--label key=value`. For example:
+
+```sh
+groundplane agent config set AGENT_ID --id --pull-interval 2 --max-concurrent-tasks 3 --max-parallel-operations-per-task 3
+```
+
 Configuration changes drain existing work and apply at an idle Ready without
 restarting running Tasks. The Controller owns Agent container creation,
 replacement, removal and recovery after Docker returns. The Agent never updates

@@ -37,10 +37,11 @@ type EtcdSnapshot struct {
 // AgentSnapshot is the non-secret local Agent projection. Credential and
 // transport state cannot be represented by this port.
 type AgentSnapshot struct {
-	Status        api.HealthState
-	PullInterval  string
-	MaxConcurrent int
-	Labels        []string
+	Status                       api.HealthState
+	PullInterval                 string
+	MaxConcurrentTasks           int
+	MaxParallelOperationsPerTask int
+	Labels                       []string
 }
 
 type SystemSnapshotSource interface {
@@ -190,10 +191,11 @@ func (service *HostService) Show(ctx context.Context) (api.Host, error) {
 			Update:  updates,
 		},
 		Agent: api.HostAgent{
-			Status:        agent.Status,
-			PullInterval:  agent.PullInterval,
-			MaxConcurrent: agent.MaxConcurrent,
-			Labels:        append(make([]string, 0, len(agent.Labels)), agent.Labels...),
+			Status:                       agent.Status,
+			PullInterval:                 agent.PullInterval,
+			MaxConcurrentTasks:           agent.MaxConcurrentTasks,
+			MaxParallelOperationsPerTask: agent.MaxParallelOperationsPerTask,
+			Labels:                       append(make([]string, 0, len(agent.Labels)), agent.Labels...),
 		},
 	}, nil
 }

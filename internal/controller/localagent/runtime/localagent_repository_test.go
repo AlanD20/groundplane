@@ -34,7 +34,7 @@ func TestLocalAgentRepositoryAdapterTranslatesLifecycleWithoutAliasing(t *testin
 		Image: testAppAgentImage, Generation: 7,
 		Phase: localagent.PhaseProvisioning,
 		Config: localagent.Config{
-			PullIntervalSeconds: 5, MaxConcurrentTasks: 4,
+			PullIntervalSeconds: 5, MaxConcurrentTasks: 4, MaxParallelOperationsPerTask: 1,
 			Labels: map[string]string{"role": "local"},
 		},
 		Credential: localagent.Credential{EncryptedToken: []byte("encrypted"), Digest: "digest"},
@@ -126,7 +126,7 @@ func TestLocalAgentRepositoryAdapterTranslatesReplacementWithoutAliasing(t *test
 		ID: runtimeAdapterAgentID, EnrollmentTaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Image: testAppAgentImage, Generation: 7, Phase: localagent.PhaseReady,
 		Config: localagent.Config{
-			PullIntervalSeconds: 5, MaxConcurrentTasks: 4,
+			PullIntervalSeconds: 5, MaxConcurrentTasks: 4, MaxParallelOperationsPerTask: 1,
 			Labels: map[string]string{"role": "local"},
 		},
 		Credential: localagent.Credential{EncryptedToken: []byte("old-encrypted"), Digest: "old-digest"},

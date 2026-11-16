@@ -34,7 +34,7 @@ func TestLocalAgentConfigReplacementCommitsWithIdempotencyMarker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSingleton() error = %v", err)
 	}
-	responseBody := []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"labels":{"zone":"edge"}}`)
+	responseBody := []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"labels":{"zone":"edge"}}`)
 	marker := agentConfigurationTestMarker()
 	marker.Locator = testidempotency.IdempotencyLocator{
 		ScopeKind: testidempotency.IdempotencyScopePlatform,
@@ -48,8 +48,8 @@ func TestLocalAgentConfigReplacementCommitsWithIdempotencyMarker(t *testing.T) {
 	}
 	desired := testlocalagents.LocalAgentConfig{
 		PullIntervalSeconds: 5,
-		MaxConcurrentTasks:  2,
-		Labels:              map[string]string{"zone": "edge"},
+		MaxConcurrentTasks:  2, MaxParallelOperationsPerTask: 1,
+		Labels: map[string]string{"zone": "edge"},
 	}
 	prepared, err := repository.PrepareConfigurationUpdate(ctx, current, desired, marker)
 	if err != nil {
@@ -103,8 +103,8 @@ func agentConfigurationTestRecord() testlocalagents.LocalAgentRecord {
 		Phase: testlocalagents.LocalAgentPhaseProvisioning,
 		Config: testlocalagents.LocalAgentConfig{
 			PullIntervalSeconds: 5,
-			MaxConcurrentTasks:  4,
-			Labels:              map[string]string{"role": "local"},
+			MaxConcurrentTasks:  4, MaxParallelOperationsPerTask: 1,
+			Labels: map[string]string{"role": "local"},
 		},
 		EncryptedToken: []byte("age-encrypted-token"), TokenDigest: base64.RawURLEncoding.EncodeToString(digest[:]),
 		CreatedAt: at, TokenUpdatedAt: at,

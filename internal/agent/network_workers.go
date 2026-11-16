@@ -30,7 +30,7 @@ func (workers *executionWorkers) submitNetwork(delivery *agentpb.NetworkWorkAssi
 		}
 		return nil
 	}
-	if available <= 0 || len(workers.active) >= workers.limit {
+	if available <= 0 || !workers.canAdmit(attempt.TaskID) {
 		return errs.New(errs.KindStateConflict, "Agent execution capacity is exhausted")
 	}
 	execution, err := workers.ownership.Begin(attempt)

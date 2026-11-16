@@ -169,7 +169,7 @@ func (manager *Manager) restoreUpdate(ctx context.Context, request UpdateRequest
 ) error {
 	if stored.Record.Generation == request.StartingGeneration+1 {
 		if err := manager.tasks.RequireIdle(
-			ctx, request.AgentID, stored.Record.Generation, stored.Record.Config.MaxConcurrentTasks,
+			ctx, request.AgentID, stored.Record.Generation, stored.Record.Config.MaxConcurrentTasks*stored.Record.Config.MaxParallelOperationsPerTask,
 		); err != nil {
 			return err
 		}

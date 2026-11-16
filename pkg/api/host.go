@@ -36,10 +36,11 @@ type HostController struct {
 }
 
 type HostAgent struct {
-	Status        HealthState `json:"status"`
-	PullInterval  string      `json:"pull_interval"`
-	MaxConcurrent int         `json:"max_concurrent"`
-	Labels        []string    `json:"labels"`
+	Status                       HealthState `json:"status"`
+	PullInterval                 string      `json:"pull_interval"`
+	MaxConcurrentTasks           int         `json:"max_concurrent_tasks"`
+	MaxParallelOperationsPerTask int         `json:"max_parallel_operations_per_task"`
+	Labels                       []string    `json:"labels"`
 }
 
 type Host struct {

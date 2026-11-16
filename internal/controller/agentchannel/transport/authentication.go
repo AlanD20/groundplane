@@ -80,9 +80,10 @@ func agentChannelConfig(config localagentrecord.LocalAgentConfig) *agentpb.Agent
 	}
 	slices.SortFunc(labels, func(left, right *agentpb.AgentLabel) int { return cmp.Compare(left.Key, right.Key) })
 	return &agentpb.AgentConfig{
-		PullIntervalSeconds: config.PullIntervalSeconds,
-		MaxConcurrentTasks:  config.MaxConcurrentTasks,
-		Labels:              labels,
+		PullIntervalSeconds:          config.PullIntervalSeconds,
+		MaxConcurrentTasks:           config.MaxConcurrentTasks,
+		MaxParallelOperationsPerTask: config.MaxParallelOperationsPerTask,
+		Labels:                       labels,
 	}
 }
 

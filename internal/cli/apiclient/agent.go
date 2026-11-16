@@ -144,8 +144,8 @@ func (c *Client) SetAgentConfig(
 	path := "/api/v1/agents/" + id + "/config"
 	body := generated.AgentConfigSetJSONRequestBody{
 		PullIntervalSeconds: int64(config.PullIntervalSeconds),
-		MaxConcurrentTasks:  int64(config.MaxConcurrentTasks),
-		Labels:              copyGeneratedAgentLabels(config.Labels),
+		MaxConcurrentTasks:  int64(config.MaxConcurrentTasks), MaxParallelOperationsPerTask: int64(config.MaxParallelOperationsPerTask),
+		Labels: copyGeneratedAgentLabels(config.Labels),
 	}
 	response, err := client.AgentConfigSetWithResponse(
 		ctx,
@@ -247,7 +247,7 @@ func copyGeneratedAgentLabels(labels map[string]string) map[string]string {
 func agentConfigFromGenerated(config generated.AgentConfig) apiTypes.AgentConfig {
 	return apiTypes.AgentConfig{
 		PullIntervalSeconds: int(config.PullIntervalSeconds),
-		MaxConcurrentTasks:  int(config.MaxConcurrentTasks),
-		Labels:              copyGeneratedAgentLabels(config.Labels),
+		MaxConcurrentTasks:  int(config.MaxConcurrentTasks), MaxParallelOperationsPerTask: int(config.MaxParallelOperationsPerTask),
+		Labels: copyGeneratedAgentLabels(config.Labels),
 	}
 }

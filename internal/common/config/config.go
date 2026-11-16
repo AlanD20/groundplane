@@ -115,6 +115,7 @@ func DefaultControllerConfig() ControllerConfig {
 	c.Storage.VolumeRoot = environmentpath.DefaultVolumeRoot
 	c.Agent.Runtime.PullIntervalSeconds = 2
 	c.Agent.Runtime.MaxConcurrentTasks = 3
+	c.Agent.Runtime.MaxParallelOperationsPerTask = 3
 	c.Agent.Runtime.Labels = map[string]string{}
 	c.AgeKeyPath = "/etc/groundplane/controller.age"
 	c.Log.Level = "warn"
@@ -129,9 +130,10 @@ func DefaultControllerConfig() ControllerConfig {
 // authenticated stream so reconnects and runtime materialization share one
 // contract.
 type AgentRuntimeConfig struct {
-	PullIntervalSeconds int32             `yaml:"pull_interval_seconds"`
-	MaxConcurrentTasks  int32             `yaml:"max_concurrent_tasks"`
-	Labels              map[string]string `yaml:"labels"`
+	PullIntervalSeconds          int32             `yaml:"pull_interval_seconds"`
+	MaxConcurrentTasks           int32             `yaml:"max_concurrent_tasks"`
+	MaxParallelOperationsPerTask int32             `yaml:"max_parallel_operations_per_task"`
+	Labels                       map[string]string `yaml:"labels"`
 }
 
 // AgentConfig is the complete Controller-owned runtime document injected into
@@ -327,8 +329,8 @@ func validateAgentRuntime(label string, runtime AgentRuntimeConfig) error {
 	if runtime.PullIntervalSeconds <= 0 {
 		return fmt.Errorf("config: %s.pull_interval_seconds must be positive", label)
 	}
-	if runtime.MaxConcurrentTasks <= 0 {
-		return fmt.Errorf("config: %s.max_concurrent_tasks must be positive", label)
+	if runtime.MaxConcurrentTasks < 1 || runtime.MaxConcurrentTasks > 256 || runtime.MaxParallelOperationsPerTask < 1 || runtime.MaxParallelOperationsPerTask > 256 || runtime.MaxConcurrentTasks*runtime.MaxParallelOperationsPerTask > 256 {
+		return fmt.Errorf("config: %s task and per-Task operation limits must each be 1..256 with at most 256 total operations", label)
 	}
 	for key, value := range runtime.Labels {
 		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 ||

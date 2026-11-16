@@ -267,7 +267,7 @@ func (nativeBackupUncalledOperations) AccountJournal(
 func (nativeBackupUncalledOperations) Ready(
 	context.Context,
 	agentregistration.WorkAuthorization,
-	uint16,
+	workexecution.AgentConcurrency,
 	bool,
 ) ([]workdispatch.Issue, error) {
 	return nil, unexpectedBackupChannelOperation()

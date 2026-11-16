@@ -135,12 +135,12 @@ func TestHostAgentSourceUsesDurableOrBootstrapConfig(t *testing.T) {
 
 	fallback := localagent.Config{
 		PullIntervalSeconds: 2,
-		MaxConcurrentTasks:  1,
-		Labels:              map[string]string{"host": "local"},
+		MaxConcurrentTasks:  1, MaxParallelOperationsPerTask: 1,
+		Labels: map[string]string{"host": "local"},
 	}
 	absent := &AgentSource{health: fakeHostAgentHealth{}, fallback: fallback}
 	got, err := absent.AgentSnapshot(context.Background())
-	if err != nil || got.Status != apiTypes.HealthStopped || got.PullInterval != "2s" || got.MaxConcurrent != 1 {
+	if err != nil || got.Status != apiTypes.HealthStopped || got.PullInterval != "2s" || got.MaxConcurrentTasks != 1 {
 		t.Fatalf("absent AgentSnapshot() = %#v, %v", got, err)
 	}
 
@@ -148,7 +148,7 @@ func TestHostAgentSourceUsesDurableOrBootstrapConfig(t *testing.T) {
 		Agent: localagent.Agent{
 			Phase: localagent.PhaseReady,
 			Config: localagent.Config{
-				PullIntervalSeconds: 5, MaxConcurrentTasks: 3,
+				PullIntervalSeconds: 5, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1,
 				Labels: map[string]string{"zone": "edge", "arch": "amd64"},
 			},
 		},
@@ -157,7 +157,7 @@ func TestHostAgentSourceUsesDurableOrBootstrapConfig(t *testing.T) {
 	got, err = present.AgentSnapshot(context.Background())
 	wantLabels := []string{"arch=amd64", "zone=edge"}
 	if err != nil || got.Status != apiTypes.HealthHealthy || got.PullInterval != "5s" ||
-		got.MaxConcurrent != 3 || !reflect.DeepEqual(got.Labels, wantLabels) {
+		got.MaxConcurrentTasks != 3 || !reflect.DeepEqual(got.Labels, wantLabels) {
 		t.Fatalf("present AgentSnapshot() = %#v, %v", got, err)
 	}
 }

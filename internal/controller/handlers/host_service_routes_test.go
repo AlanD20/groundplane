@@ -41,7 +41,7 @@ func TestHostEndpointEmitsExactConsoleContract(t *testing.T) {
 			Service: "groundplane-controller.service", Status: api.HealthHealthy, Version: "v0.4.2",
 		},
 		Agent: api.HostAgent{
-			Status: api.HealthHealthy, PullInterval: "2s", MaxConcurrent: 3,
+			Status: api.HealthHealthy, PullInterval: "2s", MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1,
 			Labels: []string{"qa-workload", "arm64"},
 		},
 	}

@@ -238,7 +238,7 @@ func (server *nativeClientProtocolServer) Connect(stream agentpb.AgentChannel_Co
 func nativeClientConfig(capacity int32) *agentpb.ControllerMessage {
 	return &agentpb.ControllerMessage{
 		Payload: &agentpb.ControllerMessage_ConfigUpdate{ConfigUpdate: &agentpb.ConfigUpdate{
-			AgentConfig: &agentpb.AgentConfig{PullIntervalSeconds: 60, MaxConcurrentTasks: capacity}}},
+			AgentConfig: &agentpb.AgentConfig{PullIntervalSeconds: 60, MaxConcurrentTasks: capacity, MaxParallelOperationsPerTask: 1}}},
 	}
 }
 

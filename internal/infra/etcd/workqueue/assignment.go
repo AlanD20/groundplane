@@ -9,21 +9,22 @@ import (
 )
 
 type Assignment struct {
-	ReadRevision  int64
-	DecisionOnly  bool
-	Task          TaskSnapshot
-	Item          ItemSnapshot
-	Executor      ExecutorSnapshot
-	Dependencies  []ItemSnapshot
-	Claims        []ClaimSnapshot
-	Reservations  []TaskReservationSnapshot
-	HostEffect    HostEffectSnapshot
-	QueueRevision int64
-	Slot          uint16
-	AttemptID     string
-	Direction     workexecution.Direction
-	At            time.Time
-	Deadline      time.Time
+	ReadRevision      int64
+	DecisionOnly      bool
+	Task              TaskSnapshot
+	Item              ItemSnapshot
+	Executor          ExecutorSnapshot
+	Dependencies      []ItemSnapshot
+	Claims            []ClaimSnapshot
+	Reservations      []TaskReservationSnapshot
+	HostEffect        HostEffectSnapshot
+	QueueRevision     int64
+	AdmissionRevision int64
+	Slot              uint16
+	AttemptID         string
+	Direction         workexecution.Direction
+	At                time.Time
+	Deadline          time.Time
 }
 
 // PrepareAssignment compares every dependency and conflict scope together with
@@ -85,6 +86,17 @@ func PrepareAssignment(request Assignment) (Change, workexecution.Attempt, error
 			{Type: keyvalue.MutationPut, Key: SlotKey(executor.Identity, request.Slot), Value: slotBytes},
 			{Type: keyvalue.MutationDelete, Key: QueueKey(next)},
 		},
+	}
+	if executor.Identity.Executor == workexecution.Agent {
+		// Serializing admissions against their complete slot snapshot prevents
+		// concurrent candidates from exceeding either per-Task limit. Executor
+		// eligibility remains unchanged, preserving authenticated channel fences.
+		change.Conditions = append(change.Conditions, keyvalue.Condition{
+			Key: AdmissionFenceKey(executor.Identity), ModRevision: request.AdmissionRevision,
+		})
+		change.Mutations = append(change.Mutations, keyvalue.Mutation{
+			Type: keyvalue.MutationPut, Key: AdmissionFenceKey(executor.Identity), Value: []byte{1},
+		})
 	}
 	if err := assignmentDependencies(request); err != nil {
 		return Change{}, workexecution.Attempt{}, err

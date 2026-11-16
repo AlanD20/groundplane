@@ -26,7 +26,7 @@ func cloneRecord(record Record) Record {
 func cloneConfig(config Config) Config {
 	cloned := Config{
 		PullIntervalSeconds: config.PullIntervalSeconds,
-		MaxConcurrentTasks:  config.MaxConcurrentTasks,
+		MaxConcurrentTasks:  config.MaxConcurrentTasks, MaxParallelOperationsPerTask: config.MaxParallelOperationsPerTask,
 	}
 	if config.Labels != nil {
 		cloned.Labels = make(map[string]string, len(config.Labels))

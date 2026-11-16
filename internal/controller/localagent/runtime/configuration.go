@@ -96,6 +96,7 @@ func (service *durableLocalAgentConfigIdempotency) Prepare(
 			requestidempotency.Field{
 				Name: "max_concurrent_tasks", Value: requestidempotency.Integer(int64(config.MaxConcurrentTasks)),
 			},
+			requestidempotency.Field{Name: "max_parallel_operations_per_task", Value: requestidempotency.Integer(int64(config.MaxParallelOperationsPerTask))},
 			requestidempotency.Field{Name: "labels", Value: requestidempotency.Object(labelFields...)},
 		)),
 	})
@@ -209,8 +210,8 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 	}
 	responseBody, err := json.Marshal(apiTypes.AgentConfig{
 		PullIntervalSeconds: int(config.PullIntervalSeconds),
-		MaxConcurrentTasks:  int(config.MaxConcurrentTasks),
-		Labels:              cloneLocalAgentLabels(config.Labels),
+		MaxConcurrentTasks:  int(config.MaxConcurrentTasks), MaxParallelOperationsPerTask: int(config.MaxParallelOperationsPerTask),
+		Labels: cloneLocalAgentLabels(config.Labels),
 	})
 	if err != nil {
 		return localagent.ConfigUpdateResult{}, errs.Wrap(errs.KindInternal, err)
@@ -235,8 +236,8 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 		current,
 		localagentrecord.LocalAgentConfig{
 			PullIntervalSeconds: config.PullIntervalSeconds,
-			MaxConcurrentTasks:  config.MaxConcurrentTasks,
-			Labels:              cloneLocalAgentLabels(config.Labels),
+			MaxConcurrentTasks:  config.MaxConcurrentTasks, MaxParallelOperationsPerTask: config.MaxParallelOperationsPerTask,
+			Labels: cloneLocalAgentLabels(config.Labels),
 		},
 		marker,
 	)

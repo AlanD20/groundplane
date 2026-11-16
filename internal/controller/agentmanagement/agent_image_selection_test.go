@@ -17,7 +17,7 @@ func TestAgentActionsSelectCurrentReleaseImage(t *testing.T) {
 	enrollTasks, updateTasks := &fakeAgentEnrollmentTasks{}, &fakeAgentUpdateTasks{}
 	enroll, err := NewEnrollmentService(
 		images,
-		localagent.Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3},
+		localagent.Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1},
 		enrollTasks,
 		&fakeAgentEnrollmentIdempotency{
 			resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},

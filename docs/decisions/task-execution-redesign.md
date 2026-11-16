@@ -104,6 +104,24 @@ does not occupy a worker slot or prevent unrelated ready work from being selecte
 Related items acquire their required conflict claims atomically before effects,
 not one resource at a time while holding partial claims indefinitely.
 
+Agent admission counts distinct Tasks and each Task's reserved native operations
+separately. A Task with many ready items must not consume every admission turn
+ahead of other Tasks. The scheduler interleaves Tasks within each bounded queue
+page and checks both limits against the same occupied-slot snapshot. A small
+placement-scoped admission fence serializes competing assignments without changing
+the authenticated executor record. Its value names no Task or attempt and cannot
+pin execution history. Finishing work releases its slot; retained recovery claims
+remain independent of these concurrency counts. The Agent enforces the same limits
+locally, and configuration replacement waits for its previous workers to drain.
+
+Execution coordination uses its own short cadence rather than the configurable
+periodic scheduler timer. Successful graph-publication batches and ready-queue
+pages continue immediately in bounded bursts, rereading durable state each time.
+This preserves transaction budgets and the complete-publication barrier without
+adding a timer delay between every successful batch. Service preparations that
+share an acknowledged Environment-file baseline still require ordered ownership;
+increasing worker capacity cannot make conflicting preparations independent.
+
 Assignment reads the Task and prerequisites at one MVCC revision. Successful
 prerequisites are protected by the Task revision comparison: settlement and Retry
 update that record atomically, and collection requires a finished Task. Repeating

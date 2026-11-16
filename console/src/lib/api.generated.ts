@@ -2080,6 +2080,8 @@ export interface components {
             /** Format: int64 */
             max_concurrent_tasks: number;
             /** Format: int64 */
+            max_parallel_operations_per_task: number;
+            /** Format: int64 */
             pull_interval_seconds: number;
         };
         AgentConfigReplacement: {
@@ -2094,6 +2096,8 @@ export interface components {
             };
             /** Format: int64 */
             max_concurrent_tasks: number;
+            /** Format: int64 */
+            max_parallel_operations_per_task: number;
             /** Format: int64 */
             pull_interval_seconds: number;
         };
@@ -3359,7 +3363,9 @@ export interface components {
         HostAgent: {
             labels: string[] | null;
             /** Format: int64 */
-            max_concurrent: number;
+            max_concurrent_tasks: number;
+            /** Format: int64 */
+            max_parallel_operations_per_task: number;
             pull_interval: string;
             status: string;
         };

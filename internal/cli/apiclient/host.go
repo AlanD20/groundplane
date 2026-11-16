@@ -78,10 +78,11 @@ func hostFromGenerated(host generated.Host) (apiTypes.Host, error) {
 			Update:  update,
 		},
 		Agent: apiTypes.HostAgent{
-			Status:        apiTypes.HealthState(host.Agent.Status),
-			PullInterval:  host.Agent.PullInterval,
-			MaxConcurrent: int(host.Agent.MaxConcurrent),
-			Labels:        labels,
+			Status:                       apiTypes.HealthState(host.Agent.Status),
+			PullInterval:                 host.Agent.PullInterval,
+			MaxConcurrentTasks:           int(host.Agent.MaxConcurrentTasks),
+			MaxParallelOperationsPerTask: int(host.Agent.MaxParallelOperationsPerTask),
+			Labels:                       labels,
 		},
 	}, nil
 }

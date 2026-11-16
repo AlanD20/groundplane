@@ -27,12 +27,14 @@ type AttemptSnapshot struct {
 // ExecutorRecord is dispatch eligibility, not a connection lease. Removing a
 // connection does not free its reserved execution slots or resource claims.
 type ExecutorRecord struct {
-	Identity              workexecution.Identity    `json:"identity"`
-	ProcessGeneration     [16]byte                  `json:"process_generation"`
-	Ready                 bool                      `json:"ready"`
-	Capacity              uint16                    `json:"capacity"`
-	Operations            []workexecution.Operation `json:"operations"`
-	UnavailableOperations []workexecution.Operation `json:"unavailable_operations,omitempty"`
+	Identity                     workexecution.Identity    `json:"identity"`
+	ProcessGeneration            [16]byte                  `json:"process_generation"`
+	Ready                        bool                      `json:"ready"`
+	Capacity                     uint16                    `json:"capacity"`
+	MaxConcurrentTasks           uint16                    `json:"max_concurrent_tasks"`
+	MaxParallelOperationsPerTask uint16                    `json:"max_parallel_operations_per_task"`
+	Operations                   []workexecution.Operation `json:"operations"`
+	UnavailableOperations        []workexecution.Operation `json:"unavailable_operations,omitempty"`
 }
 
 type ExecutorSnapshot struct {
@@ -142,6 +144,14 @@ func (record ExecutorRecord) Validate() error {
 	if record.Capacity == 0 || record.Capacity > maximumExecutorCapacity || len(record.Operations) == 0 ||
 		len(record.Operations) > 64 {
 		return invalid("executor capacity or operation catalog is invalid")
+	}
+	if record.Identity.Executor == workexecution.Agent {
+		if record.MaxConcurrentTasks == 0 || record.MaxParallelOperationsPerTask == 0 ||
+			uint32(record.MaxConcurrentTasks)*uint32(record.MaxParallelOperationsPerTask) != uint32(record.Capacity) {
+			return invalid("Agent task and operation limits must match its bounded capacity")
+		}
+	} else if record.MaxConcurrentTasks != 0 || record.MaxParallelOperationsPerTask != 0 {
+		return invalid("Controller executor must not carry Agent concurrency limits")
 	}
 	seen := make(map[workexecution.Operation]struct{}, len(record.Operations))
 	for _, operation := range record.Operations {

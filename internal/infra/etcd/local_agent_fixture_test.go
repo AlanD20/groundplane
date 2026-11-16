@@ -22,7 +22,7 @@ func localAgentTestRecord(
 		Image:            "ghcr.io/groundplane/agent@sha256:" + strings.Repeat("a", 64),
 		Generation:       1, Phase: testlocalagents.LocalAgentPhaseProvisioning,
 		Config: testlocalagents.LocalAgentConfig{
-			PullIntervalSeconds: 5, MaxConcurrentTasks: 4,
+			PullIntervalSeconds: 5, MaxConcurrentTasks: 4, MaxParallelOperationsPerTask: 1,
 			Labels: map[string]string{"role": "local"},
 		},
 		EncryptedToken: []byte("age-encrypted-token"),

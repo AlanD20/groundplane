@@ -18,6 +18,10 @@ export function AgentConfigCard({ agentId }: { agentId: string }) {
     agentConfig ? String(agentConfig.max_concurrent_tasks) : "",
     agentId,
   );
+  const [maxParallel, setMaxParallel] = useDraftField(
+    agentConfig ? String(agentConfig.max_parallel_operations_per_task) : "",
+    agentId,
+  );
   const [pullInterval, setPullInterval] = useDraftField(
     agentConfig ? String(agentConfig.pull_interval_seconds) : "",
     agentId,
@@ -32,21 +36,30 @@ export function AgentConfigCard({ agentId }: { agentId: string }) {
   const dirty =
     !!agentConfig &&
     (maxConcurrent !== String(agentConfig.max_concurrent_tasks) ||
+      maxParallel !== String(agentConfig.max_parallel_operations_per_task) ||
       pullInterval !== String(agentConfig.pull_interval_seconds) ||
       labels !== formatLabels(agentConfig.labels));
   async function save() {
     setSaving(true);
     setSaveError(null);
     try {
+      const tasks = boundedLimit(maxConcurrent, "Concurrent Tasks");
+      const operations = boundedLimit(
+        maxParallel,
+        "Parallel operations per Task",
+      );
+      if (tasks * operations > 256)
+        throw new Error(
+          "Concurrent Tasks × parallel operations per Task must be at most 256",
+        );
       const updated = await setAgentConfig(agentId, {
-        max_concurrent_tasks: positiveInteger(
-          maxConcurrent,
-          "Max concurrent tasks",
-        ),
+        max_concurrent_tasks: tasks,
+        max_parallel_operations_per_task: operations,
         pull_interval_seconds: positiveInteger(pullInterval, "Pull interval"),
         labels: parseLabels(labels),
       });
       setMaxConcurrent(String(updated.max_concurrent_tasks));
+      setMaxParallel(String(updated.max_parallel_operations_per_task));
       setPullInterval(String(updated.pull_interval_seconds));
       setLabels(formatLabels(updated.labels));
     } catch (cause) {
@@ -83,6 +96,9 @@ export function AgentConfigCard({ agentId }: { agentId: string }) {
             busy={saving}
             onCancel={() => {
               setMaxConcurrent(String(agentConfig.max_concurrent_tasks));
+              setMaxParallel(
+                String(agentConfig.max_parallel_operations_per_task),
+              );
               setPullInterval(String(agentConfig.pull_interval_seconds));
               setLabels(formatLabels(agentConfig.labels));
               setSaveError(null);
@@ -100,15 +116,27 @@ export function AgentConfigCard({ agentId }: { agentId: string }) {
           >
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`agent-max-${agentId}`}>
-                  Max concurrent tasks
-                </Label>
+                <Label htmlFor={`agent-max-${agentId}`}>Concurrent Tasks</Label>
                 <Input
                   id={`agent-max-${agentId}`}
                   type="number"
                   min={1}
+                  max={256}
                   value={maxConcurrent}
                   onChange={(event) => setMaxConcurrent(event.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`agent-parallel-${agentId}`}>
+                  Parallel operations per Task
+                </Label>
+                <Input
+                  id={`agent-parallel-${agentId}`}
+                  type="number"
+                  min={1}
+                  max={256}
+                  value={maxParallel}
+                  onChange={(event) => setMaxParallel(event.target.value)}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -124,6 +152,14 @@ export function AgentConfigCard({ agentId }: { agentId: string }) {
                 />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Concurrent Tasks counts distinct in-flight Tasks. Each Task can
+              run up to its parallel operation limit. Both limits are 1–256;
+              their product must be at most 256.
+              {Number.isInteger(Number(maxConcurrent)) &&
+                Number.isInteger(Number(maxParallel)) &&
+                ` Current total operation limit: ${Number(maxConcurrent) * Number(maxParallel)}.`}
+            </p>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={`agent-labels-${agentId}`}>Labels</Label>
               <Textarea
@@ -178,4 +214,10 @@ function parseLabels(value: string): Record<string, string> {
     labels[key] = labelValue;
   }
   return labels;
+}
+
+function boundedLimit(value: string, label: string): number {
+  const parsed = positiveInteger(value, label);
+  if (parsed > 256) throw new Error(`${label} must be between 1 and 256`);
+  return parsed;
 }

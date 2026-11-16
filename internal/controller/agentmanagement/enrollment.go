@@ -145,15 +145,15 @@ func NewEnrollmentService(
 	idempotency agentEnrollmentIdempotency,
 ) (*agentEnrollmentService, error) {
 	if images == nil || tasks == nil || idempotency == nil || config.PullIntervalSeconds <= 0 ||
-		config.MaxConcurrentTasks <= 0 {
+		config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 || config.MaxParallelOperationsPerTask < 1 || config.MaxParallelOperationsPerTask > 256 || config.MaxConcurrentTasks*config.MaxParallelOperationsPerTask > 256 {
 		return nil, errs.New(errs.KindInternal, "Agent enrollment service dependencies are invalid")
 	}
 	return &agentEnrollmentService{
 		images: images,
 		config: localagent.Config{
 			PullIntervalSeconds: config.PullIntervalSeconds,
-			MaxConcurrentTasks:  config.MaxConcurrentTasks,
-			Labels:              maps.Clone(config.Labels),
+			MaxConcurrentTasks:  config.MaxConcurrentTasks, MaxParallelOperationsPerTask: config.MaxParallelOperationsPerTask,
+			Labels: maps.Clone(config.Labels),
 		},
 		tasks: tasks, idempotency: idempotency, now: time.Now,
 	}, nil
@@ -251,7 +251,7 @@ func (service *agentEnrollmentService) newCapture(
 	capture := agentoperations.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
 		PlanID: ids.New(ids.KindPlan), AgentID: ids.New(ids.KindAgent), Action: workexecution.ActionCreate,
 		Image: image, CreatedAt: createdAt, Enrollment: &agentoperations.Enrollment{
-			PullIntervalSeconds: service.config.PullIntervalSeconds, MaxConcurrentTasks: service.config.MaxConcurrentTasks, Labels: maps.Clone(service.config.Labels)}}
+			PullIntervalSeconds: service.config.PullIntervalSeconds, MaxConcurrentTasks: service.config.MaxConcurrentTasks, MaxParallelOperationsPerTask: service.config.MaxParallelOperationsPerTask, Labels: maps.Clone(service.config.Labels)}}
 	_, err := capture.Reference()
 	return capture, err
 }

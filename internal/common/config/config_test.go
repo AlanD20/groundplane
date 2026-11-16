@@ -88,6 +88,7 @@ func TestAgentConfigRequiresCanonicalAgentID(t *testing.T) {
 			cfg.AgentID = test.agentID
 			cfg.Runtime.PullIntervalSeconds = 2
 			cfg.Runtime.MaxConcurrentTasks = 3
+			cfg.Runtime.MaxParallelOperationsPerTask = 1
 			err := cfg.Validate()
 			if (err != nil) != test.wantErr {
 				t.Fatalf("AgentConfig.Validate() error = %v, want error = %t", err, test.wantErr)
@@ -101,7 +102,7 @@ func TestControllerAgentBootstrapDefaultsAndImageValidation(t *testing.T) {
 
 	defaults := validControllerConfig()
 	if defaults.Agent.Image != "" || defaults.Agent.Runtime.PullIntervalSeconds != 2 ||
-		defaults.Agent.Runtime.MaxConcurrentTasks != 3 || len(defaults.Agent.Runtime.Labels) != 0 {
+		defaults.Agent.Runtime.MaxConcurrentTasks != 3 || defaults.Agent.Runtime.MaxParallelOperationsPerTask != 3 || len(defaults.Agent.Runtime.Labels) != 0 {
 		t.Fatalf("default Agent bootstrap = %#v", defaults.Agent)
 	}
 
@@ -191,6 +192,7 @@ func validAgentConfig() AgentConfig {
 	cfg.AgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	cfg.Runtime.PullIntervalSeconds = 2
 	cfg.Runtime.MaxConcurrentTasks = 3
+	cfg.Runtime.MaxParallelOperationsPerTask = 1
 	cfg.Runtime.Labels = map[string]string{"arch": "arm64"}
 	return cfg
 }

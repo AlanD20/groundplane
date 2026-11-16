@@ -36,9 +36,10 @@ const (
 )
 
 type LocalAgentConfig struct {
-	PullIntervalSeconds int32
-	MaxConcurrentTasks  int32
-	Labels              map[string]string
+	PullIntervalSeconds          int32
+	MaxConcurrentTasks           int32
+	MaxParallelOperationsPerTask int32
+	Labels                       map[string]string
 }
 
 type LocalAgentRecord struct {
@@ -76,11 +77,12 @@ type localAgentPrimaryData struct {
 }
 
 type localAgentConfigData struct {
-	AgentID             string            `json:"agent_id"`
-	Generation          uint64            `json:"generation"`
-	PullIntervalSeconds int32             `json:"pull_interval_seconds"`
-	MaxConcurrentTasks  int32             `json:"max_concurrent_tasks"`
-	Labels              map[string]string `json:"labels,omitempty"`
+	AgentID                      string            `json:"agent_id"`
+	Generation                   uint64            `json:"generation"`
+	PullIntervalSeconds          int32             `json:"pull_interval_seconds"`
+	MaxConcurrentTasks           int32             `json:"max_concurrent_tasks"`
+	MaxParallelOperationsPerTask int32             `json:"max_parallel_operations_per_task"`
+	Labels                       map[string]string `json:"labels,omitempty"`
 }
 
 type localAgentTokenData struct {
@@ -139,8 +141,8 @@ func EncodeLocalAgentConfig(record LocalAgentRecord) ([]byte, error) {
 	return recordcodec.Encode("agent_config", localAgentConfigData{
 		AgentID: record.ID, Generation: record.Generation,
 		PullIntervalSeconds: record.Config.PullIntervalSeconds,
-		MaxConcurrentTasks:  record.Config.MaxConcurrentTasks,
-		Labels:              maps.Clone(record.Config.Labels),
+		MaxConcurrentTasks:  record.Config.MaxConcurrentTasks, MaxParallelOperationsPerTask: record.Config.MaxParallelOperationsPerTask,
+		Labels: maps.Clone(record.Config.Labels),
 	})
 }
 
@@ -194,8 +196,8 @@ func DecodeLocalAgentConfig(value []byte) (decodedLocalAgentConfig, error) {
 	}
 	config := LocalAgentConfig{
 		PullIntervalSeconds: data.PullIntervalSeconds,
-		MaxConcurrentTasks:  data.MaxConcurrentTasks,
-		Labels:              maps.Clone(data.Labels),
+		MaxConcurrentTasks:  data.MaxConcurrentTasks, MaxParallelOperationsPerTask: data.MaxParallelOperationsPerTask,
+		Labels: maps.Clone(data.Labels),
 	}
 	if ids.Validate(ids.KindAgent, data.AgentID) != nil || data.Generation == 0 ||
 		ValidateLocalAgentConfig(config) != nil {
@@ -326,8 +328,8 @@ func validateLocalAgentPrimary(record LocalAgentRecord) error {
 }
 
 func ValidateLocalAgentConfig(config LocalAgentConfig) error {
-	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks <= 0 {
-		return errs.New(errs.KindValidationFailed, "local Agent config limits must be positive")
+	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 || config.MaxParallelOperationsPerTask < 1 || config.MaxParallelOperationsPerTask > 256 || config.MaxConcurrentTasks*config.MaxParallelOperationsPerTask > 256 {
+		return errs.New(errs.KindValidationFailed, "local Agent config pull interval must be positive and task limits must be 1..256 with at most 256 total operations")
 	}
 	for key, value := range config.Labels {
 		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 ||
@@ -386,7 +388,7 @@ func CloneLocalAgentConfig(config LocalAgentConfig) LocalAgentConfig {
 
 func equalLocalAgentConfig(left LocalAgentConfig, right LocalAgentConfig) bool {
 	if left.PullIntervalSeconds != right.PullIntervalSeconds ||
-		left.MaxConcurrentTasks != right.MaxConcurrentTasks || len(left.Labels) != len(right.Labels) {
+		left.MaxConcurrentTasks != right.MaxConcurrentTasks || left.MaxParallelOperationsPerTask != right.MaxParallelOperationsPerTask || len(left.Labels) != len(right.Labels) {
 		return false
 	}
 	for key, value := range left.Labels {

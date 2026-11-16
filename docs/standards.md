@@ -73,7 +73,7 @@ with those adapters.
 Every side-effecting repository or infrastructure function takes `context.Context`
 first. Fixed standard-library signatures may instead capture the operation context
 or use bounded cleanup. Propagate cancellation and join goroutines; do not leak
-unbounded workers. Agent concurrency follows its configured task bound. Controller
+unbounded workers. Agent concurrency follows its configured Task and per-Task operation bounds. Controller
 operation owners provide serialization, not scattered ad hoc locks.
 
 Subprocesses use [the shared Runner](../internal/common/runner) for deadlines,

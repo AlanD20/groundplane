@@ -265,7 +265,7 @@ func assignmentFixture(
 				AgentID:    ids.New(ids.KindAgent),
 				Generation: 1,
 			},
-			ProcessGeneration: [16]byte{1}, Ready: true, Capacity: 3,
+			ProcessGeneration: [16]byte{1}, Ready: true, Capacity: 3, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1,
 			Operations: []workexecution.Operation{workexecution.Backup, workexecution.Release},
 		}}
 		raw, err := EncodeExecutor(executor.Record)
@@ -300,7 +300,8 @@ func assignmentFixture(
 		store.values[key] = keyvalue.KeyValue{Key: key, Value: raw, ModRevision: 1}
 	}
 	return Assignment{
-		ReadRevision: 1,
+		ReadRevision:      1,
+		AdmissionRevision: store.values[AdmissionFenceKey(executor.Record.Identity)].ModRevision,
 		Task: TaskSnapshot{
 			Task:     task,
 			Revision: 1,

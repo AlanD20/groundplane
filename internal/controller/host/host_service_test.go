@@ -190,10 +190,10 @@ func acceptedHostFixture(etcdStatus, agentStatus api.HealthState) api.Host {
 			Version: "v0.4.2",
 		},
 		Agent: api.HostAgent{
-			Status:        agentStatus,
-			PullInterval:  "2s",
-			MaxConcurrent: 3,
-			Labels:        []string{"qa-workload", "arm64"},
+			Status:             agentStatus,
+			PullInterval:       "2s",
+			MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1,
+			Labels: []string{"qa-workload", "arm64"},
 		},
 	}
 }
@@ -228,10 +228,10 @@ func hostServiceFor(
 		}),
 		Agent: agentSnapshotFunc(func(context.Context) (AgentSnapshot, error) {
 			return AgentSnapshot{
-				Status:        host.Agent.Status,
-				PullInterval:  host.Agent.PullInterval,
-				MaxConcurrent: host.Agent.MaxConcurrent,
-				Labels:        host.Agent.Labels,
+				Status:             host.Agent.Status,
+				PullInterval:       host.Agent.PullInterval,
+				MaxConcurrentTasks: host.Agent.MaxConcurrentTasks, MaxParallelOperationsPerTask: host.Agent.MaxParallelOperationsPerTask,
+				Labels: host.Agent.Labels,
 			}, agentErr
 		}),
 		ControllerService: host.Controller.Service,

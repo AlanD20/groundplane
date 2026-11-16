@@ -101,6 +101,10 @@
             "format": "int64",
             "type": "integer"
           },
+          "max_parallel_operations_per_task": {
+            "format": "int64",
+            "type": "integer"
+          },
           "pull_interval_seconds": {
             "format": "int64",
             "type": "integer"
@@ -109,6 +113,7 @@
         "required": [
           "pull_interval_seconds",
           "max_concurrent_tasks",
+          "max_parallel_operations_per_task",
           "labels"
         ],
         "type": "object"
@@ -133,7 +138,13 @@
           },
           "max_concurrent_tasks": {
             "format": "int64",
-            "maximum": 2147483647,
+            "maximum": 256,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "max_parallel_operations_per_task": {
+            "format": "int64",
+            "maximum": 256,
             "minimum": 1,
             "type": "integer"
           },
@@ -147,6 +158,7 @@
         "required": [
           "pull_interval_seconds",
           "max_concurrent_tasks",
+          "max_parallel_operations_per_task",
           "labels"
         ],
         "type": "object"
@@ -4552,7 +4564,11 @@
               "null"
             ]
           },
-          "max_concurrent": {
+          "max_concurrent_tasks": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_parallel_operations_per_task": {
             "format": "int64",
             "type": "integer"
           },
@@ -4566,7 +4582,8 @@
         "required": [
           "status",
           "pull_interval",
-          "max_concurrent",
+          "max_concurrent_tasks",
+          "max_parallel_operations_per_task",
           "labels"
         ],
         "type": "object"

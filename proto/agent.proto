@@ -1002,6 +1002,7 @@ message AgentConfig {
   int32 pull_interval_seconds = 1;
   int32 max_concurrent_tasks = 2;
   repeated AgentLabel labels = 3; // sorted by unique key
+  int32 max_parallel_operations_per_task = 4;
 }
 
 message AgentLabel {
