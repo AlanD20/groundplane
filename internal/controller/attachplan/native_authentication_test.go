@@ -13,6 +13,32 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// A harmless publication CAS loss records an input diagnostic. Retrying must
+// still validate and open the same encrypted credential capture before making
+// the work executable, without changing the stored waiting item first.
+func TestNativeAttachPreparationRetriesAfterInputDiagnostic(t *testing.T) {
+	fixture := newNativeAuthenticationFixture(t, core.BackingAuthenticationPassword)
+	fixture.task.Action, fixture.task.TargetID = workexecution.ActionApply, fixture.generation.EnvironmentID
+	fixture.item.Phase, fixture.item.Input = workexecution.Waiting, nil
+	fixture.item.Wait = &workexecution.Wait{Reason: workexecution.WaitInput,
+		Code: "state.conflict", Detail: "Attach authority changed while preparing its input"}
+	if err := fixture.item.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	planner, err := NewProvisionPlanner(fixture.facts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := planner.ValidateWaiting(t.Context(), fixture.generation, fixture.task, fixture.item,
+		fixture.item.UpdatedAt.Add(time.Second)); err != nil {
+		t.Fatalf("a saved preparation diagnostic prevented captured credential validation: %v", err)
+	}
+	if fixture.facts.provisions != 1 || fixture.item.Input != nil ||
+		fixture.item.Phase != workexecution.Waiting || fixture.item.Wait == nil || fixture.item.Wait.Code != "state.conflict" {
+		t.Fatal("validation changed execution authority or skipped captured credential resolution")
+	}
+}
+
 // TASK-197: a Blueprint's parent is created before its Attach candidates.
 // Host provisioning and Controller settlement must retain the same captured
 // owner identity, otherwise shared consumers reject the completed owner.

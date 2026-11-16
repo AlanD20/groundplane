@@ -31,6 +31,8 @@ Initial single-host release.
   Keep genuinely unobserved outcomes explicitly unknown.
 - Isolate the Agent execution journal from temporary Script workspaces so
   concurrent Scripts cannot prevent execution or reconnect recovery.
+- Resume Attach preparation after a concurrent state change without carrying
+  an earlier waiting diagnostic into its executable state.
 - Keep disabled Cloudflare Tunnels valid without a token throughout Component
   storage and Blueprint preparation; enabling a Tunnel still requires a valid
   Secret reference.

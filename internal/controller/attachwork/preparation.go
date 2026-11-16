@@ -5,7 +5,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/attachexecution"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -99,13 +98,9 @@ func (owner *Preparation) Prepare(ctx context.Context, taskID, workID string) er
 	if !source.Generation.Record.SettlesInController() {
 		// Resolve once before readiness so corrupt encrypted input cannot become
 		// an executable assignment. No plaintext is persisted by preparation.
-		prepared := item
-		prepared.Input = &reference
-		payload, err := owner.inputs.planner.BuildCaptured(ctx, source.Generation.Record, task, prepared)
-		if err != nil {
+		if err := owner.inputs.planner.ValidateWaiting(ctx, source.Generation.Record, task, item, time.Now().UTC()); err != nil {
 			return err
 		}
-		attachexecution.ClearProvision(payload)
 	}
 	at := time.Now().UTC()
 	if !at.Before(task.Deadline) || !at.Before(item.Deadline) {

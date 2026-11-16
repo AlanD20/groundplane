@@ -3,6 +3,7 @@ package attachplan
 import (
 	"context"
 	"encoding/hex"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/attachexecution"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -29,6 +30,25 @@ func NewProvisionPlanner(facts ProvisionFacts) (*ProvisionPlanner, error) {
 		return nil, errs.New(errs.KindInternal, "Attach provisioning requires captured fact resolution")
 	}
 	return &ProvisionPlanner{facts: facts}, nil
+}
+
+// ValidateWaiting resolves the captured payload before readiness is published.
+// The native input transition removes any earlier preparation diagnostic; adding
+// an input to a still-diagnosed waiting item would invent an invalid work state.
+func (planner *ProvisionPlanner) ValidateWaiting(ctx context.Context, generation blueprintattachinputs.Generation,
+	task workexecution.Task, item workexecution.Item, at time.Time,
+) error {
+	reference, err := blueprintattachinputs.WorkInput(generation)
+	if err != nil {
+		return err
+	}
+	prepared, err := workexecution.PrepareInput(item, reference, at)
+	if err != nil {
+		return err
+	}
+	payload, err := planner.BuildCaptured(ctx, generation, task, prepared)
+	attachexecution.ClearProvision(payload)
+	return err
 }
 
 // BuildCaptured opens only the generation already bound to this work item.
