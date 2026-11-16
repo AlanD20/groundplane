@@ -29,7 +29,9 @@ func TestSecretCreateRoutePreservesExactMutationResponse(t *testing.T) {
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/secrets",
-		bytes.NewBufferString(`{"platform":true,"key":"TOKEN","kind":"env_var","value":"private","sensitive":false,"encryption":"none"}`),
+		bytes.NewBufferString(
+			`{"platform":true,"key":"TOKEN","kind":"env_var","value":"private","sensitive":false,"encryption":"none"}`,
+		),
 	)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set(idempotencyKeyHeader, "secret-create-key-0004")

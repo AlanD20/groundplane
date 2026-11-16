@@ -5,6 +5,12 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+## 0.0.1 — 2026-11-16
+
+Initial single-host release.
+
+### Console, hosting and operator refinements
+
 - Separate action configuration from execution timing. Choose **Start immediately**
   or **Wait for Tasks**, browse paginated unfinished Tasks, and retain readable
   prerequisite links as Tasks finish.
@@ -14,13 +20,14 @@ that every deployment or failure scenario has been qualified.
   inputs, with independent sensitivity and `age`/`none` storage choices. Preserve
   those choices on single-value and bulk edits, and select scoped references by
   stable ID instead of generated file paths or ambiguous keys.
-
-## 0.0.1 — 2026-11-16
-
-Initial single-host release.
-
-### Console, hosting and operator refinements
-
+- Use the shared file editor for Project and Platform Configuration creation,
+  with fullscreen, find/replace, preview and copy controls; let configuration
+  editors fill the fullscreen workspace.
+- Select image inventory rows across pages and remove selected or unused images
+  through individual protected removal Tasks, with paginated review, explicit
+  blocked results and direct Task links.
+- Show consistent UTC timestamps across Task details, runtime checks, backups,
+  image details and platform inspectors.
 - Queue operator actions behind up to 16 whole Tasks with **Run after** in the
   Console, CLI and API. Capture execution inputs only after every prerequisite
   succeeds and fully settles, without occupying Agent capacity while waiting.
