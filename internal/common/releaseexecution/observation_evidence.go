@@ -91,6 +91,9 @@ func (result EffectResult) validate(input Input, progress Progress, at time.Time
 	if result.Readiness != nil {
 		count++
 	}
+	if result.ReadinessFailure != nil {
+		count++
+	}
 	if result.DrainedAt != nil {
 		count++
 	}
@@ -106,6 +109,8 @@ func (result EffectResult) validate(input Input, progress Progress, at time.Time
 			return invalidProgress()
 		}
 		return ValidateHelperResult(input, progress, response)
+	case result.ReadinessFailure != nil:
+		return result.ReadinessFailure.validate(input, progress, at)
 	case result.Readiness != nil:
 		return result.Readiness.validate(input, progress, at)
 	default:

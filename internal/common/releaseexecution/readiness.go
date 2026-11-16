@@ -15,6 +15,15 @@ import (
 // wait loop and Controller evidence admission use this decision; neither can
 // substitute a different Service or an earlier observation from the same host.
 func Readiness(input Input, progress Progress, observed *agentpb.ObservedProject) (bool, error) {
+	return readiness(input, progress, observed, nil)
+}
+
+func readiness(
+	input Input,
+	progress Progress,
+	observed *agentpb.ObservedProject,
+	failure **ReadinessFailureProof,
+) (bool, error) {
 	services, err := ReadinessWorkloads(input, progress)
 	if err != nil {
 		return false, err
@@ -76,6 +85,9 @@ func Readiness(input Input, progress Progress, observed *agentpb.ObservedProject
 			count++
 			if container.State == agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED ||
 				container.State == agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_DEAD {
+				if err := captureReadinessFailure(failure, observed, service, container); err != nil {
+					return false, err
+				}
 				if container.ExitCode != nil {
 					return false, errs.Newf(
 						errs.KindStateConflict,
@@ -98,6 +110,9 @@ func Readiness(input Input, progress Progress, observed *agentpb.ObservedProject
 			}
 			if service.HasHealthcheck {
 				if container.Health == agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_UNHEALTHY {
+					if err := captureReadinessFailure(failure, observed, service, container); err != nil {
+						return false, err
+					}
 					return false, errs.Newf(
 						errs.KindStateConflict,
 						"service %s container %s failed its healthcheck; inspect Service logs",
@@ -106,6 +121,9 @@ func Readiness(input Input, progress Progress, observed *agentpb.ObservedProject
 					)
 				}
 				if detail := healthcheckfailure.Detail(container.HealthcheckDiagnostic); detail != "" {
+					if err := captureReadinessFailure(failure, observed, service, container); err != nil {
+						return false, err
+					}
 					return false, errs.Newf(
 						errs.KindValidationFailed,
 						"service %s container %s: %s",

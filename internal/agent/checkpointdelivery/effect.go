@@ -2,9 +2,10 @@ package checkpointdelivery
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"sync"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -57,6 +58,21 @@ func (delivery *Effect) RecordReadiness(
 	return delivery.record(ctx, boundary, result)
 }
 
+// RecordReadinessFailure saves a definite observation before failure settlement.
+// No proof is fabricated for cancelled waits or unavailable observations.
+func (delivery *Effect) RecordReadinessFailure(
+	ctx context.Context,
+	boundary releaseexecution.CheckpointReport,
+	observed *agentpb.ObservedProject,
+) (bool, error) {
+	result, err := releaseexecution.ReadinessFailureResult(delivery.input, boundary.Progress, observed)
+	if err != nil {
+		return false, nil
+	}
+	_, err = delivery.record(ctx, boundary, result)
+	return true, err
+}
+
 func (delivery *Effect) RecordDrain(
 	ctx context.Context,
 	boundary releaseexecution.CheckpointReport,
@@ -105,7 +121,42 @@ func (delivery *Effect) Resume(
 		return reference, false, err
 	}
 	reference, err = delivery.send(ctx, *record)
+	if err == nil {
+		evidence, decodeErr := releaseexecution.DecodeEffectEvidence(
+			delivery.input,
+			boundary,
+			record.Raw,
+			record.Reference,
+		)
+		if decodeErr != nil {
+			return reference, true, decodeErr
+		}
+		if evidence.Result.ReadinessFailure != nil {
+			err = evidence.Result.ReadinessFailure.Error()
+		}
+	}
 	return reference, true, err
+}
+
+func (delivery *Effect) DeliverFailure(ctx context.Context, boundary releaseexecution.CheckpointReport) error {
+	delivery.mu.Lock()
+	defer delivery.mu.Unlock()
+	record, err := delivery.journal.Effect(ctx, delivery.input, boundary)
+	if err != nil {
+		return err
+	}
+	if record == nil {
+		return errs.New(errs.KindStateConflict, "Release failure proof is unavailable")
+	}
+	evidence, err := releaseexecution.DecodeEffectEvidence(delivery.input, boundary, record.Raw, record.Reference)
+	if err != nil {
+		return err
+	}
+	if evidence.Result.ReadinessFailure == nil {
+		return errs.New(errs.KindStateConflict, "Release action did not record a readiness failure")
+	}
+	_, err = delivery.send(ctx, *record)
+	return err
 }
 
 func (delivery *Effect) send(ctx context.Context, record agentworkjournal.EffectRecord) (workexecution.Input, error) {

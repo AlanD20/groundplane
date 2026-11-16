@@ -26,6 +26,9 @@ Initial single-host release.
   deleting and recreating a key cannot silently retarget an accepted request.
 - Advance ready Blueprint work without the periodic scheduler delay, and release
   large queued request payloads after capture while retaining compact Task history.
+- Retain known deployment readiness failures across Agent reconnects, showing
+  container exits, failed healthchecks and missing probe tools in Task steps.
+  Keep genuinely unobserved outcomes explicitly unknown.
 - Keep disabled Cloudflare Tunnels valid without a token throughout Component
   storage and Blueprint preparation; enabling a Tunnel still requires a valid
   Secret reference.

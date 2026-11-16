@@ -45,6 +45,7 @@ type nativeReleaseExecutorFixture struct {
 	present      bool
 	observations int
 	hostActions  []releaseexecution.RolloutAction
+	failureProof []byte
 	files        *nativeConfigurationFileHelper
 }
 
@@ -162,8 +163,15 @@ func (f *nativeReleaseExecutorFixture) EffectEvidence(_ context.Context, identit
 	if f.last == nil || !proto.Equal(identity, f.assignment.Attempt) {
 		return workexecution.Input{}, errs.New(errs.KindStateConflict, "effect has no captured checkpoint")
 	}
-	if _, err := releaseexecution.DecodeEffectEvidence(f.input, *f.last, raw, reference); err != nil {
+	evidence, err := releaseexecution.DecodeEffectEvidence(f.input, *f.last, raw, reference)
+	if err != nil {
 		return workexecution.Input{}, err
+	}
+	if evidence.Result.ReadinessFailure != nil {
+		if f.scenario == "readiness upload fails" {
+			return workexecution.Input{}, f.transport
+		}
+		f.failureProof = append([]byte(nil), raw...)
 	}
 	return reference, nil
 }
@@ -302,6 +310,11 @@ func (f *nativeReleaseExecutorFixture) ObserveRelease(
 			Labels: proto.CloneOf(
 				service,
 			).ExpectedLabels, State: agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING}}
+	}
+	if f.present && (f.scenario == "candidate exits" || f.scenario == "readiness upload fails") {
+		code := int32(42)
+		project.Containers[0].State = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED
+		project.Containers[0].ExitCode = &code
 	}
 	return project, nil
 }

@@ -46,6 +46,9 @@ func (executor *Executor) Execute(
 		if pending.Receipt != nil {
 			return ExecutionResult{Failure: pending.Receipt}, nil
 		}
+		if err := executor.deliverReadinessFailure(ctx, input, exchange); err != nil {
+			return ExecutionResult{}, err
+		}
 		return executor.fail(ctx, input.Attempt, pending.Reason, exchange)
 	}
 	report, err := executor.execute(ctx, input, exchange)
@@ -65,6 +68,9 @@ func (executor *Executor) Execute(
 	}
 	if completed != nil {
 		return ExecutionResult{Report: &completed.Report}, err
+	}
+	if deliveryErr := executor.deliverReadinessFailure(ctx, input, exchange); deliveryErr != nil {
+		return ExecutionResult{}, deliveryErr
 	}
 	slog.ErrorContext(ctx, "Release execution failed", "task_id", input.Attempt.TaskID,
 		"work_id", input.Attempt.WorkItemID, "attempt_id", input.Attempt.ID,

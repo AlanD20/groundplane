@@ -75,6 +75,35 @@ func (service *Service) Stages(ctx context.Context, taskID, workID, attemptID st
 	if err := service.environmentOutcome(ctx, snapshot.Attempt, &result); err != nil {
 		return Stages{}, err
 	}
+	readiness, err := service.diagnostics.ReleaseReadinessResult(ctx, snapshot.Attempt, snapshot.ReadRevision)
+	if err != nil {
+		return Stages{}, err
+	}
+	if readiness != nil {
+		found := false
+		for index, stage := range result.Items {
+			if stage.Key != readiness.Key {
+				continue
+			}
+			found = true
+			if stage.State == workexecution.StageUnknown {
+				result.Items[index] = *readiness
+			}
+		}
+		if !found {
+			result.Items = append(result.Items, *readiness)
+		}
+		result.Available = true
+		if !snapshot.Incomplete {
+			result.Incomplete = false
+			for _, stage := range result.Items {
+				result.Incomplete = result.Incomplete || stage.State == workexecution.StageUnknown
+			}
+		}
+		if result.UpdatedAt == nil || result.UpdatedAt.Before(*readiness.FinishedAt) {
+			result.UpdatedAt = readiness.FinishedAt
+		}
+	}
 	hook, err := service.diagnostics.ReleaseHookResult(ctx, snapshot.Attempt, snapshot.ReadRevision)
 	if err != nil {
 		return Stages{}, err

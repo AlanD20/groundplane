@@ -44,6 +44,7 @@ type EffectEvidence interface {
 		releaseexecution.CheckpointReport,
 		*agentpb.ObservedProject,
 	) (workexecution.Input, error)
+	RecordReadinessFailure(context.Context, releaseexecution.CheckpointReport, *agentpb.ObservedProject) (bool, error)
 	RecordDrain(context.Context, releaseexecution.CheckpointReport, time.Time) (workexecution.Input, error)
 	RecordHelper(
 		context.Context,
@@ -158,6 +159,12 @@ func (driver *Driver) rollout(
 		cursor.Rolling != nil && cursor.Rolling.Phase == rollingrelease.WaitCandidateHealthy {
 		observed, err := WaitCandidate(ctx, driver.observer, input, report, nil)
 		if err != nil {
+			save, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+			_, saveErr := driver.evidence.RecordReadinessFailure(save, report, observed)
+			cancel()
+			if saveErr != nil {
+				return workexecution.Input{}, saveErr
+			}
 			return workexecution.Input{}, err
 		}
 		return driver.evidence.RecordReadiness(ctx, report, observed)

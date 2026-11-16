@@ -115,7 +115,7 @@ func EffectCompletionConditions(
 		return nil, invalid()
 	}
 	evidence, err := releaseexecution.DecodeEffectEvidence(input, report, value.Value, *next.Progress.Evidence)
-	if err != nil || next.Progress.UpdatedAt.Before(evidence.RecordedAt) {
+	if err != nil || evidence.Result.ReadinessFailure != nil || next.Progress.UpdatedAt.Before(evidence.RecordedAt) {
 		return nil, invalid()
 	}
 	return []keyvalue.Condition{

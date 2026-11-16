@@ -18,10 +18,11 @@ import (
 // EffectResult is a closed result set for Release host actions. Exactly one
 // member is populated; the active cursor determines which member is legal.
 type EffectResult struct {
-	Configuration *ConfigurationProof `json:"configuration,omitempty"`
-	Helper        []byte              `json:"helper,omitempty"`
-	Readiness     *ReadinessProof     `json:"readiness,omitempty"`
-	DrainedAt     *time.Time          `json:"drained_at,omitempty"`
+	Configuration    *ConfigurationProof    `json:"configuration,omitempty"`
+	Helper           []byte                 `json:"helper,omitempty"`
+	ReadinessFailure *ReadinessFailureProof `json:"readiness_failure,omitempty"`
+	Readiness        *ReadinessProof        `json:"readiness,omitempty"`
+	DrainedAt        *time.Time             `json:"drained_at,omitempty"`
 }
 
 // EffectEvidence retains bounded proof, not another copy of artifacts/secrets.
