@@ -1,9 +1,9 @@
 import { useId } from "react";
 import { ConfigurationTypeOptions } from "@/components/common/configuration-type-options";
 import { Checkbox } from "@/components/ui/checkbox";
+import { CodeEditor } from "@/components/ui/code-editor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 
 export type ConfigurationDraft = {
   kind: "env" | "file";
@@ -102,14 +102,12 @@ export function ConfigurationFields({
       )}
       {draft.kind === "file" && (
         <div className="space-y-1.5 md:col-span-2">
-          <Label htmlFor={`${id}-content`}>Contents</Label>
-          <Textarea
+          <CodeEditor
             id={`${id}-content`}
+            label="Contents"
             value={draft.value}
-            rows={8}
-            spellCheck={false}
-            className="font-mono text-sm"
-            onChange={(event) => update({ value: event.target.value })}
+            className="max-h-[60dvh] overflow-auto"
+            onValueChange={(value) => update({ value })}
           />
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
