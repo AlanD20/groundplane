@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/resolverexecution"
@@ -226,7 +227,11 @@ func (repository *Repository) NeedsAutomaticWork(
 	if err != nil {
 		return false, err
 	}
-	if request.Revision > 0 && request.Record.Fingerprint == digest {
+	if request.Revision > 0 && request.Record.Fingerprint == digest &&
+		slices.Equal(
+			request.Record.References,
+			capture.References,
+		) && request.Record.Outcome != workexecution.Superseded {
 		return false, nil
 	}
 	applied, found, err := repository.ReadApplied(ctx, input.HostID, input.ComponentID, capture.ReadRevision)

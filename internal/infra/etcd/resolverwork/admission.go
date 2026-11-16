@@ -89,6 +89,65 @@ func (repository *Repository) ReadAdmission(
 	} else if input.Previous != nil || input.Generation != 1 {
 		return stored, change, false, nil
 	}
-	change.Conditions = append(change.Conditions, capture.References...)
+	if current {
+		current, err = repository.referencesMatch(ctx, capture.References, view.ReadRevision)
+		if err != nil {
+			return StoredInput{}, workqueue.Change{}, false, err
+		}
+	}
+	if current {
+		change.Conditions = append(change.Conditions, capture.References...)
+	}
 	return stored, change, current, nil
+}
+
+// Stale source guards revoke unstarted work. They must not remain in the
+// superseding transaction, which would otherwise lose the same CAS forever.
+func (repository *Repository) referencesMatch(
+	ctx context.Context,
+	guards []keyvalue.Condition,
+	revision int64,
+) (bool, error) {
+	keys := make([]string, 0, len(guards))
+	for _, guard := range guards {
+		if !guard.Prefix {
+			keys = append(keys, guard.Key)
+		}
+	}
+	if len(keys) > 0 {
+		read, err := repository.read(ctx, keys, revision)
+		if err != nil {
+			return false, err
+		}
+		defer keyvalue.ClearValues(read.Values)
+		index := 0
+		for _, guard := range guards {
+			if guard.Prefix {
+				continue
+			}
+			if !keyvalue.ConditionMatchesRead(guard, read.Values[index]) {
+				return false, nil
+			}
+			index++
+		}
+	}
+	for _, guard := range guards {
+		if !guard.Prefix {
+			continue
+		}
+		read, err := repository.store.Range(ctx, keyvalue.RangeRequest{Prefix: guard.Key, Limit: 1, Revision: revision})
+		if err != nil {
+			return false, err
+		}
+		if read == nil || read.ReadRevision != revision {
+			return false, invalid("DNS resolver reference snapshot is incomplete")
+		}
+		if len(read.Values) != 0 {
+			for _, value := range read.Values {
+				clear(value.Value)
+			}
+			return false, nil
+		}
+	}
+	return true, nil
 }

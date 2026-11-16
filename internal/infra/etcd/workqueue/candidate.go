@@ -119,9 +119,12 @@ func (repository *Repository) ReadCandidate(
 	}
 	// Expiry is an operation decision, not worker admission. Let its owner
 	// settle captured input even when no executor or free slot is available.
+	// Retain the requesting host identity for owner validation, without an
+	// executor revision, readiness or slot that could authorize assignment.
 	if !item.Deadline.After(at) {
 		return Candidate{Assignment: Assignment{Task: view.Task, Item: view.Item,
-			ReadRevision: view.ReadRevision, QueueRevision: entry.Revision, Direction: direction, DecisionOnly: decisionOnly}}, nil
+			ReadRevision: view.ReadRevision, QueueRevision: entry.Revision, Direction: direction, DecisionOnly: decisionOnly,
+			Executor: ExecutorSnapshot{Record: ExecutorRecord{Identity: identity}}}}, nil
 	}
 	if retryWaiting(item) {
 		if at.Before(*item.Wait.Until) {

@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Supersede queued CoreDNS work when its captured Blueprint sources change,
+  recapture current inputs automatically, and settle expired work without
+  requiring an available executor slot.
+
 - Align Configuration filters and separate value controls from row actions.
   Keep ownership visible and expand or copy references beside each key.
 - Retry contended native execution-result publications with their exact captured
