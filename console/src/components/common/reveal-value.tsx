@@ -81,7 +81,14 @@ export function RevealValue({
       <div
         className={cn("flex min-w-0 max-w-full items-start gap-1", className)}
       >
-        <code className="min-h-9 min-w-0 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted px-3 py-2 font-mono text-sm [overflow-wrap:anywhere]">
+        <code
+          className={cn(
+            "min-h-9 min-w-0 max-h-40 flex-1 overflow-y-auto rounded-md bg-muted px-3 py-2 font-mono text-sm",
+            revealed && !expanded
+              ? "whitespace-pre-wrap [overflow-wrap:anywhere]"
+              : "whitespace-nowrap",
+          )}
+        >
           {revealed && !expanded ? (
             displayedValue === "" ? (
               <span className="font-sans italic text-muted-foreground">

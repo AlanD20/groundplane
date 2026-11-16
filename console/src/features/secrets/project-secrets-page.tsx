@@ -96,7 +96,8 @@ export default function ProjectSecretsPage() {
         icon={<KeyRound />}
         meta={
           <MetaPill icon={<KeyRound />}>
-            {scoped.length} configuration values
+            {scoped.length} configuration{" "}
+            {scoped.length === 1 ? "value" : "values"}
           </MetaPill>
         }
         actions={
@@ -163,7 +164,7 @@ export default function ProjectSecretsPage() {
         title="Configuration values"
         actions={
           <HelpHint>
-            Project-owned Secrets take precedence over matching Platform keys
+            Project values take precedence over matching Platform keys.
           </HelpHint>
         }
       >
@@ -175,7 +176,7 @@ export default function ProjectSecretsPage() {
           secrets={scoped}
           loading={store.reusableSecretsLoading}
           emptyTitle="No project configuration"
-          emptyDescription="Resolution falls back to matching platform Secrets."
+          emptyDescription="Resolution falls back to matching Platform values."
           scopeLabel="Project"
           editable
           onRemove={(secret, after) =>

@@ -1,5 +1,6 @@
 import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/common/empty-state";
+import { CompactReference } from "@/components/common/compact-reference";
 import { HelpHint } from "@/components/common/resource-panel";
 import { ResourceTable } from "@/components/common/resource-table";
 import { RevealValue } from "@/components/common/reveal-value";
@@ -95,6 +96,7 @@ export function ReusableSecretOwnerList({
             label="configuration"
           >
             <Select
+              className="w-full shrink-0 sm:w-40"
               value={kind}
               onValueChange={setKind}
               aria-label="Configuration type"
@@ -105,24 +107,15 @@ export function ReusableSecretOwnerList({
                 { value: "file", label: "Files" },
               ]}
             />
-            <HelpHint label="About protected values">
-              Secret values are hidden until revealed. Encryption is a separate
-              storage choice shown for each value. Active consumers and
-              recoverable Tasks can prevent deletion.
-            </HelpHint>
           </CollectionToolbar>
           <ResourceTable>
-            <Table>
+            <Table className="min-w-[46rem]">
               <TableHeader>
                 <TableRow>
                   <TableSortHead sort={table} field="key">
                     Key
                   </TableSortHead>
-                  <TableHead className="hidden md:table-cell">Owner</TableHead>
                   <TableHead>Storage</TableHead>
-                  <TableHead className="hidden lg:table-cell">
-                    Reference
-                  </TableHead>
                   <TableSortHead
                     sort={table}
                     field="updated"
@@ -130,35 +123,51 @@ export function ReusableSecretOwnerList({
                   >
                     Updated
                   </TableSortHead>
+                  <TableHead>
+                    <span className="inline-flex items-center gap-1">
+                      Value
+                      <HelpHint label="About protected values">
+                        Secret values are hidden until revealed. Encryption is a
+                        separate storage choice shown for each value. Active
+                        consumers and recoverable Tasks can prevent deletion.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {table.rows.map((secret) => (
                   <TableRow key={secret.id}>
-                    <TableCell className="font-mono font-medium">
-                      <span className="block">{secret.key}</span>
-                      <Badge
-                        variant="outline"
-                        className="mt-1 font-sans font-normal"
-                      >
-                        {secret.kind === "file"
-                          ? secret.sensitive
-                            ? "Secret file"
-                            : "File"
-                          : secret.sensitive
-                            ? "Secret"
-                            : "Variable"}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className="ml-1 font-sans font-normal md:hidden"
-                      >
-                        {scopeLabel}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
-                      {scopeLabel}
+                    <TableCell className="min-w-48 max-w-xs">
+                      <span className="block font-mono text-xs font-medium [overflow-wrap:anywhere]">
+                        {secret.key}
+                      </span>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <Badge variant="outline" className="font-normal">
+                          {secret.kind === "file"
+                            ? secret.sensitive
+                              ? "Secret file"
+                              : "File"
+                            : secret.sensitive
+                              ? "Secret"
+                              : "Variable"}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="font-normal text-muted-foreground"
+                        >
+                          {scopeLabel}
+                        </Badge>
+                      </div>
+                      <div className="mt-1">
+                        <CompactReference
+                          value={secret.ref}
+                          label="configuration reference"
+                          short="Reference"
+                          hideLabel
+                        />
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -171,33 +180,28 @@ export function ReusableSecretOwnerList({
                           : "Not encrypted"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="hidden max-w-72 lg:table-cell">
-                      <code
-                        className="block truncate text-xs text-muted-foreground"
-                        title={secret.ref}
-                      >
-                        {secret.ref}
-                      </code>
-                    </TableCell>
-                    <TableCell className="hidden text-muted-foreground sm:table-cell">
+                    <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground sm:table-cell">
                       {formatTimestamp(secret.updatedAt, "Not reported")}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex min-w-0 max-w-full items-start justify-end gap-2">
-                        <RevealValue
-                          loadValue={() => onReveal(secret)}
-                          label={secret.key}
-                          sensitive={secret.sensitive}
-                          file={secret.kind === "file"}
-                        />
+                    <TableCell className="w-60 min-w-52">
+                      <RevealValue
+                        loadValue={() => onReveal(secret)}
+                        label={secret.key}
+                        sensitive={secret.sensitive}
+                        file={secret.kind === "file"}
+                      />
+                    </TableCell>
+                    <TableCell className="w-px whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1">
                         {editable && (
                           <Button
                             variant="outline"
-                            size="sm"
+                            size="icon-sm"
                             onClick={() => setEditing(secret)}
                             aria-label={`Edit ${secret.key}`}
+                            title={`Edit ${secret.key}`}
                           >
-                            <Pencil className="size-3.5" /> Edit
+                            <Pencil className="size-3.5" />
                           </Button>
                         )}
                         {onRemove && (
@@ -207,6 +211,7 @@ export function ReusableSecretOwnerList({
                             className="text-muted-foreground hover:text-destructive"
                             onClick={() => setConfirmation(secret)}
                             aria-label={`Delete ${secret.key}`}
+                            title={`Delete ${secret.key}`}
                           >
                             <Trash2 className="size-3.5" />
                           </Button>

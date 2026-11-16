@@ -5,6 +5,9 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Align Configuration filters and separate value controls from row actions.
+  Keep ownership visible and expand or copy references beside each key.
+
 ## 0.0.1 — 2026-11-16
 
 Initial single-host release.
