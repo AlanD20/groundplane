@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { useState } from "react";
 import { Bell, Send } from "lucide-react";
 import { ResourcePanel } from "@/components/common/resource-panel";
@@ -219,7 +220,9 @@ function ScopedSettings({ scope }: { scope: string }) {
                 : ""}
           {saved?.last_attempt_at && (
             <span className="ml-2">
-              {new Date(saved.last_attempt_at).toLocaleString()}
+              {formatTimestamp(saved.last_attempt_at, "Not recorded", {
+                seconds: true,
+              })}
             </span>
           )}
           {saved?.last_task_id && (

@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import { useEffect, useId, useRef, useState } from "react";
 import type { components } from "@/lib/api.generated";
@@ -199,7 +200,11 @@ export function RestoreDialog({
           </div>
           <div>
             <dt className="text-muted-foreground">Captured</dt>
-            <dd>{new Date(point.createdAt).toLocaleString()}</dd>
+            <dd>
+              {formatTimestamp(point.createdAt, "Not recorded", {
+                seconds: true,
+              })}
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Original storage</dt>

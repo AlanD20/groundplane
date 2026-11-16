@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { TaskReferenceLink } from "./task-reference-link";
 import { StatusBadge } from "@/components/common/status-badge";
 import type { TaskResponse } from "./api";
@@ -38,7 +39,7 @@ export function TaskDependencyStatus({ task }: { task: TaskResponse["task"] }) {
             <p className="text-xs text-muted-foreground">
               Deadline:{" "}
               <time dateTime={wait.until}>
-                {new Date(wait.until).toLocaleString()}
+                {formatTimestamp(wait.until, "Not recorded", { seconds: true })}
               </time>
             </p>
           )}

@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { TaskExecution } from "@/features/task/task-execution";
 import { useState } from "react";
@@ -207,9 +208,11 @@ export function BackingCheckPanel({
                         : "In progress"}
             </Badge>
             <span className="text-xs text-muted-foreground">
-              {new Date(
+              {formatTimestamp(
                 result.finished_at ?? result.created_at,
-              ).toLocaleString()}
+                "Not recorded",
+                { seconds: true },
+              )}
             </span>
           </div>
           {result.stale && (

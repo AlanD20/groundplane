@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { TaskDependencyStatus } from "./task-dependency-status";
 import { useState } from "react";
 import { Select } from "@/components/ui/select";
@@ -77,7 +78,9 @@ function TaskWorkExecution({
           <p>
             Finished:{" "}
             <time dateTime={preparation.finished_at}>
-              {new Date(preparation.finished_at).toLocaleString()}
+              {formatTimestamp(preparation.finished_at, "Not recorded", {
+                seconds: true,
+              })}
             </time>
           </p>
         </AdvancedDetails>

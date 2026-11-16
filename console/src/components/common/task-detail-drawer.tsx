@@ -1,4 +1,5 @@
-"use client";
+import { formatTimestamp } from "@/lib/format-timestamp";
+("use client");
 
 import { useEffect, useState } from "react";
 import { Inspector } from "@/components/common/inspector";
@@ -240,16 +241,22 @@ export function TaskDetailDrawer({
                 <dl className="grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <dt className="text-muted-foreground">Created</dt>
-                    <dd>{new Date(task.created_at).toLocaleString()}</dd>
+                    <dd>
+                      {formatTimestamp(task.created_at, "Not recorded", {
+                        seconds: true,
+                      })}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-muted-foreground">
                       {task.finished_at ? "Finished" : "Deadline"}
                     </dt>
                     <dd>
-                      {new Date(
+                      {formatTimestamp(
                         task.finished_at || task.deadline,
-                      ).toLocaleString()}
+                        "Not recorded",
+                        { seconds: true },
+                      )}
                     </dd>
                   </div>
                   <div>

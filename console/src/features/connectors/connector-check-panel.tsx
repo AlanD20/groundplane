@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { TaskExecution } from "@/features/task/task-execution";
 import { useState } from "react";
@@ -205,7 +206,11 @@ export function ConnectorCheckResults({
         {result.draft && <Badge variant="outline">Unsaved settings</Badge>}
         <span className="text-xs text-muted-foreground">
           {result.execution_location} ·{" "}
-          {new Date(result.finished_at ?? result.created_at).toLocaleString()}
+          {formatTimestamp(
+            result.finished_at ?? result.created_at,
+            "Not recorded",
+            { seconds: true },
+          )}
         </span>
       </div>
       {stale && (

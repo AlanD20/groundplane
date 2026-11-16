@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Disclosure } from "@/components/common/disclosure";
@@ -76,7 +77,9 @@ export function WorkInspection({
           <p className="text-xs text-muted-foreground">
             Recorded{" "}
             <time dateTime={work.preparation.finished_at}>
-              {new Date(work.preparation.finished_at).toLocaleString()}
+              {formatTimestamp(work.preparation.finished_at, "Not recorded", {
+                seconds: true,
+              })}
             </time>
           </p>
           {work.preparation.dependency_id && (
@@ -116,7 +119,10 @@ export function WorkInspection({
           )}
           {work.wait.until && (
             <p className="text-xs text-muted-foreground">
-              Not before {new Date(work.wait.until).toLocaleString()}
+              Not before{" "}
+              {formatTimestamp(work.wait.until, "Not recorded", {
+                seconds: true,
+              })}
             </p>
           )}
         </div>
@@ -371,7 +377,11 @@ function WorkEvidence({
                       <div>
                         <dt className="text-muted-foreground">Assigned</dt>
                         <dd>
-                          {new Date(attempt.assigned_at).toLocaleString()}
+                          {formatTimestamp(
+                            attempt.assigned_at,
+                            "Not recorded",
+                            { seconds: true },
+                          )}
                         </dd>
                       </div>
                       <div>
@@ -379,9 +389,11 @@ function WorkEvidence({
                           {attempt.finished_at ? "Finished" : "Deadline"}
                         </dt>
                         <dd>
-                          {new Date(
+                          {formatTimestamp(
                             attempt.finished_at || attempt.deadline,
-                          ).toLocaleString()}
+                            "Not recorded",
+                            { seconds: true },
+                          )}
                         </dd>
                       </div>
                     </dl>

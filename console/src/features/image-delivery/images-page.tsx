@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { Fragment } from "react";
 import { TableExpansion } from "@/components/common/table-expansion";
 import { Download } from "lucide-react";
@@ -359,9 +360,11 @@ export default function ImagesPage() {
                                 </TableCell>
                                 <TableCell
                                   className="hidden text-xs text-muted-foreground md:table-cell"
-                                  title={new Date(
+                                  title={formatTimestamp(
                                     image.created_at,
-                                  ).toLocaleString()}
+                                    "Not recorded",
+                                    { seconds: true },
+                                  )}
                                 >
                                   {new Date(
                                     image.created_at,

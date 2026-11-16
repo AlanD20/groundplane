@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
@@ -174,7 +175,9 @@ export function AttemptEvents({
                       dateTime={event.recorded_at}
                       className="text-xs text-muted-foreground"
                     >
-                      {new Date(event.recorded_at).toLocaleString()}
+                      {formatTimestamp(event.recorded_at, "Not recorded", {
+                        seconds: true,
+                      })}
                     </time>
                     {event.stage.observed && (
                       <p className="break-words [overflow-wrap:anywhere]">

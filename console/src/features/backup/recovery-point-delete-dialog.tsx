@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { useRef } from "react";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { useStore } from "@/lib/store";
@@ -47,7 +48,11 @@ export function RecoveryPointDeleteDialog({
           </div>
           <div>
             <dt className="text-muted-foreground">Captured</dt>
-            <dd>{new Date(point.createdAt).toLocaleString()}</dd>
+            <dd>
+              {formatTimestamp(point.createdAt, "Not recorded", {
+                seconds: true,
+              })}
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Source data retained</dt>

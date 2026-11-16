@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { Fragment, useState } from "react";
 import {
   ChevronDown,
@@ -99,7 +100,9 @@ export function RecoveryGroupsTable({
               const open = expanded.has(`${env.id}/${group.id}`);
               const first = group.points[0];
               const label = group.capture
-                ? new Date(group.createdAt).toLocaleString()
+                ? formatTimestamp(group.createdAt, "Not recorded", {
+                    seconds: true,
+                  })
                 : "Earlier recovery points";
               return (
                 <Fragment key={group.id}>
@@ -265,9 +268,11 @@ export function RecoveryGroupsTable({
                                         Captured
                                       </dt>
                                       <dd>
-                                        {new Date(
+                                        {formatTimestamp(
                                           point.createdAt,
-                                        ).toLocaleString()}
+                                          "Not recorded",
+                                          { seconds: true },
+                                        )}
                                       </dd>
                                     </div>
                                     <div>

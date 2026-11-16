@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { useEffect, useState } from "react";
 import { Disclosure } from "@/components/common/disclosure";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -161,7 +162,9 @@ function StageRow({ stage }: { stage: TaskStages["items"][number] }) {
               </dt>
               <dd>
                 <time dateTime={stage.started_at}>
-                  {new Date(stage.started_at).toLocaleString()}
+                  {formatTimestamp(stage.started_at, "Not recorded", {
+                    seconds: true,
+                  })}
                 </time>
               </dd>
             </div>
@@ -173,7 +176,9 @@ function StageRow({ stage }: { stage: TaskStages["items"][number] }) {
               </dt>
               <dd>
                 <time dateTime={stage.finished_at}>
-                  {new Date(stage.finished_at).toLocaleString()}
+                  {formatTimestamp(stage.finished_at, "Not recorded", {
+                    seconds: true,
+                  })}
                 </time>
               </dd>
             </div>

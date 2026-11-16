@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { FormActions } from "@/components/common/form-actions";
 import { editorFooterClassName } from "@/components/common/workspace-section";
 import { useEffect, useState } from "react";
@@ -391,7 +392,9 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                           : item.selection}
                       </TableCell>
                       <TableCell>
-                        {new Date(item.created_at).toLocaleString()}
+                        {formatTimestamp(item.created_at, "Not recorded", {
+                          seconds: true,
+                        })}
                       </TableCell>
                       <TableCell>
                         <p>{item.phase.replaceAll("_", " ")}</p>

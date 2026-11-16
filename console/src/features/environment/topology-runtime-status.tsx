@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
@@ -38,7 +39,10 @@ export function TopologyRuntimeStatus({
           )}
           {observation.state !== "unavailable" && (
             <p>
-              Last observed: {new Date(observation.observedAt).toLocaleString()}
+              Last observed:{" "}
+              {formatTimestamp(observation.observedAt, "Not recorded", {
+                seconds: true,
+              })}
             </p>
           )}
         </div>

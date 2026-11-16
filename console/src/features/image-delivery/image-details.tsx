@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/common/copy-button";
 import { PageHeader } from "@/components/common/page-header";
@@ -80,9 +81,15 @@ export function ImageDetails({
       {actionForm}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-border bg-card p-4 text-xs text-muted-foreground">
         <CompactReference value={image.id} label="Image ID" />
-        <span>Created {new Date(image.created_at).toLocaleString()}</span>
+        <span>
+          Created{" "}
+          {formatTimestamp(image.created_at, "Not recorded", { seconds: true })}
+        </span>
         {observedAt && (
-          <span>Observed {new Date(observedAt).toLocaleString()}</span>
+          <span>
+            Observed{" "}
+            {formatTimestamp(observedAt, "Not recorded", { seconds: true })}
+          </span>
         )}
       </div>
       {unavailable && (
@@ -212,7 +219,9 @@ export function ImageDetails({
                     label={fetch.status.replaceAll("_", " ")}
                   />
                   <span className="text-muted-foreground">
-                    {new Date(fetch.requested_at).toLocaleString()}
+                    {formatTimestamp(fetch.requested_at, "Not recorded", {
+                      seconds: true,
+                    })}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

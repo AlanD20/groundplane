@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
@@ -132,8 +133,11 @@ export function RecoveryGroupDeleteDialog({
         <DialogHeader>
           <DialogTitle>Delete this backup?</DialogTitle>
           <DialogDescription>
-            Backup captured {new Date(group.createdAt).toLocaleString()}:
-            permanently delete these {group.points.length} remaining archives.
+            Backup captured{" "}
+            {formatTimestamp(group.createdAt, "Not recorded", {
+              seconds: true,
+            })}
+            : permanently delete these {group.points.length} remaining archives.
             Source data is not changed. Each archive uses GP’s protected
             deletion.
           </DialogDescription>

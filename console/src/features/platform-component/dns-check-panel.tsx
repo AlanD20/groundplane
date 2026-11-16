@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { TaskExecution } from "@/features/task/task-execution";
 import { useState } from "react";
@@ -181,9 +182,11 @@ export function DNSCheckPanel({
                 result.observed_at ?? result.finished_at ?? result.created_at
               }
             >
-              {new Date(
+              {formatTimestamp(
                 result.observed_at ?? result.finished_at ?? result.created_at,
-              ).toLocaleString()}
+                "Not recorded",
+                { seconds: true },
+              )}
             </time>
           </div>
           {result.stale && (

@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { TaskExecution } from "@/features/task/task-execution";
 import { useState } from "react";
@@ -246,9 +247,11 @@ export function EdgeCheckPanel({
               <Badge variant="outline">Different selection</Badge>
             )}
             <span className="text-xs text-muted-foreground">
-              {new Date(
+              {formatTimestamp(
                 result.finished_at || result.created_at,
-              ).toLocaleString()}
+                "Not recorded",
+                { seconds: true },
+              )}
             </span>
           </div>
           <p className="break-all text-xs">
@@ -379,7 +382,11 @@ export function EdgeCheckPanel({
               {result.certificate_expires_at && (
                 <p>
                   Certificate expires:{" "}
-                  {new Date(result.certificate_expires_at).toLocaleString()}
+                  {formatTimestamp(
+                    result.certificate_expires_at,
+                    "Not recorded",
+                    { seconds: true },
+                  )}
                 </p>
               )}
               {result.helper_name && (

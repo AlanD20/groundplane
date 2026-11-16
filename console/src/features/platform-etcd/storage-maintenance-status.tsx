@@ -1,3 +1,4 @@
+import { formatTimestamp } from "@/lib/format-timestamp";
 import { DetailRow } from "@/components/common/detail-row";
 import { ResourcePanel } from "@/components/common/resource-panel";
 import type { operations } from "@/lib/api.generated";
@@ -51,7 +52,9 @@ export function StorageMaintenanceStatus({
             />
             <DetailRow
               label="Observed"
-              value={new Date(status.observed_at).toLocaleString()}
+              value={formatTimestamp(status.observed_at, "Not recorded", {
+                seconds: true,
+              })}
             />
             <DetailRow
               label="Quota headroom"
@@ -143,5 +146,7 @@ function bytes(value: number) {
 }
 
 function time(value?: string) {
-  return value ? new Date(value).toLocaleString() : "Not recorded";
+  return value
+    ? formatTimestamp(value, "Not recorded", { seconds: true })
+    : "Not recorded";
 }
