@@ -91,8 +91,8 @@ func (resolverSecretValueReader) GetSecret(
 
 func (resolverSecretValueReader) GetSecretValue(
 	context.Context, testkeyvalue.Versioned[testsecrets.Record],
-) (testsecrets.EncryptedValue, error) {
-	return testsecrets.EncryptedValue{}, nil
+) (testsecrets.StoredValue, error) {
+	return testsecrets.StoredValue{}, nil
 }
 
 func (reader *resolverComponentFileReader) ResolveComponentFile(

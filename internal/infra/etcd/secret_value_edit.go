@@ -18,7 +18,7 @@ func (repository *SecretRepository) ReplaceSecretValueIdempotent(
 	owner secrets.Owner,
 	current keyvalue.Versioned[secrets.Record],
 	replacement secrets.Record,
-	value secrets.EncryptedValue,
+	value secrets.StoredValue,
 	marker idempotency.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := secrets.ValidateSecretOwnership(ctx, owner, current.Record); err != nil {
@@ -31,6 +31,8 @@ func (repository *SecretRepository) ReplaceSecretValueIdempotent(
 		replacement.Secret.Key != current.Record.Secret.Key ||
 		replacement.Secret.Kind != current.Record.Secret.Kind ||
 		replacement.Secret.Ref != current.Record.Secret.Ref ||
+		replacement.Secret.Sensitive != current.Record.Secret.Sensitive ||
+		replacement.Secret.Encryption != current.Record.Secret.Encryption ||
 		current.Revision <= 0 {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -98,7 +100,7 @@ func (repository *SecretRepository) ReplaceSecretValueIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(metadata)
-	ciphertext, err := secrets.EncodeEncryptedValue(value)
+	ciphertext, err := secrets.EncodeStoredValue(value)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

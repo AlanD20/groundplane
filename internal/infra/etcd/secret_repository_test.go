@@ -161,9 +161,9 @@ func testSecretRepositoryProject(
 	}
 }
 
-func testSecretEncryptedValue(secretID string, ciphertext string) testsecrets.EncryptedValue {
+func testSecretEncryptedValue(secretID string, ciphertext string) testsecrets.StoredValue {
 	digest := sha256.Sum256([]byte(ciphertext))
-	return testsecrets.EncryptedValue{
+	return testsecrets.StoredValue{
 		SecretID: secretID, EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 		CiphertextSHA256: hex.EncodeToString(digest[:]), Ciphertext: []byte(ciphertext),
 	}

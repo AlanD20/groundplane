@@ -1,6 +1,6 @@
-# Reusable Secrets and Connectors
+# Reusable Configuration and Connectors
 
-Reusable Secrets store operator-supplied values once at Project or Platform
+Reusable Configuration stores operator-supplied values once at Project or Platform
 scope. Consumers resolve a Project value before the Platform fallback. An
 S3-compatible Connector is instead owned by one Environment and records where
 Backup artifacts go, how the SDK addresses that endpoint, and how its access
@@ -18,13 +18,30 @@ This document owns the feature behavior. Exact REST and CLI shapes remain in
 
 ## Configuration and behavior
 
-### Reusable Secrets
+### Reusable Configuration
 
 A reusable Secret has exactly one owner: a Project or the Platform. Its
 metadata contains stable id, scope, optional Project id, key, `env_var` or
 `file` kind, canonical materialization reference, and update time. The value is
 valid UTF-8 of at most 255 KiB before encryption and is never included in list,
 detail, create, or delete responses.
+
+The Console offers **Variable**, **Secret**, and **File**. Variable and Secret
+both deliver an environment variable; Secret sets `sensitive: true`, which
+controls hiding/reveal confirmation. A File independently chooses whether its
+contents are sensitive. `encryption: age | none` chooses storage, independently
+of sensitivity. Secret values default to encrypted in the Console; the operator
+can turn encryption off explicitly. An unencrypted Secret is hidden in the
+Console but stored without encryption. Ordinary values can also be encrypted.
+The metadata exposes both choices without exposing the value.
+
+API/CLI resource identity remains the reusable Secret (`sec_...`) used by
+existing references. Creation accepts `sensitive` (defaults to true) and
+`encryption` (defaults to `age`). For example, `secret add APP_ENV --value-file
+app-env.txt --platform --sensitive=false --encryption none` creates a regular unencrypted
+variable; `--sensitive=true --encryption none` explicitly creates a masked,
+unencrypted Secret. Omitted storage options are creation defaults, not a
+fallback reader or an automatic decryption downgrade.
 
 Keys are unique within one scope. A key reference resolves the selected
 Project index first and the Platform index second at one fixed revision. A
@@ -49,9 +66,11 @@ that revision without the value. A Script source or recoverable execution pin
 blocks replacement of bytes it still needs; edits do not retain a hidden old
 plaintext/ciphertext copy. Previously materialized running processes change only
 through their normal configuration/deployment actions.
+Sensitivity and encryption are fixed when created and preserved on value edits.
+Create a replacement value to choose different settings.
 
-File Secrets have an **Edit** action on their owning Project or Platform page.
-The editor loads the current contents explicitly, supports search and full-screen
+Variables, Secrets and files have an **Edit** action on their owning Project or Platform page.
+The editor loads the current value explicitly, supports search and full-screen
 editing, and saves with the loaded metadata revision. Close or Cancel discards
 the draft. A concurrent edit must be reloaded; an uncertain save can retry the
 same submission. Reveal confirmation applies when enabled in Preferences.
@@ -63,6 +82,8 @@ multiline values. It does not expand shell variables or execute the file. Only
 submitted env-var keys are created/replaced; omitted keys and file Secrets remain
 unchanged. Loading existing values is an explicit reveal action and excludes
 Platform fallback values from a Project editing buffer.
+The batch chooses sensitivity and encryption for new keys; existing keys retain
+their own settings, and uncertain retries retain the exact original choices.
 
 A UI batch is at most 256 keys / 1 MiB and orchestrates normal create/edit API
 requests; it is not one atomic storage transaction. Successfully saved keys remain
@@ -76,8 +97,11 @@ atomically tombstones the Secret and returns a Task, hiding it from reads and
 resolution while retaining metadata, indexes, and ciphertext. Success removes
 those records atomically with terminal Task state. Failure, timeout, or abort
 removes only the tombstone and restores visibility; retry reacquires the fence.
-Desired-state references do not block deletion. Later resolution uses the
-remaining normal fallback or fails when no value remains.
+Configured Component credentials and Blueprint credential selections protect
+their referenced value, including selections accepted by a waiting Task before
+execution capture. Replace or remove that selection before deleting the value.
+Other unpinned references resolve through the remaining normal fallback or fail
+when no value remains.
 
 Exact execution pins are different from desired references. Existing Script
 source guards remain in force. Under [Service release and recovery](../decisions/service-release-and-recovery.md#recover-the-pinned-configuration-not-current-configuration),

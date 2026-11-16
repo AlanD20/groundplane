@@ -161,7 +161,7 @@ func loadSecretCredential(
 			return nil, errs.New(errs.KindStateConflict, "backup prune credential Secret snapshot is unavailable")
 		}
 		record, recordErr := secrets.DecodeRecord(read.Values[0].Value)
-		encrypted, valueErr := secrets.DecodeEncryptedValue(read.Values[2].Value)
+		encrypted, valueErr := secrets.DecodeStoredValue(read.Values[2].Value)
 		clear(encrypted.Ciphertext)
 		scopeMatches := index == 0 && record.Secret.Scope == backupsecret.SecretScopeProject &&
 			record.Secret.ProjectID == projectID ||

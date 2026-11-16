@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -36,11 +37,15 @@ func ValidateSecretDeletionFence(value *etcdstore.KeyValue, secretID string) err
 	return nil
 }
 
-func ValidateSecretValueBinding(record Record, value EncryptedValue) error {
-	if err := ValidateEncryptedValue(value); err != nil {
+func ValidateSecretValueBinding(record Record, value StoredValue) error {
+	if err := ValidateStoredValue(value); err != nil {
 		return err
 	}
-	if record.Secret.ID != value.SecretID {
+	cipher := "age-x25519"
+	if record.Secret.Encryption == "none" {
+		cipher = "none"
+	}
+	if record.Secret.ID != value.SecretID || cipher != value.Cipher {
 		return errs.New(errs.KindValidationFailed, "Secret encrypted value does not match metadata")
 	}
 	return nil

@@ -2,6 +2,7 @@ package secretmutations
 
 import (
 	"context"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
@@ -12,7 +13,7 @@ func (repository *Repository) CreateSecret(
 	ctx context.Context,
 	owner secretrecord.Owner,
 	record secretrecord.Record,
-	value secretrecord.EncryptedValue,
+	value secretrecord.StoredValue,
 ) (etcdstore.Versioned[secretrecord.Record], error) {
 	if err := secretrecord.ValidateSecretOwnership(ctx, owner, record); err != nil {
 		return etcdstore.Versioned[secretrecord.Record]{}, err
@@ -25,7 +26,7 @@ func (repository *Repository) CreateSecret(
 		return etcdstore.Versioned[secretrecord.Record]{}, err
 	}
 	defer clear(primaryValue)
-	encryptedValue, err := secretrecord.EncodeEncryptedValue(value)
+	encryptedValue, err := secretrecord.EncodeStoredValue(value)
 	if err != nil {
 		return etcdstore.Versioned[secretrecord.Record]{}, err
 	}

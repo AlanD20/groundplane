@@ -176,7 +176,7 @@ func newTaskJournalListCmd(short string, activity bool) *cobra.Command {
 	list.Flags().Int64Var(&limit, "limit", 25, "page size from 1 through 100")
 	list.Flags().StringVar(&after, "after", "", "last Task inspected on the previous page")
 	list.Flags().Int64Var(&revision, "revision", 0, "snapshot revision from the previous page")
-	list.Flags().StringVar(&status, "status", "", "filter the whole journal by Task status")
+	list.Flags().StringVar(&status, "status", "", "filter by Task status; active includes all unfinished Tasks")
 	list.Flags().StringVar(&action, "action", "", "filter by action, such as deploy or fetch")
 	list.Flags().
 		StringVar(&resourceKind, "resource-kind", "", "filter by target resource kind, such as service or image")

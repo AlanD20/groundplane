@@ -5,15 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 	"unicode/utf8"
+
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -404,6 +405,7 @@ func secretResponse(record secretrecord.Record) apiTypes.Secret {
 	return apiTypes.Secret{
 		ID: secret.ID, Scope: string(secret.Scope), ProjectID: secret.ProjectID,
 		Key: secret.Key, Kind: string(secret.Kind), Ref: secret.Ref,
+		Sensitive: secret.Sensitive, Encryption: secret.Encryption,
 		UpdatedAt: secret.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 }

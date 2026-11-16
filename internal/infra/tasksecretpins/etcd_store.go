@@ -2,6 +2,7 @@ package tasksecretpins
 
 import (
 	"context"
+
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -137,7 +138,7 @@ func (adapter recoverySecretPinStore) VerifySecret(
 	if err != nil || record.Secret.ID != pin.SecretID {
 		return SecretAuthority{}, secretrecord.CorruptRecord()
 	}
-	encrypted, err := secretrecord.DecodeEncryptedValue(value.Value)
+	encrypted, err := secretrecord.DecodeStoredValue(value.Value)
 	defer clear(encrypted.Ciphertext)
 	if err != nil || encrypted.SecretID != pin.SecretID || encrypted.CiphertextSHA256 != pin.CiphertextSHA256 {
 		return SecretAuthority{}, errs.New(

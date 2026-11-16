@@ -102,7 +102,7 @@ func addNativeBackupPlatformFallback(t *testing.T, f *nativeBackupCredentialFixt
 	if err != nil || read.Entry == nil {
 		t.Fatalf("selected Secret value unavailable: %v", err)
 	}
-	value, err := secrets.DecodeEncryptedValue(read.Entry.Value)
+	value, err := secrets.DecodeStoredValue(read.Entry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,5 +112,5 @@ func addNativeBackupPlatformFallback(t *testing.T, f *nativeBackupCredentialFixt
 	defer clear(value.Ciphertext)
 	digest := sha256.Sum256(value.Ciphertext)
 	value.CiphertextSHA256 = hex.EncodeToString(digest[:])
-	nativeBackupPut(t, f.store, secrets.ValueKey(record.Secret.ID), value, secrets.EncodeEncryptedValue)
+	nativeBackupPut(t, f.store, secrets.ValueKey(record.Secret.ID), value, secrets.EncodeStoredValue)
 }

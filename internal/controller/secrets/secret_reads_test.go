@@ -19,7 +19,7 @@ type fakeSecretReadRepository struct {
 	secretReadRepository
 	project        testkeyvalue.Versioned[testhierarchy.ProjectRecord]
 	secret         testkeyvalue.Versioned[testsecrets.Record]
-	value          testsecrets.EncryptedValue
+	value          testsecrets.StoredValue
 	page           testkeyvalue.Page[testsecrets.Record]
 	wantRequest    testkeyvalue.PageRequest
 	wantScope      core.SecretScope
@@ -49,9 +49,9 @@ func (fake *fakeSecretReadRepository) GetSecret(
 func (fake *fakeSecretReadRepository) GetSecretValue(
 	_ context.Context,
 	current testkeyvalue.Versioned[testsecrets.Record],
-) (testsecrets.EncryptedValue, error) {
+) (testsecrets.StoredValue, error) {
 	if current.Record.Secret.ID != fake.secret.Record.Secret.ID {
-		return testsecrets.EncryptedValue{}, errs.New(errs.KindInternal, "Secret version changed")
+		return testsecrets.StoredValue{}, errs.New(errs.KindInternal, "Secret version changed")
 	}
 	return fake.value, nil
 }
@@ -121,7 +121,7 @@ func TestSecretRevealDecryptsExactValueAndClearsCiphertext(t *testing.T) {
 		secret: testkeyvalue.Versioned[testsecrets.Record]{
 			Record: testsecrets.Record{Secret: core.Secret{ID: secretID}}, Revision: 31, ReadRevision: 31,
 		},
-		value: testsecrets.EncryptedValue{
+		value: testsecrets.StoredValue{
 			SecretID: secretID, EnvelopeVersion: uint8(metadata.Version), Cipher: string(metadata.Cipher),
 			DigestAlgorithm: string(metadata.Digest.Algorithm), CiphertextSHA256: metadata.Digest.Value,
 			Ciphertext: envelope.Ciphertext(),
@@ -155,7 +155,7 @@ func TestSecretRevealRejectsNonUTF8Plaintext(t *testing.T) {
 		secret: testkeyvalue.Versioned[testsecrets.Record]{
 			Record: testsecrets.Record{Secret: core.Secret{ID: secretID}}, Revision: 32, ReadRevision: 32,
 		},
-		value: testsecrets.EncryptedValue{
+		value: testsecrets.StoredValue{
 			SecretID: secretID, EnvelopeVersion: uint8(metadata.Version), Cipher: string(metadata.Cipher),
 			DigestAlgorithm: string(metadata.Digest.Algorithm), CiphertextSHA256: metadata.Digest.Value,
 			Ciphertext: envelope.Ciphertext(),

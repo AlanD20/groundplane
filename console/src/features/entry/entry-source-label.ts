@@ -28,6 +28,6 @@ export function entrySourceLabel(
         matches(secret),
     ) ??
     secrets.find((secret) => secret.scope === "platform" && matches(secret));
-  if (!selected) return `Secret reference: ${source.secretRef}`;
-  return `${selected.scope === "project" ? "Project" : "Platform"} Secret: ${selected.key}`;
+  if (!selected) return `Configuration reference: ${source.secretRef}`;
+  return `${selected.scope === "project" ? "Project" : "Platform"} ${selected.sensitive ? "Secret" : selected.kind === "file" ? "file" : "variable"}: ${selected.key}`;
 }

@@ -34,9 +34,6 @@ func ProjectEntrySpec(logicalKey string, spec EntrySpec, entryID string) (EnvEnt
 	if len(spec.Source.Literal) > maximumAuthoredEntryValueBytes {
 		return EnvEntry{}, fmt.Errorf("entry %s: literal exceeds 256 KiB", logicalKey)
 	}
-	if source.Kind == SourceSecretRef && !spec.Secret {
-		return EnvEntry{}, fmt.Errorf("entry %s: secret_ref requires a secret destination", logicalKey)
-	}
 	exposure := append([]string(nil), spec.Exposure...)
 	sort.Strings(exposure)
 	for index, value := range exposure {

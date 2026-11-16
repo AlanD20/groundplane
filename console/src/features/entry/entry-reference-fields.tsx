@@ -14,6 +14,7 @@ export function EntryReferenceFields({
   env,
   projectId,
   sourceKind,
+  kind,
   secretRef,
   connectionSource,
   onSecretChange,
@@ -22,6 +23,7 @@ export function EntryReferenceFields({
   env: Environment;
   projectId?: string;
   sourceKind: "secret_ref" | "fact";
+  kind: "env" | "file";
   secretRef: string;
   connectionSource: ConnectionSource;
   onSecretChange: (value: string) => void;
@@ -35,7 +37,9 @@ export function EntryReferenceFields({
     key: factKey,
   } = connectionSource;
   const secretOptions = store.reusableSecrets.filter(
-    (secret) => secret.scope === "platform" || secret.projectId === projectId,
+    (secret) =>
+      secret.kind === kind &&
+      (secret.scope === "platform" || secret.projectId === projectId),
   );
   const connection = env.attaches.find((attach) => attach.id === factAttach);
   const factSet = connection?.factSets.find(
@@ -59,18 +63,22 @@ export function EntryReferenceFields({
     <>
       {sourceKind === "secret_ref" && (
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="entry-secret-ref">Reusable Secret reference</Label>
+          <Label htmlFor="entry-secret-ref">
+            Project or Platform configuration
+          </Label>
           <SecretReferencePicker
             id="entry-secret-ref"
+            noun="configuration"
             value={secretRef}
             onChange={onSecretChange}
             options={secretOptions.map((secret) => ({
-              value: secret.ref,
-              label: `${secret.key} · ${secret.scope === "platform" ? "Platform" : "Project"}`,
+              value: secret.id,
+              label: `${secret.key} · ${secret.scope === "platform" ? "Platform" : "Project"} · ${secret.sensitive ? "Secret" : secret.kind === "file" ? "File" : "Variable"}`,
             }))}
           />
           <p className="text-xs text-muted-foreground">
-            Project keys take precedence over matching Platform keys.
+            Choose an owned value, or enter a key for Project-before-Platform
+            lookup.
           </p>
         </div>
       )}

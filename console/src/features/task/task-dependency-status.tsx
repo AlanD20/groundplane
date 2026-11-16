@@ -1,4 +1,4 @@
-import { TaskLink } from "@/components/common/task-link";
+import { TaskReferenceLink } from "./task-reference-link";
 import { StatusBadge } from "@/components/common/status-badge";
 import type { TaskResponse } from "./api";
 
@@ -17,17 +17,17 @@ export function TaskDependencyStatus({ task }: { task: TaskResponse["task"] }) {
         {wait && task.pending_preparation
           ? "Preparation waiting"
           : failed
-            ? "Prerequisite Task failed"
+            ? "Blocked by a prerequisite"
             : task.pending_preparation && !decision?.ready && after.length
-              ? "Waiting for whole Tasks"
+              ? "Waiting for Tasks"
               : task.pending_preparation
                 ? "Preparing accepted action"
-                : "Run after · whole Tasks"}
+                : "Prerequisites"}
       </h3>
       {task.pending_preparation && !task.finished_at && (
         <p className="text-sm text-muted-foreground">
           {after.length && !decision?.ready
-            ? "Executable work is not prepared until these whole Tasks succeed and fully settle."
+            ? "Waiting for these Tasks to finish successfully."
             : "The Controller is preparing this accepted action."}
         </p>
       )}
@@ -47,7 +47,7 @@ export function TaskDependencyStatus({ task }: { task: TaskResponse["task"] }) {
       {failed && (
         <p className="flex flex-wrap items-center gap-2 text-sm">
           This action cannot run because{" "}
-          <TaskLink taskId={failed.task_id}>{failed.task_id}</TaskLink> reported{" "}
+          <TaskReferenceLink taskId={failed.task_id} /> reported{" "}
           <StatusBadge status={failed.outcome} />.
         </p>
       )}
@@ -55,16 +55,16 @@ export function TaskDependencyStatus({ task }: { task: TaskResponse["task"] }) {
         <ul className="space-y-2">
           {after.map((id) => (
             <li key={id} className="flex flex-wrap items-center gap-2">
-              <TaskLink taskId={id}>{id}</TaskLink>
+              <TaskReferenceLink taskId={id} />
               {failed?.task_id === id ? (
                 <StatusBadge status={failed.outcome} />
               ) : decision?.waiting?.includes(id) ? (
                 <span className="text-xs text-muted-foreground">
-                  Waiting for settlement
+                  Waiting to finish
                 </span>
               ) : decision?.ready ? (
                 <span className="text-xs text-muted-foreground">
-                  Succeeded and settled
+                  Completed successfully
                 </span>
               ) : null}
             </li>

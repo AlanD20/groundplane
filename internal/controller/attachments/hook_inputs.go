@@ -21,7 +21,7 @@ import (
 
 type backingHookSecretRepository interface {
 	ResolveSecretAtRevision(context.Context, string, string, int64) (etcdstore.Versioned[secretrecord.Record], error)
-	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
+	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.StoredValue, error)
 }
 
 func (service *FactService) EnableBackingHookInputs(repository backingHookSecretRepository) error {

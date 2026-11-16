@@ -198,7 +198,7 @@ export function BackingHookFields({
                   value={source}
                   options={[
                     { value: "literal", label: "Plain value" },
-                    { value: "secret", label: "Secret reference" },
+                    { value: "secret", label: "Configuration reference" },
                     { value: "password", label: "Generate an Attach password" },
                   ]}
                   onValueChange={(next) =>
@@ -215,7 +215,9 @@ export function BackingHookFields({
               {source !== "password" && (
                 <div className="grid gap-1.5 sm:col-span-2">
                   <Label htmlFor={`${id}-value-${index}`}>
-                    {source === "secret" ? "Secret ID" : "Plain value"}
+                    {source === "secret"
+                      ? "Configuration value ID"
+                      : "Plain value"}
                   </Label>
                   <Input
                     id={`${id}-value-${index}`}

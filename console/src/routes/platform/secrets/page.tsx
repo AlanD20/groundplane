@@ -1,3 +1,7 @@
+import {
+  ConfigurationFields,
+  newConfigurationDraft,
+} from "@/features/secrets/configuration-fields";
 import { BulkSecretEditor } from "@/features/secrets/bulk-secret-editor";
 import { CreationButton } from "@/components/common/creation-button";
 ("use client");
@@ -11,9 +15,6 @@ import {
   ResourceFormTitle as DialogTitle,
   ResourceForm,
 } from "@/components/common/resource-form";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { ReusableSecretOwnerList } from "@/features/secrets/reusable-secret-owner-list";
 import { useStore } from "@/lib/store";
 import { KeyRound, Plus } from "lucide-react";
@@ -22,17 +23,13 @@ export default function PlatformSecretsPage() {
   const store = useStore();
   const [open, setOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [kind, setKind] = useState<"env" | "file">("env");
-  const [key, setKey] = useState("");
-  const [value, setValue] = useState("");
-  const [path, setPath] = useState("");
+  const [draft, setDraft] = useState(newConfigurationDraft);
+  const { kind, key, value, path, sensitive, encryption } = draft;
   const [creating, setCreating] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   function clearDraft() {
-    setKey("");
-    setValue("");
-    setPath("");
+    setDraft(newConfigurationDraft());
   }
 
   const reusableSecrets = store.reusableSecrets.filter(
@@ -49,13 +46,13 @@ export default function PlatformSecretsPage() {
         kind,
         path: kind === "file" ? path.trim() : undefined,
         value,
+        sensitive,
+        encryption,
       });
       setOpen(false);
-      setKey("");
-      setValue("");
-      setPath("");
+      clearDraft();
     } catch (cause) {
-      setValue("");
+      setDraft((current) => ({ ...current, value: "" }));
       setMutationError(
         cause instanceof Error ? cause.message : "Unable to create Secret",
       );
@@ -84,7 +81,7 @@ export default function PlatformSecretsPage() {
               disabled={bulkOpen}
               onClick={() => setOpen(true)}
             >
-              <Plus className="size-4" /> New variable or file
+              <Plus className="size-4" /> Add configuration
             </CreationButton>
           </div>
         }
@@ -106,90 +103,7 @@ export default function PlatformSecretsPage() {
         <DialogHeader>
           <DialogTitle>New platform variable or file</DialogTitle>
         </DialogHeader>
-        <div className="grid max-w-5xl items-start gap-4 md:grid-cols-2">
-          <div className="flex flex-col gap-1.5 md:col-span-2">
-            <Label>Type</Label>
-            <div className="flex gap-2">
-              {(["env", "file"] as const).map((candidate) => (
-                <Button
-                  key={candidate}
-                  variant={kind === candidate ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setKind(candidate)}
-                >
-                  {candidate === "env" ? "Variable" : "File"}
-                </Button>
-              ))}
-            </div>
-          </div>
-          {kind === "env" ? (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="s-key">Key</Label>
-                <Input
-                  id="s-key"
-                  value={key}
-                  onChange={(event) => setKey(event.target.value)}
-                  placeholder="APP_KEY"
-                  autoFocus
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="s-value">Value</Label>
-                <Input
-                  id="s-value"
-                  type="password"
-                  autoComplete="new-password"
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                  placeholder="••••"
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="f-key">Name</Label>
-                <Input
-                  id="f-key"
-                  value={key}
-                  onChange={(event) => setKey(event.target.value)}
-                  placeholder="identity-tls-ca"
-                  autoFocus
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="f-path">
-                  Path relative to each environment volume
-                </Label>
-                <Input
-                  id="f-path"
-                  value={path}
-                  onChange={(event) => setPath(event.target.value)}
-                  placeholder="config/identity-tls/ca.pem"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5 md:col-span-2">
-                <Label htmlFor="f-content">Content</Label>
-                <Textarea
-                  id="f-content"
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                  rows={6}
-                  spellCheck={false}
-                  className="font-mono text-xs"
-                  placeholder={
-                    "-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----"
-                  }
-                />
-              </div>
-            </>
-          )}
-          <p className="text-xs text-muted-foreground md:col-span-2">
-            Stored encrypted in the Controller and materialized by the Agent
-            only when referenced.
-          </p>
-        </div>
+        <ConfigurationFields draft={draft} onChange={setDraft} />
         <DialogFooter>
           <Button
             variant="outline"
@@ -215,7 +129,7 @@ export default function PlatformSecretsPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <ResourcePanel
-        title="Variables & files"
+        title="Configuration values"
         actions={
           <HelpHint>
             Platform-owned metadata. Plaintext is returned only by the explicit
@@ -227,9 +141,11 @@ export default function PlatformSecretsPage() {
           secrets={reusableSecrets}
           loading={store.reusableSecretsLoading}
           emptyTitle="No platform configuration yet"
-          scopeLabel="platform scope"
+          scopeLabel="Platform"
           editable
-          onRemove={(secret, after) => store.removeReusableSecret(secret.id, after)}
+          onRemove={(secret, after) =>
+            store.removeReusableSecret(secret.id, after)
+          }
           onRefresh={() => store.refreshReusableSecrets()}
           onReveal={(secret) => store.revealReusableSecret(secret.id)}
         />

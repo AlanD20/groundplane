@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"time"
+
 	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -20,7 +21,7 @@ import (
 
 type EntrySecretRepository interface {
 	ResolveSecret(context.Context, string, string) (etcdstore.Versioned[secretrecord.Record], error)
-	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
+	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.StoredValue, error)
 }
 
 type EntryFactResolver interface {
@@ -180,12 +181,15 @@ func (service *EntryGenerationService) withResolvedEntrySource(
 		defer clear(value)
 		return consume(value)
 	case core.SourceSecretRef:
-		if !entry.Secret {
-			return errs.New(errs.KindValidationFailed, "Reusable Secret requires a secret Entry destination")
-		}
 		current, err := service.secrets.ResolveSecret(ctx, projectID, entry.Source.SecretRef)
 		if err != nil {
 			return err
+		}
+		if current.Record.Secret.Sensitive && !entry.Secret {
+			return errs.New(
+				errs.KindValidationFailed,
+				"A secret Configuration value requires a secret Entry destination",
+			)
 		}
 		if !entrySecretKindMatches(entry.Kind, current.Record.Secret.Kind) {
 			return errs.New(errs.KindValidationFailed, "Reusable Secret kind does not match the Entry destination")

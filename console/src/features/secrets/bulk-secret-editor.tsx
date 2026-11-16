@@ -9,6 +9,16 @@ import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useStore } from "@/lib/store";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { controllerUpdateRejected } from "@/lib/controller-request-errors";
@@ -32,6 +42,8 @@ type Write = {
   revision?: number;
   idempotencyKey: string;
   done: boolean;
+  sensitive: boolean;
+  encryption: "age" | "none";
 };
 const maximumBytes = 1024 * 1024;
 
@@ -54,6 +66,10 @@ export function BulkSecretEditor({
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState<string[]>([]);
   const [uncertain, setUncertain] = useState(false);
+  const [sensitive, setSensitive] = useState(true);
+  const [encryption, setEncryption] = useState<"age" | "none">("age");
+  const [confirmReveal, setConfirmReveal] = useState(false);
+  const [revealWord, setRevealWord] = useState("");
   const pending = useRef<Write[] | null>(null);
   const scope = projectId ? "Project" : "Platform";
   const owned = useMemo(
@@ -102,6 +118,7 @@ export function BulkSecretEditor({
     setError(null);
     try {
       const values: { key: string; value: string }[] = [];
+      let bytes = 0;
       const env = owned.filter((secret) => secret.kind === "env");
       if (env.length > 256)
         throw new Error(
@@ -109,6 +126,14 @@ export function BulkSecretEditor({
         );
       for (const secret of env) {
         const value = await store.revealReusableSecret(secret.id);
+        bytes +=
+          new TextEncoder().encode(
+            formatBulkEnvironmentEntries([{ key: secret.key, value }]),
+          ).length + (values.length ? 1 : 0);
+        if (bytes > maximumBytes)
+          throw new Error(
+            "Existing values exceed the 1 MiB editor limit; paste a smaller batch instead.",
+          );
         values.push({ key: secret.key, value });
       }
       const next = formatBulkEnvironmentEntries(values);
@@ -147,6 +172,8 @@ export function BulkSecretEditor({
             revision: existing?.revision,
             idempotencyKey: crypto.randomUUID(),
             done: false,
+            sensitive,
+            encryption,
           };
         });
       for (const write of pending.current) {
@@ -171,6 +198,8 @@ export function BulkSecretEditor({
               key: write.key,
               kind: "env_var",
               value: write.value,
+              sensitive: write.sensitive,
+              encryption: write.encryption,
               ...(projectId ? { project_id: projectId } : { platform: true }),
             };
             await controllerRequest<SecretResponse>("/secrets", 201, {
@@ -230,10 +259,51 @@ export function BulkSecretEditor({
       </ResourceFormHeader>
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Pasted keys create or replace {scope.toLowerCase()} env-var Secrets.
-          Omitted keys and file Secrets stay unchanged. Values remain hidden
-          unless you explicitly load them below.
+          Create or update {scope.toLowerCase()} variables and secrets. Omitted
+          keys and files stay unchanged. Existing values keep their protection
+          and encryption settings.
         </p>
+        <fieldset
+          disabled={busy || !!pending.current}
+          className="space-y-3 rounded-lg border border-border p-3"
+        >
+          <legend className="px-1 text-sm font-medium">New keys</legend>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={!sensitive ? "default" : "outline"}
+              aria-pressed={!sensitive}
+              onClick={() => {
+                setSensitive(false);
+                setEncryption("none");
+              }}
+            >
+              Variables
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={sensitive ? "default" : "outline"}
+              aria-pressed={sensitive}
+              onClick={() => {
+                setSensitive(true);
+                setEncryption("age");
+              }}
+            >
+              Secrets
+            </Button>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={encryption === "age"}
+              onChange={(event) =>
+                setEncryption(event.target.checked ? "age" : "none")
+              }
+            />
+            Encrypt stored values
+          </label>
+        </fieldset>
         <div className="flex flex-wrap items-center gap-3">
           <Input
             aria-label="Import .env file"
@@ -264,14 +334,76 @@ export function BulkSecretEditor({
               !!pending.current ||
               !owned.some((secret) => secret.kind === "env")
             }
-            onClick={loadValues}
+            onClick={() => {
+              if (
+                store.requireRevealConfirm &&
+                owned.some(
+                  (secret) => secret.kind === "env" && secret.sensitive,
+                )
+              ) {
+                setRevealWord("");
+                setConfirmReveal(true);
+              } else void loadValues();
+            }}
           >
             Reveal existing values in editor
           </Button>
         </div>
+        <Dialog open={confirmReveal} onOpenChange={setConfirmReveal}>
+          <DialogContent
+            data-form-shortcuts="ignore"
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                event.target instanceof HTMLInputElement
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (revealWord === "reveal") {
+                  setConfirmReveal(false);
+                  void loadValues();
+                }
+              }
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Reveal existing values?</DialogTitle>
+              <DialogDescription>
+                Load {scope.toLowerCase()} variables and secrets into this
+                editor.
+              </DialogDescription>
+            </DialogHeader>
+            <Label htmlFor="bulk-reveal-confirm">Type reveal to continue</Label>
+            <Input
+              id="bulk-reveal-confirm"
+              autoFocus
+              value={revealWord}
+              onChange={(event) => setRevealWord(event.target.value)}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmReveal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={revealWord !== "reveal"}
+                onClick={() => {
+                  setConfirmReveal(false);
+                  void loadValues();
+                }}
+              >
+                Reveal values
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <CodeEditor
           id={`bulk-${projectId || "platform"}-secrets`}
-          label="Secret values · KEY=value"
+          label="Configuration · KEY=value"
           language="shell"
           value={text}
           onValueChange={changeText}

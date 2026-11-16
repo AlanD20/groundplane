@@ -2,6 +2,8 @@ package backupsecrets
 
 import (
 	"context"
+	"time"
+
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -12,7 +14,6 @@ import (
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"time"
 )
 
 // BackupSecretValueEvidence is an encrypted Secret value selected by the
@@ -21,7 +22,7 @@ import (
 type SecretValueEvidence struct {
 	Name      backupsecret.CredentialName
 	Reference string
-	Value     secretrecord.EncryptedValue
+	Value     secretrecord.StoredValue
 }
 
 // BackupSecretResolutionEvidence contains only the durable proof and

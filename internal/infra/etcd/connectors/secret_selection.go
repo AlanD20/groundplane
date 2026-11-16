@@ -1,10 +1,11 @@
 package connectors
 
 import (
+	"sort"
+
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
-	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -80,7 +81,7 @@ func selectConnectorCredentialSecret(
 	conditions = append(conditions, etcdstore.Condition{
 		Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), record.Secret.ID),
 	})
-	value, err := secretrecord.DecodeEncryptedValue(values[2].Value)
+	value, err := secretrecord.DecodeStoredValue(values[2].Value)
 	if err != nil {
 		return false, nil, 0, secretrecord.CorruptRecord()
 	}

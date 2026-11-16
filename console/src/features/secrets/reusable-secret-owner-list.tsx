@@ -24,7 +24,7 @@ import { formatTimestamp } from "@/lib/format-timestamp";
 import type { ReusableSecret } from "@/lib/types";
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { FileSecretEditor } from "./file-secret-editor";
+import { ConfigurationValueEditor } from "./configuration-value-editor";
 
 export function ReusableSecretOwnerList({
   secrets,
@@ -42,7 +42,10 @@ export function ReusableSecretOwnerList({
   emptyTitle: string;
   emptyDescription?: string;
   scopeLabel: string;
-  onRemove?: (secret: ReusableSecret, after: string[]) => Promise<{ task_id: string }>;
+  onRemove?: (
+    secret: ReusableSecret,
+    after: string[],
+  ) => Promise<{ task_id: string }>;
   onRefresh?: () => Promise<void>;
   onReveal: (secret: ReusableSecret) => Promise<string>;
   editable?: boolean;
@@ -53,7 +56,12 @@ export function ReusableSecretOwnerList({
   const [kind, setKind] = useState("all");
   const matches = secrets.filter(
     (secret) =>
-      (kind === "all" || secret.kind === kind) &&
+      (kind === "all" ||
+        (secret.kind === "file"
+          ? "file"
+          : secret.sensitive
+            ? "secret"
+            : "variable") === kind) &&
       `${secret.key} ${secret.kind} ${secret.ref} ${scopeLabel}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()),
@@ -84,22 +92,23 @@ export function ReusableSecretOwnerList({
           <CollectionToolbar
             query={query}
             onQueryChange={setQuery}
-            label="Variables & files"
+            label="configuration"
           >
             <Select
               value={kind}
               onValueChange={setKind}
               aria-label="Configuration type"
               options={[
-                { value: "all", label: "Variables & files" },
-                { value: "env", label: "Variables" },
+                { value: "all", label: "All types" },
+                { value: "variable", label: "Variables" },
+                { value: "secret", label: "Secrets" },
                 { value: "file", label: "Files" },
               ]}
             />
             <HelpHint label="About protected values">
-              All values here are reusable Secrets, encrypted at rest. Values
-              are fetched only when explicitly revealed. Deletion remains
-              protected when a resource or recoverable Task uses the Secret.
+              Secret values are hidden until revealed. Encryption is a separate
+              storage choice shown for each value. Active consumers and
+              recoverable Tasks can prevent deletion.
             </HelpHint>
           </CollectionToolbar>
           <ResourceTable>
@@ -110,7 +119,7 @@ export function ReusableSecretOwnerList({
                     Key
                   </TableSortHead>
                   <TableHead className="hidden md:table-cell">Owner</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Storage</TableHead>
                   <TableHead className="hidden lg:table-cell">
                     Reference
                   </TableHead>
@@ -133,7 +142,13 @@ export function ReusableSecretOwnerList({
                         variant="outline"
                         className="mt-1 font-sans font-normal"
                       >
-                        {secret.kind === "file" ? "File" : "Variable"}
+                        {secret.kind === "file"
+                          ? secret.sensitive
+                            ? "Secret file"
+                            : "File"
+                          : secret.sensitive
+                            ? "Secret"
+                            : "Variable"}
                       </Badge>
                       <Badge
                         variant="outline"
@@ -146,7 +161,15 @@ export function ReusableSecretOwnerList({
                       {scopeLabel}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="success">Protected</Badge>
+                      <Badge
+                        variant={
+                          secret.encryption === "age" ? "success" : "outline"
+                        }
+                      >
+                        {secret.encryption === "age"
+                          ? "Encrypted"
+                          : "Not encrypted"}
+                      </Badge>
                     </TableCell>
                     <TableCell className="hidden max-w-72 lg:table-cell">
                       <code
@@ -164,9 +187,10 @@ export function ReusableSecretOwnerList({
                         <RevealValue
                           loadValue={() => onReveal(secret)}
                           label={secret.key}
+                          sensitive={secret.sensitive}
                           file={secret.kind === "file"}
                         />
-                        {editable && secret.kind === "file" && (
+                        {editable && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -199,11 +223,11 @@ export function ReusableSecretOwnerList({
               </p>
             )}
           </ResourceTable>
-          <TablePagination table={table} label="Variables & files" />
+          <TablePagination table={table} label="Configuration values" />
         </div>
       )}
       {editing && (
-        <FileSecretEditor
+        <ConfigurationValueEditor
           key={editing.id}
           secret={editing}
           onClose={() => setEditing(null)}
@@ -220,13 +244,15 @@ export function ReusableSecretOwnerList({
             if (!open) setConfirmation(null);
           }}
           title={`Delete ${confirmation.key}?`}
-          description="Delete this reusable Secret. The Controller rejects deletion while it is still in use."
+          description="Delete this configuration value. Active consumers and recoverable Tasks can prevent deletion."
           type="remove"
           target={confirmation.id}
           workspace={confirmation.scope === "platform" ? "Platform" : "Project"}
-          startLabel="Delete Secret"
+          startLabel="Delete configuration value"
           destructive
-          onDispatch={async (after) => (await onRemove(confirmation, after)).task_id}
+          onDispatch={async (after) =>
+            (await onRemove(confirmation, after)).task_id
+          }
           onCommit={() => {
             void onRefresh?.().catch(() => undefined);
           }}

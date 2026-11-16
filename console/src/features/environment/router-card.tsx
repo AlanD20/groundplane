@@ -289,7 +289,10 @@ export function RouterCard({ env }: { env: Environment }) {
                         setTunnelCredentialMode(value as "existing" | "new")
                       }
                       options={[
-                        { value: "existing", label: "Existing Secret" },
+                        {
+                          value: "existing",
+                          label: "Existing configuration value",
+                        },
                         { value: "new", label: "New token" },
                       ]}
                     />
@@ -297,7 +300,7 @@ export function RouterCard({ env }: { env: Environment }) {
                   {tunnelCredentialMode === "existing" ? (
                     <div className="flex flex-col gap-1">
                       <Label htmlFor="component-reusable-secret">
-                        Reusable Secret
+                        Token value
                       </Label>
                       <Select
                         searchable
@@ -306,12 +309,12 @@ export function RouterCard({ env }: { env: Environment }) {
                         onValueChange={setTunnelSecret}
                         options={tunnelSecrets.map((secret) => ({
                           value: secret.id,
-                          label: secret.key + " · " + secret.id,
+                          label: `${secret.key} · ${secret.scope === "platform" ? "Platform" : "Project"}`,
                         }))}
                       />
                       {tunnelSecrets.length === 0 && (
                         <p className="text-xs text-warning">
-                          Create a Project or platform env-var Secret first, or
+                          Add a Project or Platform variable or Secret first, or
                           choose New token.
                         </p>
                       )}

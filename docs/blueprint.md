@@ -533,8 +533,9 @@ x-gp-entry:
 `kind` is `env` or `file`. Sources are:
 
 - `source.literal`, a string of at most 256 KiB;
-- `source.secret_ref`, a reusable Secret key or allowed stable id, requiring
-  `secret: true`; or
+- `source.secret_ref`, a reusable Configuration key or allowed stable id;
+  a sensitive source requires `secret: true`, checked against its captured
+  metadata during preparation; or
 - `source.fact` with `attach`, optional `grant`, and fact `key`.
 
 `secret` defaults to false. A confidential fact must have a secret destination;

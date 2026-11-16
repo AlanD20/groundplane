@@ -29,7 +29,7 @@ func (filter Filter) Validate() error {
 		return errs.New(errs.KindValidationFailed, "task action filter is invalid")
 	}
 	switch filter.Status {
-	case "", "queued", "preparing", "waiting", "running", "attention_required", "stopping", "finishing",
+	case "", "active", "queued", "preparing", "waiting", "running", "attention_required", "stopping", "finishing",
 		"succeeded", "failed", "cancelled", "superseded":
 		return nil
 	default:
@@ -69,7 +69,7 @@ func (service *Service) List(
 				return TaskPage{}, err
 			}
 			if (filter.Action == "" || filter.Action == summary.Action) &&
-				(filter.Status == "" || filter.Status == summary.Status) &&
+				(filter.Status == "" || filter.Status == summary.Status || filter.Status == "active" && summary.FinishedAt == nil) &&
 				(filter.ResourceKind == "" || filter.ResourceKind == summary.ResourceKind) {
 				result.Tasks = append(result.Tasks, summary)
 			}

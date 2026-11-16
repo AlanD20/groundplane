@@ -29,7 +29,7 @@ func TestBackupSecretResolutionEvidenceClearZeroesCiphertext(t *testing.T) {
 	evidence := Evidence{
 		Credentials: testconnectors.EncryptedCredentials{Ciphertext: connectorCiphertext},
 		SecretValues: []SecretValueEvidence{{
-			Value: testsecrets.EncryptedValue{Ciphertext: secretCiphertext},
+			Value: testsecrets.StoredValue{Ciphertext: secretCiphertext},
 		}},
 	}
 	evidence.Clear()

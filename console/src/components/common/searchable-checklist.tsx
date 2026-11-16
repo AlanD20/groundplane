@@ -17,12 +17,16 @@ export function SearchableChecklist({
   selected,
   onChange,
   maximum,
+  searchPlaceholder = "Search by name or path…",
+  emptyMessage = "Nothing available.",
 }: {
   label: string;
   options: ChecklistOption[];
   selected: string[];
   onChange: (ids: string[]) => void;
   maximum: number;
+  searchPlaceholder?: string;
+  emptyMessage?: string;
 }) {
   const [query, setQuery] = useState("");
   const visible = options.filter((option) =>
@@ -50,7 +54,7 @@ export function SearchableChecklist({
           aria-label={`Search ${label.toLowerCase()}`}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by name or path…"
+          placeholder={searchPlaceholder}
           className="pl-9"
         />
       </div>
@@ -91,7 +95,7 @@ export function SearchableChecklist({
         })}
         {!visible.length && (
           <p className="p-3 text-sm text-muted-foreground">
-            {query ? "No matches." : "Nothing available."}
+            {query ? "No matches." : emptyMessage}
           </p>
         )}
       </div>

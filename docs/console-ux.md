@@ -182,6 +182,12 @@ of identifiers, repeated status summaries and implementation terminology.
 
 ## Task execution viewer
 
+Action review forms put **Execution timing** in its own final section, after
+resource configuration. **Start immediately** is the default; **Wait for Tasks**
+reveals the shared paginated unfinished-Task chooser. Show readable action and
+scope labels; IDs remain searchable and inspectable. Completed selections stay
+visible rather than silently changing an unsent request.
+
 Implemented target for the [Task redesign](decisions/task-execution-redesign.md),
 with candidate-specific browser proof and limits in the [QA matrix](qa-matrix.md).
 This replaces the terminal-first presentation requirement. Keep the
@@ -204,6 +210,14 @@ the operator can do next. Use this reading order:
    Retry execution or Retry cleanup, plus links to the affected resource and its
    logs when available. Explain unavailable relevant actions without inventing
    repair buttons or presenting every action as available.
+
+For multi-resource Tasks, use a compact status list and one selected execution
+panel. Prioritise failed or active work initially; preserve the operator's
+selection while refreshing. Load detailed evidence only for the focused resource.
+Separate Steps, Events and Execution details with the shared tabs. Stage rows
+show a short observed result when collapsed, with complete evidence on expansion.
+Open failed or unknown stages initially. Never make a cleanup success hide the
+original failure.
 
 ### Execution detail, not numbered filler
 

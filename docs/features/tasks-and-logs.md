@@ -58,8 +58,15 @@ For CLI inspection, use `groundplane task show <id>`, then `task attempts`,
 
 ## Run after whole Tasks
 
-Task-producing action review forms offer **Run after · whole Tasks**. Select
-recent Tasks or add an existing Task ID, up to 16. These are whole-Task
+Task-producing action review forms separate **Execution timing** from action
+configuration. **Start immediately** is the default; **Wait for Tasks** opens
+the **Run after** picker. The picker lists only
+unfinished Tasks, including queued, waiting and running work, with server-side
+pagination and the configured page size (5, 10, 25 or 50). Search applies to the
+current page. Selected prerequisites remain visible separately when changing
+pages or after completion. `task list --status active` and
+`GET /api/v1/tasks?status=active` expose the same unfinished-Task filter.
+Select unfinished Tasks or add an unfinished Task ID, up to 16. These are whole-Task
 prerequisites, separate from dependencies between operations inside one Task.
 Synchronous metadata saves and Retry of an existing Task do not create a new
 dependency list.

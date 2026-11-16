@@ -36,7 +36,7 @@ type connectorCheckSecret struct {
 	name      string
 	reference string
 	metadata  keyvalue.Versioned[secretrecord.Record]
-	value     secretrecord.EncryptedValue
+	value     secretrecord.StoredValue
 }
 
 func (source *ConnectorCheckSource) Clear() {
@@ -76,9 +76,9 @@ func (source ConnectorCheckSource) DirectCredentials() *connectorrecord.Encrypte
 // lookup occurs after capture, including during cleanup Retry.
 func (source ConnectorCheckSource) SecretValues(
 	operationID string,
-) ([]connectorchecks.SecretSource, []secretrecord.EncryptedValue) {
+) ([]connectorchecks.SecretSource, []secretrecord.StoredValue) {
 	sources := make([]connectorchecks.SecretSource, len(source.secrets))
-	values := make([]secretrecord.EncryptedValue, len(source.secrets))
+	values := make([]secretrecord.StoredValue, len(source.secrets))
 	for index, secret := range source.secrets {
 		sources[index] = connectorchecks.SecretSource{Name: secret.name, Reference: secret.reference,
 			Pin: tasksecretpinrecord.Record{OperationID: operationID, SecretID: secret.metadata.Record.Secret.ID,

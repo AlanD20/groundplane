@@ -190,9 +190,9 @@ func newNativeBackupCredentialFixture(t *testing.T, secretScope core.SecretScope
 	f.secretKey = secrets.ValueKey(secret.Secret.ID)
 	ciphertext := []byte("native-secret-envelope")
 	cipherDigest := sha256.Sum256(ciphertext)
-	secretValue := nativeBackupPut(t, f.store, f.secretKey, secrets.EncryptedValue{SecretID: secret.Secret.ID,
+	secretValue := nativeBackupPut(t, f.store, f.secretKey, secrets.StoredValue{SecretID: secret.Secret.ID,
 		EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
-		CiphertextSHA256: hex.EncodeToString(cipherDigest[:]), Ciphertext: ciphertext}, secrets.EncodeEncryptedValue)
+		CiphertextSHA256: hex.EncodeToString(cipherDigest[:]), Ciphertext: ciphertext}, secrets.EncodeStoredValue)
 	source := backuppolicy.BackupSourceRecord{ID: ids.New(ids.KindBackupSource), EnvironmentID: environment.ID,
 		Kind: core.BackupSourceVolume, TargetID: ids.New(ids.KindVolume), CreatedAt: at.Add(-time.Hour)}
 	f.sourceKey = backuppolicy.BackupSourceKey(source.ID)

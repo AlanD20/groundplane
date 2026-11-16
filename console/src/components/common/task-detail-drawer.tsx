@@ -155,24 +155,39 @@ export function TaskDetailDrawer({
       {task && detail && (
         <div className="min-w-0 space-y-4">
           <section className="space-y-2 rounded-lg border border-border p-4">
-            <p className="text-sm">
-              Created {new Date(task.created_at).toLocaleString()}
-              {task.finished_at
-                ? ` · Finished ${new Date(task.finished_at).toLocaleString()}`
-                : ` · Deadline ${new Date(task.deadline).toLocaleString()}`}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {task.counts.succeeded} succeeded · {task.counts.failed} failed ·{" "}
-              {task.counts.running + task.counts.assigned} active ·{" "}
-              {task.counts.waiting} waiting
-              {task.counts.ready > 0 && ` · ${task.counts.ready} ready`}
-              {task.counts.attention > 0 &&
-                ` · ${task.counts.attention} need attention`}
-              {task.counts.cancelled > 0 &&
-                ` · ${task.counts.cancelled} cancelled`}
-              {task.counts.superseded > 0 &&
-                ` · ${task.counts.superseded} superseded`}
-            </p>
+            <div className="grid grid-cols-4 gap-3 py-2">
+              {[
+                ["Completed", task.counts.succeeded],
+                ["Running", task.counts.running + task.counts.assigned],
+                ["Waiting", task.counts.waiting + task.counts.ready],
+                [
+                  "Failed / attention",
+                  task.counts.failed + task.counts.attention,
+                ],
+              ].map(([label, count]) => (
+                <div key={label}>
+                  <p className="text-lg font-semibold tabular-nums">{count}</p>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                </div>
+              ))}
+            </div>
+            <Disclosure
+              summary="All operation counts"
+              summaryClassName="text-xs text-muted-foreground"
+            >
+              <p className="pt-2 text-xs text-muted-foreground">
+                {task.counts.succeeded} succeeded · {task.counts.failed} failed
+                · {task.counts.running + task.counts.assigned} active ·{" "}
+                {task.counts.waiting} waiting
+                {task.counts.ready > 0 && ` · ${task.counts.ready} ready`}
+                {task.counts.attention > 0 &&
+                  ` · ${task.counts.attention} need attention`}
+                {task.counts.cancelled > 0 &&
+                  ` · ${task.counts.cancelled} cancelled`}
+                {task.counts.superseded > 0 &&
+                  ` · ${task.counts.superseded} superseded`}
+              </p>
+            </Disclosure>
             <p className="text-xs text-muted-foreground">
               {presentation?.scope} ·{" "}
               {task.finished_at ? "Finished after" : "Requested"}{" "}
@@ -209,17 +224,39 @@ export function TaskDetailDrawer({
                 below.
               </p>
             )}
-            {!task.cancel.allowed && task.cancel.reason && (
-              <p className="text-xs text-muted-foreground">
-                {task.cancel.reason}
-              </p>
-            )}
+            {!task.finished_at &&
+              !task.cancel.allowed &&
+              task.cancel.reason && (
+                <p className="text-xs text-muted-foreground">
+                  {task.cancel.reason}
+                </p>
+              )}
             <Disclosure
-              summary="Task identity"
+              summary="Task details"
               summaryClassName="text-xs text-muted-foreground"
             >
-              <div className="pt-2">
+              <div className="space-y-3 pt-3">
                 <CompactReference value={task.id} label="Task" />
+                <dl className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <dt className="text-muted-foreground">Created</dt>
+                    <dd>{new Date(task.created_at).toLocaleString()}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">
+                      {task.finished_at ? "Finished" : "Deadline"}
+                    </dt>
+                    <dd>
+                      {new Date(
+                        task.finished_at || task.deadline,
+                      ).toLocaleString()}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Requested by</dt>
+                    <dd>{task.actor}</dd>
+                  </div>
+                </dl>
               </div>
             </Disclosure>
           </section>
@@ -230,6 +267,7 @@ export function TaskDetailDrawer({
           ) : (
             <>
               <TaskExecution
+                key={task.id}
                 detail={detail}
                 onChanged={() => {
                   setPage({});

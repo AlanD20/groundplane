@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -22,23 +23,23 @@ func (repository *Reader) GetSecret(
 func (repository *Reader) GetSecretValue(
 	ctx context.Context,
 	current etcdstore.Versioned[Record],
-) (EncryptedValue, error) {
+) (StoredValue, error) {
 	if err := ValidateSecretVersion(current); err != nil {
-		return EncryptedValue{}, err
+		return StoredValue{}, err
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{ValueKey(current.Record.Secret.ID)}, Revision: current.ReadRevision,
 	})
 	if err != nil {
-		return EncryptedValue{}, err
+		return StoredValue{}, err
 	}
 	if result == nil || len(result.Values) != 1 || result.Values[0] == nil {
-		return EncryptedValue{}, errs.New(errs.KindInternal, "Secret encrypted value is missing")
+		return StoredValue{}, errs.New(errs.KindInternal, "Secret encrypted value is missing")
 	}
-	value, err := DecodeEncryptedValue(result.Values[0].Value)
-	if err != nil || value.SecretID != current.Record.Secret.ID {
+	value, err := DecodeStoredValue(result.Values[0].Value)
+	if err != nil || ValidateSecretValueBinding(current.Record, value) != nil {
 		clear(value.Ciphertext)
-		return EncryptedValue{}, CorruptRecord()
+		return StoredValue{}, CorruptRecord()
 	}
 	return value, nil
 }

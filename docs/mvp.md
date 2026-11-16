@@ -238,7 +238,13 @@ Release. Applications remain responsible for trusting their own proxy peers.
 
 ### Credentials and configuration
 
-Secrets are encrypted at rest and excluded from public metadata and Task events.
+Project and Platform Configuration has independent confidentiality and storage
+choices. A variable or file may be classified as secret; secret values are
+hidden until explicitly revealed. Reusable values choose `age` encryption or
+explicit `none`, including unencrypted secrets. Encryption failure never falls
+back to plaintext. Value bytes are excluded from metadata and Task events in
+either mode. Environment secret Entries and confidential Attach facts continue
+to use encrypted subordinate value generations.
 Attach facts are not reusable Secrets and are never injected automatically;
 operators choose Entry mappings and exposure. A Task that needs an exact Secret
 for recovery blocks deletion until that use is released.

@@ -1402,6 +1402,42 @@ func (e ScriptExecution1Mode) Valid() bool {
 	}
 }
 
+// Defines values for SecretEncryption.
+const (
+	SecretEncryptionAge  SecretEncryption = "age"
+	SecretEncryptionNone SecretEncryption = "none"
+)
+
+// Valid indicates whether the value is a known member of the SecretEncryption enum.
+func (e SecretEncryption) Valid() bool {
+	switch e {
+	case SecretEncryptionAge:
+		return true
+	case SecretEncryptionNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretCreateRequestEncryption.
+const (
+	SecretCreateRequestEncryptionAge  SecretCreateRequestEncryption = "age"
+	SecretCreateRequestEncryptionNone SecretCreateRequestEncryption = "none"
+)
+
+// Valid indicates whether the value is a known member of the SecretCreateRequestEncryption enum.
+func (e SecretCreateRequestEncryption) Valid() bool {
+	switch e {
+	case SecretCreateRequestEncryptionAge:
+		return true
+	case SecretCreateRequestEncryptionNone:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ServiceContainerObservationHealth.
 const (
 	ServiceContainerObservationHealthHealthy   ServiceContainerObservationHealth = "healthy"
@@ -4585,30 +4621,40 @@ type Secret struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Secret.json
-	Schema    *string `json:"$schema,omitempty"`
-	Id        string  `json:"id"`
-	Key       string  `json:"key"`
-	Kind      string  `json:"kind"`
-	ProjectId *string `json:"project_id,omitempty"`
-	Ref       string  `json:"ref"`
-	Revision  *int64  `json:"revision,omitempty"`
-	Scope     string  `json:"scope"`
-	UpdatedAt string  `json:"updated_at"`
+	Schema     *string          `json:"$schema,omitempty"`
+	Encryption SecretEncryption `json:"encryption"`
+	Id         string           `json:"id"`
+	Key        string           `json:"key"`
+	Kind       string           `json:"kind"`
+	ProjectId  *string          `json:"project_id,omitempty"`
+	Ref        string           `json:"ref"`
+	Revision   *int64           `json:"revision,omitempty"`
+	Scope      string           `json:"scope"`
+	Sensitive  bool             `json:"sensitive"`
+	UpdatedAt  string           `json:"updated_at"`
 }
+
+// SecretEncryption defines model for Secret.Encryption.
+type SecretEncryption string
 
 // SecretCreateRequest defines model for SecretCreateRequest.
 type SecretCreateRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/SecretCreateRequest.json
-	Schema    *string `json:"$schema,omitempty"`
-	Key       string  `json:"key"`
-	Kind      string  `json:"kind"`
-	Path      *string `json:"path,omitempty"`
-	Platform  *bool   `json:"platform,omitempty"`
-	ProjectId *string `json:"project_id,omitempty"`
-	Value     string  `json:"value"`
+	Schema     *string                        `json:"$schema,omitempty"`
+	Encryption *SecretCreateRequestEncryption `json:"encryption,omitempty"`
+	Key        string                         `json:"key"`
+	Kind       string                         `json:"kind"`
+	Path       *string                        `json:"path,omitempty"`
+	Platform   *bool                          `json:"platform,omitempty"`
+	ProjectId  *string                        `json:"project_id,omitempty"`
+	Sensitive  *bool                          `json:"sensitive,omitempty"`
+	Value      string                         `json:"value"`
 }
+
+// SecretCreateRequestEncryption defines model for SecretCreateRequest.Encryption.
+type SecretCreateRequestEncryption string
 
 // SecretEditRequest defines model for SecretEditRequest.
 type SecretEditRequest struct {

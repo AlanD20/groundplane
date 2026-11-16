@@ -4327,6 +4327,8 @@ export interface components {
              * @example /api/v1/Secret.json
              */
             readonly $schema?: string;
+            /** @enum {string} */
+            encryption: "age" | "none";
             id: string;
             key: string;
             kind: string;
@@ -4335,6 +4337,7 @@ export interface components {
             /** Format: int64 */
             revision?: number;
             scope: string;
+            sensitive: boolean;
             updated_at: string;
         };
         SecretCreateRequest: {
@@ -4344,11 +4347,14 @@ export interface components {
              * @example /api/v1/SecretCreateRequest.json
              */
             readonly $schema?: string;
+            /** @enum {string} */
+            encryption?: "age" | "none";
             key: string;
             kind: string;
             path?: string;
             platform?: boolean;
             project_id?: string;
+            sensitive?: boolean;
             value: string;
         };
         SecretEditRequest: {

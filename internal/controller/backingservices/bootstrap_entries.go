@@ -7,14 +7,15 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"sort"
+	"time"
+
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
-	"sort"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backingprovision"
@@ -38,11 +39,11 @@ func (service *CreationService) backingCreationEntries(
 	allocator *desiredrevision.BlueprintIdentityAllocator,
 	createdAt time.Time,
 	seed []byte,
-) ([]entryrecord.Record, []entryrecord.EntryValueGeneration, []secretrecord.Record, []secretrecord.EncryptedValue, map[string]string, error) {
+) ([]entryrecord.Record, []entryrecord.EntryValueGeneration, []secretrecord.Record, []secretrecord.StoredValue, map[string]string, error) {
 	bootstrapValues := make(map[string][]byte)
 	bootstrapSecrets := make(map[string]string)
 	var secrets []secretrecord.Record
-	var secretValues []secretrecord.EncryptedValue
+	var secretValues []secretrecord.StoredValue
 	for _, declaration := range spec.Environment {
 		if declaration.BootstrapKey == "" {
 			continue
@@ -168,14 +169,14 @@ func sealBackingSecret(
 	protector *secretvalue.Protector,
 	secretID string,
 	value []byte,
-) (secretrecord.EncryptedValue, error) {
+) (secretrecord.StoredValue, error) {
 	envelope, err := protector.Seal(ctx, value)
 	if err != nil {
-		return secretrecord.EncryptedValue{}, err
+		return secretrecord.StoredValue{}, err
 	}
 	defer envelope.Clear()
 	metadata := envelope.Metadata()
-	return secretrecord.EncryptedValue{
+	return secretrecord.StoredValue{
 		SecretID: secretID, EnvelopeVersion: uint8(metadata.Version), Cipher: string(metadata.Cipher),
 		DigestAlgorithm: string(metadata.Digest.Algorithm), CiphertextSHA256: metadata.Digest.Value,
 		Ciphertext: envelope.Ciphertext(),

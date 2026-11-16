@@ -523,30 +523,6 @@ type Runner struct {
 // Connectors, by contrast, are environment-scoped only — see Connector
 // below and blueprint.md: "There is no project or platform connector and
 // no fallback."
-type SecretKind = backupsecret.SecretKind
-
-const (
-	SecretKindEnvVar            = backupsecret.SecretKindEnvVar
-	SecretKindFile   SecretKind = "file"
-)
-
-type SecretScope = backupsecret.SecretScope
-
-const (
-	SecretScopeProject  = backupsecret.SecretScopeProject
-	SecretScopePlatform = backupsecret.SecretScopePlatform
-)
-
-type Secret struct {
-	ID        string      `yaml:"id"                   json:"id"` // sec_<ulid>
-	Scope     SecretScope `yaml:"scope"                json:"scope"`
-	ProjectID string      `yaml:"project_id,omitempty" json:"project_id,omitempty"`
-	Key       string      `yaml:"key"                  json:"key"`
-	Kind      SecretKind  `yaml:"kind"                 json:"kind"`
-	Ref       string      `yaml:"ref"                  json:"ref"` // generated env-file name or volume-relative file path
-	UpdatedAt time.Time   `yaml:"updated_at"           json:"updated_at"`
-}
-
 type ConnectorKind string
 
 const ConnectorKindS3Compatible ConnectorKind = "s3-compatible"

@@ -128,7 +128,7 @@ func TestMalformedSecretRecoveryPinsFailClosed(t *testing.T) {
 
 func secretRecoveryPinFixture(
 	t *testing.T,
-) (*memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.ProjectRecord], *SecretRepository, testkeyvalue.Versioned[testsecrets.Record], testsecrets.EncryptedValue) {
+) (*memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.ProjectRecord], *SecretRepository, testkeyvalue.Versioned[testsecrets.Record], testsecrets.StoredValue) {
 	t.Helper()
 	ctx := context.Background()
 	store, project := secretMetadataStore(t)

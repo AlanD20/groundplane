@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	backingpostgresrelease "github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -165,7 +166,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		if err := secretrecord.ValidateRecord(secret); err != nil {
 			return err
 		}
-		if err := secretrecord.ValidateEncryptedValue(creation.SecretValues[index]); err != nil {
+		if err := secretrecord.ValidateStoredValue(creation.SecretValues[index]); err != nil {
 			return err
 		}
 	}

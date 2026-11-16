@@ -84,7 +84,7 @@ func (repository *Planner) manualBackupSecretCredential(ctx context.Context, pro
 			return nil, errs.New(errs.KindStateConflict, "backup credential Secret snapshot is unavailable")
 		}
 		record, recordErr := secretrecord.DecodeRecord(read.Values[0].Value)
-		encrypted, valueErr := secretrecord.DecodeEncryptedValue(read.Values[2].Value)
+		encrypted, valueErr := secretrecord.DecodeStoredValue(read.Values[2].Value)
 		clear(encrypted.Ciphertext)
 		scopeMatches := index == 0 && record.Secret.Scope == backupsecret.SecretScopeProject &&
 			record.Secret.ProjectID == projectID ||

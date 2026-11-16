@@ -88,6 +88,7 @@ func TestEntryGenerationServiceGeneratesReusableSecret(t *testing.T) {
 			Record: testsecrets.Record{Secret: core.Secret{
 				ID: secretID, Scope: core.SecretScopeProject, ProjectID: projectID,
 				Key: "DB_PASSWORD", Kind: core.SecretKindEnvVar, Ref: "secrets/.env." + projectID, UpdatedAt: now,
+				Sensitive: true, Encryption: "age",
 			}},
 			Revision:     1,
 			ReadRevision: 1,
@@ -119,6 +120,24 @@ func TestEntryGenerationServiceGeneratesReusableSecret(t *testing.T) {
 	if got := openEntryGenerationTestValue(t, protector, *generation.Secret); got != "database-password" {
 		t.Fatalf("generated secret plaintext = %q", got)
 	}
+	// Reusable variables may feed ordinary destinations, but changing only the
+	// destination classification must not declassify a sensitive source.
+	entry.Secret = false
+	secrets.record.Record.Secret.Sensitive = true
+	if _, err := service.Generate(context.Background(), projectID, ids.NewAt(ids.KindEnvironment, now, 4),
+		entry, ids.NewAt(ids.KindConfig, now, 6), now); err == nil {
+		t.Fatal("sensitive source was copied into an ordinary Entry")
+	}
+	secrets.record.Record.Secret.Sensitive = false
+	plain, err := service.Generate(context.Background(), projectID, ids.NewAt(ids.KindEnvironment, now, 4),
+		entry, ids.NewAt(ids.KindConfig, now, 7), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ClearEntryValueGeneration(&plain)
+	if plain.Plain == nil || plain.Secret != nil || string(plain.Plain.Content) != "database-password" {
+		t.Fatal("ordinary reusable variable did not produce an ordinary Entry")
+	}
 }
 
 // Rationale: a fact source must carry the Entry's secret-destination decision into live Attach resolution.
@@ -148,7 +167,7 @@ func TestEntryGenerationServiceEnforcesFactSecrecy(t *testing.T) {
 
 type entryGenerationTestSecretRepository struct {
 	record   testkeyvalue.Versioned[testsecrets.Record]
-	value    testsecrets.EncryptedValue
+	value    testsecrets.StoredValue
 	resolves int
 	reads    int
 }
@@ -168,7 +187,7 @@ func (repository *entryGenerationTestSecretRepository) ResolveSecret(
 func (repository *entryGenerationTestSecretRepository) GetSecretValue(
 	_ context.Context,
 	_ testkeyvalue.Versioned[testsecrets.Record],
-) (testsecrets.EncryptedValue, error) {
+) (testsecrets.StoredValue, error) {
 	repository.reads++
 	value := repository.value
 	value.Ciphertext = append([]byte(nil), repository.value.Ciphertext...)
@@ -243,14 +262,14 @@ func sealEntryGenerationTestSecret(
 	protector *secretvalue.Protector,
 	secretID string,
 	plaintext []byte,
-) testsecrets.EncryptedValue {
+) testsecrets.StoredValue {
 	t.Helper()
 	envelope, err := protector.Seal(context.Background(), plaintext)
 	if err != nil {
 		t.Fatalf("Seal() error = %v", err)
 	}
 	metadata := envelope.Metadata()
-	return testsecrets.EncryptedValue{
+	return testsecrets.StoredValue{
 		SecretID:         secretID,
 		EnvelopeVersion:  uint8(metadata.Version),
 		Cipher:           string(metadata.Cipher),

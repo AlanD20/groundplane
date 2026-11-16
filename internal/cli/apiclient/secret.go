@@ -20,6 +20,11 @@ func (c *Client) CreateSecret(
 	}
 	params := &generated.SecretCreateParams{IdempotencyKey: ids.NewULID()}
 	body := generated.SecretCreateRequest{Key: input.Key, Kind: input.Kind, Value: input.Value}
+	body.Sensitive = input.Sensitive
+	if input.Encryption != "" {
+		encryption := generated.SecretCreateRequestEncryption(input.Encryption)
+		body.Encryption = &encryption
+	}
 	if input.ProjectID != "" {
 		body.ProjectId = &input.ProjectID
 	}
@@ -175,6 +180,7 @@ func secretFromGenerated(secret generated.Secret) apiTypes.Secret {
 			secret.Revision,
 		), ID: secret.Id, Scope: secret.Scope, ProjectID: projectID, Key: secret.Key,
 		Kind: secret.Kind, Ref: secret.Ref, UpdatedAt: secret.UpdatedAt,
+		Sensitive: secret.Sensitive, Encryption: string(secret.Encryption),
 	}
 }
 

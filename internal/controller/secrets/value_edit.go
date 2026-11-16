@@ -130,21 +130,11 @@ func (service *ValueEditor) EditSecret(
 		}
 		owner = secretrecord.ProjectOwner(project)
 	}
-	envelope, err := service.protector.Seal(ctx, valueBytes)
+	value, err := storeConfigurationValue(ctx, service.protector, id, current.Record.Secret.Encryption, valueBytes)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
-	metadata := envelope.Metadata()
-	ciphertext := envelope.Ciphertext()
-	defer clear(ciphertext)
-	value := secretrecord.EncryptedValue{
-		SecretID:         id,
-		EnvelopeVersion:  uint8(metadata.Version),
-		Cipher:           string(metadata.Cipher),
-		DigestAlgorithm:  string(metadata.Digest.Algorithm),
-		CiphertextSHA256: metadata.Digest.Value,
-		Ciphertext:       ciphertext,
-	}
+	defer clear(value.Ciphertext)
 	replacement := current.Record
 	replacement.Secret.UpdatedAt = time.Now().UTC()
 	body, err := json.Marshal(secretCreationResponse(replacement))

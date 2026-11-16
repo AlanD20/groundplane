@@ -2,6 +2,7 @@ package backupsecrets
 
 import (
 	"context"
+
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
@@ -126,7 +127,7 @@ func (reader *Reader) resolveEncryptedCredentialValues(
 		if !backupSecretRecordMatches(value, backupCredentialSlot(evidence.ConnectorAuthority, reference.name)) {
 			return errs.New(errs.KindStateConflict, "backup sealed Secret credential slot changed")
 		}
-		encrypted, decodeErr := secretrecord.DecodeEncryptedValue(value.Value)
+		encrypted, decodeErr := secretrecord.DecodeStoredValue(value.Value)
 		if decodeErr != nil || encrypted.SecretID != selected.id {
 			return errs.New(errs.KindInternal, "backup Secret encrypted value is corrupt")
 		}

@@ -198,6 +198,8 @@ export type ReusableSecretBase = {
   key: string;
   kind: SecretKind;
   ref: string;
+  sensitive: boolean;
+  encryption: "age" | "none";
   updatedAt: string;
 };
 
@@ -471,7 +473,7 @@ export type TaskJournalScope = (
   | { kind: "project"; projectId: string }
   | { kind: "environment"; environmentId: string }
 ) & {
-  status?: TaskStatus;
+  status?: TaskStatus | "active";
   resourceKind?: string;
   taskType?: TaskType;
 };

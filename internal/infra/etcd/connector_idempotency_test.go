@@ -144,7 +144,7 @@ func TestConnectorIdempotentCreateRejectsSecretValueRace(t *testing.T) {
 	}
 	racing := &connectorSecretRaceStore{hierarchyStore: base}
 	racing.beforeTransact = func() {
-		changed, encodeErr := testsecrets.EncodeEncryptedValue(testSecretEncryptedValue(secretID, "rotated-access-key"))
+		changed, encodeErr := testsecrets.EncodeStoredValue(testSecretEncryptedValue(secretID, "rotated-access-key"))
 		if encodeErr != nil {
 			t.Fatalf("encodeSecretEncryptedValue() error = %v", encodeErr)
 		}

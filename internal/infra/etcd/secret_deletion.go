@@ -89,7 +89,7 @@ func (repository *SecretRepository) PrepareSecretRemovalAuthority(
 			"Secret deletion indexes or encrypted value are corrupt",
 		)
 	}
-	encrypted, err := secretrecord.DecodeEncryptedValue(dependencies.Values[2].Value)
+	encrypted, err := secretrecord.DecodeStoredValue(dependencies.Values[2].Value)
 	if err != nil || encrypted.SecretID != secretID {
 		clear(encrypted.Ciphertext)
 		return workqueue.Change{}, secretrecord.CorruptRecord()

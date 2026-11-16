@@ -26,6 +26,16 @@ type CipherSuite string
 
 const CipherSuiteAgeX25519 CipherSuite = "age-x25519"
 
+// CipherSuiteNone explicitly stores unencrypted Configuration bytes. It is
+// never inferred when an encrypted value fails to open.
+const CipherSuiteNone CipherSuite = "none"
+
+func Plain(plaintext []byte) (Envelope, error) {
+	metadata := currentMetadata(plaintext)
+	metadata.Cipher = CipherSuiteNone
+	return Restore(metadata, plaintext)
+}
+
 // DigestAlgorithm identifies the integrity digest over ciphertext. Digests
 // never cover plaintext, which would disclose equality and invite guessing of
 // low-entropy secret values.
@@ -140,13 +150,13 @@ func (e Envelope) Validate() error {
 	if e.metadata.Version != EnvelopeVersion1 {
 		return errs.New(errs.KindInternal, "secret value: unsupported envelope version")
 	}
-	if e.metadata.Cipher != CipherSuiteAgeX25519 {
+	if e.metadata.Cipher != CipherSuiteAgeX25519 && e.metadata.Cipher != CipherSuiteNone {
 		return errs.New(errs.KindInternal, "secret value: unsupported cipher suite")
 	}
 	if e.metadata.Digest.Algorithm != DigestAlgorithmSHA256 {
 		return errs.New(errs.KindInternal, "secret value: unsupported digest algorithm")
 	}
-	if len(e.ciphertext) == 0 {
+	if len(e.ciphertext) == 0 && e.metadata.Cipher != CipherSuiteNone {
 		return errs.New(errs.KindInternal, "secret value: ciphertext is empty")
 	}
 	if len(e.ciphertext) > maxCiphertextBytes {
@@ -207,7 +217,13 @@ func (p *Protector) Open(ctx context.Context, envelope Envelope, consume Plainte
 
 	ciphertext := append([]byte(nil), envelope.ciphertext...)
 	defer clear(ciphertext)
-	plaintext, err := p.opener.Open(ctx, ciphertext)
+	var plaintext []byte
+	var err error
+	if envelope.metadata.Cipher == CipherSuiteNone {
+		plaintext = append([]byte(nil), ciphertext...)
+	} else {
+		plaintext, err = p.opener.Open(ctx, ciphertext)
+	}
 	defer clear(plaintext)
 	if err != nil {
 		if contextErr := ctx.Err(); contextErr != nil {
@@ -252,7 +268,13 @@ func (p *Protector) OpenOwned(ctx context.Context, envelope *Envelope, consume P
 		return err
 	}
 
-	plaintext, err := p.opener.Open(ctx, envelope.ciphertext)
+	var plaintext []byte
+	var err error
+	if envelope.metadata.Cipher == CipherSuiteNone {
+		plaintext = append([]byte(nil), envelope.ciphertext...)
+	} else {
+		plaintext, err = p.opener.Open(ctx, envelope.ciphertext)
+	}
 	defer clear(plaintext)
 	if err != nil {
 		if contextErr := ctx.Err(); contextErr != nil {

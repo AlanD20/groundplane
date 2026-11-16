@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	backingpostgresrelease "github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingprovisionwork"
@@ -43,7 +44,7 @@ type BackingServiceCreation struct {
 	Zone            zonerecord.Record
 	Service         servicerecord.ServiceRecord
 	Secrets         []secretrecord.Record
-	SecretValues    []secretrecord.EncryptedValue
+	SecretValues    []secretrecord.StoredValue
 	Entries         []entryrecord.Record
 	EntryValues     []entryrecord.EntryValueGeneration
 	Claim           blueprints.EnvironmentBlueprintStageClaim
@@ -225,7 +226,7 @@ func (repository *HierarchyRepository) PrepareBackingServiceCreation(
 			return workqueue.Change{}, err
 		}
 		defer clear(secretValues[index])
-		secretEncryptedValues[index], err = secretrecord.EncodeEncryptedValue(creation.SecretValues[index])
+		secretEncryptedValues[index], err = secretrecord.EncodeStoredValue(creation.SecretValues[index])
 		if err != nil {
 			return workqueue.Change{}, err
 		}

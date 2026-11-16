@@ -5,15 +5,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"time"
+	"unicode/utf16"
+	"unicode/utf8"
+
 	"filippo.io/age"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	backupsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/backupsecrets"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
-	"time"
-	"unicode/utf16"
-	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -272,7 +273,7 @@ func (resolver *BackupSecretResolver) openCurrentAgeIdentity(
 
 func (resolver *BackupSecretResolver) openSecretValue(
 	ctx context.Context,
-	value *secretrecord.EncryptedValue,
+	value *secretrecord.StoredValue,
 ) ([]byte, error) {
 	metadata := secretvalue.Metadata{
 		Version: secretvalue.EnvelopeVersion(value.EnvelopeVersion),

@@ -39,7 +39,7 @@ func (repository *SecretRepository) CaptureSecretRemoval(ctx context.Context, ow
 			"Secret encrypted value is unavailable for removal",
 		)
 	}
-	value, err := secrets.DecodeEncryptedValue(read.Values[0].Value)
+	value, err := secrets.DecodeStoredValue(read.Values[0].Value)
 	defer clear(value.Ciphertext)
 	if err != nil || value.SecretID != current.Record.Secret.ID {
 		return secretremoval.Input{}, secrets.CorruptRecord()

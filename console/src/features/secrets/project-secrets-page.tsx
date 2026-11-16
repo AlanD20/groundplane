@@ -1,3 +1,7 @@
+import {
+  ConfigurationFields,
+  newConfigurationDraft,
+} from "@/features/secrets/configuration-fields";
 import { BulkSecretEditor } from "@/features/secrets/bulk-secret-editor";
 import { CreationButton } from "@/components/common/creation-button";
 ("use client");
@@ -13,9 +17,6 @@ import {
   ResourceFormTitle as DialogTitle,
   ResourceForm,
 } from "@/components/common/resource-form";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import { ArrowLeft, KeyRound, Plus } from "lucide-react";
@@ -29,17 +30,13 @@ export default function ProjectSecretsPage() {
   const project = store.getProject(params.tenant, params.project);
   const [open, setOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [kind, setKind] = useState<"env" | "file">("env");
-  const [key, setKey] = useState("");
-  const [value, setValue] = useState("");
-  const [path, setPath] = useState("");
+  const [draft, setDraft] = useState(newConfigurationDraft);
+  const { kind, key, value, path, sensitive, encryption } = draft;
   const [creating, setCreating] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   function clearDraft() {
-    setKey("");
-    setValue("");
-    setPath("");
+    setDraft(newConfigurationDraft());
   }
   if (!tenant || !project || project.tenantId !== tenant.id) {
     return (
@@ -76,13 +73,13 @@ export default function ProjectSecretsPage() {
         kind,
         path: kind === "file" ? path.trim() : undefined,
         value,
+        sensitive,
+        encryption,
       });
       setOpen(false);
-      setKey("");
-      setValue("");
-      setPath("");
+      clearDraft();
     } catch (cause) {
-      setValue("");
+      setDraft((current) => ({ ...current, value: "" }));
       setMutationError(
         cause instanceof Error ? cause.message : "Unable to create Secret",
       );
@@ -99,7 +96,7 @@ export default function ProjectSecretsPage() {
         icon={<KeyRound />}
         meta={
           <MetaPill icon={<KeyRound />}>
-            {scoped.length} protected values
+            {scoped.length} configuration values
           </MetaPill>
         }
         actions={
@@ -116,7 +113,7 @@ export default function ProjectSecretsPage() {
               disabled={bulkOpen}
               onClick={() => setOpen(true)}
             >
-              <Plus className="size-4" /> New variable or file
+              <Plus className="size-4" /> Add configuration
             </CreationButton>
           </div>
         }
@@ -135,92 +132,9 @@ export default function ProjectSecretsPage() {
         }}
       >
         <DialogHeader>
-          <DialogTitle>New variable or file · {project.name}</DialogTitle>
+          <DialogTitle>Add configuration · {project.name}</DialogTitle>
         </DialogHeader>
-        <div className="grid max-w-5xl items-start gap-4 md:grid-cols-2">
-          <div className="flex flex-col gap-1.5 md:col-span-2">
-            <Label>Type</Label>
-            <div className="flex gap-2">
-              {(["env", "file"] as const).map((candidate) => (
-                <Button
-                  key={candidate}
-                  variant={kind === candidate ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setKind(candidate)}
-                >
-                  {candidate === "env" ? "Variable" : "File"}
-                </Button>
-              ))}
-            </div>
-          </div>
-          {kind === "env" ? (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="ps-key">Key</Label>
-                <Input
-                  id="ps-key"
-                  value={key}
-                  onChange={(event) => setKey(event.target.value)}
-                  placeholder="ACME_ORG_TOKEN"
-                  autoFocus
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="ps-value">Value</Label>
-                <Input
-                  id="ps-value"
-                  type="password"
-                  autoComplete="new-password"
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                  placeholder="••••"
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="pf-key">Name</Label>
-                <Input
-                  id="pf-key"
-                  value={key}
-                  onChange={(event) => setKey(event.target.value)}
-                  placeholder="acme-ca"
-                  autoFocus
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="pf-path">
-                  Path relative to each environment volume
-                </Label>
-                <Input
-                  id="pf-path"
-                  value={path}
-                  onChange={(event) => setPath(event.target.value)}
-                  placeholder="config/acme/ca.pem"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5 md:col-span-2">
-                <Label htmlFor="pf-content">Content</Label>
-                <Textarea
-                  id="pf-content"
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                  rows={6}
-                  spellCheck={false}
-                  className="font-mono text-xs"
-                  placeholder={
-                    "-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----"
-                  }
-                />
-              </div>
-            </>
-          )}
-          <p className="text-xs text-muted-foreground md:col-span-2">
-            Stored encrypted in the Controller. Project values override matching
-            platform keys.
-          </p>
-        </div>
+        <ConfigurationFields draft={draft} onChange={setDraft} />
         <DialogFooter>
           <Button
             variant="outline"
@@ -246,7 +160,7 @@ export default function ProjectSecretsPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <ResourcePanel
-        title="Variables & files"
+        title="Configuration values"
         actions={
           <HelpHint>
             Project-owned Secrets take precedence over matching Platform keys
@@ -264,14 +178,16 @@ export default function ProjectSecretsPage() {
           emptyDescription="Resolution falls back to matching platform Secrets."
           scopeLabel="Project"
           editable
-          onRemove={(secret, after) => store.removeReusableSecret(secret.id, after)}
+          onRemove={(secret, after) =>
+            store.removeReusableSecret(secret.id, after)
+          }
           onRefresh={() => store.refreshReusableSecrets()}
           onReveal={(secret) => store.revealReusableSecret(secret.id)}
         />
       </ResourcePanel>
 
       <ResourcePanel
-        title="Platform fallback Secrets"
+        title="Platform fallback configuration"
         actions={
           <HelpHint>used only when this project has no matching key</HelpHint>
         }
@@ -283,7 +199,7 @@ export default function ProjectSecretsPage() {
         <ReusableSecretOwnerList
           secrets={fallbacks}
           loading={store.reusableSecretsLoading}
-          emptyTitle="No platform fallback Secrets"
+          emptyTitle="No platform fallback configuration"
           scopeLabel="Platform fallback"
           onReveal={(secret) => store.revealReusableSecret(secret.id)}
         />

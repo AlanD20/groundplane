@@ -4,11 +4,12 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"path"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -21,15 +22,15 @@ const (
 	secretValuePrefix  = "/v1/secret-values/secrets/"
 )
 
-// Record contains only listable desired metadata. The encrypted value
+// Record contains only listable desired metadata. The value
 // is stored under secretValuePrefix and committed with this record.
 type Record struct {
 	Secret core.Secret `json:"secret"`
 }
 
-// EncryptedValue is the Controller-key envelope stored for one Secret.
-// No plaintext length or plaintext digest is persisted.
-type EncryptedValue struct {
+// StoredValue carries one explicit age-encrypted or unencrypted Configuration
+// payload. Encrypted payloads never retain plaintext length or plaintext digest.
+type StoredValue struct {
 	SecretID         string `json:"secret_id"`
 	EnvelopeVersion  uint8  `json:"envelope_version"`
 	Cipher           string `json:"cipher"`
@@ -78,7 +79,7 @@ func newSecretRecord(
 	}
 	record := Record{Secret: core.Secret{
 		ID: id, Scope: scope, ProjectID: projectID, Key: key, Kind: kind,
-		Ref: reference, UpdatedAt: updatedAt,
+		Ref: reference, Sensitive: true, Encryption: "age", UpdatedAt: updatedAt,
 	}}
 	if err := ValidateRecord(record); err != nil {
 		return Record{}, err
@@ -104,8 +105,8 @@ func DecodeRecord(value []byte) (Record, error) {
 	return record, nil
 }
 
-func EncodeEncryptedValue(value EncryptedValue) ([]byte, error) {
-	if err := ValidateEncryptedValue(value); err != nil {
+func EncodeStoredValue(value StoredValue) ([]byte, error) {
+	if err := ValidateStoredValue(value); err != nil {
 		return nil, err
 	}
 	copyOfValue := value
@@ -113,16 +114,19 @@ func EncodeEncryptedValue(value EncryptedValue) ([]byte, error) {
 	return recordcodec.Encode("secret_value", copyOfValue)
 }
 
-func DecodeEncryptedValue(value []byte) (EncryptedValue, error) {
-	record, err := recordcodec.Decode[EncryptedValue](value, "secret_value")
-	if err != nil || ValidateEncryptedValue(record) != nil {
+func DecodeStoredValue(value []byte) (StoredValue, error) {
+	record, err := recordcodec.Decode[StoredValue](value, "secret_value")
+	if err != nil || ValidateStoredValue(record) != nil {
 		clear(record.Ciphertext)
-		return EncryptedValue{}, CorruptRecord()
+		return StoredValue{}, CorruptRecord()
 	}
 	return record, nil
 }
 
 func ValidateRecord(record Record) error {
+	if record.Secret.Encryption != "age" && record.Secret.Encryption != "none" {
+		return errs.New(errs.KindValidationFailed, "Configuration encryption must be age or none")
+	}
 	secret := record.Secret
 	if recordcodec.ValidateID(ids.KindSecret, secret.ID) != nil {
 		return errs.New(errs.KindValidationFailed, "Secret stable identity is invalid")
@@ -164,10 +168,10 @@ func ValidateRecord(record Record) error {
 	return recordcodec.ValidateTimestamp("Secret updated_at", secret.UpdatedAt)
 }
 
-func ValidateEncryptedValue(value EncryptedValue) error {
+func ValidateStoredValue(value StoredValue) error {
 	if recordcodec.ValidateID(ids.KindSecret, value.SecretID) != nil || value.EnvelopeVersion != 1 ||
-		value.Cipher != "age-x25519" || value.DigestAlgorithm != "sha256" ||
-		len(value.Ciphertext) == 0 || len(value.Ciphertext) > recordcodec.MaximumValueBytes ||
+		(value.Cipher != "age-x25519" && value.Cipher != "none") || value.DigestAlgorithm != "sha256" ||
+		(value.Cipher == "age-x25519" && len(value.Ciphertext) == 0) || len(value.Ciphertext) > recordcodec.MaximumValueBytes ||
 		!recordcodec.ValidSHA256(value.CiphertextSHA256) {
 		return errs.New(errs.KindValidationFailed, "Secret encrypted value envelope is invalid")
 	}

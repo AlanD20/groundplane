@@ -2,6 +2,9 @@ package secrets
 
 import (
 	"context"
+	"time"
+	"unicode/utf8"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -9,8 +12,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/secretremoval"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
-	"time"
-	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -22,7 +23,7 @@ import (
 type secretReadRepository interface {
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetSecret(context.Context, string) (etcdstore.Versioned[secretrecord.Record], error)
-	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
+	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.StoredValue, error)
 	ListSecrets(
 		context.Context,
 		core.SecretScope,
@@ -173,7 +174,7 @@ func (repository *Repository) GetSecret(
 func (repository *Repository) GetSecretValue(
 	ctx context.Context,
 	current etcdstore.Versioned[secretrecord.Record],
-) (secretrecord.EncryptedValue, error) {
+) (secretrecord.StoredValue, error) {
 	return repository.secrets.GetSecretValue(ctx, current)
 }
 
@@ -190,7 +191,7 @@ func (repository *Repository) CreateSecretIdempotent(
 	ctx context.Context,
 	owner secretrecord.Owner,
 	record secretrecord.Record,
-	value secretrecord.EncryptedValue,
+	value secretrecord.StoredValue,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.secrets.CreateSecretIdempotent(ctx, owner, record, value, marker)

@@ -24,7 +24,7 @@ const backingServiceCreationStagePrefix = "/v1/staging/backing-services/"
 // Its private encrypted seed is captured only after dependencies settle and
 // keeps generated bootstrap credentials stable across interrupted compilation.
 type BackingServiceCreationStage struct {
-	BootstrapSeed secrets.EncryptedValue               `json:"bootstrap_seed"`
+	BootstrapSeed secrets.StoredValue                  `json:"bootstrap_seed"`
 	Locator       idempotencyrecord.IdempotencyLocator `json:"locator"`
 	RequestSHA256 string                               `json:"request_sha256"`
 	ProjectID     string                               `json:"project_id"`
@@ -130,7 +130,7 @@ func validateBackingServiceCreationStage(record BackingServiceCreationStage) err
 	if _, err := idempotencyrecord.IdempotencyMarkerKey(record.Locator); err != nil {
 		return err
 	}
-	if secrets.ValidateEncryptedValue(record.BootstrapSeed) != nil ||
+	if secrets.ValidateStoredValue(record.BootstrapSeed) != nil || record.BootstrapSeed.Cipher != "age-x25519" ||
 		record.BootstrapSeed.SecretID != ids.DeriveAt(
 			ids.KindSecret,
 			record.CreatedAt,

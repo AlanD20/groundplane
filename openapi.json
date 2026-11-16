@@ -7789,6 +7789,13 @@
             "readOnly": true,
             "type": "string"
           },
+          "encryption": {
+            "enum": [
+              "age",
+              "none"
+            ],
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -7811,6 +7818,9 @@
           "scope": {
             "type": "string"
           },
+          "sensitive": {
+            "type": "boolean"
+          },
           "updated_at": {
             "type": "string"
           }
@@ -7821,6 +7831,8 @@
           "key",
           "kind",
           "ref",
+          "sensitive",
+          "encryption",
           "updated_at"
         ],
         "type": "object"
@@ -7837,6 +7849,13 @@
             "readOnly": true,
             "type": "string"
           },
+          "encryption": {
+            "enum": [
+              "age",
+              "none"
+            ],
+            "type": "string"
+          },
           "key": {
             "type": "string"
           },
@@ -7851,6 +7870,9 @@
           },
           "project_id": {
             "type": "string"
+          },
+          "sensitive": {
+            "type": "boolean"
           },
           "value": {
             "type": "string"

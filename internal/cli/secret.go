@@ -41,7 +41,8 @@ func newSecretCmd() *cobra.Command {
 		},
 	})
 
-	var kind, filePath, valueFile string
+	var kind, filePath, valueFile, encryption string
+	var sensitive bool
 	add := &cobra.Command{
 		Use:   "add <name>",
 		Short: "Add a secret",
@@ -62,6 +63,7 @@ func newSecretCmd() *cobra.Command {
 			secret, err := app.Client.CreateSecret(cmd.Context(), apiTypes.SecretCreateRequest{
 				ProjectID: projectID, Platform: platformScope, Key: args[0],
 				Kind: kind, Path: filePath, Value: value,
+				Sensitive: &sensitive, Encryption: encryption,
 			})
 			if err != nil {
 				return err
@@ -72,6 +74,9 @@ func newSecretCmd() *cobra.Command {
 	add.Flags().StringVar(&kind, "kind", "env_var", "env_var | file")
 	add.Flags().StringVar(&filePath, "path", "", "volume-relative path for a file Secret")
 	add.Flags().StringVar(&valueFile, "value-file", "", "read the value from PATH, or - for stdin")
+	add.Flags().BoolVar(&sensitive, "sensitive", true, "hide the value until explicitly revealed")
+	add.Flags().
+		StringVar(&encryption, "encryption", "age", "at-rest encryption: age | none (independent of sensitivity)")
 	cmd.AddCommand(add)
 
 	cmd.AddCommand(&cobra.Command{
@@ -235,5 +240,6 @@ func secretFields(secret apiTypes.Secret) map[string]any {
 	return map[string]any{
 		"id": secret.ID, "scope": secret.Scope, "project_id": secret.ProjectID,
 		"key": secret.Key, "kind": secret.Kind, "ref": secret.Ref, "updated_at": secret.UpdatedAt,
+		"sensitive": secret.Sensitive, "encryption": secret.Encryption,
 	}
 }

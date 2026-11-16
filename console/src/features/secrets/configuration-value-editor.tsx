@@ -25,7 +25,7 @@ type Edit =
   operations["secret.edit"]["requestBody"]["content"]["application/json"];
 type Submission = { body: Edit; key: string };
 
-export function FileSecretEditor({
+export function ConfigurationValueEditor({
   secret,
   onClose,
   onSaved,
@@ -36,7 +36,9 @@ export function FileSecretEditor({
 }) {
   const { requireRevealConfirm } = useStore();
   const id = useId();
-  const [authorized, setAuthorized] = useState(!requireRevealConfirm);
+  const [authorized, setAuthorized] = useState(
+    !secret.sensitive || !requireRevealConfirm,
+  );
   const [typed, setTyped] = useState("");
   const [draft, setDraft] = useState("");
   const [initial, setInitial] = useState("");
@@ -76,11 +78,11 @@ export function FileSecretEditor({
         });
         if (
           before.id !== secret.id ||
-          before.kind !== "file" ||
+          before.kind !== (secret.kind === "file" ? "file" : "env_var") ||
           before.revision !== after.revision
         )
           throw new Error(
-            "This Secret changed while loading. Reload its current contents.",
+            "This configuration value changed while loading. Reload its current contents.",
           );
         if (!abort.signal.aborted) {
           setDraft(value.value);
@@ -92,14 +94,14 @@ export function FileSecretEditor({
           setError(
             cause instanceof Error
               ? cause.message
-              : "Unable to load file contents",
+              : "Unable to load the current value",
           );
       } finally {
         if (!abort.signal.aborted) setLoading(false);
       }
     })();
     return () => abort.abort();
-  }, [authorized, path, reload, secret.id]);
+  }, [authorized, path, reload, secret.id, secret.kind]);
 
   const oversized = new TextEncoder().encode(draft).length > 255 * 1024;
   async function save() {
@@ -123,9 +125,7 @@ export function FileSecretEditor({
         const rejected = controllerUpdateRejected(cause);
         if (rejected) pending.current = null;
         const reason =
-          cause instanceof Error
-            ? cause.message
-            : "Unable to save file contents";
+          cause instanceof Error ? cause.message : "Unable to save the value";
         setError(
           rejected
             ? reason
@@ -159,14 +159,19 @@ export function FileSecretEditor({
           <DialogHeader>
             <DialogTitle>Edit {secret.key}</DialogTitle>
             <DialogDescription>
-              {secret.scope === "platform" ? "Platform" : "Project"} file Secret
-              · {secret.ref}
+              {secret.scope === "platform" ? "Platform" : "Project"} ·{" "}
+              {secret.kind === "file"
+                ? "File"
+                : secret.sensitive
+                  ? "Secret"
+                  : "Variable"}{" "}
+              · {secret.encryption === "age" ? "Encrypted" : "Not encrypted"}
             </DialogDescription>
           </DialogHeader>
           {!authorized ? (
             <div className="space-y-2">
               <Label htmlFor={`${id}-confirm`}>
-                Type reveal to load the current file contents
+                Type reveal to load the current value
               </Label>
               <Input
                 id={`${id}-confirm`}
@@ -178,7 +183,7 @@ export function FileSecretEditor({
             </div>
           ) : loading ? (
             <p role="status" className="text-sm text-muted-foreground">
-              Loading file contents…
+              Loading current value…
             </p>
           ) : revision ? (
             <CodeEditor
@@ -192,7 +197,7 @@ export function FileSecretEditor({
           ) : null}
           {oversized && (
             <p role="alert" className="text-sm text-destructive">
-              File contents must not exceed 255 KiB.
+              Values must not exceed 255 KiB.
             </p>
           )}
           {error && (

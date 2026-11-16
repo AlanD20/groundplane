@@ -32,7 +32,7 @@ export function ConnectorCredentialField({
 }) {
   const keepLabel = existing
     ? existing.kind === "ref"
-      ? `Keep existing Secret reference: ${existing.name}`
+      ? `Keep existing Configuration reference: ${existing.name}`
       : "Keep existing credential value"
     : "Keep existing credential";
   return (
@@ -47,28 +47,25 @@ export function ConnectorCredentialField({
         }
         options={[
           ...(existing ? [{ value: "keep", label: keepLabel }] : []),
-          { value: "ref", label: "Reusable Secret" },
+          { value: "ref", label: "Project / Platform configuration" },
           { value: "value", label: "Enter credential value" },
         ]}
       />
       {draft.kind !== "keep" && (
         <>
           <Label htmlFor={id}>
-            {draft.kind === "ref" ? "Secret key name" : "Credential value"}
+            {draft.kind === "ref" ? "Configuration value" : "Credential value"}
           </Label>
           {draft.kind === "ref" ? (
             <SecretReferencePicker
               id={id}
+              noun="configuration"
               value={draft.value}
               onChange={(value) => onChange({ ...draft, value })}
-              options={[
-                ...new Map(
-                  secretOptions.map((secret) => [
-                    secret.key,
-                    { value: secret.key, label: secret.key },
-                  ]),
-                ).values(),
-              ]}
+              options={secretOptions.map((secret) => ({
+                value: secret.id,
+                label: `${secret.key} · ${secret.scope === "platform" ? "Platform" : "Project"}`,
+              }))}
             />
           ) : (
             <Input

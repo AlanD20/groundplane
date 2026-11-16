@@ -27,7 +27,7 @@ const operationLabels: Record<string, string> = {
   software_staging: "Stage Groundplane artifacts",
   connector_check: "Check storage connection",
   connector_removal: "Delete Connector",
-  secret_removal: "Delete Secret",
+  secret_removal: "Delete configuration value",
   script_removal: "Delete Script",
   backing_check: "Check Backing Service connection",
   dns_check: "Check DNS resolution",

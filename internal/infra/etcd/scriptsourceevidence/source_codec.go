@@ -8,6 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
+
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -15,8 +18,6 @@ import (
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"io"
-	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	coreproof "github.com/AlanD20/groundplane/internal/core/materializationproof"
@@ -177,7 +178,7 @@ func ValidateScriptSourceRecord(key string, value []byte, reference ref.Referenc
 			return errs.New(errs.KindValidationFailed, "Script Entry source key is invalid")
 		}
 	case ref.SourceSecretValue:
-		record, err := secretrecord.DecodeEncryptedValue(value)
+		record, err := secretrecord.DecodeStoredValue(value)
 		if err != nil || key != secretrecord.ValueKey(source.SecretID) || record.SecretID != source.SecretID ||
 			record.CiphertextSHA256 != reference.SourceDigest {
 			return errs.New(errs.KindValidationFailed, "Script Secret source evidence is invalid")

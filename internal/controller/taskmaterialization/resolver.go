@@ -42,7 +42,7 @@ type materializationComponentFileReader interface {
 
 type materializationSecretValueReader interface {
 	GetSecret(context.Context, string) (etcdstore.Versioned[secretrecord.Record], error)
-	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
+	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.StoredValue, error)
 }
 
 // TaskMaterializationResolver resolves only the immutable Controller source
@@ -292,7 +292,8 @@ func (resolver *TaskMaterializationResolver) PinSecretValue(
 		return materializationrecord.SecretValueReference{}, err
 	}
 	defer clear(value.Ciphertext)
-	if value.SecretID != secretID || len(value.Ciphertext) == 0 || len(value.CiphertextSHA256) != sha256.Size*2 {
+	if value.SecretID != secretID || (value.Cipher != "none" && len(value.Ciphertext) == 0) ||
+		len(value.CiphertextSHA256) != sha256.Size*2 {
 		return materializationrecord.SecretValueReference{}, CorruptSource()
 	}
 	return materializationrecord.SecretValueReference{

@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { AttemptStages } from "./attempt-stages";
 import { AttemptEvents } from "./attempt-events";
 import { WorkRetry } from "./work-retry";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { cleanupLabel, operationLabel } from "./operation-label";
 import {
   requestTaskAttempts,
@@ -337,46 +338,71 @@ function WorkEvidence({
                   {history ? "Attempt" : "Latest attempt"} {attempt.number} ·{" "}
                   {attempt.direction === "recovery" ? "Cleanup" : "Execution"}
                 </p>
-                <p>
-                  {attempt.outcome ||
-                    (attempt.started_at ? "Running" : "Assigned, not started")}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Assigned {new Date(attempt.assigned_at).toLocaleString()}
-                  {attempt.finished_at
-                    ? ` · Finished ${new Date(attempt.finished_at).toLocaleString()}`
-                    : ` · Deadline ${new Date(attempt.deadline).toLocaleString()}`}
-                </p>
-                <AttemptStages
-                  taskId={taskId}
-                  workId={work.id}
-                  attemptId={attempt.id}
-                  revision={attempts.revision}
+                <StatusBadge
+                  status={
+                    attempt.outcome ||
+                    (attempt.started_at ? "running" : "assigned")
+                  }
                 />
-                <AttemptEvents
-                  taskId={taskId}
-                  workId={work.id}
-                  attemptId={attempt.id}
-                  revision={attempts.revision}
-                />
-                <Disclosure
-                  summary="Executor identity"
-                  summaryClassName="text-xs text-muted-foreground"
-                >
-                  <div className="space-y-1 pt-2">
-                    <CompactReference value={attempt.id} label="Attempt" />
-                    {attempt.host_id && (
-                      <CompactReference value={attempt.host_id} label="Host" />
-                    )}
-                    {attempt.agent_id && (
-                      <CompactReference
-                        value={attempt.agent_id}
-                        label="Agent"
-                      />
-                    )}
-                    <p>Process generation {attempt.generation}</p>
-                  </div>
-                </Disclosure>
+                <Tabs defaultValue="steps" className="pt-3">
+                  <TabsList variant="underline">
+                    <TabsTab value="steps">Steps</TabsTab>
+                    <TabsTab value="events">Events</TabsTab>
+                    <TabsTab value="details">Execution details</TabsTab>
+                  </TabsList>
+                  <TabsPanel value="steps">
+                    <AttemptStages
+                      taskId={taskId}
+                      workId={work.id}
+                      attemptId={attempt.id}
+                      revision={attempts.revision}
+                    />
+                  </TabsPanel>
+                  <TabsPanel value="events" className="pt-3">
+                    <AttemptEvents
+                      taskId={taskId}
+                      workId={work.id}
+                      attemptId={attempt.id}
+                      revision={attempts.revision}
+                    />
+                  </TabsPanel>
+                  <TabsPanel value="details" className="pt-3">
+                    <dl className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <dt className="text-muted-foreground">Assigned</dt>
+                        <dd>
+                          {new Date(attempt.assigned_at).toLocaleString()}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">
+                          {attempt.finished_at ? "Finished" : "Deadline"}
+                        </dt>
+                        <dd>
+                          {new Date(
+                            attempt.finished_at || attempt.deadline,
+                          ).toLocaleString()}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="space-y-1 pt-2">
+                      <CompactReference value={attempt.id} label="Attempt" />
+                      {attempt.host_id && (
+                        <CompactReference
+                          value={attempt.host_id}
+                          label="Host"
+                        />
+                      )}
+                      {attempt.agent_id && (
+                        <CompactReference
+                          value={attempt.agent_id}
+                          label="Agent"
+                        />
+                      )}
+                      <p>Process generation {attempt.generation}</p>
+                    </div>
+                  </TabsPanel>
+                </Tabs>
               </li>
             ))}
           </ol>

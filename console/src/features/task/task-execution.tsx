@@ -20,6 +20,7 @@ function TaskWorkExecution({
   onChanged?: () => void;
 }) {
   const [filter, setFilter] = useState("all");
+  const [selectedId, setSelectedId] = useState<string>();
   const attention = detail.work.items.filter(
     (work) => work.phase === "attention" || work.outcome === "failed",
   );
@@ -44,6 +45,15 @@ function TaskWorkExecution({
         return true;
     }
   });
+  const selected =
+    visible.find((work) => work.id === selectedId) ??
+    visible.find(
+      (work) => work.phase === "attention" || work.outcome === "failed",
+    ) ??
+    visible.find(
+      (work) => work.phase === "running" || work.phase === "assigned",
+    ) ??
+    visible[0];
   if (detail.task.history_expired)
     return (
       <p className="text-sm text-muted-foreground">
@@ -90,7 +100,7 @@ function TaskWorkExecution({
         (attention.length > 0 || waiting.length > 0) && (
           <section
             aria-label="Resources needing attention"
-            className="space-y-3 rounded-lg border border-border bg-muted/30 p-3"
+            className="flex flex-wrap gap-2"
           >
             {[
               {
@@ -111,14 +121,6 @@ function TaskWorkExecution({
                     >
                       {group.label} · {group.items.length}
                     </Button>
-                    <p className="break-words text-sm">
-                      {group.items
-                        .map(
-                          (work) =>
-                            work.target_name || operationLabel(work.operation),
-                        )
-                        .join(", ")}
-                    </p>
                   </div>
                 ),
             )}
@@ -126,7 +128,7 @@ function TaskWorkExecution({
         )}
       {detail.work.items.length > 1 && (
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-sm font-medium">Resource work</h2>
+          <h2 className="text-sm font-medium">Execution</h2>
           <Select
             aria-label="Filter work on this page"
             className="ml-auto w-48"
@@ -148,23 +150,60 @@ function TaskWorkExecution({
           No work on this page matches this filter.
         </p>
       )}
-      {visible.map((work) => (
-        <div key={work.id} className="space-y-3">
+      {detail.work.items.length > 1 && (
+        <ul
+          aria-label="Resources in this Task"
+          className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-border p-1"
+        >
+          {visible.map((work) => (
+            <li key={work.id}>
+              <Button
+                type="button"
+                variant={selected?.id === work.id ? "secondary" : "ghost"}
+                size="content"
+                aria-pressed={selected?.id === work.id}
+                aria-controls={`task-focused-work-${detail.task.id}`}
+                className="w-full justify-between gap-3 px-3 py-2 text-left"
+                onClick={() => setSelectedId(work.id)}
+              >
+                <span className="min-w-0">
+                  <span className="block break-words text-sm">
+                    {work.target_name || operationLabel(work.operation)}
+                  </span>
+                  {work.target_name && (
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      {operationLabel(work.operation)}
+                    </span>
+                  )}
+                </span>
+                <StatusBadge status={work.outcome || work.phase} />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {selected && (
+        <div
+          id={`task-focused-work-${detail.task.id}`}
+          key={selected.id}
+          className="space-y-3"
+          aria-label="Selected resource execution"
+        >
           <WorkInspection
             taskId={detail.task.id}
-            work={work}
+            work={selected}
             revision={detail.work.revision}
             targetName={
-              work.target_name ||
-              (work.target_id === detail.task.target_id
+              selected.target_name ||
+              (selected.target_id === detail.task.target_id
                 ? detail.task.target_name
                 : undefined)
             }
             onChanged={onChanged}
           />
-          <WorkCheckEvidence task={detail.task} work={work} />
+          <WorkCheckEvidence task={detail.task} work={selected} />
         </div>
-      ))}
+      )}
     </section>
   );
 }

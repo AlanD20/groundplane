@@ -103,7 +103,7 @@ type fakeSecretCreationRepository struct {
 	project testkeyvalue.Versioned[testhierarchy.ProjectRecord]
 	owner   testsecrets.Owner
 	record  testsecrets.Record
-	value   testsecrets.EncryptedValue
+	value   testsecrets.StoredValue
 	marker  testidempotency.IdempotencyMarker
 	calls   int
 }
@@ -120,7 +120,7 @@ func (repository *fakeSecretCreationRepository) CreateSecretIdempotent(
 	_ context.Context,
 	owner testsecrets.Owner,
 	record testsecrets.Record,
-	value testsecrets.EncryptedValue,
+	value testsecrets.StoredValue,
 	marker testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	repository.calls++

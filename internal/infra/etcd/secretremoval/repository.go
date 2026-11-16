@@ -108,7 +108,7 @@ func (repository *Repository) PrepareDecision(
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	value, err := secrets.DecodeEncryptedValue(read.Values[1].Value)
+	value, err := secrets.DecodeStoredValue(read.Values[1].Value)
 	clear(value.Ciphertext)
 	if err != nil || value.SecretID != id {
 		return workqueue.Change{}, secrets.CorruptRecord()

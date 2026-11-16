@@ -227,7 +227,7 @@ func TestManualScriptSourceMembersRetainResolvedEntryAndSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secretValue, err := testsecrets.EncodeEncryptedValue(testsecrets.EncryptedValue{
+	secretValue, err := testsecrets.EncodeStoredValue(testsecrets.StoredValue{
 		SecretID: secretID, EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 		CiphertextSHA256: cipherDigest, Ciphertext: ciphertext,
 	})

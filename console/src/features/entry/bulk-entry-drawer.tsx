@@ -1,4 +1,5 @@
-"use client";
+import { ConfigurationTypeOptions } from "@/components/common/configuration-type-options";
+("use client");
 
 import { useEffect, useRef, useState } from "react";
 
@@ -217,21 +218,13 @@ export function BulkEntryDrawer({
           className="space-y-4 rounded-lg border border-border p-4"
         >
           <legend className="px-1 text-sm font-medium">New keys</legend>
-          <div className="flex flex-col gap-1.5">
-            <Label>Encryption</Label>
-            <div className="flex gap-2">
-              {(["plain", "secret"] as const).map((candidate) => (
-                <Button
-                  key={candidate}
-                  variant={bulkStorage === candidate ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setBulkStorage(candidate)}
-                >
-                  {candidate === "plain" ? "Plain" : "Encrypted"}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <ConfigurationTypeOptions
+            files={false}
+            value={bulkStorage === "secret" ? "secret" : "variable"}
+            onChange={(type) =>
+              setBulkStorage(type === "secret" ? "secret" : "plain")
+            }
+          />
           {!serviceName && (
             <div className="flex flex-col gap-1.5">
               <Label>Exposure</Label>

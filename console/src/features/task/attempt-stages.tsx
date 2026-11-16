@@ -78,20 +78,12 @@ export function AttemptStages({
         </p>
       ) : (
         <div className="space-y-3">
-          {value.updated_at && (
-            <p className="text-xs text-muted-foreground">
-              Last recorded update{" "}
-              <time dateTime={value.updated_at}>
-                {new Date(value.updated_at).toLocaleString()}
-              </time>
-            </p>
-          )}
           {value.items.length === 0 && (
             <p className="text-sm text-muted-foreground">
               No stage observations are retained.
             </p>
           )}
-          <ol className="space-y-2">
+          <ol className="divide-y divide-border border-l-2 border-border pl-4">
             {value.items.map((stage) => (
               <StageRow key={stage.key} stage={stage} />
             ))}
@@ -103,6 +95,11 @@ export function AttemptStages({
 }
 
 function StageRow({ stage }: { stage: TaskStages["items"][number] }) {
+  const needsAttention = stage.state === "failed" || stage.state === "unknown";
+  const [open, setOpen] = useState(needsAttention);
+  useEffect(() => {
+    if (needsAttention) setOpen(true);
+  }, [needsAttention]);
   const duration =
     stage.started_at && stage.finished_at
       ? taskDuration(
@@ -110,8 +107,10 @@ function StageRow({ stage }: { stage: TaskStages["items"][number] }) {
         )
       : null;
   return (
-    <li className="min-w-0 rounded-md border border-border p-3">
+    <li className="min-w-0 py-3">
       <Disclosure
+        open={open}
+        onOpenChange={setOpen}
         summaryClassName="items-start"
         summary={
           <span className="min-w-0 flex-1 space-y-1">
@@ -126,21 +125,23 @@ function StageRow({ stage }: { stage: TaskStages["items"][number] }) {
                 <StatusBadge status={stage.state} />
               </span>
             </span>
-            <span className="block break-words text-sm [overflow-wrap:anywhere]">
-              {stage.observed || stage.expected}
-            </span>
+            {!open && stage.observed && (
+              <span className="block line-clamp-1 text-xs font-normal text-muted-foreground">
+                {stage.observed}
+              </span>
+            )}
           </span>
         }
       >
         <dl className="space-y-3 pt-3 text-sm">
           <div>
-            <dt className="text-xs text-muted-foreground">Expected</dt>
+            <dt className="text-xs text-muted-foreground">Expected result</dt>
             <dd className="break-words [overflow-wrap:anywhere]">
               {stage.expected}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-muted-foreground">Recorded result</dt>
+            <dt className="text-xs text-muted-foreground">Result</dt>
             <dd className="break-words [overflow-wrap:anywhere]">
               {stage.observed || "No result recorded yet"}
             </dd>

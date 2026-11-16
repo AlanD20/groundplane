@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretmutations "github.com/AlanD20/groundplane/internal/infra/etcd/secretmutations"
@@ -32,7 +33,7 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 	ctx context.Context,
 	owner secretrecord.Owner,
 	record secretrecord.Record,
-	value secretrecord.EncryptedValue,
+	value secretrecord.StoredValue,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := secretrecord.ValidateSecretOwnership(ctx, owner, record); err != nil {
@@ -56,7 +57,7 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(primaryValue)
-	encryptedValue, err := secretrecord.EncodeEncryptedValue(value)
+	encryptedValue, err := secretrecord.EncodeStoredValue(value)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -8,24 +8,28 @@ const MaximumSecretValueBytes = 255 << 10
 type Secret struct {
 	Revision int64 `json:"revision,omitempty"`
 
-	ID        string `json:"id"`
-	Scope     string `json:"scope"` // "project" | "platform"
-	ProjectID string `json:"project_id,omitempty"`
-	Key       string `json:"key"`
-	Kind      string `json:"kind"` // "env_var" | "file"
-	Ref       string `json:"ref"`
-	UpdatedAt string `json:"updated_at"`
+	ID         string `json:"id"`
+	Scope      string `json:"scope"` // "project" | "platform"
+	ProjectID  string `json:"project_id,omitempty"`
+	Key        string `json:"key"`
+	Kind       string `json:"kind"` // "env_var" | "file"
+	Ref        string `json:"ref"`
+	Sensitive  bool   `json:"sensitive"`
+	Encryption string `json:"encryption" enum:"age,none"`
+	UpdatedAt  string `json:"updated_at"`
 }
 
 // SecretCreateRequest keeps the value write-only. ProjectID and Platform are
 // mutually exclusive; Path is required only for file Secrets.
 type SecretCreateRequest struct {
-	ProjectID string `json:"project_id,omitempty"`
-	Platform  bool   `json:"platform,omitempty"`
-	Key       string `json:"key"`
-	Kind      string `json:"kind"`
-	Path      string `json:"path,omitempty"`
-	Value     string `json:"value"`
+	ProjectID  string `json:"project_id,omitempty"`
+	Platform   bool   `json:"platform,omitempty"`
+	Key        string `json:"key"`
+	Kind       string `json:"kind"`
+	Path       string `json:"path,omitempty"`
+	Value      string `json:"value"`
+	Sensitive  *bool  `json:"sensitive,omitempty"`
+	Encryption string `json:"encryption,omitempty" enum:"age,none"`
 }
 
 type SecretEditRequest struct {

@@ -6,13 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"time"
+	"unicode/utf8"
+
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
-	"net/http"
-	"time"
-	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -34,7 +35,7 @@ type secretCreationRepository interface {
 		context.Context,
 		secretrecord.Owner,
 		secretrecord.Record,
-		secretrecord.EncryptedValue,
+		secretrecord.StoredValue,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -96,6 +97,11 @@ func (service *durableSecretCreationIdempotency) Prepare(
 		Scope:  scope,
 		Query:  requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "sensitive", Value: requestidempotency.Bool(configurationSensitive(input))},
+			requestidempotency.Field{
+				Name:  "encryption",
+				Value: requestidempotency.String(configurationEncryption(input)),
+			},
 			requestidempotency.Field{Name: "key", Value: requestidempotency.String(input.Key)},
 			requestidempotency.Field{Name: "kind", Value: requestidempotency.String(input.Kind)},
 			requestidempotency.Field{Name: "path", Value: requestidempotency.String(input.Path)},
@@ -233,18 +239,11 @@ func (service *secretCreationService) createSecretOnce(
 	}
 	plaintext := []byte(input.Value)
 	defer clear(plaintext)
-	envelope, err := service.protector.Seal(ctx, plaintext)
+	value, err := storeConfigurationValue(ctx, service.protector, record.Secret.ID, record.Secret.Encryption, plaintext)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	metadata := envelope.Metadata()
-	ciphertext := envelope.Ciphertext()
-	defer clear(ciphertext)
-	value := secretrecord.EncryptedValue{
-		SecretID: record.Secret.ID, EnvelopeVersion: uint8(metadata.Version),
-		Cipher: string(metadata.Cipher), DigestAlgorithm: string(metadata.Digest.Algorithm),
-		CiphertextSHA256: metadata.Digest.Value, Ciphertext: ciphertext,
-	}
+	defer clear(value.Ciphertext)
 	responseBody, err := json.Marshal(secretCreationResponse(record))
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -321,10 +320,19 @@ func prepareSecretCreation(
 		)
 	}
 	id := ids.New(ids.KindSecret)
+	var record secretrecord.Record
+	var err error
 	if input.Platform {
-		return secretrecord.NewPlatformRecord(id, input.Key, kind, input.Path, updatedAt)
+		record, err = secretrecord.NewPlatformRecord(id, input.Key, kind, input.Path, updatedAt)
+	} else {
+		record, err = secretrecord.NewProjectRecord(id, input.ProjectID, input.Key, kind, input.Path, updatedAt)
 	}
-	return secretrecord.NewProjectRecord(id, input.ProjectID, input.Key, kind, input.Path, updatedAt)
+	if err != nil {
+		return secretrecord.Record{}, err
+	}
+	record.Secret.Sensitive = configurationSensitive(input)
+	record.Secret.Encryption = configurationEncryption(input)
+	return record, secretrecord.ValidateRecord(record)
 }
 
 func secretCreationLocator(input apiTypes.SecretCreateRequest, key string) idempotencyrecord.IdempotencyLocator {
@@ -345,6 +353,7 @@ func secretCreationResponse(record secretrecord.Record) apiTypes.Secret {
 	return apiTypes.Secret{
 		ID: secret.ID, Scope: string(secret.Scope), ProjectID: secret.ProjectID,
 		Key: secret.Key, Kind: string(secret.Kind), Ref: secret.Ref,
+		Sensitive: secret.Sensitive, Encryption: secret.Encryption,
 		UpdatedAt: secret.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 }

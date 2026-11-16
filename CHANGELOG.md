@@ -5,6 +5,16 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Separate action configuration from execution timing. Choose **Start immediately**
+  or **Wait for Tasks**, browse paginated unfinished Tasks, and retain readable
+  prerequisite links as Tasks finish.
+- Present Task execution as compact stage rows with separate Steps, Events and
+  Execution details, preserving original failures and recovery evidence.
+- Reuse Project/Platform Configuration editors for Variable, Secret and File
+  inputs, with independent sensitivity and `age`/`none` storage choices. Preserve
+  those choices on single-value and bulk edits, and select scoped references by
+  stable ID instead of generated file paths or ambiguous keys.
+
 ## 0.0.1 — 2026-11-16
 
 Initial single-host release.

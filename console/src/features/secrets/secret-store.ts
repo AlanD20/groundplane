@@ -18,6 +18,8 @@ type ReusableSecretCreateInput = {
   kind: SecretKind;
   path?: string;
   value: string;
+  sensitive?: boolean;
+  encryption?: "age" | "none";
 } & (
   | { projectId: string; platform?: never }
   | { projectId?: never; platform: true }
@@ -32,7 +34,10 @@ export type ReusableSecretActions = {
   createReusableSecret: (
     input: ReusableSecretCreateInput,
   ) => Promise<ReusableSecret>;
-  removeReusableSecret: (id: string, after?: string[]) => Promise<{ task_id: string }>;
+  removeReusableSecret: (
+    id: string,
+    after?: string[],
+  ) => Promise<{ task_id: string }>;
   refreshReusableSecrets: (signal?: AbortSignal) => Promise<void>;
   revealReusableSecret: (id: string) => Promise<string>;
 };
@@ -49,6 +54,13 @@ function reusableSecretFromAPI(
     throw new Error(
       "Controller returned a reusable Secret with an invalid kind",
     );
+  if (
+    typeof secret.sensitive !== "boolean" ||
+    !["age", "none"].includes(secret.encryption)
+  )
+    throw new Error(
+      "Controller returned invalid Configuration protection metadata",
+    );
 
   const base = {
     id: secret.id,
@@ -56,6 +68,8 @@ function reusableSecretFromAPI(
     key: secret.key,
     kind,
     ref: secret.ref,
+    sensitive: secret.sensitive,
+    encryption: secret.encryption,
     updatedAt: secret.updated_at,
   };
 
@@ -167,6 +181,8 @@ export function createSecretActions(
         key: input.key,
         kind: input.kind === "env" ? "env_var" : "file",
         value: input.value,
+        sensitive: input.sensitive,
+        encryption: input.encryption,
         ...(input.kind === "file" ? { path: input.path } : {}),
         ...(input.projectId !== undefined
           ? { project_id: input.projectId }
@@ -207,7 +223,7 @@ export function createSecretActions(
         const accepted = await controllerRequest<SecretTaskAccepted>(
           "/secrets/" + encodeURIComponent(id),
           202,
-          { method: "DELETE", body: after.length ? {after} : {} },
+          { method: "DELETE", body: after.length ? { after } : {} },
         );
         if (!accepted.task_id)
           throw new Error("Controller response is missing task_id");

@@ -9,11 +9,13 @@ export function SecretReferencePicker({
   value,
   options,
   onChange,
+  noun = "Secret",
 }: {
   id: string;
   value: string;
   options: SelectOption[];
   onChange: (value: string) => void;
+  noun?: string;
 }) {
   const [manual, setManual] = useState(false);
   const choices =
@@ -27,19 +29,19 @@ export function SecretReferencePicker({
           id={id}
           value={value}
           autoComplete="off"
-          placeholder="Enter Secret reference"
+          placeholder={`Enter ${noun} reference`}
           onChange={(event) => onChange(event.target.value)}
         />
       ) : (
         <SearchableSelect
           id={id}
-          aria-label="Reusable Secret"
+          aria-label={`Reusable ${noun}`}
           value={value || null}
           options={choices}
           onValueChange={onChange}
-          placeholder="Choose a Secret"
-          searchPlaceholder="Search Secrets…"
-          emptyText="No Secrets available. Enter a reference manually."
+          placeholder={`Choose ${noun}`}
+          searchPlaceholder={`Search ${noun}…`}
+          emptyText={`No ${noun} available. Enter a reference manually.`}
         />
       )}
       <Button
@@ -48,7 +50,7 @@ export function SecretReferencePicker({
         variant="link"
         onClick={() => setManual(!manual)}
       >
-        {manual ? "Choose an existing Secret" : "Enter reference manually"}
+        {manual ? `Choose existing ${noun}` : "Enter reference manually"}
       </Button>
     </div>
   );

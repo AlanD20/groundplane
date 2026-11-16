@@ -155,9 +155,9 @@ func connectorCredentialEvidence(ciphertext []byte) testconnectors.EncryptedCred
 	}
 }
 
-func secretCredentialEvidence(ciphertext []byte) testsecrets.EncryptedValue {
+func secretCredentialEvidence(ciphertext []byte) testsecrets.StoredValue {
 	digest := sha256.Sum256(ciphertext)
-	return testsecrets.EncryptedValue{
+	return testsecrets.StoredValue{
 		EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 		CiphertextSHA256: hex.EncodeToString(digest[:]), Ciphertext: ciphertext,
 	}

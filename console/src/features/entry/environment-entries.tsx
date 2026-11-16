@@ -1,3 +1,4 @@
+import { ConfigurationTypeOptions } from "@/components/common/configuration-type-options";
 import { EntryRemoveDialog } from "./entry-remove-dialog";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { EmptyState } from "@/components/common/empty-state";
@@ -193,7 +194,7 @@ export function EnvVarsCard({
         break;
       case "secret_ref":
         if (!secretRef.trim()) {
-          setSaveError("Secret reference is required.");
+          setSaveError("Choose or enter a Configuration reference.");
           return;
         }
         source = { kind: "secret_ref", secret_ref: secretRef.trim() };
@@ -257,20 +258,14 @@ export function EnvVarsCard({
       </DialogHeader>
       <div className="grid min-w-0 gap-4 md:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <Label>Type</Label>
-          <div className="flex gap-2">
-            {(["env", "file"] as const).map((candidate) => (
-              <Button
-                key={candidate}
-                variant={kind === candidate ? "default" : "outline"}
-                size="sm"
-                disabled={!!editing}
-                onClick={() => setKind(candidate)}
-              >
-                {candidate === "env" ? "Variable" : "File"}
-              </Button>
-            ))}
-          </div>
+          <ConfigurationTypeOptions
+            value={kind === "file" ? "file" : secret ? "secret" : "variable"}
+            disabled={!!editing}
+            onChange={(type) => {
+              setKind(type === "file" ? "file" : "env");
+              setSecret(type === "secret");
+            }}
+          />
         </div>
 
         {kind === "env" ? (
@@ -339,7 +334,7 @@ export function EnvVarsCard({
                 {
                   {
                     literal: "Enter value",
-                    secret_ref: "Reusable Secret",
+                    secret_ref: "Project / Platform configuration",
                     fact: "Connection value",
                   }[candidate]
                 }
@@ -385,13 +380,20 @@ export function EnvVarsCard({
             env={env}
             projectId={project?.id}
             sourceKind={sourceKind}
+            kind={kind}
             secretRef={secretRef}
             connectionSource={{
               attachId: factAttach,
               grantAttachId: factGrantAttach,
               key: factKey,
             }}
-            onSecretChange={setSecretRef}
+            onSecretChange={(reference) => {
+              setSecretRef(reference);
+              const source = store.reusableSecrets.find(
+                (item) => item.id === reference,
+              );
+              if (source && !editing) setSecret(source.sensitive);
+            }}
             onConnectionChange={(source) => {
               setFactAttach(source.attachId);
               setFactGrantAttach(source.grantAttachId);
@@ -425,11 +427,13 @@ export function EnvVarsCard({
           </div>
         </div>
 
-        <EntryProtection
-          secret={secret}
-          editing={!!editing}
-          onChange={setSecret}
-        />
+        {kind === "file" && (
+          <EntryProtection
+            secret={secret}
+            editing={!!editing}
+            onChange={setSecret}
+          />
+        )}
         {saveError && <p className="text-sm text-destructive">{saveError}</p>}
       </div>
       <TaskRunAfterSelector

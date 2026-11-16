@@ -230,7 +230,7 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	if err != nil {
 		return scriptsourceevidence.ScriptSourcePreparationMember{}, err
 	}
-	secret, err := secretrecord.DecodeEncryptedValue(value.Value)
+	secret, err := secretrecord.DecodeStoredValue(value.Value)
 	if err != nil {
 		return scriptsourceevidence.ScriptSourcePreparationMember{}, err
 	}
