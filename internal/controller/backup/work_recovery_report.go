@@ -66,7 +66,10 @@ func (owner *AgentWork) Recover(ctx context.Context, authorization agentregistra
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Backup recovery ownership changed; resend the saved report")
+			return nil, errs.New(
+				errs.KindExecutionWriteContention,
+				"Backup recovery ownership changed; resend the saved report",
+			)
 		}
 		view, err = authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 		if err != nil {

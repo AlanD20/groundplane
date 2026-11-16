@@ -75,7 +75,7 @@ func (owner *Work) ReportEnvironmentProvision(
 		}
 		if !committed.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"environment result ownership changed; resend the saved report",
 			)
 		}

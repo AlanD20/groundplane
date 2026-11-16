@@ -69,7 +69,10 @@ func (service *WorkReports) CompleteEntry(ctx context.Context, authorization age
 			return nil, err
 		}
 		if !result.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Entry completion ownership changed; resend the saved result")
+			return nil, errs.New(
+				errs.KindExecutionWriteContention,
+				"Entry completion ownership changed; resend the saved result",
+			)
 		}
 		view, err = service.reportView(ctx, authorization, request.Attempt)
 		if err != nil {

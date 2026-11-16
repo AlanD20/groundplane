@@ -176,7 +176,7 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRelease(
 	}
 	if !result.Succeeded {
 		return errs.New(
-			errs.KindStateConflict,
+			errs.KindExecutionWriteContention,
 			"Release completion changed before it could be saved; reload the same attempt",
 		)
 	}

@@ -75,7 +75,10 @@ func (owner *AgentWork) Fail(ctx context.Context, authorization agentregistratio
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Backup failure ownership changed; resend the saved report")
+			return nil, errs.New(
+				errs.KindExecutionWriteContention,
+				"Backup failure ownership changed; resend the saved report",
+			)
 		}
 		view, err = authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 		if err != nil {

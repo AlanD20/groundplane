@@ -72,7 +72,7 @@ func (service *WorkReports) FailLifecycle(ctx context.Context, authorization age
 		}
 		if !committed.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"Service lifecycle failure ownership changed; resend the saved report",
 			)
 		}

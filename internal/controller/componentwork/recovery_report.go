@@ -58,7 +58,7 @@ func (service *WorkReports) RecoverComponent(
 		}
 		if !committed.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"Component recovery ownership changed; resend the saved report",
 			)
 		}

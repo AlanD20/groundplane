@@ -107,7 +107,10 @@ func (ledger *ReleaseLedger) settleProvenGroupRestoration(ctx context.Context, v
 	result, err := queue.Commit(ctx, workqueue.Change{Conditions: conditions}, resources, hooks, execution)
 	keyvalue.ClearValues(result.FailureReads)
 	if err == nil && !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Group restoration authority changed before atomic completion")
+		return errs.New(
+			errs.KindExecutionWriteContention,
+			"Group restoration authority changed before atomic completion",
+		)
 	}
 	return err
 }

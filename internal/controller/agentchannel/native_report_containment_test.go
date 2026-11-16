@@ -21,6 +21,123 @@ type nativeConflictingReportOwner struct {
 	blockedCalls, unrelatedCalls int
 }
 
+type nativeContendedReportOwner struct {
+	ScriptWorkCompleter
+	blockedTask              string
+	failures, unrelatedCalls int
+	reports                  []*agentpb.ScriptWorkCompletionRequest
+}
+
+func (owner *nativeContendedReportOwner) CompleteScript(_ context.Context,
+	_ agentregistration.WorkAuthorization, request *agentpb.ScriptWorkCompletionRequest,
+) (*agentpb.ScriptWorkCompletionAck, error) {
+	if request.Attempt.TaskId == owner.blockedTask {
+		owner.reports = append(owner.reports, proto.CloneOf(request))
+		if len(owner.reports) <= owner.failures {
+			return nil, errs.New(errs.KindExecutionWriteContention, "publication snapshot changed")
+		}
+	} else {
+		owner.unrelatedCalls++
+	}
+	return &agentpb.ScriptWorkCompletionAck{Attempt: proto.CloneOf(request.Attempt),
+		CheckpointSequence: request.CheckpointSequence, CheckpointEvidence: proto.CloneOf(request.CheckpointEvidence),
+		Outcome:    string(workexecution.Succeeded),
+		FinishedAt: timestamppb.New(request.Attempt.Deadline.AsTime().Add(-time.Second))}, nil
+}
+
+// A concurrent publication must retry the identical terminal report, not refuse
+// it or repeat execution. Live delivery and crash replay share the same finite
+// budget; exhaustion must still permit an unrelated report on the channel.
+// Storage contention is injected at the owner, not claimed as physical host QA.
+func TestNativeTerminalPublicationContentionRetriesLiveAndReplay(t *testing.T) {
+	for _, delivery := range []string{"live", "replay"} {
+		for _, failures := range []int{2, 100} {
+			name := "transient"
+			if failures == 100 {
+				name = "exhausted"
+			}
+			t.Run(delivery+"/"+name, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				defer cancel()
+				server, peer, authenticate := nativeConnectFixture(t)
+				owner := &nativeContendedReportOwner{blockedTask: peer.attempt.TaskId, failures: failures}
+				server.scriptCompletion = owner
+				request := &agentpb.ScriptWorkCompletionRequest{Attempt: proto.CloneOf(peer.attempt),
+					CheckpointSequence: 2, CheckpointEvidence: proto.CloneOf(peer.attempt.Input)}
+				blocked := &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_ScriptWorkCompletionRequest{
+					ScriptWorkCompletionRequest: request}}
+				unrelated := proto.CloneOf(request)
+				unrelated.Attempt.TaskId, unrelated.Attempt.WorkItemId, unrelated.Attempt.AttemptId =
+					ids.New(ids.KindTask), ids.New(ids.KindWorkItem), ids.New(ids.KindAttempt)
+				incoming := []*agentpb.AgentMessage{authenticate}
+				if delivery == "replay" {
+					raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(blocked)
+					if err != nil {
+						t.Fatal(err)
+					}
+					incoming = append(
+						incoming,
+						&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_WorkJournalReplayRequest{
+							WorkJournalReplayRequest: &agentpb.WorkJournalReplayRequest{
+								Report: raw,
+							}}},
+						nativeConnectReplayComplete(),
+					)
+				} else {
+					incoming = append(incoming, nativeConnectReplayComplete(), blocked)
+				}
+				incoming = append(
+					incoming,
+					&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_ScriptWorkCompletionRequest{
+						ScriptWorkCompletionRequest: unrelated}},
+				)
+				stream := &nativeDispatchStream{ctx: ctx, received: incoming}
+				if err := server.Connect(stream); err != nil {
+					t.Fatal(err)
+				}
+				wantCalls := 3
+				if failures == 100 {
+					wantCalls = 8
+				}
+				if len(owner.reports) != wantCalls || owner.unrelatedCalls != 1 {
+					t.Fatalf("publication calls=%d unrelated=%d", len(owner.reports), owner.unrelatedCalls)
+				}
+				for _, actual := range owner.reports {
+					if !proto.Equal(actual, request) {
+						t.Fatal("retry changed captured terminal evidence")
+					}
+				}
+				var acknowledgement *agentpb.ControllerMessage
+				refused := false
+				for _, message := range stream.messages {
+					if workreceipt.Match(blocked, message) == nil {
+						acknowledgement = message
+					}
+					if workreceipt.MatchRejection(blocked, message) == nil {
+						refused = true
+					}
+					if replay := message.GetWorkJournalReplayAck(); replay != nil && len(replay.ReportSha256) != 0 {
+						refused = replay.FailureCode != ""
+						if len(replay.Acknowledgement) != 0 {
+							acknowledgement = new(agentpb.ControllerMessage)
+							if err := proto.Unmarshal(replay.Acknowledgement, acknowledgement); err != nil {
+								t.Fatal(err)
+							}
+						}
+					}
+				}
+				if failures == 100 {
+					if !refused || acknowledgement != nil {
+						t.Fatal("exhausted publication was acknowledged or lost its refusal")
+					}
+				} else if refused || workreceipt.Match(blocked, acknowledgement) != nil {
+					t.Fatal("transient contention lost the exact terminal acknowledgement")
+				}
+			})
+		}
+	}
+}
+
 func (owner *nativeConflictingReportOwner) CompleteScript(_ context.Context,
 	_ agentregistration.WorkAuthorization, request *agentpb.ScriptWorkCompletionRequest,
 ) (*agentpb.ScriptWorkCompletionAck, error) {

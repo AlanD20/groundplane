@@ -7,6 +7,9 @@ that every deployment or failure scenario has been qualified.
 
 - Align Configuration filters and separate value controls from row actions.
   Keep ownership visible and expand or copy references beside each key.
+- Retry contended native execution-result publications with their exact captured
+  report during live delivery and restart replay, rather than refusing completed
+  work and interrupting parallel operations.
 
 ## 0.0.1 — 2026-11-16
 

@@ -67,7 +67,7 @@ func (service *Reports) StoreAttachProvisionFacts(
 	}
 	if !result.Succeeded {
 		return nil, errs.New(
-			errs.KindStateConflict,
+			errs.KindExecutionWriteContention,
 			"Attach fact publication ownership changed; resend the saved output",
 		)
 	}

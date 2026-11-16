@@ -134,7 +134,10 @@ func (repository *ScriptRepository) settleProvenScriptWork(ctx context.Context, 
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Script completion changed before saving; reload the same attempt")
+		return errs.New(
+			errs.KindExecutionWriteContention,
+			"Script completion changed before saving; reload the same attempt",
+		)
 	}
 	return nil
 }

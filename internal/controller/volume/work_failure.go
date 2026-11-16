@@ -60,7 +60,10 @@ func (service *WorkReports) FailVolume(ctx context.Context, authorization agentr
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Volume failure ownership changed; resend the saved report")
+			return nil, errs.New(
+				errs.KindExecutionWriteContention,
+				"Volume failure ownership changed; resend the saved report",
+			)
 		}
 		view, err = service.reportView(ctx, authorization, request.Attempt)
 		if err != nil {

@@ -70,7 +70,7 @@ func (service *WorkReports) CompleteNetwork(ctx context.Context, authorization a
 		}
 		if !result.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"Network completion ownership changed; resend the saved result",
 			)
 		}

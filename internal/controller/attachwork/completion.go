@@ -86,7 +86,7 @@ func (service *Reports) CompleteAttachProvision(ctx context.Context, authorizati
 		}
 		if !committed.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"Attach completion ownership changed; resend the saved completion",
 			)
 		}

@@ -70,7 +70,7 @@ func (ledger *ReleaseLedger) SettleFailedBlueprintRelease(
 		return err
 	}
 	if !committed.Succeeded {
-		return errs.New(errs.KindStateConflict, "Release failure state changed; reload the same attempt")
+		return errs.New(errs.KindExecutionWriteContention, "Release failure state changed; reload the same attempt")
 	}
 	return nil
 }
@@ -111,7 +111,7 @@ func (ledger *ReleaseLedger) SettleFailedReleaseRestoration(
 		return err
 	}
 	if !committed.Succeeded {
-		return errs.New(errs.KindStateConflict, "Release recovery failure changed; reload the same attempt")
+		return errs.New(errs.KindExecutionWriteContention, "Release recovery failure changed; reload the same attempt")
 	}
 	return nil
 }

@@ -67,7 +67,7 @@ func (service *WorkReports) RecoverLifecycle(
 		}
 		if !committed.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"Service lifecycle recovery ownership changed; resend the saved report",
 			)
 		}

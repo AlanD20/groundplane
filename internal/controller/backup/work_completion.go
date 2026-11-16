@@ -83,7 +83,10 @@ func (owner *AgentWork) Complete(ctx context.Context, authorization agentregistr
 			return nil, err
 		}
 		if !result.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Backup completion ownership changed; resend the saved result")
+			return nil, errs.New(
+				errs.KindExecutionWriteContention,
+				"Backup completion ownership changed; resend the saved result",
+			)
 		}
 		view, err = authorization.ReadResult(ctx, owner.queue, attempt.TaskID, attempt.WorkItemID, attempt.ID)
 		if err != nil {

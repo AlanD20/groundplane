@@ -71,7 +71,7 @@ func (service *WorkReports) CompleteBackingProvision(
 		}
 		if !committed.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"backing creation completion ownership changed; resend the saved result",
 			)
 		}

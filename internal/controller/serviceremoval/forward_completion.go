@@ -88,7 +88,7 @@ func (service *WorkReports) CompleteLifecycle(ctx context.Context, authorization
 		}
 		if !result.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"Service removal completion ownership changed; resend the saved result",
 			)
 		}

@@ -64,7 +64,10 @@ func (service *Reports) ReportProvisionRecovery(ctx context.Context, authorizati
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Attach inspection ownership changed; resend the saved report")
+			return nil, errs.New(
+				errs.KindExecutionWriteContention,
+				"Attach inspection ownership changed; resend the saved report",
+			)
 		}
 		view, _, err = service.readDirectionalView(ctx, authorization, request.Attempt, workexecution.Recovery)
 		if err != nil {

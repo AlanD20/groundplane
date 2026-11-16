@@ -42,7 +42,7 @@ func (server *Server) nativeOperationReport(
 			if !handled {
 				break
 			}
-			if !checkpoint || err == nil {
+			if err == nil {
 				return true, reply, err
 			}
 			// Only a failed atomic publication is retryable. Each call reloads
@@ -56,6 +56,9 @@ func (server *Server) nativeOperationReport(
 				case <-timer.C:
 					continue
 				}
+			}
+			if !checkpoint {
+				return true, reply, err
 			}
 			if code := status.Code(err); code != codes.Aborted && code != codes.FailedPrecondition {
 				return true, nil, err

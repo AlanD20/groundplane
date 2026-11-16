@@ -122,7 +122,7 @@ func (repository *ScriptRepository) settleInterruptedScript(
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Script changed before interruption could be recorded")
+		return errs.New(errs.KindExecutionWriteContention, "Script changed before interruption could be recorded")
 	}
 	return nil
 }

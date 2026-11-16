@@ -53,7 +53,10 @@ func (service *WorkReports) CheckpointLifecycle(ctx context.Context, authorizati
 		return nil, err
 	}
 	if !result.Succeeded {
-		return nil, errs.New(errs.KindStateConflict, "Service removal ownership changed; resend the saved checkpoint")
+		return nil, errs.New(
+			errs.KindExecutionWriteContention,
+			"Service removal ownership changed; resend the saved checkpoint",
+		)
 	}
 	digest, err := hex.DecodeString(checkpoint.Evidence.SHA256)
 	if err != nil {

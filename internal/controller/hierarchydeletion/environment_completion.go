@@ -90,7 +90,7 @@ func (service *Reports) CompleteEnvironmentRemoval(
 		}
 		if !result.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"Environment removal completion ownership changed; resend the saved result",
 			)
 		}

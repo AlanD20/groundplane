@@ -58,7 +58,10 @@ func (service *WorkReports) RecoverEntry(
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Entry recovery ownership changed; resend the saved report")
+			return nil, errs.New(
+				errs.KindExecutionWriteContention,
+				"Entry recovery ownership changed; resend the saved report",
+			)
 		}
 		view, err = service.reportView(ctx, authorization, request.Attempt)
 		if err != nil {

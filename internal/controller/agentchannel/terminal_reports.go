@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/common/workreceipt"
@@ -53,9 +54,32 @@ func (server *Server) terminalOperationReport(
 	return true, reply, nil
 }
 
-// terminalReport is shared by live delivery and startup replay. This
-// switch is deliberately closed: no grant, hook, input or checkpoint route.
+// terminalReport retries only a failed atomic publication. Both live delivery
+// and startup replay retain the exact report; each attempt reloads authority,
+// never re-executes host effects and never treats a domain conflict as retryable.
 func (server *Server) terminalReport(
+	ctx context.Context,
+	authorization agentregistration.WorkAuthorization,
+	message *agentpb.AgentMessage,
+) (*agentpb.ControllerMessage, error) {
+	for attempt := 0; ; attempt++ {
+		reply, err := server.dispatchTerminalReport(ctx, authorization, message)
+		kind, _ := errs.KindOf(err)
+		if err == nil || kind != errs.KindExecutionWriteContention || attempt >= 7 {
+			return reply, err
+		}
+		timer := time.NewTimer(time.Duration(attempt+1) * 5 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+// Dispatch remains closed: no grant, hook, input or checkpoint route.
+func (server *Server) dispatchTerminalReport(
 	ctx context.Context,
 	authorization agentregistration.WorkAuthorization,
 	message *agentpb.AgentMessage,

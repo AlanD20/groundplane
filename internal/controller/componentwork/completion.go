@@ -78,7 +78,7 @@ func (service *WorkReports) CompleteComponent(ctx context.Context, authorization
 		}
 		if !result.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"Component completion ownership changed; resend the saved result",
 			)
 		}

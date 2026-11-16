@@ -72,7 +72,10 @@ func (service *Reports) FailAttachProvision(ctx context.Context, authorization a
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Attach failure ownership changed; resend the saved failure")
+			return nil, errs.New(
+				errs.KindExecutionWriteContention,
+				"Attach failure ownership changed; resend the saved failure",
+			)
 		}
 		view, _, err = service.readView(ctx, authorization, request.Attempt)
 		if err != nil {

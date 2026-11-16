@@ -57,7 +57,10 @@ func (service *WorkReports) RecoverNetwork(
 			return nil, err
 		}
 		if !committed.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Network recovery ownership changed; resend the saved report")
+			return nil, errs.New(
+				errs.KindExecutionWriteContention,
+				"Network recovery ownership changed; resend the saved report",
+			)
 		}
 		view, err = service.reportView(ctx, authorization, request.Attempt)
 		if err != nil {

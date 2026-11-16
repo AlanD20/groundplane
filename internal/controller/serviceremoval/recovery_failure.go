@@ -70,7 +70,7 @@ func (service *WorkReports) FailRemovalRecovery(ctx context.Context, authorizati
 		}
 		if !committed.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"Service removal recovery ownership changed; resend the saved failure",
 			)
 		}

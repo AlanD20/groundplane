@@ -134,7 +134,7 @@ func (ledger *ReleaseLedger) settleProvenBlueprintRecovery(ctx context.Context, 
 		return err
 	}
 	if !committed.Succeeded {
-		return errs.New(errs.KindStateConflict, "Release recovery state changed; reload the same attempt")
+		return errs.New(errs.KindExecutionWriteContention, "Release recovery state changed; reload the same attempt")
 	}
 	return nil
 }

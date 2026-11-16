@@ -109,7 +109,10 @@ func (owner *AgentWork) finishCaptureSource(ctx context.Context, authorization a
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Backup source changed during retention settlement; resend cleanup")
+		return errs.New(
+			errs.KindExecutionWriteContention,
+			"Backup source changed during retention settlement; resend cleanup",
+		)
 	}
 	return nil
 }

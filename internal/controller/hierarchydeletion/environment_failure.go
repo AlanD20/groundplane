@@ -79,7 +79,7 @@ func (service *Reports) FailEnvironmentRemoval(ctx context.Context, authorizatio
 		}
 		if !committed.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"Environment removal failure ownership changed; resend the saved failure",
 			)
 		}

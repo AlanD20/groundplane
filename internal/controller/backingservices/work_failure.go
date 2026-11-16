@@ -43,7 +43,7 @@ func (service *WorkReports) FailBackingProvision(ctx context.Context, authorizat
 		}
 		if !committed.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"backing creation failure ownership changed; resend the saved failure",
 			)
 		}

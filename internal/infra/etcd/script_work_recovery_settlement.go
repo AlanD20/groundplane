@@ -84,7 +84,10 @@ func (repository *ScriptRepository) SettleRecoveredScript(ctx context.Context, v
 		return err
 	}
 	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "Script recovery changed before settlement; reload the same attempt")
+		return errs.New(
+			errs.KindExecutionWriteContention,
+			"Script recovery changed before settlement; reload the same attempt",
+		)
 	}
 	return nil
 }

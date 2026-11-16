@@ -50,7 +50,7 @@ func (service *WorkReports) RecoverBackingProvision(
 		}
 		if !committed.Succeeded {
 			return nil, errs.New(
-				errs.KindStateConflict,
+				errs.KindExecutionWriteContention,
 				"backing creation cleanup ownership changed; resend the saved report",
 			)
 		}

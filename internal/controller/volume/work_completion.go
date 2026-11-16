@@ -69,7 +69,10 @@ func (service *WorkReports) CompleteVolume(ctx context.Context, authorization ag
 			return nil, err
 		}
 		if !result.Succeeded {
-			return nil, errs.New(errs.KindStateConflict, "Volume completion ownership changed; resend the saved result")
+			return nil, errs.New(
+				errs.KindExecutionWriteContention,
+				"Volume completion ownership changed; resend the saved result",
+			)
 		}
 		view, err = service.reportView(ctx, authorization, request.Attempt)
 		if err != nil {
