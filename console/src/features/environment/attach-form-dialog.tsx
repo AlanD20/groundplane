@@ -371,7 +371,7 @@ function AttachForm({
           <div className="flex flex-col gap-1.5 md:col-span-2">
             <Label>
               Connection values available after provisioning (map them in
-              Variables & files)
+              Configuration)
             </Label>
             <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
               {factRows.map((key) => (

@@ -11,7 +11,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   Layers,
-  KeyRound,
+  Braces,
   GitBranch,
   Settings,
   FolderKanban,
@@ -153,7 +153,7 @@ export function Sidebar({
             active:
               pathname === projectPath && search.get("view") === "runners",
           },
-          item("Secrets", `${projectPath}/secrets`, KeyRound),
+          item("Configuration", `${projectPath}/secrets`, Braces),
           item("Settings", `${projectPath}/settings`, Settings),
         ],
       },

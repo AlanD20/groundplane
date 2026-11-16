@@ -94,12 +94,12 @@ export default function ProjectSecretsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Secrets"
+        title="Configuration"
         eyebrow={`Project · ${project.name}`}
         icon={<KeyRound />}
         meta={
           <MetaPill icon={<KeyRound />}>
-            {scoped.length} Project Secrets
+            {scoped.length} protected values
           </MetaPill>
         }
         actions={
@@ -116,7 +116,7 @@ export default function ProjectSecretsPage() {
               disabled={bulkOpen}
               onClick={() => setOpen(true)}
             >
-              <Plus className="size-4" /> New secret
+              <Plus className="size-4" /> New variable or file
             </CreationButton>
           </div>
         }
@@ -135,7 +135,7 @@ export default function ProjectSecretsPage() {
         }}
       >
         <DialogHeader>
-          <DialogTitle>New secret · {project.name}</DialogTitle>
+          <DialogTitle>New variable or file · {project.name}</DialogTitle>
         </DialogHeader>
         <div className="grid max-w-5xl items-start gap-4 md:grid-cols-2">
           <div className="flex flex-col gap-1.5 md:col-span-2">
@@ -148,7 +148,7 @@ export default function ProjectSecretsPage() {
                   size="sm"
                   onClick={() => setKind(candidate)}
                 >
-                  {candidate === "env" ? "env variable" : "file secret"}
+                  {candidate === "env" ? "Variable" : "File"}
                 </Button>
               ))}
             </div>
@@ -238,7 +238,7 @@ export default function ProjectSecretsPage() {
             }
             onClick={() => void create()}
           >
-            {creating ? "Saving…" : "Save secret"}
+            {creating ? "Saving…" : "Save configuration"}
           </Button>
         </DialogFooter>
       </ResourceForm>
@@ -246,7 +246,7 @@ export default function ProjectSecretsPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <ResourcePanel
-        title="Secret references"
+        title="Variables & files"
         actions={
           <HelpHint>
             Project-owned Secrets take precedence over matching Platform keys
@@ -260,7 +260,7 @@ export default function ProjectSecretsPage() {
         <ReusableSecretOwnerList
           secrets={scoped}
           loading={store.reusableSecretsLoading}
-          emptyTitle="No project Secrets"
+          emptyTitle="No project configuration"
           emptyDescription="Resolution falls back to matching platform Secrets."
           scopeLabel="Project"
           editable
@@ -278,7 +278,7 @@ export default function ProjectSecretsPage() {
       >
         <p className="text-sm text-muted-foreground">
           Owned by the Platform and used only when this Project has no matching
-          key. Manage these shared resources in Platform Secrets.
+          key. Manage these shared resources in Platform Configuration.
         </p>
         <ReusableSecretOwnerList
           secrets={fallbacks}

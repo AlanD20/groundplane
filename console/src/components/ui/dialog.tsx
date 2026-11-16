@@ -25,62 +25,13 @@ function DialogContent({
   ) => {
     onKeyDown?.(event);
     if (submitOnEnter) submitFormOnShortcut(event);
-    if (
-      event.defaultPrevented ||
-      !submitOnEnter ||
-      event.key !== "Enter" ||
-      event.altKey ||
-      event.ctrlKey ||
-      event.metaKey ||
-      event.shiftKey ||
-      event.nativeEvent.isComposing
-    ) {
-      return;
-    }
-
-    const target = event.target;
-    if (!(
-      target instanceof HTMLInputElement || target instanceof HTMLSelectElement
-    ))
-      return;
-    if (
-      target instanceof HTMLInputElement &&
-      !["email", "number", "password", "search", "tel", "text", "url"].includes(
-        target.type,
-      )
-    ) {
-      return;
-    }
-    if (
-      target.getAttribute("role") === "combobox" &&
-      target.getAttribute("aria-expanded") === "true"
-    )
-      return;
-
-    // Native forms already provide the correct submit semantics and validation.
-    const nativeForm = target.closest("form");
-    if (nativeForm && event.currentTarget.contains(nativeForm)) return;
-
-    const footer = event.currentTarget.querySelector<HTMLElement>(
-      '[data-slot="dialog-footer"]',
-    );
-    const actions = footer?.querySelectorAll<HTMLButtonElement>("button");
-    const primaryAction = actions?.item((actions?.length ?? 0) - 1);
-    if (
-      !primaryAction ||
-      primaryAction.disabled ||
-      primaryAction.getAttribute("aria-disabled") === "true"
-    )
-      return;
-
-    event.preventDefault();
-    primaryAction.click();
   };
 
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm transition-all duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
       <DialogPrimitive.Popup
+        data-form-owner
         data-slot="dialog-content"
         className={cn(
           "fixed left-1/2 top-1/2 z-50 grid min-w-0 grid-cols-[minmax(0,1fr)] [overflow-wrap:anywhere] w-[calc(100vw-2rem)] max-h-[90dvh] overflow-y-auto max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl outline-none",

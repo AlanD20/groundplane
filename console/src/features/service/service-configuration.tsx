@@ -95,10 +95,7 @@ export function ServiceConfiguration({
             value={service.resources.cpus || "Not set"}
           />
           <DetailRow label="Restart policy" value={service.restart} />
-          <DetailRow
-            label="Deployment strategy"
-            value={service.strategy}
-          />
+          <DetailRow label="Deployment strategy" value={service.strategy} />
           <DetailRow label="Runtime intent" value={service.runtimeIntent} />
           <DetailRow
             label="Log rotation"
@@ -208,7 +205,7 @@ export function ServiceConfiguration({
         {!service.environment.length && (
           <p className="text-sm text-muted-foreground">
             No inline environment values. Managed Entries are listed in
-            Variables & files.
+            Configuration.
           </p>
         )}
         <DetailRow

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   Activity,
   Database,
-  KeyRound,
+  Braces,
   Layers,
   Server,
   Settings,
@@ -46,9 +46,9 @@ export function PlatformNavigation({
       active: pathname === "/platform/activity",
     },
     {
-      label: "Secrets",
+      label: "Configuration",
       href: "/platform/secrets",
-      icon: KeyRound,
+      icon: Braces,
       active: pathname === "/platform/secrets",
     },
     {

@@ -177,6 +177,7 @@ function SearchControls({ view }: { view: EditorView }) {
 /** CodeMirror owns search state and commands; Console owns the panel controls. */
 export function createEditorSearchPanel(view: EditorView): Panel {
   const dom = document.createElement("div");
+  dom.dataset.formShortcuts = "ignore";
   const root = createRoot(dom);
   const render = () => root.render(<SearchControls view={view} />);
   return {

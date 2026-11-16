@@ -67,8 +67,8 @@ export default function PlatformSecretsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Secrets"
-        eyebrow="Settings"
+        title="Configuration"
+        eyebrow="Platform"
         icon={<KeyRound />}
         actions={
           <div className="flex flex-wrap gap-2">
@@ -84,7 +84,7 @@ export default function PlatformSecretsPage() {
               disabled={bulkOpen}
               onClick={() => setOpen(true)}
             >
-              <Plus className="size-4" /> New secret
+              <Plus className="size-4" /> New variable or file
             </CreationButton>
           </div>
         }
@@ -104,7 +104,7 @@ export default function PlatformSecretsPage() {
         }}
       >
         <DialogHeader>
-          <DialogTitle>New platform Secret</DialogTitle>
+          <DialogTitle>New platform variable or file</DialogTitle>
         </DialogHeader>
         <div className="grid max-w-5xl items-start gap-4 md:grid-cols-2">
           <div className="flex flex-col gap-1.5 md:col-span-2">
@@ -117,7 +117,7 @@ export default function PlatformSecretsPage() {
                   size="sm"
                   onClick={() => setKind(candidate)}
                 >
-                  {candidate === "env" ? "env variable" : "file secret"}
+                  {candidate === "env" ? "Variable" : "File"}
                 </Button>
               ))}
             </div>
@@ -207,7 +207,7 @@ export default function PlatformSecretsPage() {
             }
             onClick={() => void create()}
           >
-            {creating ? "Saving…" : "Save secret"}
+            {creating ? "Saving…" : "Save configuration"}
           </Button>
         </DialogFooter>
       </ResourceForm>
@@ -215,7 +215,7 @@ export default function PlatformSecretsPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <ResourcePanel
-        title="Secret references"
+        title="Variables & files"
         actions={
           <HelpHint>
             Platform-owned metadata. Plaintext is returned only by the explicit
@@ -226,7 +226,7 @@ export default function PlatformSecretsPage() {
         <ReusableSecretOwnerList
           secrets={reusableSecrets}
           loading={store.reusableSecretsLoading}
-          emptyTitle="No platform Secrets yet"
+          emptyTitle="No platform configuration yet"
           scopeLabel="platform scope"
           editable
           onRemove={(secret) => store.removeReusableSecret(secret.id)}

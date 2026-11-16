@@ -19,7 +19,6 @@ import {
   editorFooterClassName,
 } from "./workspace-section";
 import { AnimatedSection } from "./animated-section";
-import { submitFormOnShortcut } from "@/components/ui/form-submit-shortcut";
 import { cn } from "@/lib/utils";
 
 const Inline = createContext(false);
@@ -39,7 +38,9 @@ export function ResourceFormBody({
     <EditorDiscard.Provider value={onDiscard}>
       <Editing.Provider value={editing}>
         <Inline.Provider value>
-          <div className="space-y-4">{children}</div>
+          <div data-form-owner className="space-y-4">
+            {children}
+          </div>
         </Inline.Provider>
       </Editing.Provider>
     </EditorDiscard.Provider>
@@ -108,7 +109,7 @@ export function ResourceForm({
                 >
                   <div className="w-full">
                     <section
-                      onKeyDown={submitFormOnShortcut}
+                      data-form-owner
                       className={
                         editing
                           ? workspaceSectionClassName(

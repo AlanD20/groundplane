@@ -81,7 +81,6 @@ export function ImageFetchAction({
     >
       <DialogContent className="max-w-lg">
         <form
-          onKeyDown={(event) => event.stopPropagation()}
           onSubmit={(event) => {
             event.preventDefault();
             event.stopPropagation();

@@ -1,3 +1,4 @@
+import { submitFormOnShortcut } from "@/components/ui/form-submit-shortcut";
 import { editorDraftValue } from "@/lib/editor-draft-value";
 import {
   EditorSessionProvider,
@@ -162,6 +163,23 @@ export function FormActions({
       leave(id);
     };
   }, [eligible, enter, leave, id]);
+  useLayoutEffect(() => {
+    if (!active || !ref.current) return;
+    const owner =
+      ref.current.closest<HTMLElement>("form, section, [data-form-owner]") ??
+      ref.current.parentElement;
+    if (!owner) return;
+    const keydown = (event: KeyboardEvent) =>
+      submitFormOnShortcut(
+        event,
+        owner,
+        latestDiscard.current
+          ? () => latestDiscard.current?.("editor")
+          : undefined,
+      );
+    owner.addEventListener("keydown", keydown);
+    return () => owner.removeEventListener("keydown", keydown);
+  }, [active]);
   const [label, setLabel] = useState("");
   const update = dock?.update;
   useLayoutEffect(() => {

@@ -116,7 +116,7 @@ export default function TenantProjectPage() {
           <>
             <Link to={`/t/${tenant.slug}/${project.slug}/secrets`}>
               <Button variant="outline">
-                <KeyRound className="size-4" /> Secrets
+                <KeyRound className="size-4" /> Configuration
               </Button>
             </Link>
             <CreationButton active={open} onClick={() => setOpen(true)}>

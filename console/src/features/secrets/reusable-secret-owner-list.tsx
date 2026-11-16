@@ -1,3 +1,4 @@
+import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/common/empty-state";
 import { HelpHint } from "@/components/common/resource-panel";
 import { ResourceTable } from "@/components/common/resource-table";
@@ -49,10 +50,13 @@ export function ReusableSecretOwnerList({
   const [editing, setEditing] = useState<ReusableSecret | null>(null);
   const [confirmation, setConfirmation] = useState<ReusableSecret | null>(null);
   const [query, setQuery] = useState("");
-  const matches = secrets.filter((secret) =>
-    `${secret.key} ${secret.kind} ${secret.ref} ${scopeLabel}`
-      .toLowerCase()
-      .includes(query.trim().toLowerCase()),
+  const [kind, setKind] = useState("all");
+  const matches = secrets.filter(
+    (secret) =>
+      (kind === "all" || secret.kind === kind) &&
+      `${secret.key} ${secret.kind} ${secret.ref} ${scopeLabel}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
   );
   const table = useTableView(
     matches,
@@ -63,13 +67,13 @@ export function ReusableSecretOwnerList({
     },
     "key",
     "asc",
-    `${scopeLabel}/${query}`,
+    `${scopeLabel}/${query}/${kind}`,
   );
   return (
     <>
       {loading && (
         <p role="status" className="py-3 text-xs text-muted-foreground">
-          Loading Secrets…
+          Loading configuration…
         </p>
       )}
       {!loading && secrets.length === 0 && (
@@ -80,10 +84,21 @@ export function ReusableSecretOwnerList({
           <CollectionToolbar
             query={query}
             onQueryChange={setQuery}
-            label="Secrets"
+            label="Variables & files"
           >
-            <HelpHint label="About Secret values">
-              Values are fetched only when explicitly revealed. Deletion remains
+            <Select
+              value={kind}
+              onValueChange={setKind}
+              aria-label="Configuration type"
+              options={[
+                { value: "all", label: "Variables & files" },
+                { value: "env", label: "Variables" },
+                { value: "file", label: "Files" },
+              ]}
+            />
+            <HelpHint label="About protected values">
+              All values here are reusable Secrets, encrypted at rest. Values
+              are fetched only when explicitly revealed. Deletion remains
               protected when a resource or recoverable Task uses the Secret.
             </HelpHint>
           </CollectionToolbar>
@@ -131,7 +146,7 @@ export function ReusableSecretOwnerList({
                       {scopeLabel}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="success">Stored</Badge>
+                      <Badge variant="success">Protected</Badge>
                     </TableCell>
                     <TableCell className="hidden max-w-72 lg:table-cell">
                       <code
@@ -180,11 +195,11 @@ export function ReusableSecretOwnerList({
             </Table>
             {matches.length === 0 && (
               <p className="p-6 text-center text-xs text-muted-foreground">
-                No Secrets match your search.
+                No variables or files match your filters.
               </p>
             )}
           </ResourceTable>
-          <TablePagination table={table} label="Secrets" />
+          <TablePagination table={table} label="Variables & files" />
         </div>
       )}
       {editing && (

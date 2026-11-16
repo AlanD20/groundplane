@@ -15,7 +15,7 @@ export const serviceDestinations = [
   { key: "overview", label: "Overview", icon: Layers },
   { key: "logs", label: "Logs", icon: Terminal },
   { key: "releases", label: "Deployments", icon: History },
-  { key: "entries", label: "Variables & files", icon: Braces },
+  { key: "entries", label: "Configuration", icon: Braces },
   { key: "storage", label: "Storage", icon: HardDrive },
   { key: "connections", label: "Backing connections", icon: Plug },
   { key: "configuration", label: "Runtime & image", icon: Container },

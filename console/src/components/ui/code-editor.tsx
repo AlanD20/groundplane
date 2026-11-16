@@ -1,3 +1,4 @@
+import { submitOwnedForm } from "./form-submit-shortcut";
 import { useWorkspaceFullscreen } from "@/components/common/use-workspace-fullscreen";
 import { registerEditorDraft } from "@/lib/editor-draft-value";
 import { createEditorSearchPanel } from "./editor-search-panel";
@@ -152,6 +153,11 @@ export function CodeEditor({
         history(),
         search({ top: true, createPanel: createEditorSearchPanel }),
         keymap.of([
+          ...["Mod-Enter", "Ctrl-Enter"].map((key) => ({
+            key,
+            run: (view: EditorView) =>
+              !view.state.readOnly && submitOwnedForm(view.contentDOM),
+          })),
           ...searchKeymap,
           ...foldKeymap.map((binding) =>
             binding.run === foldAll
@@ -314,6 +320,14 @@ export function CodeEditor({
   return (
     <section
       data-draft-editor
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && fullscreen && !event.defaultPrevented) {
+          event.preventDefault();
+          event.stopPropagation();
+          setFullscreen(false);
+          view.current?.focus();
+        }
+      }}
       ref={(element) => {
         if (element)
           return registerEditorDraft(

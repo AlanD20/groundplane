@@ -69,7 +69,7 @@ export function FactsCard({
         {!!factGroups.length && (
           <p className="text-xs text-muted-foreground">
             Connection outputs. Manage access in Backing connections; map values
-            in Variables & files.
+            in Configuration.
           </p>
         )}
         {factGroups.map((grp) => (

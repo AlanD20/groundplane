@@ -36,7 +36,7 @@ function buildCrumbs(
       "backing-services": "Backing services",
       components: "Components",
       activity: "Tasks",
-      secrets: "Secrets",
+      secrets: "Configuration",
       host: "Host",
       settings: "Settings",
     };
@@ -78,7 +78,7 @@ function buildCrumbs(
         label: lookups.projectName(slug, parts[2]),
         href: `/t/${slug}/${parts[2]}`,
       });
-      if (parts[3] === "secrets") crumbs.push({ label: "Secrets" });
+      if (parts[3] === "secrets") crumbs.push({ label: "Configuration" });
       else if (parts[3] === "settings") crumbs.push({ label: "Settings" });
       else if (parts[3]) crumbs.push({ label: parts[3] });
     }
@@ -92,7 +92,7 @@ const PLATFORM_SECTIONS: CrumbOption[] = [
   { label: "Backing services", href: "/platform/backing-services" },
   { label: "Components", href: "/platform/components" },
   { label: "Tasks", href: "/platform/activity" },
-  { label: "Secrets", href: "/platform/secrets" },
+  { label: "Configuration", href: "/platform/secrets" },
   { label: "Host", href: "/platform/host" },
   { label: "Settings", href: "/platform/settings" },
 ];
@@ -167,7 +167,7 @@ function attachOptions(
           href: `/t/${slug}/${parts[2]}/${encodeURIComponent(e.name)}`,
         }));
         const sectionOptions: CrumbOption[] = [
-          { label: "Secrets", href: `/t/${slug}/${parts[2]}/secrets` },
+          { label: "Configuration", href: `/t/${slug}/${parts[2]}/secrets` },
         ];
         return { ...c, options: [...envOptions, ...sectionOptions] };
       }

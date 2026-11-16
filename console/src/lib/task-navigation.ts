@@ -109,7 +109,7 @@ export function resolveTaskOperationSurface(
     ) {
       return workspaceFallback(task, tenant);
     }
-    return exact("/platform/secrets", "Open Platform Secrets");
+    return exact("/platform/secrets", "Open Platform Configuration");
   }
   if (secret?.scope === "project") {
     const project = context.tenantProjects.find(
@@ -130,7 +130,7 @@ export function resolveTaskOperationSurface(
     if (project && owningTenant) {
       return exact(
         `/t/${segment(owningTenant.slug)}/${segment(project.slug)}/secrets`,
-        "Open Project Secrets",
+        "Open Project Configuration",
       );
     }
     return workspaceFallback(task, tenant);

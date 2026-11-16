@@ -484,8 +484,8 @@ export function EnvVarsCard({
       <ResourcePanel
         title={
           <span className="flex items-center gap-2">
-            <ShieldCheck className="size-4 text-muted-foreground" /> Variables &
-            files
+            <ShieldCheck className="size-4 text-muted-foreground" />{" "}
+            Configuration
           </span>
         }
         actions={
@@ -520,8 +520,8 @@ export function EnvVarsCard({
         {service && (
           <p className="text-xs text-muted-foreground">
             Environment Entries available to {service.name}. Shared Entries are
-            the same definitions shown in Environment Variables & files; editing
-            one affects all listed Services.
+            the same definitions shown in Environment Configuration; editing one
+            affects all listed Services.
           </p>
         )}
         <ListToolbar

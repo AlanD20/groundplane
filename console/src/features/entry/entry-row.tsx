@@ -100,7 +100,8 @@ export function EntryRow({
               className="shrink-0"
             />
             {editing && <Badge variant="warning">Editing</Badge>}
-            {secret && <Badge variant="muted">Encrypted</Badge>}
+            <Badge variant="outline">{file ? "File" : "Variable"}</Badge>
+            {secret && <Badge variant="muted">Protected</Badge>}
             {secret && <EmptySecretValueBadge empty={emptySecretValue} />}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">

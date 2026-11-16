@@ -226,7 +226,7 @@ export function BulkSecretEditor({
   return (
     <ResourceForm open={open} onOpenChange={close}>
       <ResourceFormHeader>
-        <ResourceFormTitle>Bulk edit · {scope} Secrets</ResourceFormTitle>
+        <ResourceFormTitle>Bulk edit · {scope} variables</ResourceFormTitle>
       </ResourceFormHeader>
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">

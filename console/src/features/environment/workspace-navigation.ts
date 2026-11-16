@@ -46,7 +46,7 @@ export const environmentSections = [
     icon: FileCode2,
     panels: [
       { key: "blueprint", label: "Blueprint", icon: FileCode2 },
-      { key: "entries", label: "Variables & files", icon: Braces },
+      { key: "entries", label: "Configuration", icon: Braces },
       { key: "volumes", label: "Volumes", icon: HardDrive },
       { key: "scripts", label: "Scripts", icon: SquareTerminal },
     ],
