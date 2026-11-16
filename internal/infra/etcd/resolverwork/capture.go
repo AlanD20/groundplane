@@ -145,6 +145,9 @@ func matchesWork(
 	task workexecution.Task,
 	item workexecution.Item,
 ) error {
+	// The sealed input retains its original forward deadline. Cleanup and an
+	// explicit Retry renew the queue item's execution budget, not that input.
+	// Only an initial, never-failed publication must have identical deadlines.
 	if task.Validate() != nil || item.Validate() != nil || task.ID != input.TaskID || item.ID != input.WorkID ||
 		item.TaskID != task.ID ||
 		item.Operation != workexecution.Resolver ||
@@ -157,8 +160,9 @@ func matchesWork(
 		task.Scope != (workexecution.Scope{}) ||
 		input.CreatedAt.Before(task.CreatedAt) ||
 		input.CreatedAt.After(task.UpdatedAt) ||
-		!item.Deadline.Equal(input.Deadline) ||
-		item.Deadline.After(task.Deadline) ||
+		input.Deadline.After(task.Deadline) ||
+		item.Cleanup == workexecution.CleanupNone && item.Deadline.After(task.Deadline) ||
+		item.AttemptNumber == 0 && item.FirstFailure == nil && !item.Deadline.Equal(input.Deadline) ||
 		!item.CreatedAt.Equal(input.CreatedAt) ||
 		task.ExpectedItems != 1 ||
 		!task.PublicationComplete ||
