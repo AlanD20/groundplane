@@ -102,7 +102,7 @@ func Submit[T any](ctx context.Context, submitter *Submitter, submission Submiss
 	result, err := submitter.replay.PublishAcceptedAction(ctx, marker, accepted, payload, credentials)
 	var resolution requestidempotency.Resolution
 	if err != nil {
-		resolution, err = submitter.coordinator.ResolveUnknown(
+		resolution, err = submitter.coordinator.ResolveOperationRootUnknown(
 			ctx,
 			submitter.replay,
 			submission.Locator,

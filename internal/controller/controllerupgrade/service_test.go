@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -35,7 +37,22 @@ func TestNativeUpdateServicePublishesAndReplaysPinnedTask(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatal(err)
 	}
-	h.prepare(t, response.Body)
+	queue, err := workqueue.NewRepository(h.storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, _, err := queue.ReadTask(ctx, accepted.TaskID, 0)
+	if err != nil || !pending.Task.PendingPreparation() || pending.Task.AcceptedIntent == nil ||
+		pending.Task.ExpectedItems != 0 {
+		t.Fatalf("accepted request was not pure encrypted pending intent: %v", err)
+	}
+	if _, found, err := h.service.records.Current(ctx, 0); err != nil || found {
+		t.Fatalf("accepted request captured Controller runtime before preparation: %v", err)
+	}
+	preparedTask := h.prepare(t, response.Body)
+	if preparedTask.ID != accepted.TaskID || !preparedTask.PublicationComplete {
+		t.Fatal("late compiler did not promote original accepted Task")
+	}
 	current, found, err := h.service.records.Current(ctx, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -73,6 +90,14 @@ func TestNativeUpdateServicePublishesAndReplaysPinnedTask(t *testing.T) {
 func TestNativeUpdateServiceResolvesLostPublicationResponse(t *testing.T) {
 	h := newServiceHarness(t)
 	h.storage.loseResponse = true
+	h.storage.loseResponseMatch = func(mutations []testkeyvalue.Mutation) bool {
+		for _, mutation := range mutations {
+			if strings.Contains(mutation.Key, "/tasks/task_") && strings.HasSuffix(mutation.Key, "/record") {
+				return true
+			}
+		}
+		return false
+	}
 	response, err := h.service.UpdateController(
 		context.Background(),
 		string(h.input.Release),
@@ -82,6 +107,29 @@ func TestNativeUpdateServiceResolvesLostPublicationResponse(t *testing.T) {
 	if err != nil || response.Status != http.StatusAccepted {
 		t.Fatalf("unknown publication = %s, %v; %d writes", response, err, h.storage.transactions)
 	}
+	writes := h.storage.transactions
+	replay, err := h.service.UpdateController(
+		context.Background(),
+		string(h.input.Release),
+		nil,
+		"native-update-key-0002",
+	)
+	if err != nil || string(replay.Body) != string(response.Body) || h.storage.transactions != writes {
+		t.Fatalf("lost-response replay changed accepted Task: %v", err)
+	}
+	if _, found, err := h.service.records.Current(t.Context(), 0); err != nil || found {
+		t.Fatalf("acceptance prematurely captured activation: %v", err)
+	}
+	h.prepare(t, response.Body)
+	var accepted apiTypes.TaskAccepted
+	if err := json.Unmarshal(response.Body, &accepted); err != nil {
+		t.Fatal(err)
+	}
+	if current, found, err := h.service.records.Current(t.Context(), 0); err != nil || !found ||
+		current.Record.Capture.TaskID != accepted.TaskID {
+		t.Fatalf("lost-response Task was not promoted under original ID: %v", err)
+	}
+
 }
 
 // Rationale: foreground development remains usable without native bootstrap,
@@ -142,7 +190,10 @@ func TestNativeUpdateServiceRejectsInvalidPredecessor(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			h.prepare(t, response.Body)
+			preparedTask := h.prepare(t, response.Body)
+			if preparedTask.Outcome != workexecution.Failed || preparedTask.FinishedAt == nil {
+				t.Fatal("invalid predecessor did not terminate before native execution")
+			}
 			if _, found, err := h.service.records.Current(t.Context(), 0); err != nil || found {
 				t.Fatalf("invalid predecessor captured: %v", err)
 			}
@@ -243,7 +294,7 @@ func (publicationCipher) Open(_ context.Context, raw []byte) ([]byte, error) {
 	return append([]byte(nil), raw[len("test-sealed:"):]...), nil
 }
 
-func (h *serviceHarness) prepare(t *testing.T, body []byte) {
+func (h *serviceHarness) prepare(t *testing.T, body []byte) workexecution.Task {
 	t.Helper()
 	var accepted apiTypes.TaskAccepted
 	if err := json.Unmarshal(body, &accepted); err != nil {
@@ -263,11 +314,12 @@ func (h *serviceHarness) prepare(t *testing.T, body []byte) {
 			t.Fatal(err)
 		}
 		if !snapshot.Task.PendingPreparation() {
-			return
+			return snapshot.Task
 		}
 		if _, err := preparations.Advance(t.Context(), accepted.TaskID, h.now); err != nil {
 			t.Fatal(err)
 		}
 	}
 	t.Fatal("accepted update did not finish preparation")
+	return workexecution.Task{}
 }

@@ -29,13 +29,6 @@ func TestControllerUpdateAfterImageCleanup(t *testing.T) {
 					ModRevision: 1,
 				}
 			}
-			if scenario.change {
-				h.storage.beforeCommit = func() {
-					h.storage.revision++
-					h.storage.entries[imagefence.Key] = keyvalue.KeyValue{
-						Key: imagefence.Key, Value: []byte(`{"operation":"new-cleanup"}`), ModRevision: h.storage.revision}
-				}
-			}
 			response, err := h.service.UpdateController(
 				t.Context(),
 				string(h.input.Release),
@@ -44,6 +37,13 @@ func TestControllerUpdateAfterImageCleanup(t *testing.T) {
 			)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if scenario.change {
+				h.storage.beforeCommit = func() {
+					h.storage.revision++
+					h.storage.entries[imagefence.Key] = keyvalue.KeyValue{
+						Key: imagefence.Key, Value: []byte(`{"operation":"new-cleanup"}`), ModRevision: h.storage.revision}
+				}
 			}
 			h.prepare(t, response.Body)
 			_, found, err := h.service.records.Current(t.Context(), 0)

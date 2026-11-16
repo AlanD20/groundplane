@@ -342,11 +342,12 @@ type unknownReadStore struct {
 
 	beforeReturn func()
 	getCalls     int
+	value        []byte
 }
 
 func (store *unknownReadStore) Get(
 	ctx context.Context,
-	_ string,
+	key string,
 ) (*testkeyvalue.GetResult, error) {
 	store.getCalls++
 	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) <= 0 {
@@ -355,7 +356,154 @@ func (store *unknownReadStore) Get(
 	if store.beforeReturn != nil {
 		store.beforeReturn()
 	}
-	return &testkeyvalue.GetResult{ReadRevision: 1}, nil
+	var entry *testkeyvalue.KeyValue
+	if store.value != nil {
+		entry = &testkeyvalue.KeyValue{Key: key, Value: append([]byte(nil), store.value...), ModRevision: 1}
+	}
+	return &testkeyvalue.GetResult{ReadRevision: 1, Entry: entry}, nil
+}
+
+func (store *unknownReadStore) GetMany(
+	ctx context.Context,
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	values := make([]*testkeyvalue.KeyValue, len(request.Keys))
+	for index, key := range request.Keys {
+		if store.value != nil {
+			values[index] = &testkeyvalue.KeyValue{Key: key, Value: append([]byte(nil), store.value...), ModRevision: 1}
+		}
+	}
+	return &testkeyvalue.GetManyResult{ReadRevision: request.Revision, ResponseRevision: 1, Values: values}, nil
+}
+
+// An unknown final acceptance response may replay its immutable operation root,
+// while ordinary repeats still report active work. Every path compares protected
+// evidence, performs at most one bounded read, and respects caller cancellation.
+func TestOperationRootUnknownReplaysOnlyMatchingBoundedEvidence(t *testing.T) {
+	coordinator, err := NewCoordinator(testProtector(t, &retainingCipher{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, digest, err := Canonicalize(t.Context(), canonicalTestIntent())
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := coordinator.ProtectIntent(t.Context(), version, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer evidence.Destroy()
+	durable, err := evidence.DurableRecord()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(durable.Ciphertext)
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeTenant,
+		ScopeID:   ids.NewAt(ids.KindTenant, testTime(1), 1),
+		Method:    http.MethodPost,
+		Route:     "/test",
+		Key:       "operation-root-unknown",
+	}
+	taskID := ids.NewAt(ids.KindTask, testTime(2), 2)
+	marker := idempotencyrecord.IdempotencyMarker{
+		Locator:   locator,
+		Kind:      idempotencyrecord.IdempotencyMarkerTask,
+		State:     idempotencyrecord.IdempotencyMarkerPending,
+		Intent:    durable,
+		TaskID:    taskID,
+		CreatedAt: testTime(2),
+		UpdatedAt: testTime(2),
+		Response: idempotencyrecord.IdempotencyResponse{
+			Status:      202,
+			ContentKind: "application/json",
+			Body:        []byte(`{"task_id":"` + taskID + `"}`),
+		},
+	}
+	value, err := idempotencyrecord.EncodeIdempotencyMarker(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(value)
+	original := errs.New(errs.KindStorageUnavailable, "unknown acceptance outcome")
+	for _, scenario := range []string{"immutable root", "ordinary pending", "different intent", "cancelled", "absent", "ineligible"} {
+		t.Run(scenario, func(t *testing.T) {
+			store := &unknownReadStore{value: value}
+			repository, err := infraetcd.NewIdempotencyRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			candidate := evidence
+			if scenario == "different intent" {
+				changed := canonicalTestIntent()
+				changed.Path[0].Value = ids.NewAt(ids.KindService, testTime(4), 4)
+				v, d, err := Canonicalize(t.Context(), changed)
+				if err != nil {
+					t.Fatal(err)
+				}
+				candidate, err = coordinator.ProtectIntent(t.Context(), v, d)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer candidate.Destroy()
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if scenario == "cancelled" {
+				store.beforeReturn = cancel
+			}
+			if scenario == "absent" {
+				store.value = nil
+			}
+			cause := original
+			if scenario == "ineligible" {
+				cause = errs.New(errs.KindValidationFailed, "not submitted")
+			}
+			var result Resolution
+			if scenario == "ordinary pending" {
+				result, err = coordinator.ResolveUnknown(ctx, repository, locator, candidate, cause)
+			} else {
+				result, err = coordinator.ResolveOperationRootUnknown(ctx, repository, locator, candidate, cause)
+			}
+			switch scenario {
+			case "immutable root":
+				if err != nil || result.Kind != ResolutionReplay ||
+					string(result.Response.Body) != string(marker.Response.Body) {
+					t.Fatalf("immutable acceptance lost: %#v %v", result, err)
+				}
+			case "ordinary pending":
+				if !hasKind(err, errs.KindIdempotencyInProgress) {
+					t.Fatalf("ordinary pending semantics changed: %v", err)
+				}
+			case "different intent":
+				if !hasKind(err, errs.KindIdempotencyMismatch) {
+					t.Fatalf("different request replayed: %v", err)
+				}
+			case "cancelled":
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("caller cancellation lost: %v", err)
+				}
+			case "absent":
+				if !errors.Is(err, original) {
+					t.Fatalf("unknown missing outcome replaced: %v", err)
+				}
+			case "ineligible":
+				if !hasKind(err, errs.KindInternal) {
+					t.Fatalf("ineligible latest reread allowed: %v", err)
+				}
+			}
+			expectedReads := 1
+			if scenario == "ineligible" {
+				expectedReads = 0
+			}
+			if store.getCalls != expectedReads {
+				t.Fatalf("read count=%d, want %d", store.getCalls, expectedReads)
+			}
+		})
+	}
 }
 
 func (cipher *retainingCipher) Seal(_ context.Context, plaintext []byte) ([]byte, error) {

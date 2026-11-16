@@ -225,6 +225,29 @@ func (coordinator *Coordinator) ResolveUnknown(
 	candidate ProtectedEvidence,
 	original error,
 ) (Resolution, error) {
+	return coordinator.resolveUnknown(ctx, repository, locator, candidate, original, replayOrdinary)
+}
+
+// ResolveOperationRootUnknown uses the same single bounded outcome read and
+// cancellation rules as ResolveUnknown, replaying immutable Task acceptance.
+func (coordinator *Coordinator) ResolveOperationRootUnknown(
+	ctx context.Context,
+	repository EvidenceRepository,
+	locator idempotencyrecord.IdempotencyLocator,
+	candidate ProtectedEvidence,
+	original error,
+) (Resolution, error) {
+	return coordinator.resolveUnknown(ctx, repository, locator, candidate, original, replayOperationRoot)
+}
+
+func (coordinator *Coordinator) resolveUnknown(
+	ctx context.Context,
+	repository EvidenceRepository,
+	locator idempotencyrecord.IdempotencyLocator,
+	candidate ProtectedEvidence,
+	original error,
+	policy replayPolicy,
+) (Resolution, error) {
 	if ctx == nil || repository == nil || original == nil {
 		return Resolution{}, internalError("unknown-outcome evidence is incomplete")
 	}
@@ -255,7 +278,7 @@ func (coordinator *Coordinator) ResolveUnknown(
 		return Resolution{}, err
 	}
 	defer clearProtectedMarker(marker)
-	return coordinator.classifyMarker(ctx, candidate, marker)
+	return coordinator.classifyMarkerWithPolicy(ctx, candidate, marker, policy)
 }
 
 func clearProtectedMarker(marker idempotencyrecord.IdempotencyMarker) {
@@ -276,6 +299,22 @@ func (coordinator *Coordinator) classifyMarker(
 	candidate ProtectedEvidence,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (Resolution, error) {
+	return coordinator.classifyMarkerWithPolicy(ctx, candidate, marker, replayOrdinary)
+}
+
+type replayPolicy uint8
+
+const (
+	replayOrdinary replayPolicy = iota
+	replayOperationRoot
+)
+
+func (coordinator *Coordinator) classifyMarkerWithPolicy(
+	ctx context.Context,
+	candidate ProtectedEvidence,
+	marker idempotencyrecord.IdempotencyMarker,
+	policy replayPolicy,
+) (Resolution, error) {
 	if coordinator == nil || coordinator.protector == nil {
 		return Resolution{}, internalError("coordinator is not initialized")
 	}
@@ -294,7 +333,7 @@ func (coordinator *Coordinator) classifyMarker(
 	if !matched {
 		return Resolution{}, errs.New(errs.KindIdempotencyMismatch, "idempotency key was used for a different request")
 	}
-	if marker.Kind == idempotencyrecord.IdempotencyMarkerTask &&
+	if policy == replayOrdinary && marker.Kind == idempotencyrecord.IdempotencyMarkerTask &&
 		marker.State == idempotencyrecord.IdempotencyMarkerPending {
 		return Resolution{}, errs.New(errs.KindIdempotencyInProgress, "the original task is still active")
 	}
@@ -312,17 +351,7 @@ func (coordinator *Coordinator) classifyOperationRootMarker(
 	candidate ProtectedEvidence,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (Resolution, error) {
-	resolution, err := coordinator.classifyMarker(ctx, candidate, marker)
-	if !errors.Is(err, errs.New(errs.KindIdempotencyInProgress, "")) {
-		return resolution, err
-	}
-	return Resolution{
-		Kind: ResolutionReplay,
-		Response: idempotencyrecord.IdempotencyResponse{
-			Status: marker.Response.Status, ContentKind: marker.Response.ContentKind,
-			Body: append([]byte(nil), marker.Response.Body...),
-		},
-	}, nil
+	return coordinator.classifyMarkerWithPolicy(ctx, candidate, marker, replayOperationRoot)
 }
 
 func restoreProtectedIntent(value idempotencyrecord.ProtectedIntentRecord) (secretvalue.Envelope, error) {

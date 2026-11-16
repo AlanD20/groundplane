@@ -14,16 +14,22 @@ import (
 // This storage-boundary double exercises the real Task and protected-marker
 // repositories. Tests are sequential; unsupported unrelated capabilities fail.
 type publicationStore struct {
-	entries      map[string]testkeyvalue.KeyValue
-	revision     int64
-	transactions int
-	loseResponse bool
-	readError    error
-	beforeCommit func()
+	entries           map[string]testkeyvalue.KeyValue
+	history           map[int64]map[string]testkeyvalue.KeyValue
+	revision          int64
+	transactions      int
+	loseResponse      bool
+	loseResponseMatch func([]testkeyvalue.Mutation) bool
+	readError         error
+	beforeCommit      func()
 }
 
 func (store *publicationStore) entry(key string) *testkeyvalue.KeyValue {
-	value, found := store.entries[key]
+	return publicationEntry(store.entries, key)
+}
+
+func publicationEntry(entries map[string]testkeyvalue.KeyValue, key string) *testkeyvalue.KeyValue {
+	value, found := entries[key]
 	if !found {
 		return nil
 	}
@@ -47,16 +53,17 @@ func (store *publicationStore) GetMany(
 	if store.readError != nil {
 		return nil, store.readError
 	}
-	if request.Revision != 0 && request.Revision != store.revision {
-		return nil, unexpectedStorage()
+	entries, revision, err := store.at(request.Revision)
+	if err != nil {
+		return nil, err
 	}
 	values := make([]*testkeyvalue.KeyValue, len(request.Keys))
 	for index, key := range request.Keys {
-		values[index] = store.entry(key)
+		values[index] = publicationEntry(entries, key)
 	}
 	return &testkeyvalue.GetManyResult{
 		Values:           values,
-		ReadRevision:     store.revision,
+		ReadRevision:     revision,
 		ResponseRevision: store.revision,
 	}, nil
 }
@@ -71,11 +78,12 @@ func (store *publicationStore) Range(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if request.Revision != 0 && request.Revision != store.revision {
-		return nil, unexpectedStorage()
+	entries, revision, err := store.at(request.Revision)
+	if err != nil {
+		return nil, err
 	}
 	keys := make([]string, 0)
-	for key := range store.entries {
+	for key := range entries {
 		if strings.HasPrefix(key, request.Prefix) && key > request.StartExclusive {
 			keys = append(keys, key)
 		}
@@ -84,17 +92,17 @@ func (store *publicationStore) Range(
 	if request.Descending {
 		sort.Sort(sort.Reverse(sort.StringSlice(keys)))
 	}
-	more := int64(len(keys)) > request.Limit
+	more := request.Limit > 0 && int64(len(keys)) > request.Limit
 	if more {
 		keys = keys[:request.Limit]
 	}
 	values := make([]testkeyvalue.KeyValue, 0, len(keys))
 	for _, key := range keys {
-		values = append(values, *store.entry(key))
+		values = append(values, *publicationEntry(entries, key))
 	}
 	return &testkeyvalue.RangeResult{
 		Values:           values,
-		ReadRevision:     store.revision,
+		ReadRevision:     revision,
 		ResponseRevision: store.revision,
 		More:             more,
 	}, nil
@@ -113,6 +121,7 @@ func (store *publicationStore) Transact(
 	conditions []testkeyvalue.Condition,
 	mutations []testkeyvalue.Mutation,
 ) (testkeyvalue.TransactionResult, error) {
+	store.remember()
 	if store.beforeCommit != nil {
 		hook := store.beforeCommit
 		store.beforeCommit = nil
@@ -122,10 +131,20 @@ func (store *publicationStore) Transact(
 		return testkeyvalue.TransactionResult{}, err
 	}
 	for _, condition := range conditions {
+		matches := store.entries[condition.Key].ModRevision == condition.ModRevision
 		if condition.Prefix {
-			return testkeyvalue.TransactionResult{}, unexpectedStorage()
+			if condition.ModRevision != 0 {
+				return testkeyvalue.TransactionResult{}, unexpectedStorage()
+			}
+			matches = true
+			for key := range store.entries {
+				if strings.HasPrefix(key, condition.Key) {
+					matches = false
+					break
+				}
+			}
 		}
-		if store.entries[condition.Key].ModRevision != condition.ModRevision {
+		if !matches {
 			reads := make([]*testkeyvalue.KeyValue, len(conditions))
 			for index, item := range conditions {
 				reads[index] = store.entry(item.Key)
@@ -159,7 +178,8 @@ func (store *publicationStore) Transact(
 			ModRevision: store.revision,
 		}
 	}
-	if store.loseResponse {
+	store.remember()
+	if store.loseResponse && (store.loseResponseMatch == nil || store.loseResponseMatch(mutations)) {
 		store.loseResponse = false
 		return testkeyvalue.TransactionResult{}, errs.New(errs.KindStorageUnavailable, "lost committed response")
 	}
@@ -179,4 +199,25 @@ func (*publicationStore) Snapshot(context.Context, io.Writer) error { return une
 func (*publicationStore) Close() error                              { return unexpectedStorage() }
 func unexpectedStorage() error {
 	return errs.New(errs.KindInternal, "unexpected storage operation in native publication test")
+}
+
+func (store *publicationStore) remember() {
+	if store.history == nil {
+		store.history = make(map[int64]map[string]testkeyvalue.KeyValue)
+	}
+	entries := make(map[string]testkeyvalue.KeyValue, len(store.entries))
+	for key := range store.entries {
+		entries[key] = *store.entry(key)
+	}
+	store.history[store.revision] = entries
+}
+func (store *publicationStore) at(revision int64) (map[string]testkeyvalue.KeyValue, int64, error) {
+	if revision == 0 || revision == store.revision {
+		return store.entries, store.revision, nil
+	}
+	entries, found := store.history[revision]
+	if !found {
+		return nil, 0, unexpectedStorage()
+	}
+	return entries, revision, nil
 }

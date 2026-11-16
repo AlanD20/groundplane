@@ -357,6 +357,7 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 		name     string
 		method   string
 		path     string
+		body     string
 		status   int
 		response string
 		args     []string
@@ -381,6 +382,7 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 			name:     "disable",
 			method:   http.MethodPost,
 			path:     "/api/v1/components/cmp_1/disable",
+			body:     `{}`,
 			status:   http.StatusAccepted,
 			response: `{"task_id":"task_1"}`,
 			args:     []string{"disable", "cmp_1"},
@@ -389,6 +391,7 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 			name:     "update",
 			method:   http.MethodPost,
 			path:     "/api/v1/components/cmp_1/update",
+			body:     `{}`,
 			status:   http.StatusAccepted,
 			response: `{"task_id":"task_1"}`,
 			args:     []string{"update", "cmp_1"},
@@ -404,7 +407,7 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := exactRequestServer(t, test.method, test.path, "", test.status, test.response)
+			server := exactRequestServer(t, test.method, test.path, test.body, test.status, test.response)
 			defer server.Close()
 			executeNoun(t, newComponentCmd(), server.URL, Scope{}, test.args...)
 		})
@@ -640,8 +643,8 @@ func TestTaskRetryPreservesTaskAndSelectedWork(t *testing.T) {
 
 // QA: BAK-05, UI-01; local command shape and dispatch only, not policy admission, capture, or Retry behavior.
 // Rationale: manual Backup uses the policy's complete frozen source set, so the
-// CLI must expose no source selector and send one bodyless run request.
-func TestBackupRunPostsWithoutBodyOrSourceSelection(t *testing.T) {
+// CLI must expose no source selector and send only optional scheduling metadata.
+func TestBackupRunPostsWithoutSourceSelection(t *testing.T) {
 	t.Parallel()
 
 	command := newBackupCmd()
@@ -657,7 +660,7 @@ func TestBackupRunPostsWithoutBodyOrSourceSelection(t *testing.T) {
 		t,
 		http.MethodPost,
 		"/api/v1/environments/env_01ARZ3NDEKTSV4RRFFQ69G5FAV/backup-run",
-		"",
+		`{}`,
 		http.StatusAccepted,
 		`{"task_id":"task_backup"}`,
 	)
