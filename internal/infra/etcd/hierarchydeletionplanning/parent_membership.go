@@ -126,5 +126,12 @@ func (repository *Planner) freezeProjectMembership(
 	if err != nil {
 		return nil, err
 	}
+	// Shared Project credentials outlive every Environment and Runner that can
+	// consume them. Their finalizers use the same reference fence as direct
+	// deletion; running them alongside consumers would race those protections.
+	consumers := terminalHierarchyDeletionNodes(nodes)
+	for index := range secrets {
+		secrets[index].PrerequisiteNodeIDs = append(secrets[index].PrerequisiteNodeIDs, consumers...)
+	}
 	return append(nodes, secrets...), nil
 }

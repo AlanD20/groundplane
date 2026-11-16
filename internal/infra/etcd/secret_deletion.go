@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/secretmutations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/secretremoval"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -175,7 +176,7 @@ func (repository *SecretRepository) PublishSecretRemoval(
 			})
 		}
 	}
-	references, err := secretremoval.PrepareReferenceAbsence(ctx, repository.store, secretID)
+	references, err := secretmutations.PrepareSecretRemovalAbsence(ctx, repository.store, secretID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

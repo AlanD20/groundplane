@@ -9,8 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintsecretrefs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
@@ -136,24 +138,53 @@ func (repository *BackupRuntimeRepository) publishConfigRestore(
 			}
 			next := backupruntime.CloneBackupRestoreRecord(current)
 			if authority.head == owner.BaselineRevisionID {
+				desired, found, err := blueprints.ReadDesiredInputRevisionAt(ctx, repository.store,
+					owner.EnvironmentID, current.TaskID, authority.revision)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return configTransferAuthorityConflict()
+				}
+				environmentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+					Keys: []string{hierarchy.EnvironmentKey(owner.EnvironmentID)}, Revision: authority.revision})
+				if err != nil {
+					return err
+				}
+				if environmentRead == nil || environmentRead.ReadRevision != authority.revision ||
+					len(environmentRead.Values) != 1 || environmentRead.Values[0] == nil {
+					return configTransferAuthorityConflict()
+				}
+				environment, err := hierarchy.DecodeEnvironment(environmentRead.Values[0].Value)
+				etcdstore.ClearValues(environmentRead.Values)
+				if err != nil || environment.ID != owner.EnvironmentID {
+					return configTransferAuthorityConflict()
+				}
+				credentials, err := blueprintsecretrefs.PrepareReplacement(ctx, repository.store,
+					owner.EnvironmentID, environment.ProjectID, desired.Record.ComponentSecretIDs(), authority.revision)
+				if err != nil {
+					return err
+				}
 				head, err := idempotency.EncodeTaskReference(current.TaskID)
 				if err != nil {
+					etcdstore.ClearMutationValues(credentials.Mutations)
 					return err
 				}
 				err = repository.commitConfigRestorePublication(
 					ctx,
 					authority,
 					next,
-					nil,
-					[]etcdstore.Mutation{
+					credentials.Conditions,
+					append(credentials.Mutations, []etcdstore.Mutation{
 						{
 							Type:  etcdstore.MutationPut,
 							Key:   blueprints.EnvironmentBlueprintHeadKey(owner.EnvironmentID),
 							Value: head,
 						},
-					},
+					}...),
 				)
 				clear(head)
+				etcdstore.ClearMutationValues(credentials.Mutations)
 				if err != nil {
 					return err
 				}

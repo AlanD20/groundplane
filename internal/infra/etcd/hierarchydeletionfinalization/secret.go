@@ -3,12 +3,12 @@ package hierarchydeletionfinalization
 import (
 	"context"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
-	secretmutations "github.com/AlanD20/groundplane/internal/infra/etcd/secretmutations"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/secretmutations"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 )
 
 // Secret ciphertext remains protected during parent deletion by the same
-// exact Script count and forward-membership absence proof as direct removal.
+// reference and recoverable-input absence proof as direct removal.
 func (repository *Preparer) prepareHierarchyDeletionSecretFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
@@ -22,7 +22,7 @@ func (repository *Preparer) prepareHierarchyDeletionSecretFinalizer(
 	if err != nil || record.Secret.ID != action.TargetID {
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	fences, err := secretmutations.PrepareSecretScriptAbsence(ctx, repository.store, action.TargetID)
+	fences, err := secretmutations.PrepareSecretRemovalAbsence(ctx, repository.store, action.TargetID)
 	if err != nil {
 		return Effects{}, err
 	}

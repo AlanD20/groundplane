@@ -3,6 +3,7 @@ package hierarchydeletionfinalization
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintsecretrefs"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
@@ -75,6 +76,11 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer etcdstore.ClearValues(indexes.Values)
+	credentials, err := blueprintsecretrefs.PrepareReplacement(ctx, repository.store,
+		record.ID, record.ProjectID, nil, indexes.ReadRevision)
+	if err != nil {
+		return Effects{}, err
+	}
 	metadata, err := PrepareEnvironmentDeletionFinalization(
 		ctx, repository.store, record.ID, operation.Tombstone.OperationID, indexes.ReadRevision,
 	)
@@ -111,6 +117,7 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 		},
 	}
 	conditions = append(conditions, metadata.conditions...)
+	conditions = append(conditions, credentials.Conditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: blueprints.EnvironmentBlueprintHeadKey(record.ID)},
 		{Type: etcdstore.MutationDelete, Key: projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID)},
@@ -122,6 +129,7 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 		{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
 	}
 	mutations = append(mutations, metadata.mutations...)
+	mutations = append(mutations, credentials.Mutations...)
 	return Effects{
 		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(
 			primary.Value,

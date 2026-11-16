@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintsecretrefs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -226,6 +227,12 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return keyvalue.TransactionResult{}, err
 	}
 	defer clear(reference)
+	credentials, err := blueprintsecretrefs.PrepareReplacement(ctx, repository.store,
+		environment.Record.ID, project.Record.ID, input.DesiredInput.ComponentSecretIDs(), environment.ReadRevision)
+	if err != nil {
+		return keyvalue.TransactionResult{}, err
+	}
+	defer keyvalue.ClearMutationValues(credentials.Mutations)
 	conditions := []keyvalue.Condition{
 		{Key: blueprintunits.EpochKey(environment.Record.ID), ModRevision: input.Baseline.EpochRevision},
 		{
@@ -375,7 +382,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		return attachInputs.finish(ctx, repository.store, parent.ID, keyvalue.TransactionResult{}, err)
 	}
 	conditions = append(conditions, input.RetainedAttachConditions...)
-	acceptance, err := workqueue.JoinChanges(work, graph,
+	acceptance, err := workqueue.JoinChanges(work, graph, credentials,
 		workqueue.Change{Conditions: markerConditions, Mutations: markerMutations},
 		workqueue.Change{Conditions: conditions, Mutations: mutations})
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/secretmutations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -137,7 +138,7 @@ func (repository *Repository) PrepareDecision(
 	if outcome != workexecution.Succeeded {
 		return change, nil
 	}
-	guards, err := PrepareReferenceAbsence(ctx, repository.store, id)
+	guards, err := secretmutations.PrepareSecretRemovalAbsence(ctx, repository.store, id)
 	if err != nil {
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err

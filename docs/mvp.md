@@ -228,6 +228,11 @@ Secrets are encrypted at rest and excluded from public metadata and Task events.
 Attach facts are not reusable Secrets and are never injected automatically;
 operators choose Entry mappings and exposure. A Task that needs an exact Secret
 for recovery blocks deletion until that use is released.
+Accepted Component configuration also protects its selected credential before
+execution input or runtime metadata exists. Replace or remove that selection
+before deleting the credential. Recreating the same key creates a new identity
+and never changes the input of an existing Task. Missing captured credentials
+fail preparation explicitly instead of waiting for a different credential.
 
 Valkey creation requires an explicit immutable authentication choice:
 `username_password`, `password` or `none`. There is no default.

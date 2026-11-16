@@ -88,6 +88,9 @@ func (owner *ComponentWorkPreparation) Prepare(ctx context.Context, taskID, work
 	if _, err := workqueue.DependencyConditions(item, dependencies); err != nil {
 		return err
 	}
+	if rejected, err := owner.inputs.RejectMissingCredential(ctx, work, snapshot.HeadRevision); err != nil || rejected {
+		return err
+	}
 	var services []workqueue.View
 	writes := make(map[string]bool, len(unit.Writes))
 	for _, target := range unit.Writes {

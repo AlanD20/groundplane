@@ -84,7 +84,7 @@ func (repository *Repository) DeleteSecret(
 		return 0, errs.New(errs.KindInternal, "Secret indexes or encrypted value are missing")
 	}
 	conditions := secretrecord.SecretDeleteConditions(owner, current, dependencies.Values)
-	fences, err := PrepareSecretScriptAbsence(ctx, repository.store, current.Record.Secret.ID)
+	fences, err := PrepareSecretRemovalAbsence(ctx, repository.store, current.Record.Secret.ID)
 	if err != nil {
 		return 0, err
 	}
