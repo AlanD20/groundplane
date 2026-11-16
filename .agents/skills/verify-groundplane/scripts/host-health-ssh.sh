@@ -374,7 +374,10 @@ def canonical_host:
   (.controller | .service == "groundplane-controller.service" and .status == "healthy" and
     (.version | nonempty) and (.update | native_update)) and
   (.agent | .status == "healthy" and (.pull_interval | nonempty) and
-    (.max_concurrent | integer and . > 0) and (.labels | type == "array") and
+    (.max_concurrent_tasks | integer and . > 0 and . <= 256) and
+    (.max_parallel_operations_per_task | integer and . > 0 and . <= 256) and
+    (.max_concurrent_tasks * .max_parallel_operations_per_task <= 256) and
+    (.labels | type == "array") and
     (all(.labels[]; type == "string")) and (.labels == (.labels | sort)));
 '
 
