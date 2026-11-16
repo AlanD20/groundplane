@@ -52,35 +52,35 @@ func NewPublications(queue *workqueue.Repository, registrations []PublicationReg
 // Advance performs one bounded batch, not the entire graph. On an unknown
 // commit outcome the next sweep reads persisted membership before preparing
 // another batch; it never replays an in-memory transaction blindly.
-func (publications *Publications) Advance(ctx context.Context, taskID string, at time.Time) error {
+func (publications *Publications) Advance(ctx context.Context, taskID string, at time.Time) (bool, error) {
 	if at.IsZero() {
-		return errs.New(errs.KindInternal, "task publication requires a timestamp")
+		return false, errs.New(errs.KindInternal, "task publication requires a timestamp")
 	}
 	task, revision, err := publications.queue.ReadTask(ctx, taskID, 0)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if task.Task.PublicationComplete {
-		return nil
+		return false, nil
 	}
 	owner := publications.owners[task.Task.Action]
 	if owner == nil {
-		return errs.New(errs.KindStateConflict, "task action has no captured-plan publication owner")
+		return false, errs.New(errs.KindStateConflict, "task action has no captured-plan publication owner")
 	}
 	batch, err := owner.PreparePublication(ctx, task, revision, at)
 	defer keyvalue.ClearMutationValues(batch.Authority.Mutations)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if batch.Planning {
 		if batch.Rejected || len(batch.Graph) != 0 {
-			return errs.New(errs.KindInternal, "planning publication cannot also publish execution work")
+			return false, errs.New(errs.KindInternal, "planning publication cannot also publish execution work")
 		}
 		if len(batch.Authority.Conditions) == 0 && len(batch.Authority.Mutations) == 0 {
-			return nil
+			return false, nil
 		}
 		if len(batch.Authority.Conditions) == 0 || len(batch.Authority.Mutations) == 0 {
-			return errs.New(errs.KindInternal, "planning publication requires guarded metadata changes")
+			return false, errs.New(errs.KindInternal, "planning publication requires guarded metadata changes")
 		}
 		guard := workqueue.Change{Conditions: []keyvalue.Condition{{
 			Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision,
@@ -89,42 +89,42 @@ func (publications *Publications) Advance(ctx context.Context, taskID string, at
 		if err == nil && !result.Succeeded {
 			err = errs.New(errs.KindStateConflict, "task or metadata changed during publication planning")
 		}
-		return err
+		return err == nil && result.Succeeded, err
 	}
 	if len(batch.Authority.Conditions) == 0 {
-		return errs.New(errs.KindInternal, "task publication requires captured-plan authority comparisons")
+		return false, errs.New(errs.KindInternal, "task publication requires captured-plan authority comparisons")
 	}
 	var queueChange workqueue.Change
 	if batch.Rejected {
 		queueChange, err = workqueue.PrepareRejectedPublicationComplete(task, batch.Graph, at)
 	} else if task.Task.ExpectedItems == 0 && task.Task.Action == workexecution.ActionRemove {
 		if len(batch.Graph) == 0 || len(batch.Graph) > int(workexecution.MaximumTaskItems) {
-			return errs.New(errs.KindStateConflict, "removal plan membership is invalid")
+			return false, errs.New(errs.KindStateConflict, "removal plan membership is invalid")
 		}
 		captured := task.Task
 		captured.ExpectedItems = uint32(len(batch.Graph))
 		if err := workexecution.ValidateGraph(captured, batch.Graph); err != nil {
-			return err
+			return false, err
 		}
 		queueChange, err = workqueue.PrepareCapturedMembership(task, captured.ExpectedItems, at)
 	} else {
 		queueChange, _, err = publications.queue.PrepareGraphBatch(ctx, task, batch.Graph, at)
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer keyvalue.ClearMutationValues(queueChange.Mutations)
 	result, err := publications.queue.Commit(ctx, batch.Authority, queueChange)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !result.Succeeded {
-		return errs.New(
+		return false, errs.New(
 			errs.KindStateConflict,
 			"task or captured publication inputs changed before the batch was stored",
 		)
 	}
-	return nil
+	return true, nil
 }
 
 // Run gives each indexed Task one batch per sweep. An oversized or damaged
@@ -136,15 +136,18 @@ func (publications *Publications) Run(ctx context.Context, interval time.Duratio
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	after := ""
+	bursts := 0
 	for {
 		page, err := publications.queue.Publishing(ctx, after)
 		if err != nil {
 			return err
 		}
+		progressed := false
 		for _, task := range page.Tasks {
 			bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
-			err := publications.Advance(bounded, task.Task.ID, time.Now().UTC())
+			changed, err := publications.Advance(bounded, task.Task.ID, time.Now().UTC())
 			cancel()
+			progressed = progressed || changed
 			if err != nil {
 				report(Issue{TaskID: task.Task.ID, Err: err})
 			}
@@ -153,6 +156,15 @@ func (publications *Publications) Run(ctx context.Context, interval time.Duratio
 			}
 		}
 		after = page.Next
+		// Keep the atomic eight-item batches, but do not add a periodic timer
+		// between successful batches. Each sweep gives every indexed Task a
+		// turn and re-reads durable membership. A bounded burst yields even if
+		// operation planning keeps changing without completing its graph.
+		bursts++
+		if (after != "" || progressed) && bursts < maximumCoordinationBurst {
+			continue
+		}
+		bursts = 0
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

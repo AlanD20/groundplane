@@ -29,8 +29,14 @@ type Runtime struct {
 	logger       *slog.Logger
 }
 
+// Coordination is latency-sensitive queue processing, separate from the
+// operator-configured periodic scheduler interval.
+const (
+	coordinationInterval     = time.Second
+	maximumCoordinationBurst = 32
+)
+
 type RuntimeConfig struct {
-	Interval            time.Duration
 	CollectionInterval  time.Duration
 	HistoryRetention    time.Duration
 	DiagnosticRetention time.Duration
@@ -86,7 +92,7 @@ func (runtime *Runtime) Run(
 		return err
 	}
 	if ctx == nil || identity.Validate() != nil || identity.Executor != workexecution.Controller ||
-		config.Interval < 100*time.Millisecond || config.CollectionInterval < time.Second || config.HistoryRetention != workexecution.TaskHistoryRetention ||
+		config.CollectionInterval < time.Second || config.HistoryRetention != workexecution.TaskHistoryRetention ||
 		config.DiagnosticRetention < time.Hour || config.DiagnosticRetention > config.HistoryRetention || config.CollectionBudget <= 0 {
 		return errs.New(errs.KindInternal, "execution runtime identity or intervals are invalid")
 	}
@@ -118,19 +124,21 @@ func (runtime *Runtime) Run(
 		)
 	}
 	loops := []func(context.Context) error{
-		func(ctx context.Context) error { return runtime.inputs.Run(ctx, config.Interval, report) },
-		func(ctx context.Context) error { return runtime.publications.Run(ctx, config.Interval, report) },
+		func(ctx context.Context) error { return runtime.inputs.Run(ctx, coordinationInterval, report) },
+		func(ctx context.Context) error { return runtime.publications.Run(ctx, coordinationInterval, report) },
 		func(ctx context.Context) error {
-			return runtime.scheduler.RunPlacement(ctx, identity, config.Interval, func(sweep Sweep) {
+			return runtime.scheduler.RunPlacement(ctx, identity, coordinationInterval, func(sweep Sweep) {
 				for _, issue := range sweep.Issues {
 					report(issue)
 				}
 			})
 		},
-		func(ctx context.Context) error { return runtime.controller.Run(ctx, identity, config.Interval, report) },
-		func(ctx context.Context) error { return runtime.scheduler.RunStops(ctx, config.Interval, report) },
 		func(ctx context.Context) error {
-			return runtime.completions.Run(ctx, config.Interval, config.HistoryRetention, report)
+			return runtime.controller.Run(ctx, identity, coordinationInterval, report)
+		},
+		func(ctx context.Context) error { return runtime.scheduler.RunStops(ctx, coordinationInterval, report) },
+		func(ctx context.Context) error {
+			return runtime.completions.Run(ctx, coordinationInterval, config.HistoryRetention, report)
 		},
 		func(ctx context.Context) error {
 			return runtime.retention.Run(

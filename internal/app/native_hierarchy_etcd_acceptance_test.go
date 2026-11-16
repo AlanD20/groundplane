@@ -265,7 +265,7 @@ func (owner *nativeHierarchyEtcdRuntime) finish(t *testing.T, ctx context.Contex
 func (owner *nativeHierarchyEtcdRuntime) publish(t *testing.T, ctx context.Context, taskID string, at time.Time) {
 	t.Helper()
 	for batch := 0; batch < 10; batch++ {
-		if err := owner.publication.Advance(ctx, taskID, at); err != nil {
+		if _, err := owner.publication.Advance(ctx, taskID, at); err != nil {
 			t.Fatal(err)
 		}
 		task, _, err := owner.queue.ReadTask(ctx, taskID, 0)

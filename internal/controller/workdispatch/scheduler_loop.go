@@ -21,6 +21,7 @@ func (scheduler *Scheduler) RunPlacement(ctx context.Context, identity workexecu
 	target := workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	bursts := 0
 	for {
 		registration, err := scheduler.queue.ReadExecutor(ctx, target)
 		if err != nil {
@@ -49,6 +50,15 @@ func (scheduler *Scheduler) RunPlacement(ctx context.Context, identity workexecu
 				return err
 			}
 		}
+		// A later page or newly settled prerequisite can expose independent
+		// ready work immediately. Re-run admission from fresh durable state;
+		// assignments still acquire the same slots and claims atomically.
+		bursts++
+		if (result.Next != "" || len(result.Assignments)+len(result.Settled)+len(result.Advanced)+len(result.Attention) > 0) &&
+			bursts < maximumCoordinationBurst {
+			continue
+		}
+		bursts = 0
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

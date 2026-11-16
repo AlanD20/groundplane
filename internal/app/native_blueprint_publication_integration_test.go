@@ -36,7 +36,7 @@ func TestNativeBlueprintPublicationResumesWithoutDuplicateWork(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newNativeBlueprintPublication(t, false)
 			f.store.loseBatchResponse = true
-			if err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); !errors.Is(
+			if _, err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); !errors.Is(
 				err,
 				errLostBlueprintBatchResponse,
 			) {
@@ -66,7 +66,7 @@ func TestNativeBlueprintPublicationResumesWithoutDuplicateWork(t *testing.T) {
 			// only persisted membership chooses the next bounded batch.
 			f.publisher(t)
 			for range 4 {
-				if err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err != nil {
+				if _, err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -100,7 +100,7 @@ func TestNativeBlueprintPublicationResumesWithoutDuplicateWork(t *testing.T) {
 // turn a partially published Apply into executable work or change its members.
 func TestNativeBlueprintPublicationRefusesChangedCapture(t *testing.T) {
 	f := newNativeBlueprintPublication(t, false)
-	if err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err != nil {
+	if _, err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	before, _, err := f.queue.ReadTask(t.Context(), f.task.ID, 0)
@@ -111,12 +111,50 @@ func TestNativeBlueprintPublicationRefusesChangedCapture(t *testing.T) {
 	if _, err := f.store.Put(t.Context(), key, []byte("corrupt captured graph")); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err == nil {
+	if _, err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err == nil {
 		t.Fatal("corrupt graph opened publication")
 	}
 	after, _, err := f.queue.ReadTask(t.Context(), f.task.ID, 0)
 	if err != nil || after.Revision != before.Revision || after.Task.PublicationComplete {
 		t.Fatalf("corrupt graph changed Task: %v", err)
+	}
+}
+
+// TASK-122: a complete captured graph must not pay one periodic scheduler tick
+// for every atomic publication batch. The actual publisher must open the
+// barrier before its one-hour fallback tick, without inventing execution.
+func TestNativeBlueprintPublicationDrainsProgressWithoutWaitingForTick(t *testing.T) {
+	f := newNativeBlueprintPublication(t, false)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	f.store.afterCommit = func() {
+		task, _, err := f.queue.ReadTask(t.Context(), f.task.ID, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task.Task.PublicationComplete {
+			cancel()
+		}
+	}
+	err := f.publications.Run(ctx, time.Hour, func(issue workdispatch.Issue) {
+		t.Errorf("publication failed: %v", issue.Err)
+		cancel()
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("publication waited for its periodic tick: %v", err)
+	}
+	task, _, err := f.queue.ReadTask(t.Context(), f.task.ID, 0)
+	if err != nil || !task.Task.PublicationComplete || task.Task.Progress.Total() != 17 {
+		t.Fatalf("publication did not retain its complete membership: %#v %v", task.Task.Progress, err)
+	}
+	page, err := f.queue.ListWork(t.Context(), f.task.ID, "", 100, 0)
+	if err != nil || len(page.Items) != 17 {
+		t.Fatalf("published work: %v", err)
+	}
+	for _, item := range page.Items {
+		if item.Item.AttemptNumber != 0 || item.Item.ActiveAttemptID != "" || item.Item.Result != nil {
+			t.Fatal("draining publication executed work")
+		}
 	}
 }
 
@@ -130,7 +168,7 @@ func TestNativeBlueprintInputSupersessionFencesPlanningAndConcurrentHead(t *test
 		t.Run(map[bool]string{false: "settle", true: "concurrent_head"}[race], func(t *testing.T) {
 			f := newNativeBlueprintPublication(t, true)
 			for range 4 {
-				if err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err != nil {
+				if _, err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -219,6 +257,7 @@ type nativeBlueprintPublicationStore struct {
 	*memoryHierarchyStore
 	loseBatchResponse bool
 	beforeCommit      func([]keyvalue.Mutation)
+	afterCommit       func()
 }
 
 func (store *nativeBlueprintPublicationStore) Transact(ctx context.Context, conditions []keyvalue.Condition,
@@ -228,6 +267,9 @@ func (store *nativeBlueprintPublicationStore) Transact(ctx context.Context, cond
 		store.beforeCommit(mutations)
 	}
 	result, err := store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
+	if err == nil && result.Succeeded && store.afterCommit != nil {
+		store.afterCommit()
+	}
 	if err != nil || !result.Succeeded || !store.loseBatchResponse {
 		return result, err
 	}

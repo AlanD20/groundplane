@@ -24,7 +24,7 @@ func TestNativeBlueprintAcknowledgesAppliedInputWithoutDispatch(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			f := newNativeBlueprintPublication(t, true)
 			for range 4 {
-				if err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err != nil {
+				if _, err := f.publications.Advance(t.Context(), f.task.ID, time.Now().UTC()); err != nil {
 					t.Fatal(err)
 				}
 			}

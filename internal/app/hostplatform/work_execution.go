@@ -501,7 +501,6 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	return &WorkExecution{Runtime: runtime, Queue: queue, scheduler: scheduler, controller: controller,
 		Retries: retries, retention: retention,
 		config: workdispatch.RuntimeConfig{
-			Interval:            platform.dependencies.Tick,
 			CollectionInterval:  maintenance.CleanupInterval,
 			HistoryRetention:    workexecution.TaskHistoryRetention,
 			DiagnosticRetention: maintenance.DiagnosticRetention,

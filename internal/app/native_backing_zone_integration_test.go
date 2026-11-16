@@ -111,7 +111,7 @@ func TestNativeBackingZoneRemovalPublishesCapturedGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 3 {
-		if err := publications.Advance(t.Context(), accepted.TaskID, time.Now().UTC()); err != nil {
+		if _, err := publications.Advance(t.Context(), accepted.TaskID, time.Now().UTC()); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -13,7 +13,7 @@ import (
 // reconciliation or running worker outlives the process-ownership lease. It is
 // called only after the coordinated storage/protocol cutover has been admitted.
 func (runtime *Runtime) Start(ctx context.Context, capacity uint16, config RuntimeConfig) (result error) {
-	if ctx == nil || capacity == 0 || capacity > 256 || config.Interval < 100*time.Millisecond ||
+	if ctx == nil || capacity == 0 || capacity > 256 ||
 		config.CollectionInterval < time.Second || config.HistoryRetention != workexecution.TaskHistoryRetention ||
 		config.DiagnosticRetention < time.Hour || config.DiagnosticRetention > config.HistoryRetention || config.CollectionBudget <= 0 {
 		return errs.New(errs.KindInternal, "execution lifetime configuration is invalid")
