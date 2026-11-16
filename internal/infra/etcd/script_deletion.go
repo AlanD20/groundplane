@@ -256,7 +256,7 @@ func (repository *ScriptRepository) PrepareScriptRemovalAuthority(
 	if err != nil {
 		return workqueue.Change{}, workexecution.Item{}, err
 	}
-	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
+	conditions, _, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Item{}, err
 	}

@@ -180,7 +180,7 @@ func (repository *SecretRepository) PrepareSecretRemovalAuthority(
 			"Secret removal references or ownership changed; refresh before removing",
 		)
 	})
-	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
+	conditions, _, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

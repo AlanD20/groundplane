@@ -86,6 +86,7 @@ func (service *serviceMutationService) prepareAcceptedRemoval(ctx context.Contex
 		ctx,
 		blueprints.EnvironmentBlueprintStageClaimRequest{
 			AcceptedTaskRevision: accepted.Revision,
+			TaskLocator:          &request.Locator,
 			EnvironmentID:        environment.Record.ID, CandidateRevisionID: task.ID, CandidateTaskID: task.ID,
 			Locator: request.Locator, Intent: request.Intent, BaselineHeadRevision: expectedHeadRevision,
 			SourceKind: blueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: generation,
@@ -100,12 +101,6 @@ func (service *serviceMutationService) prepareAcceptedRemoval(ctx context.Contex
 			errs.KindStateConflict,
 			"Service removal staging belongs to another accepted Task",
 		)
-	}
-	candidate, err = buildServiceRemovalProjection(
-		tenant.Record.ID, project.Record.ID, projection.Record, current.Record, claim.RevisionID, generation,
-	)
-	if err != nil {
-		return taskdependencies.Prepared{}, err
 	}
 	projectionEvidence, err := controllerrevision.PreflightProjection(candidate)
 	if err != nil {

@@ -23,16 +23,15 @@ func (publisher *RouteWorkPublisher) prepareDefinition(ctx context.Context, requ
 		return taskdependencies.Prepared{}, err
 	}
 	record := request.Route
-	task, item, err := taskplanning.NewRouteDefinitionWork(workexecution.Scope{
+	_, item, err := taskplanning.NewRouteDefinitionWork(workexecution.Scope{
 		TenantID: request.Project.Record.TenantID, ProjectID: request.Project.Record.ID,
 		EnvironmentID: request.Environment.Record.ID,
 	}, request.Claim, request.Action, record.Desired.ID, record.Desired.Host+record.Desired.Path)
 	if err != nil {
 		return taskdependencies.Prepared{}, err
 	}
-	retained := request.Accepted.Task
-	retained.Intent, retained.ExpectedItems, retained.UpdatedAt = *retained.AcceptedIntent, 1, request.At
-	task = retained
+	task := request.Accepted.Task
+	task.Intent, task.ExpectedItems, task.UpdatedAt = *task.AcceptedIntent, 1, request.At
 	item.CreatedAt, item.UpdatedAt = request.At, request.At
 	item.Deadline = acceptedaction.ExecutionDeadline(
 		task,

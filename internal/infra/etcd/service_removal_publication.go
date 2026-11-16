@@ -221,7 +221,7 @@ func (repository *ServiceRepository) PrepareServiceRemoval(
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*keyvalue.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "Service or its references changed before removal; retry the action")
 	})
-	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
+	conditions, _, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
 		return ServiceRemovalCapture{}, err
 	}
