@@ -106,7 +106,6 @@ export function ConfigurationFields({
             id={`${id}-content`}
             label="Contents"
             value={draft.value}
-            className="max-h-[60dvh] overflow-auto"
             onValueChange={(value) => update({ value })}
           />
           <label className="flex items-center gap-2 text-sm">

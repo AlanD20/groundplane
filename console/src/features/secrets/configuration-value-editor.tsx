@@ -192,7 +192,6 @@ export function ConfigurationValueEditor({
               value={draft}
               onValueChange={setDraft}
               disabled={saving || !!pending.current}
-              className="max-h-[60dvh] overflow-auto"
             />
           ) : null}
           {oversized && (
