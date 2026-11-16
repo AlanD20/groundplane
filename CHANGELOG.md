@@ -5,12 +5,14 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
-- Keep CoreDNS failure reports and recovery readable when cleanup or explicit
-  Retry renews its execution deadline, preserving the original captured input.
-
 ## 0.0.1 — 2026-11-16
 
 Initial single-host release.
+
+### CoreDNS recovery correction
+
+- Keep CoreDNS failure reports and recovery readable when cleanup or explicit
+  Retry renews its execution deadline, preserving the original captured input.
 
 ### Console, hosting and operator refinements
 
