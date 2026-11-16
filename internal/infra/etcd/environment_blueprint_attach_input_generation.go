@@ -65,6 +65,10 @@ func (repository *EnvironmentBlueprintRepository) prepareBlueprintAttachInputGen
 	if err != nil {
 		return prepared, err
 	}
+	taskGuard, err := blueprintStagingTaskCondition(ctx, repository.store, parent)
+	if err != nil {
+		return prepared, err
+	}
 	inputs = append([]BlueprintAttachInputGenerationPublication(nil), inputs...)
 	sort.Slice(inputs, func(left, right int) bool {
 		return inputs[left].Generation.AttachID < inputs[right].Generation.AttachID
@@ -154,7 +158,7 @@ func (repository *EnvironmentBlueprintRepository) prepareBlueprintAttachInputGen
 		}
 		workID := ids.DeriveAt(ids.KindWorkItem, parent.CreatedAt, parent.ID,
 			"blueprint-resource/"+string(ids.KindAttach)+"/"+generation.AttachID)
-		capture, err := inputOwner.PrepareInput(ctx, parent, workID, generation, nil)
+		capture, err := inputOwner.PrepareInput(ctx, parent, workID, generation, []etcdstore.Condition{taskGuard})
 		if err != nil {
 			return fail(err)
 		}
@@ -219,25 +223,30 @@ func (prepared *preparedBlueprintAttachInputGenerations) finish(
 				errs.New(errs.KindInternal, "Attach input publication has an invalid owning Task"),
 			)
 		}
-		for index, generation := range prepared.generations {
-			stored, err := attachinputs.Decode(read.Values[index+1].Value)
-			expected, expectedErr := attachinputs.WorkInput(generation)
-			actual, actualErr := attachinputs.WorkInput(stored)
-			if err != nil || expectedErr != nil || actualErr != nil || expected != actual ||
-				stored.ParentTaskID != parentTaskID || stored.EnvironmentID != storedTask.Scope.EnvironmentID {
+		if storedTask.AcceptedIntent == nil || storedTask.Intent != (workexecution.Input{}) {
+			for index, generation := range prepared.generations {
+				stored, err := attachinputs.Decode(read.Values[index+1].Value)
+				expected, expectedErr := attachinputs.WorkInput(generation)
+				actual, actualErr := attachinputs.WorkInput(stored)
+				if err != nil || expectedErr != nil || actualErr != nil || expected != actual ||
+					stored.ParentTaskID != parentTaskID || stored.EnvironmentID != storedTask.Scope.EnvironmentID {
+					attachinputs.Clear(&stored)
+					return result, errors.Join(publicationErr, errs.New(
+						errs.KindInternal, "Blueprint Attach input publication evidence is corrupt",
+					))
+				}
 				attachinputs.Clear(&stored)
-				return result, errors.Join(publicationErr, errs.New(
-					errs.KindInternal, "Blueprint Attach input publication evidence is corrupt",
-				))
 			}
-			attachinputs.Clear(&stored)
+			return result, publicationErr
 		}
-		return result, publicationErr
 	}
 	if read.Values[0] != nil {
-		return result, errors.Join(publicationErr, errs.New(
-			errs.KindInternal, "Blueprint Attach input publication is partially visible",
-		))
+		storedTask, err := workqueue.DecodeTask(read.Values[0].Value)
+		if err != nil || storedTask.AcceptedIntent == nil || storedTask.Intent != (workexecution.Input{}) {
+			return result, errors.Join(publicationErr, errs.New(
+				errs.KindInternal, "Blueprint Attach input publication is partially visible",
+			))
+		}
 	}
 	for index := len(prepared.preparations) - 1; index >= 0; index-- {
 		publicationErr = errors.Join(publicationErr, prepared.preparations[index].Abandon(cleanupCtx))

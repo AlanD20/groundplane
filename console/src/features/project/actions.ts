@@ -19,7 +19,7 @@ export type ProjectActions = {
   }) => Promise<Project>;
   editProject: (projectId: string, name: string) => Promise<Project>;
   renameProject: (projectId: string, slug: string) => Promise<Project>;
-  deleteProject: (projectId: string) => Promise<string>;
+  deleteProject: (projectId: string, after?: string[]) => Promise<string>;
 };
 export function createProjectActions(
   update: (
@@ -86,11 +86,11 @@ export function createProjectActions(
       });
       return renamed;
     },
-    deleteProject: async (projectId) => {
+    deleteProject: async (projectId, after = []) => {
       const accepted = await controllerRequest<HierarchyTaskAccepted>(
         `/projects/${encodeURIComponent(projectId)}`,
         202,
-        { method: "DELETE" },
+        { method: "DELETE", body: { after } },
       );
       if (!accepted.task_id)
         throw new Error("Controller response is missing task_id");

@@ -5,27 +5,25 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type restorePublication interface {
-	PublishWork(
+	PrepareWorkAuthority(
 		context.Context,
 		workexecution.Task,
 		workexecution.Item,
 		*agentpb.BackupWorkInput,
-		idempotency.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	) (workqueue.Change, error)
 	Clear()
 }
 

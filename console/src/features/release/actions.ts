@@ -16,11 +16,13 @@ export type ReleaseActions = {
     image: string,
     strategy: Service["strategy"],
     onFailure: Service["onFailure"],
+    after?: string[],
   ) => Promise<string>;
   commitRollback: (
     envId: string,
     service: string,
     tag: string,
+    after?: string[],
   ) => Promise<string>;
 };
 export function createReleaseActions(
@@ -28,7 +30,14 @@ export function createReleaseActions(
   assertEnvironmentMutable: (environmentId: string, operation: string) => void,
 ): ReleaseActions {
   return {
-    commitDeploy: async (envId, service, image, strategy, onFailure) => {
+    commitDeploy: async (
+      envId,
+      service,
+      image,
+      strategy,
+      onFailure,
+      after = [],
+    ) => {
       assertEnvironmentMutable(envId, "deployment");
       const target = findEnvironment(state, envId)?.services.find(
         (candidate) => candidate.name === service,
@@ -39,6 +48,7 @@ export function createReleaseActions(
           image,
           strategy,
           on_failure: onFailure,
+          ...(after.length ? { after } : {}),
         };
       const accepted = await controllerRequest<
         operations["service.deploy"]["responses"][202]["content"]["application/json"]
@@ -50,14 +60,14 @@ export function createReleaseActions(
         throw new Error("Controller response is missing deploy task_id");
       return accepted.task_id;
     },
-    commitRollback: async (envId, service, tag) => {
+    commitRollback: async (envId, service, tag, after = []) => {
       assertEnvironmentMutable(envId, "rollback");
       const target = findEnvironment(state, envId)?.services.find(
         (candidate) => candidate.name === service,
       );
       if (!target) throw new Error(`Service ${service} no longer exists`);
       const body: operations["service.rollback"]["requestBody"]["content"]["application/json"] =
-        { tag };
+        { tag, ...(after.length ? { after } : {}) };
       const accepted = await controllerRequest<
         operations["service.rollback"]["responses"][202]["content"]["application/json"]
       >(`/services/${encodeURIComponent(target.id)}/rollback`, 202, {

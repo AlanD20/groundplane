@@ -79,7 +79,7 @@ func (s *Server) prepareSoftware(
 	if s.softwarePreparer == nil {
 		return nil, errs.New(errs.KindStrategyNotImplemented, "software preparation is unavailable on this host")
 	}
-	accepted, err := s.softwarePreparer.Start(ctx, software.Request{
+	accepted, err := s.softwarePreparer.Start(ctx, software.Request{After: append([]string(nil), input.Body.After...),
 		Selection: preparation.Selection(
 			input.Body.Selection,
 		), SourceKind: preparation.SourceKind(input.Body.SourceKind),

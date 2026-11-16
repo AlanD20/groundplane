@@ -2,11 +2,9 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
-	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -27,8 +25,18 @@ type ScriptReader interface {
 type ScriptMutator interface {
 	CreateScript(context.Context, apiTypes.ScriptCreate, string) (idempotencyrecord.IdempotencyResponse, error)
 	EditScript(context.Context, string, apiTypes.ScriptEdit, string) (idempotencyrecord.IdempotencyResponse, error)
-	RemoveScript(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	RunScript(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveScript(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	RunScript(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type scriptListInput struct {
@@ -53,11 +61,13 @@ type scriptEditInput struct {
 }
 
 type scriptRemoveInput struct {
-	ID             string `path:"id" pattern:"^scr_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID             string                        `path:"id" pattern:"^scr_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type scriptRunInput struct {
+	Body           *apiTypes.TaskRunAfterRequest
 	ID             string `path:"id" pattern:"^scr_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
@@ -73,6 +83,7 @@ type scriptMutationOutput struct {
 }
 
 func (s *Server) registerScripts() {
+	s.setRoutePolicy("DELETE /api/v1/scripts/{id}", routePolicy{body: jsonBody})
 	scriptExecutionSchema(s.API.OpenAPI().Components.Schemas)
 	scriptSchema := s.API.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[apiTypes.Script](), true, "Script")
 	huma.Register(s.API, huma.Operation{
@@ -107,18 +118,18 @@ func (s *Server) registerScripts() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "script.remove", Method: http.MethodDelete, Path: "/scripts/{id}",
 		Summary: "Remove a script", Tags: []string{"Script"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectBodylessScriptBody, s.rejectBodylessScriptQuery},
+		Middlewares: huma.Middlewares{s.rejectBodylessScriptQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.removeScript)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "script.run", Method: http.MethodPost, Path: "/scripts/{id}/run",
 		Summary: "Run a script", Tags: []string{"Script"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectBodylessScriptBody, s.rejectBodylessScriptQuery},
+		Middlewares: huma.Middlewares{s.rejectBodylessScriptQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.runScript)
 	s.setRoutePolicy("POST /api/v1/scripts", routePolicy{body: jsonBody})
 	s.setRoutePolicy("PATCH /api/v1/scripts/{id}", routePolicy{body: jsonBody})
-	s.setRoutePolicy("POST /api/v1/scripts/{id}/run", routePolicy{})
+	s.setRoutePolicy("POST /api/v1/scripts/{id}/run", routePolicy{body: jsonBody})
 }
 
 func (s *Server) listScripts(ctx context.Context, request *scriptListInput) (*scriptPageOutput, error) {
@@ -180,7 +191,7 @@ func (s *Server) removeScript(ctx context.Context, request *scriptRemoveInput) (
 	if s.scriptMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Script mutator is not configured")
 	}
-	response, err := s.scriptMutations.RemoveScript(ctx, request.ID, request.IdempotencyKey)
+	response, err := s.scriptMutations.RemoveScript(ctx, request.ID, taskRunAfter(request.Body), request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -191,7 +202,11 @@ func (s *Server) runScript(ctx context.Context, request *scriptRunInput) (*scrip
 	if s.scriptMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Script mutator is not configured")
 	}
-	response, err := s.scriptMutations.RunScript(ctx, request.ID, request.IdempotencyKey)
+	input := apiTypes.TaskRunAfterRequest{}
+	if request.Body != nil {
+		input.After = append([]string(nil), request.Body.After...)
+	}
+	response, err := s.scriptMutations.RunScript(ctx, request.ID, input, request.IdempotencyKey)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Error("controller: run Script", slog.String("script_id", request.ID), slog.Any("error", err))
@@ -199,16 +214,6 @@ func (s *Server) runScript(ctx context.Context, request *scriptRunInput) (*scrip
 		return nil, normalizeProjectError(err)
 	}
 	return s.scriptMutationResponse(response), nil
-}
-
-func (s *Server) rejectBodylessScriptBody(ctx huma.Context, next func(huma.Context)) {
-	var probe [1]byte
-	count, err := ctx.BodyReader().Read(probe[:])
-	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		s.writeScriptProblem(ctx, "Script action body is not allowed")
-		return
-	}
-	next(ctx)
 }
 
 func (s *Server) rejectBodylessScriptQuery(ctx huma.Context, next func(huma.Context)) {

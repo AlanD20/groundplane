@@ -4,14 +4,11 @@ import (
 	"context"
 	"net/http"
 	"slices"
-	"time"
 
 	registeredcatalog "github.com/AlanD20/groundplane-component-sdk/catalog"
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
-	contract "github.com/AlanD20/groundplane/internal/common/edgeconnectioncheck"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/imagefence"
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/serviceobservation"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
@@ -46,14 +43,16 @@ type Service struct {
 	observations serviceobservation.Channel
 	action       *agentpb.ComponentApply
 	readyURL     string
+	submitter    *acceptedaction.Submitter
 }
 
 func NewService(routes *etcd.RouteRepository, checks *checkrecord.Repository, markers *etcd.IdempotencyRepository,
 	coordinator *requestidempotency.Coordinator, images workloadseal.Resolver, observations serviceobservation.Channel,
 	catalog observationCatalog, actionID componentsdk.ActionID,
+	submitter *acceptedaction.Submitter,
 ) (*Service, error) {
 	if routes == nil || checks == nil || markers == nil || coordinator == nil || images == nil || observations == nil ||
-		catalog == nil ||
+		catalog == nil || submitter == nil ||
 		actionID == "" {
 		return nil, errs.New(errs.KindInternal, "Tunnel check admission dependencies are required")
 	}
@@ -67,6 +66,7 @@ func NewService(routes *etcd.RouteRepository, checks *checkrecord.Repository, ma
 	}
 	definitionDigest, catalogDigest := definition.Digest(), catalog.Digest()
 	return &Service{
+		submitter:    submitter,
 		routes:       routes,
 		checks:       checks,
 		idempotency:  markers,
@@ -86,7 +86,7 @@ func (service *Service) CheckConnections(ctx context.Context, environmentID stri
 	key string,
 ) (idempotency.IdempotencyResponse, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindRoute, input.RouteID) != nil ||
-		ids.Validate(ids.KindComponent, input.ConnectorID) != nil || input.Revision <= 0 || len(input.Path) > 2048 {
+		ids.Validate(ids.KindComponent, input.ConnectorID) != nil || input.Revision < 0 || len(input.Path) > 2048 {
 		return idempotency.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Tunnel check requires an Environment, Route revision and connector",
@@ -101,7 +101,8 @@ func (service *Service) CheckConnections(ctx context.Context, environmentID stri
 			requestidempotency.Field{Name: "route_id", Value: requestidempotency.String(input.RouteID)},
 			requestidempotency.Field{Name: "revision", Value: requestidempotency.Integer(input.Revision)},
 			requestidempotency.Field{Name: "connector_id", Value: requestidempotency.String(input.ConnectorID)},
-			requestidempotency.Field{Name: "path", Value: requestidempotency.String(input.Path)}))}
+			requestidempotency.Field{Name: "path", Value: requestidempotency.String(input.Path)},
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)}))}
 	version, digest, err := requestidempotency.Canonicalize(ctx, intent)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
@@ -126,83 +127,16 @@ func (service *Service) CheckConnections(ctx context.Context, environmentID stri
 	if err != nil || existing {
 		return resolution.Response, err
 	}
-	return service.admit(ctx, environmentID, input, locator, evidence)
-}
-
-func (service *Service) admit(ctx context.Context, environmentID string, input apiTypes.EdgeCheckRequest,
-	locator idempotency.IdempotencyLocator, evidence requestidempotency.ProtectedEvidence,
-) (idempotency.IdempotencyResponse, error) {
-	ctx = imagefence.WithScope(ctx)
-	source, err := service.routes.LoadEdgeCheckSource(
+	return acceptCheck(
 		ctx,
+		service,
 		environmentID,
 		input.RouteID,
-		input.Revision,
-		input.ConnectorID,
-		input.Path,
+		"Public route",
+		"route-check",
+		input.After,
+		input,
+		locator,
+		evidence,
 	)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	return service.admitSource(ctx, environmentID, source, locator, evidence)
-}
-
-func (service *Service) admitSource(ctx context.Context, environmentID string, source etcd.EdgeCheckSource,
-	locator idempotency.IdempotencyLocator, evidence requestidempotency.ProtectedEvidence,
-) (idempotency.IdempotencyResponse, error) {
-	checkOwner := checkrecord.Owner{
-		TaskID:        ids.New(ids.KindTask),
-		WorkItemID:    ids.New(ids.KindWorkItem),
-		PlanID:        ids.New(ids.KindPlan),
-		OperationID:   ids.New(ids.KindOperation),
-		EnvironmentID: environmentID,
-	}
-	if err := source.BindObservationAction(service.action, service.readyURL, checkOwner.OperationID); err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	images, err := service.images.ResolveWorkloadImages(
-		ctx,
-		source.AgentID(),
-		[]*agentpb.WorkloadImageSelector{source.ImageSelector()},
-	)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	observed, err := service.observations.ObserveServices(ctx, source.AgentID(), source.ObservationTargets())
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	if err := source.BindHostSelection(images, observed); err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	configuration, err := source.Configuration()
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	environment, project := source.Scope()
-	now := time.Now().UTC()
-	check, err := checkrecord.NewRecord(checkOwner, configuration, now)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	hash, err := checkrecord.PlanHash(check)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	targetName := configuration.Request.Target.Hostname
-	if len(targetName) > 160 {
-		targetName = targetName[:157] + "..."
-	}
-	task := workexecution.Task{
-		ID: checkOwner.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionCheck,
-		Scope: workexecution.Scope{
-			TenantID:      project.Record.TenantID,
-			ProjectID:     project.Record.ID,
-			EnvironmentID: environment.Record.ID,
-		},
-		TargetID: configuration.Request.TargetID(), TargetName: targetName,
-		Intent: workexecution.Input{ID: checkOwner.PlanID, SHA256: hash}, ExpectedItems: 1,
-		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(contract.TaskTimeoutSeconds) * time.Second),
-	}
-	return service.publish(ctx, source, check, task, locator, evidence)
 }

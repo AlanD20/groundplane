@@ -181,6 +181,15 @@ func (publication Publication) AbandonUnpublished(ctx context.Context) error {
 	}
 	defer keyvalue.ClearValues(read.Values)
 	for index, value := range read.Values {
+		if index == 0 && value != nil {
+			task, err := workqueue.DecodeTask(value.Value)
+			if err != nil {
+				return err
+			}
+			if task.PendingPreparation() {
+				continue
+			}
+		}
 		if value != nil {
 			if value.Key != keys[index] || value.ModRevision <= 0 {
 				return invalid("backing creation publication absence has invalid evidence")

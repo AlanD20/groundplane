@@ -64,7 +64,10 @@ func (service *Service) List(
 		for index, snapshot := range page.Tasks {
 			scanned++
 			result.After = snapshot.Task.ID
-			summary := summarize(snapshot.Task)
+			summary, err := service.summarizeDependencies(ctx, snapshot.Task, result.Revision)
+			if err != nil {
+				return TaskPage{}, err
+			}
 			if (filter.Action == "" || filter.Action == summary.Action) &&
 				(filter.Status == "" || filter.Status == summary.Status) &&
 				(filter.ResourceKind == "" || filter.ResourceKind == summary.ResourceKind) {

@@ -2,8 +2,6 @@ package dnsresolver
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
@@ -12,7 +10,7 @@ import (
 	"time"
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -29,6 +27,7 @@ const (
 )
 
 type PlatformMutationService struct {
+	submitter   *acceptedaction.Submitter
 	components  *etcd.ComponentRepository
 	tasks       *etcd.TaskRepository
 	idempotency *etcd.IdempotencyRepository
@@ -41,11 +40,13 @@ type PlatformMutationService struct {
 func (service *PlatformMutationService) EnablePlatformComponent(
 	ctx context.Context,
 	componentID string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.mutatePlatformComponentLifecycle(
 		ctx,
 		componentID,
+		input.After,
 		idempotencyKey,
 		"enable",
 		platformComponentEnableRoute,
@@ -55,11 +56,13 @@ func (service *PlatformMutationService) EnablePlatformComponent(
 func (service *PlatformMutationService) DisablePlatformComponent(
 	ctx context.Context,
 	componentID string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.mutatePlatformComponentLifecycle(
 		ctx,
 		componentID,
+		input.After,
 		idempotencyKey,
 		"disable",
 		platformComponentDisableRoute,
@@ -69,38 +72,33 @@ func (service *PlatformMutationService) DisablePlatformComponent(
 func (service *PlatformMutationService) UpdatePlatformComponent(
 	ctx context.Context,
 	componentID string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.mutatePlatformComponentLifecycle(
 		ctx,
 		componentID,
+		input.After,
 		idempotencyKey,
 		"update",
 		platformComponentUpdateRoute,
 	)
 }
 
-func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
-	ctx context.Context,
-	componentID string,
-	idempotencyKey string,
-	action string,
-	route string,
+func (service *PlatformMutationService) mutatePlatformComponentLifecycle(ctx context.Context, componentID string,
+	after []string, idempotencyKey, action, route string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"CoreDNS lifecycle context is required",
-		)
-	}
-	intent, err := platformComponentLifecycleIntent(ctx, service.coordinator, componentID, action, route)
+	intent, err := platformComponentLifecycleIntent(ctx, service.coordinator, componentID, action, route, after)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(intent.durable.Ciphertext)
 	locator := idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
-		Method: http.MethodPost, Route: route, Key: idempotencyKey,
+		ScopeKind: idempotencyrecord.IdempotencyScopePlatform,
+		ScopeID:   "-",
+		Method:    http.MethodPost,
+		Route:     route,
+		Key:       idempotencyKey,
 	}
 	existing, found, err := service.coordinator.ResolveExisting(ctx, service.idempotency, locator, intent.protected)
 	if err != nil {
@@ -109,80 +107,14 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	if found {
 		return cloneIdempotencyResponse(existing.Response), nil
 	}
-	current, err := service.components.GetComponent(ctx, componentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if current.Record.Desired.Owner != core.ComponentOwnerPlatform ||
-		current.Record.Desired.Kind != core.ComponentKindCoreDNS {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"Platform lifecycle is supported only for CoreDNS",
-		)
-	}
-	desired, err := componentrecord.ProjectRecord(current.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	desired, ensureService, disableService, err := platformComponentLifecycleCandidate(desired, action)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if err := ValidateComponent(service.renderer, desired); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	nativeAction := workexecution.ActionUpdate
-	if action == "enable" {
-		nativeAction = workexecution.ActionStart
-	}
-	if disableService {
-		nativeAction = workexecution.ActionStop
-	}
-	prepared, err := service.prepareMutation(ctx, current, desired, nativeAction, ensureService)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	now, taskID := prepared.Input.CreatedAt, prepared.Input.TaskID
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
-	}
-	result, publishErr := service.tasks.PublishResolverWork(
-		ctx, prepared.Input, prepared.Capture,
-		idempotencyrecord.IdempotencyMarker{
-			Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-			Locator: locator, Intent: intent.durable, Response: response,
-			TaskID: taskID, CreatedAt: now, UpdatedAt: now,
-		},
+	return service.acceptPlatformMutation(
+		ctx,
+		componentID,
+		after,
+		platformMutationRequest{Action: platformMutationKind(action)},
+		locator,
+		intent,
 	)
-	var resolution requestidempotency.Resolution
-	if publishErr != nil {
-		if !unknownPlatformComponentMutationOutcome(publishErr) {
-			return idempotencyrecord.IdempotencyResponse{}, publishErr
-		}
-		resolution, err = service.coordinator.ResolveUnknown(
-			ctx, service.idempotency, locator, intent.protected, publishErr,
-		)
-	} else {
-		resolution, err = service.coordinator.ResolveKnown(ctx, intent.protected, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if resolution.Kind == requestidempotency.ResolutionReplay {
-		return cloneIdempotencyResponse(resolution.Response), nil
-	}
-	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Platform Component lifecycle resolution is invalid",
-		)
-	}
-	return cloneIdempotencyResponse(response), nil
 }
 
 func platformComponentLifecycleIntent(
@@ -191,6 +123,7 @@ func platformComponentLifecycleIntent(
 	componentID string,
 	action string,
 	route string,
+	after []string,
 ) (platformComponentProtectedIntent, error) {
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: route,
@@ -198,6 +131,7 @@ func platformComponentLifecycleIntent(
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: componentID}},
 		Query: requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(after)},
 			requestidempotency.Field{Name: "action", Value: requestidempotency.String(action)},
 		)),
 	})
@@ -223,13 +157,15 @@ func NewPlatformMutationService(
 	coordinator *requestidempotency.Coordinator,
 	renderer componentdns.Renderer,
 	planner *PlatformRenderPlanner,
+	submitter *acceptedaction.Submitter,
 ) (*PlatformMutationService, error) {
-	if components == nil || tasks == nil || idempotency == nil || coordinator == nil || renderer == nil ||
+	if submitter == nil || components == nil || tasks == nil || idempotency == nil || coordinator == nil ||
+		renderer == nil ||
 		planner == nil {
 		return nil, errs.New(errs.KindInternal, "Platform Component mutation dependencies are not configured")
 	}
 	return &PlatformMutationService{
-		components: components, tasks: tasks, idempotency: idempotency,
+		submitter: submitter, components: components, tasks: tasks, idempotency: idempotency,
 		coordinator: coordinator, renderer: renderer, planner: planner, now: time.Now,
 	}, nil
 }
@@ -250,7 +186,7 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	intent, err := platformComponentConfigIntent(ctx, service.coordinator, componentID, config)
+	intent, err := platformComponentConfigIntent(ctx, service.coordinator, componentID, config, request.After)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -273,79 +209,29 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 		return cloneIdempotencyResponse(existing.Response), nil
 	}
 
-	current, err := service.components.GetComponent(ctx, componentID)
+	current, err := service.platformComponent(ctx, componentID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if current.Record.Desired.Owner != core.ComponentOwnerPlatform ||
-		current.Record.Desired.Kind != core.ComponentKindCoreDNS {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"Platform Component config is supported only for CoreDNS",
-		)
-	}
-	desired, err := componentrecord.ProjectRecord(current.Record)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	desired = platformComponentConfigCandidate(desired, config)
-	if err := ValidateComponent(service.renderer, desired); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if !desired.Enabled {
+	if !current.Record.Desired.Enabled && len(request.After) == 0 {
+		desired, err := componentrecord.ProjectRecord(current.Record)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		desired = platformComponentConfigCandidate(desired, config)
+		if err := ValidateComponent(service.renderer, desired); err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
 		return service.saveDisabledConfig(ctx, current, desired, locator, intent)
 	}
-
-	ensureService := len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy
-	prepared, err := service.prepareMutation(ctx, current, desired, workexecution.ActionUpdate, ensureService)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	publicConfig := publicCoreDNSConfig(config)
-	now, taskID := prepared.Input.CreatedAt, prepared.Input.TaskID
-	responseBody, err := json.Marshal(apiTypes.ComponentConfigMutationResult{
-		Resource: publicConfig, ReconcileTaskID: &taskID,
-	})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusOK, ContentKind: "application/json",
-		Body: append([]byte(nil), responseBody...),
-	}
-	result, publishErr := service.tasks.PublishResolverWork(
-		ctx, prepared.Input, prepared.Capture,
-		idempotencyrecord.IdempotencyMarker{
-			Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-			Locator: locator, Intent: intent.durable, Response: response,
-			TaskID: taskID, CreatedAt: now, UpdatedAt: now,
-		},
+	return service.acceptPlatformMutation(
+		ctx,
+		componentID,
+		request.After,
+		platformMutationRequest{Action: platformConfigure, Config: &config},
+		locator,
+		intent,
 	)
-	var resolution requestidempotency.Resolution
-	if publishErr != nil {
-		if !unknownPlatformComponentMutationOutcome(publishErr) {
-			return idempotencyrecord.IdempotencyResponse{}, publishErr
-		}
-		resolution, err = service.coordinator.ResolveUnknown(
-			ctx, service.idempotency, locator, intent.protected, publishErr,
-		)
-	} else {
-		resolution, err = service.coordinator.ResolveKnown(ctx, intent.protected, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if resolution.Kind == requestidempotency.ResolutionReplay {
-		return cloneIdempotencyResponse(resolution.Response), nil
-	}
-	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Platform Component config resolution is invalid",
-		)
-	}
-	return cloneIdempotencyResponse(response), nil
 }
 
 type platformComponentProtectedIntent struct {
@@ -358,6 +244,7 @@ func platformComponentConfigIntent(
 	coordinator *requestidempotency.Coordinator,
 	componentID string,
 	config core.CoreDNSComponentConfig,
+	after []string,
 ) (platformComponentProtectedIntent, error) {
 	if coordinator == nil {
 		return platformComponentProtectedIntent{}, errs.New(
@@ -378,6 +265,7 @@ func platformComponentConfigIntent(
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: componentID}},
 		Query: requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(after)},
 			requestidempotency.Field{Name: "config", Value: requestidempotency.Object(
 				requestidempotency.Field{Name: "records", Value: dnsRecordsIntent(config.Records)},
 				requestidempotency.Field{
@@ -504,14 +392,6 @@ func publicCoreDNSConfig(config core.CoreDNSComponentConfig) apiTypes.ComponentC
 			Forwarders: forwarders, TailnetDelegation: tailnetDelegation,
 		},
 	}
-}
-
-func unknownPlatformComponentMutationOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
 }
 
 func cloneIdempotencyResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {

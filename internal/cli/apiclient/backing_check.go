@@ -14,36 +14,21 @@ import (
 func (c *Client) CheckBackingAccess(
 	ctx context.Context,
 	environmentID, attachID, grantID string,
+	revision int64,
+	after []string,
 ) (apiTypes.TaskAccepted, error) {
-	var revision int64
-	cursor := ""
-	for {
-		page, err := c.ListAttaches(ctx, environmentID, 200, cursor)
-		if err != nil {
-			return apiTypes.TaskAccepted{}, err
-		}
-		for _, attach := range page.Items {
-			if attach.ID == attachID {
-				revision = attach.Revision
-				break
-			}
-		}
-		if revision > 0 || page.NextCursor == "" {
-			break
-		}
-		cursor = page.NextCursor
-	}
-	if revision <= 0 {
-		return apiTypes.TaskAccepted{}, errs.New(
-			errs.KindAttachNotFound,
-			"Attach snapshot was not found in this Environment",
-		)
+	if revision < 0 {
+		return apiTypes.TaskAccepted{}, errs.New(errs.KindValidationFailed, "revision cannot be negative")
 	}
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	body := generated.AttachCheckJSONRequestBody{AttachId: attachID, Revision: revision}
+	body := generated.AttachCheckJSONRequestBody{
+		AttachId: attachID,
+		Revision: optionalTaskRevision(revision),
+		After:    optionalServiceStrings(after),
+	}
 	if grantID != "" {
 		body.GrantId = &grantID
 	}

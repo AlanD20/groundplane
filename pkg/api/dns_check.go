@@ -7,7 +7,8 @@ type DNSCheckQuery struct {
 }
 
 type DNSCheckRequest struct {
-	Revision int64           `json:"revision" required:"true" minimum:"1"`
+	After    []string        `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	Revision int64           `json:"revision,omitempty" minimum:"0"`
 	Queries  []DNSCheckQuery `json:"queries,omitempty" maxItems:"10"`
 }
 

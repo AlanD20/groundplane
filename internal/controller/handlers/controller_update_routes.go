@@ -13,7 +13,7 @@ import (
 )
 
 type ControllerUpdater interface {
-	UpdateController(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	UpdateController(context.Context, string, []string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type controllerUpdateInput struct {
@@ -48,7 +48,12 @@ func (s *Server) updateController(
 	if s.controllerUpdates == nil {
 		return nil, errs.New(errs.KindInternal, "Controller update service is not configured")
 	}
-	response, err := s.controllerUpdates.UpdateController(ctx, request.Body.Release, request.IdempotencyKey)
+	response, err := s.controllerUpdates.UpdateController(
+		ctx,
+		request.Body.Release,
+		request.Body.After,
+		request.IdempotencyKey,
+	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/AlanD20/groundplane/internal/cli/apiclient"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/spf13/cobra"
 )
@@ -68,21 +69,26 @@ func newComponentCmd() *cobra.Command {
 		},
 	)
 	cmd.AddCommand(newComponentEnableCmd())
-	cmd.AddCommand(
-		&cobra.Command{
-			Use:   "disable <id>",
-			Short: "Disable a component",
-			Args:  cobra.ExactArgs(1),
-			RunE: func(cmd *cobra.Command, args []string) error {
-				app := fromContext(cmd)
-				accepted, err := app.Client.DisableComponent(cmd.Context(), target(app, args[0]))
-				if err != nil {
-					return err
-				}
-				return renderDispatchedTask(cmd, accepted)
-			},
+	var disableAfter []string
+	disable := &cobra.Command{
+		Use:   "disable <id>",
+		Short: "Disable a component",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(disableAfter)
+			if err != nil {
+				return err
+			}
+			app := fromContext(cmd)
+			accepted, err := app.Client.DisableComponent(cmd.Context(), target(app, args[0]), after)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
-	)
+	}
+	addTaskAfterFlag(disable, &disableAfter)
+	cmd.AddCommand(disable)
 	config := &cobra.Command{Use: "config", Short: "A component's kind-specific config"}
 	config.AddCommand(
 		&cobra.Command{
@@ -110,11 +116,41 @@ func newComponentCmd() *cobra.Command {
 	var alias string
 	var templateFile string
 	var zones []string
+	var authoredConfigFile string
+	var configAfter []string
 	set := &cobra.Command{
 		Use:   "set <id>",
 		Short: "Set a component's config",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(configAfter)
+			if err != nil {
+				return err
+			}
+			if authoredConfigFile != "" {
+				if err := rejectComponentConfigFlagMix(cmd); err != nil {
+					return err
+				}
+				config, err := readAuthoredComponentConfig(cmd, authoredConfigFile)
+				if err != nil {
+					return err
+				}
+				result, err := fromContext(
+					cmd,
+				).Client.SetComponentConfig(
+					cmd.Context(),
+					target(fromContext(cmd), args[0]),
+					config,
+					after,
+				)
+				if err != nil {
+					return err
+				}
+				return renderComponentConfigSave(cmd, result)
+			}
+			if len(after) > 0 {
+				return fmt.Errorf("--after requires --config-file containing the complete authored Component config")
+			}
 			body := apiTypes.ComponentConfigMutationInput{}
 			flagConfig := cmd.Flags().Changed("upstream-auto") || cmd.Flags().Changed("upstream") ||
 				cmd.Flags().Changed("forward") || cmd.Flags().Changed("tailnet-delegation") ||
@@ -284,16 +320,16 @@ func newComponentCmd() *cobra.Command {
 				body.CoreDNS.TailnetDelegation = &tailnetDelegation
 			}
 			result, err := app.Client.SetComponentConfig(
-				cmd.Context(), target(app, args[0]), body,
+				cmd.Context(), target(app, args[0]), body, after,
 			)
 			if err != nil {
 				return err
 			}
-			fields := map[string]any{"config": result.Resource, "reconcile_task_id": result.ReconcileTaskID}
-			headers, rows := tabulateVia(app, []map[string]any{fields})
-			return app.Out.Render(headers, rows, result)
+			return renderComponentConfigSave(cmd, result)
 		},
 	}
+	set.Flags().
+		StringVar(&authoredConfigFile, "config-file", "", "complete authored Component config JSON file; - reads stdin")
 	set.Flags().
 		BoolVar(&upstreamAuto, "upstream-auto", false, "derive upstream resolvers from the authoritative host baseline")
 	set.Flags().StringArrayVar(&upstreamResolvers, "upstream", nil, "repeatable upstream resolver endpoint")
@@ -306,23 +342,29 @@ func newComponentCmd() *cobra.Command {
 		StringVar(&templateFile, "template-file", "", "read the required CoreDNS Corefile template from PATH, or -")
 	set.Flags().StringVar(&alias, "alias", "", "optional Caddy primary-Zone alias; empty clears it")
 	set.Flags().StringArrayVar(&zones, "zone", nil, "repeatable Zone slug; with global --id, repeatable stable Zone id")
+	addTaskAfterFlag(set, &configAfter)
 	config.AddCommand(set)
 	cmd.AddCommand(config)
-	cmd.AddCommand(
-		&cobra.Command{
-			Use:   "update <id>",
-			Short: "Update a component",
-			Args:  cobra.ExactArgs(1),
-			RunE: func(cmd *cobra.Command, args []string) error {
-				app := fromContext(cmd)
-				accepted, err := app.Client.UpdateComponent(cmd.Context(), target(app, args[0]))
-				if err != nil {
-					return err
-				}
-				return renderDispatchedTask(cmd, accepted)
-			},
+	var updateAfter []string
+	update := &cobra.Command{
+		Use:   "update <id>",
+		Short: "Update a component",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(updateAfter)
+			if err != nil {
+				return err
+			}
+			app := fromContext(cmd)
+			accepted, err := app.Client.UpdateComponent(cmd.Context(), target(app, args[0]), after)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
-	)
+	}
+	addTaskAfterFlag(update, &updateAfter)
+	cmd.AddCommand(update)
 	return cmd
 }
 
@@ -370,4 +412,13 @@ func parseCoreDNSForwardFlags(values []string) ([]apiTypes.ComponentDNSForwarder
 		})
 	}
 	return result, nil
+}
+
+func renderComponentConfigSave(cmd *cobra.Command, result apiclient.ComponentConfigSaveResult) error {
+	if result.Task != nil {
+		return renderTaskAccepted(cmd, *result.Task)
+	}
+	fields := map[string]any{"config": result.Saved.Resource}
+	headers, rows := tabulateVia(fromContext(cmd), []map[string]any{fields})
+	return fromContext(cmd).Out.Render(headers, rows, result.Saved)
 }

@@ -6,7 +6,8 @@ import (
 )
 
 type ControllerUpdateRequest struct {
-	Release string `json:"release" minLength:"71" maxLength:"71" pattern:"^sha256:[0-9a-f]{64}$"`
+	After   []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	Release string   `json:"release" minLength:"71" maxLength:"71" pattern:"^sha256:[0-9a-f]{64}$"`
 }
 
 type ControllerRelease struct {

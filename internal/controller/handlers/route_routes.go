@@ -2,8 +2,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -23,7 +21,7 @@ type RouteReader interface {
 type RouteMutator interface {
 	CreateRoute(context.Context, corenetwork.CreateRouteRequest, string) (corenetwork.MutationResponse, error)
 	EditRoute(context.Context, string, corenetwork.EditRouteRequest, string) (corenetwork.MutationResponse, error)
-	RemoveRoute(context.Context, string, string) (corenetwork.MutationResponse, error)
+	RemoveRoute(context.Context, string, apiTypes.TaskRunAfterRequest, string) (corenetwork.MutationResponse, error)
 }
 
 type routeListInput struct {
@@ -48,8 +46,9 @@ type routeEditInput struct {
 }
 
 type routeRemoveInput struct {
-	ID             string `path:"id" pattern:"^rte_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID             string                        `path:"id" pattern:"^rte_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type routeOutput struct {
@@ -67,6 +66,7 @@ type routeMutationOutput struct {
 }
 
 func (s *Server) registerRoutes() {
+	s.setRoutePolicy("DELETE /api/v1/routes/{id}", routePolicy{body: jsonBody})
 	huma.Register(s.API, huma.Operation{
 		OperationID: "route.list", Method: http.MethodGet, Path: "/routes",
 		Summary: "List routes", Tags: []string{"Route"},
@@ -83,7 +83,7 @@ func (s *Server) registerRoutes() {
 				Description: http.StatusText(http.StatusAccepted),
 				Content: map[string]*huma.MediaType{
 					"application/json": {Schema: s.API.OpenAPI().Components.Schemas.Schema(
-						reflect.TypeFor[apiTypes.RouteTaskAccepted](), true, "RouteTaskAccepted",
+						reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
 					)},
 				},
 			},
@@ -97,7 +97,7 @@ func (s *Server) registerRoutes() {
 				Description: http.StatusText(http.StatusAccepted),
 				Content: map[string]*huma.MediaType{
 					"application/json": {Schema: s.API.OpenAPI().Components.Schemas.Schema(
-						reflect.TypeFor[apiTypes.RouteTaskAccepted](), true, "RouteTaskAccepted",
+						reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
 					)},
 				},
 			},
@@ -109,7 +109,7 @@ func (s *Server) registerRoutes() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "route.remove", Method: http.MethodDelete, Path: "/routes/{id}",
 		Summary: "Remove a route", Tags: []string{"Route"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectRouteDeleteBody, s.rejectRouteDeleteQuery},
+		Middlewares: huma.Middlewares{s.rejectRouteDeleteQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.removeRoute)
 	s.setRoutePolicy("POST /api/v1/routes", routePolicy{body: jsonBody})
@@ -161,14 +161,18 @@ func (s *Server) createRoute(
 	if s.routeMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutator is not configured")
 	}
-	response, err := s.routeMutations.CreateRoute(ctx, corenetwork.CreateRouteRequest{
-		EnvironmentID:   request.Body.EnvironmentID,
-		Host:            request.Body.Host,
-		Path:            request.Body.Path,
-		Exposure:        corenetwork.RouteExposure(request.Body.Exposure),
-		TargetServiceID: request.Body.TargetServiceID,
-		TargetPort:      request.Body.TargetPort,
-	}, request.IdempotencyKey)
+	response, err := s.routeMutations.CreateRoute(
+		ctx,
+		corenetwork.CreateRouteRequest{After: append([]string(nil), request.Body.After...),
+			EnvironmentID:   request.Body.EnvironmentID,
+			Host:            request.Body.Host,
+			Path:            request.Body.Path,
+			Exposure:        corenetwork.RouteExposure(request.Body.Exposure),
+			TargetServiceID: request.Body.TargetServiceID,
+			TargetPort:      request.Body.TargetPort,
+		},
+		request.IdempotencyKey,
+	)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Error(
@@ -192,7 +196,12 @@ func (s *Server) editRoute(
 		return nil, errs.New(errs.KindInternal, "Route mutator is not configured")
 	}
 	response, err := s.routeMutations.EditRoute(
-		ctx, request.ID, corenetwork.EditRouteRequest{Exposure: corenetwork.RouteExposure(request.Body.Exposure)},
+		ctx,
+		request.ID,
+		corenetwork.EditRouteRequest{
+			After:    append([]string(nil), request.Body.After...),
+			Exposure: corenetwork.RouteExposure(request.Body.Exposure),
+		},
 		request.IdempotencyKey,
 	)
 	if err != nil {
@@ -208,21 +217,11 @@ func (s *Server) removeRoute(
 	if s.routeMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutator is not configured")
 	}
-	response, err := s.routeMutations.RemoveRoute(ctx, request.ID, request.IdempotencyKey)
+	response, err := s.routeMutations.RemoveRoute(ctx, request.ID, taskRunAfter(request.Body), request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
 	return s.routeMutationResponse(response), nil
-}
-
-func (s *Server) rejectRouteDeleteBody(ctx huma.Context, next func(huma.Context)) {
-	var probe [1]byte
-	count, err := ctx.BodyReader().Read(probe[:])
-	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		s.writeRouteProblem(ctx, "Route deletion body is not allowed")
-		return
-	}
-	next(ctx)
 }
 
 func (s *Server) rejectRouteDeleteQuery(ctx huma.Context, next func(huma.Context)) {

@@ -25,6 +25,8 @@ import {
 import { controllerRequest } from "@/lib/controller-json-request";
 import type { SoftwareReleaseCatalog, SoftwareRequest } from "./software-api";
 import { useSoftwarePreparations } from "./use-software-preparations";
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
+import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 
 export function SoftwarePreparationPanel({ active }: { active: boolean }) {
   const work = useSoftwarePreparations(active);
@@ -37,6 +39,8 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
   const [releaseError, setReleaseError] = useState<string | null>(null);
   const [loadingReleases, setLoadingReleases] = useState(false);
   const [review, setReview] = useState<string | null>(null);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const table = useTableView(
     work.items,
     {
@@ -80,11 +84,12 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
           className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!busy && ref.trim())
+            if (!busy && !afterLoading && ref.trim())
               void work.prepare({
                 selection,
                 source_kind: source,
                 ref: ref.trim(),
+                after,
               });
           }}
         >
@@ -157,6 +162,13 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
               {releaseError}
             </p>
           )}
+          <fieldset disabled={busy}>
+            <TaskRunAfterSelector
+              value={after}
+              onChange={setAfter}
+              onBusyChange={setAfterLoading}
+            />
+          </fieldset>
           <FormActions
             onDiscard={() => setRef("")}
             pinned={!!ref.trim()}
@@ -167,6 +179,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
               type="submit"
               disabled={
                 busy ||
+                afterLoading ||
                 !ref.trim() ||
                 (source === "release" &&
                   (loadingReleases ||
@@ -199,6 +212,31 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
           </p>
         )}
       </ResourcePanel>
+      {work.acceptedTaskId && (
+        <ResourcePanel
+          title="Accepted software Task"
+          actions={<TaskLink taskId={work.acceptedTaskId} />}
+        >
+          <p className="text-sm">
+            {work.acceptedStatus
+              ? work.acceptedStatus.replaceAll("_", " ")
+              : "Accepted"}
+          </p>
+          {work.acceptedKind === "prepare" &&
+            !["failed", "cancelled", "superseded"].includes(
+              work.acceptedStatus ?? "",
+            ) && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => setReview(work.acceptedTaskId)}
+              >
+                Review & apply
+              </Button>
+            )}
+        </ResourcePanel>
+      )}
       {work.activation && (
         <ResourcePanel
           title="Latest activation"
@@ -227,6 +265,46 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
           )}
         </ResourcePanel>
       )}
+      <TaskRunnerDialog
+        open={review !== null}
+        onOpenChange={(open) => {
+          if (!open) setReview(null);
+        }}
+        title="Apply prepared software"
+        description="The Console may briefly disconnect during activation."
+        type="update"
+        target={review ?? ""}
+        workspace="Platform"
+        runAfter
+        startLabel="Apply"
+        startDisabled={(after) =>
+          busy ||
+          (!work.items.some(
+            (item) => item.task_id === review && item.phase === "verified",
+          ) &&
+            !after.includes(review ?? ""))
+        }
+        review={
+          review ? (
+            <div className="space-y-2">
+              <TaskLink taskId={review}>Selected preparation</TaskLink>
+              {!work.items.some(
+                (item) => item.task_id === review && item.phase === "verified",
+              ) && (
+                <p className="text-xs text-muted-foreground">
+                  Select this preparation Task below so activation waits for its
+                  verified result.
+                </p>
+              )}
+            </div>
+          ) : undefined
+        }
+        onDispatch={(after) =>
+          review
+            ? work.apply(review, after)
+            : Promise.reject(new Error("No preparation selected"))
+        }
+      />
       <ResourcePanel
         title="Preparations"
         actions={
@@ -326,43 +404,14 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                       <TableCell>
                         <div className="flex flex-col items-start gap-2">
                           <TaskLink taskId={item.task_id} />
-                          {item.phase === "verified" &&
-                            (review === item.task_id ? (
-                              <div className="flex flex-col gap-2 rounded-lg border p-3">
-                                <p className="max-w-xs text-xs">
-                                  Apply this version? The Console may briefly
-                                  disconnect.
-                                </p>
-                                <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    disabled={busy}
-                                    onClick={() => {
-                                      void work.apply(item.task_id);
-                                      setReview(null);
-                                    }}
-                                  >
-                                    Apply
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setReview(null)}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={busy}
-                                onClick={() => setReview(item.task_id)}
-                              >
-                                Review & apply
-                              </Button>
-                            ))}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy || item.phase === "failed"}
+                            onClick={() => setReview(item.task_id)}
+                          >
+                            Review & apply
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

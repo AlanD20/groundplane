@@ -80,6 +80,12 @@ func TestRecoveryPointRemovalPublishesAtomicallyAgainstConcurrentOperation(t *te
 			}
 			defer prepared.Publication.Clear()
 			task, item, input, marker := nativeBackupPrunePublicationFixture(t, prepared)
+			task.Actor = workexecution.OperatorActor
+			accepted, err := acceptNativeOwnerFixture(t.Context(), store, task, marker)
+			if err != nil {
+				t.Fatal(err)
+			}
+			task.AcceptedIntent = accepted.Task.AcceptedIntent
 			if racingOperation {
 				lock := backupruntime.BackupOperationLockRecord{
 					EnvironmentID: run.EnvironmentID, OperationID: ids.New(ids.KindOperation),
@@ -98,13 +104,21 @@ func TestRecoveryPointRemovalPublishesAtomicallyAgainstConcurrentOperation(t *te
 					t.Fatalf("seed lock: %v/%v", result, err)
 				}
 			}
-			result, err := prepared.Publication.PublishWork(context.Background(), task, item, input, marker)
+			authority, err := prepared.Publication.PrepareWorkAuthority(t.Context(), task, item, input)
 			if err != nil {
 				t.Fatal(err)
 			}
-			outcome, _, conflict, err := result.Classify()
+			defer etcdstore.ClearMutationValues(authority.Mutations)
+			result, err := promoteNativeOwnerFixture(t.Context(), store, accepted, task, item, authority)
+			var outcome IdempotencyKnownOutcome
+			var conflict error
 			if err != nil {
-				t.Fatal(err)
+				conflict = err
+			} else {
+				outcome, _, conflict, err = result.Classify()
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
 			if racingOperation {
 				if conflict == nil || outcome == IdempotencyKnownApplied {
@@ -113,7 +127,7 @@ func TestRecoveryPointRemovalPublishesAtomicallyAgainstConcurrentOperation(t *te
 				if _, err := repository.GetBackupRecoveryPoint(context.Background(), point.ID); err != nil {
 					t.Fatal(err)
 				}
-				for _, key := range []string{backupruntime.BackupRecoveryPointPruneKey(point.ID), workqueue.TaskKey(task.ID), workqueue.ItemKey(item.ID), backupwork.InputKey(item.ID)} {
+				for _, key := range []string{backupruntime.BackupRecoveryPointPruneKey(point.ID), workqueue.ItemKey(item.ID), backupwork.InputKey(item.ID)} {
 					if mustOptionalKey(t, store, key) != nil {
 						t.Fatalf("partial deletion at %s", key)
 					}

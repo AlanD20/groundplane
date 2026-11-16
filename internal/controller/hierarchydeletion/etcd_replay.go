@@ -3,11 +3,10 @@ package hierarchydeletion
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -27,7 +26,7 @@ func (repository *EtcdRepository) ResolveDeletionReplay(
 		return BeginResult{}, true, err
 	}
 	protected, candidate, err := repository.protectBegin(ctx, BeginDeletion{
-		TargetKind: request.TargetKind, TargetID: request.TargetID, IdempotencyKey: request.IdempotencyKey,
+		TargetKind: request.TargetKind, TargetID: request.TargetID, IdempotencyKey: request.IdempotencyKey, After: request.After,
 		IdempotencyIntent: idempotencyIntentWithScope(request.TargetKind, request.TargetID, scopeKind, scopeID),
 	})
 	if err != nil {
@@ -38,133 +37,6 @@ func (repository *EtcdRepository) ResolveDeletionReplay(
 	defer clear(candidate.Response.Body)
 	replayed, err := repository.replayAtRevision(ctx, request, protected, locator, revision)
 	return replayed, true, err
-}
-
-func (repository *EtcdRepository) resolveReplay(
-	ctx context.Context,
-	request DeleteRequest,
-	protected requestidempotency.ProtectedEvidence,
-	expected *idempotencyrecord.IdempotencyLocator,
-	mustFind bool,
-) (BeginResult, bool, error) {
-	intent := idempotencyIntent(request.TargetKind, request.TargetID)
-	locator, revision, found, err := repository.lookupReplay(ctx, intent, request.TargetID, request.IdempotencyKey)
-	if err != nil {
-		return BeginResult{}, found, err
-	}
-	if !found {
-		if mustFind {
-			return BeginResult{}, true, errs.New(errs.KindInternal, "hierarchy deletion replay index is missing")
-		}
-		return BeginResult{}, false, nil
-	}
-	if expected != nil && *expected != locator {
-		return BeginResult{}, true, errs.New(errs.KindInternal, "hierarchy deletion replay locator is inconsistent")
-	}
-	replayed, err := repository.replayAtRevision(ctx, request, protected, locator, revision)
-	return replayed, true, err
-}
-
-func (repository *EtcdRepository) replayAtRevision(
-	ctx context.Context,
-	request DeleteRequest,
-	protected requestidempotency.ProtectedEvidence,
-	locator idempotencyrecord.IdempotencyLocator,
-	revision int64,
-) (BeginResult, error) {
-	evidence, err := repository.idempotency.ReadAtRevision(ctx, locator, revision)
-	if err != nil {
-		return BeginResult{}, err
-	}
-	if evidence == nil {
-		return BeginResult{}, errs.New(
-			errs.KindInternal,
-			"hierarchy deletion replay marker disappeared from its fixed snapshot",
-		)
-	}
-	marker, err := evidence.Marker()
-	if err != nil {
-		return BeginResult{}, err
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	if marker.Locator != locator || marker.TaskID == "" {
-		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay marker is inconsistent")
-	}
-	resolution, err := repository.coordinator.ResolveMarker(ctx, protected, marker)
-	if err != nil {
-		return BeginResult{}, err
-	}
-	return repository.replayedBeginAtRevision(ctx, resolution, revision, marker.TaskID, request, locator)
-}
-
-func (repository *EtcdRepository) resolveReplayAfterMiss(
-	ctx context.Context,
-	request DeleteRequest,
-	protected requestidempotency.ProtectedEvidence,
-	expected idempotencyrecord.IdempotencyLocator,
-) (BeginResult, bool, error) {
-	evidence, revision, err := repository.idempotency.ReadWithRevision(ctx, expected)
-	if err != nil {
-		return BeginResult{}, false, err
-	}
-	if evidence == nil {
-		return BeginResult{}, false, nil
-	}
-	marker, err := evidence.Marker()
-	if err != nil {
-		return BeginResult{}, true, err
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	if marker.Locator != expected || marker.TaskID == "" {
-		return BeginResult{}, true, errs.New(errs.KindInternal, "hierarchy deletion replay marker is inconsistent")
-	}
-	replayTarget, err := replayTargetForIntent(
-		idempotencyIntent(request.TargetKind, request.TargetID),
-		request.TargetID,
-	)
-	if err != nil {
-		return BeginResult{}, true, err
-	}
-	locator, found, err := repository.idempotency.ResolveReplayLocatorAtSnapshot(
-		ctx,
-		replayTarget,
-		idempotencyIntent(request.TargetKind, request.TargetID).Method,
-		idempotencyIntent(request.TargetKind, request.TargetID).RouteTemplate,
-		request.IdempotencyKey,
-		revision,
-	)
-	if err != nil {
-		return BeginResult{}, true, err
-	}
-	if found {
-		if locator != expected {
-			return BeginResult{}, true, errs.New(
-				errs.KindInternal,
-				"hierarchy deletion replay locator is inconsistent",
-			)
-		}
-		replayed, replayErr := repository.replayAtRevision(ctx, request, protected, locator, revision)
-		return replayed, true, replayErr
-	}
-	resolution, err := repository.coordinator.ResolveMarker(ctx, protected, marker)
-	if err != nil {
-		if kind, ok := errs.KindOf(err); ok && kind == errs.KindIdempotencyInProgress {
-			return BeginResult{}, true, errs.New(
-				errs.KindInternal,
-				"hierarchy deletion idempotency marker has no replay index",
-			)
-		}
-		return BeginResult{}, true, err
-	}
-	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return BeginResult{}, true, errs.New(errs.KindInternal, "hierarchy deletion replay resolution is invalid")
-	}
-	return BeginResult{}, true, errs.New(
-		errs.KindInternal,
-		"hierarchy deletion idempotency marker has no replay index",
-	)
 }
 
 func (repository *EtcdRepository) lookupReplay(
@@ -180,11 +52,6 @@ func (repository *EtcdRepository) lookupReplay(
 	return repository.idempotency.ResolveReplayLocatorAtRevision(
 		ctx, replayTarget, intent.Method, intent.RouteTemplate, key,
 	)
-}
-
-func isUnknownBeginError(err error) bool {
-	kind, isKind := errs.KindOf(err)
-	return errors.Is(err, context.DeadlineExceeded) || (isKind && kind == errs.KindStorageUnavailable)
 }
 
 func (repository *EtcdRepository) protectBegin(
@@ -206,7 +73,7 @@ func (repository *EtcdRepository) protectBegin(
 		Method: begin.IdempotencyIntent.Method, Route: begin.IdempotencyIntent.RouteTemplate,
 		Scope: requestidempotency.Scope{Kind: scopeKind, ID: canonicalScopeID},
 		Path:  make([]requestidempotency.PathBinding, len(begin.IdempotencyIntent.PathBindings)),
-		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
+		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(begin.After)})),
 	}
 	for index, binding := range begin.IdempotencyIntent.PathBindings {
 		intent.Path[index] = requestidempotency.PathBinding{Name: binding.Name, Value: binding.Value}
@@ -255,23 +122,6 @@ func (repository *EtcdRepository) protectBegin(
 	return protected, marker, nil
 }
 
-func replayRequestFromBegin(begin BeginDeletion) (DeleteRequest, error) {
-	var target TargetKind
-	switch begin.IdempotencyIntent.RouteTemplate {
-	case TenantDeleteRoute:
-		target = TargetTenant
-	case ProjectDeleteRoute:
-		target = TargetProject
-	case EnvironmentDeleteRoute:
-		target = TargetEnvironment
-	case BackingDeleteRoute:
-		target = TargetBackingService
-	default:
-		return DeleteRequest{}, errs.New(errs.KindValidationFailed, "hierarchy deletion replay route is invalid")
-	}
-	return DeleteRequest{TargetKind: target, TargetID: begin.TargetID, IdempotencyKey: begin.IdempotencyKey}, nil
-}
-
 func (repository *EtcdRepository) replayedBeginAtRevision(
 	ctx context.Context,
 	resolution requestidempotency.Resolution,
@@ -292,42 +142,17 @@ func (repository *EtcdRepository) replayedBeginAtRevision(
 		response.TaskID != markerTaskID {
 		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay Task is inconsistent")
 	}
-	operation, err := repository.journal.OperationByTaskAtRevision(ctx, response.TaskID, revision)
-	if err != nil {
-		if kind, ok := errs.KindOf(err); ok && kind == errs.KindTaskNotFound {
-			return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay Task is missing")
-		}
-		return BeginResult{}, err
+	if locator.Method != "DELETE" ||
+		locator.Route != idempotencyIntent(request.TargetKind, request.TargetID).RouteTemplate {
+		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay locator is inconsistent")
 	}
-	if locator.Method != http.MethodDelete ||
-		locator.Route != idempotencyIntent(request.TargetKind, request.TargetID).RouteTemplate ||
-		operation.MarkerLocator != locator ||
-		operation.Tombstone.TargetID != request.TargetID ||
-		operation.RootTaskID != markerTaskID ||
-		!replayScopeMatches(locator, operation) ||
-		(request.TargetKind == TargetTenant && operation.Tombstone.TargetKind != hierarchydeletion.HierarchyDeletionTargetTenant) ||
-		(request.TargetKind == TargetEnvironment && operation.Tombstone.TargetKind != hierarchydeletion.HierarchyDeletionTargetEnvironment) ||
-		(request.TargetKind == TargetBackingService && operation.Tombstone.TargetKind != hierarchydeletion.HierarchyDeletionTargetBacking) ||
-		(request.TargetKind == TargetProject && operation.Tombstone.TargetKind != hierarchydeletion.HierarchyDeletionTargetProject) {
-		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay proof is inconsistent")
-	}
-	converted := operationFromEtcd(operation)
-	converted.TaskID = response.TaskID
-	return BeginResult{Operation: converted, Existing: true}, nil
-}
-
-func replayScopeMatches(
-	locator idempotencyrecord.IdempotencyLocator,
-	operation hierarchydeletion.HierarchyDeletionOperation,
-) bool {
-	scope := operation.Scope
-	if scope.TenantID == "" {
-		return locator.ScopeKind == idempotencyrecord.IdempotencyScopePlatform && locator.ScopeID == "-"
-	}
-	if scope.EnvironmentID != "" {
-		return locator.ScopeKind == idempotencyrecord.IdempotencyScopeProject && locator.ScopeID == scope.ProjectID
-	}
-	return locator.ScopeKind == idempotencyrecord.IdempotencyScopeTenant && locator.ScopeID == scope.TenantID
+	return BeginResult{
+		Operation: Operation{
+			ID:     stableOperationID(operationForTarget(request.TargetKind), request.TargetID, request.IdempotencyKey),
+			TaskID: response.TaskID,
+		},
+		Existing: true,
+	}, nil
 }
 
 func idempotencyScopeKind(target TargetKind) requestidempotency.ScopeKind {
@@ -395,4 +220,37 @@ func replayTargetForIntent(
 		)
 	}
 	return idempotencyrecord.IdempotencyReplayTarget{Kind: kind, ID: targetID}, nil
+}
+
+func (repository *EtcdRepository) replayAtRevision(
+	ctx context.Context,
+	request DeleteRequest,
+	protected requestidempotency.ProtectedEvidence,
+	locator idempotencyrecord.IdempotencyLocator,
+	revision int64,
+) (BeginResult, error) {
+	evidence, err := repository.idempotency.ReadAtRevision(ctx, locator, revision)
+	if err != nil {
+		return BeginResult{}, err
+	}
+	if evidence == nil {
+		return BeginResult{}, errs.New(
+			errs.KindInternal,
+			"hierarchy deletion replay marker disappeared from its fixed snapshot",
+		)
+	}
+	marker, err := evidence.Marker()
+	if err != nil {
+		return BeginResult{}, err
+	}
+	defer clear(marker.Intent.Ciphertext)
+	defer clear(marker.Response.Body)
+	if marker.Locator != locator || marker.TaskID == "" {
+		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay marker is inconsistent")
+	}
+	resolution, err := repository.coordinator.ResolveMarker(ctx, protected, marker)
+	if err != nil {
+		return BeginResult{}, err
+	}
+	return repository.replayedBeginAtRevision(ctx, resolution, revision, marker.TaskID, request, locator)
 }

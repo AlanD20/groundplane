@@ -77,8 +77,12 @@ func (resolver *BackupSecretResolver) RetainRestoreIdentity(ctx context.Context,
 	if sessions.closed || sessions.lifetime.Err() != nil || !time.Now().Before(deadline) {
 		return errs.New(errs.KindStateConflict, "Restore identity session is no longer available")
 	}
-	if _, exists := sessions.sessions[restore.TaskID]; exists {
-		return errs.New(errs.KindStateConflict, "Restore identity session already exists")
+	if previous := sessions.sessions[restore.TaskID]; previous != nil {
+		if previous.environmentID != restore.EnvironmentID || subtle.ConstantTimeCompare(previous.identity, line) != 1 {
+			return errs.New(errs.KindStateConflict, "Restore identity differs from the accepted request")
+		}
+		previous.expiry.Stop()
+		clear(previous.identity)
 	}
 	session := &restoreIdentitySession{operationID: restore.OperationID, environmentID: restore.EnvironmentID,
 		pointID: restore.Point.ID, keyEra: restore.Point.KeyEra, recipientSHA: recipient, deadline: deadline,

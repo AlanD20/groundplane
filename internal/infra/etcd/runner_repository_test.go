@@ -30,8 +30,8 @@ func TestRunnerCreatePublishesOneOwnerAndLowestFreeAllocations(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := firstFixture.publish(t, repository)
-	if outcome, _, _, classifyErr := first.Classify(); classifyErr != nil || outcome != IdempotencyKnownApplied {
-		t.Fatalf("CreateRunnerWithTask(tenant) outcome = %v, %v", outcome, classifyErr)
+	if !first.Applied {
+		t.Fatal("Runner capture did not atomically publish its allocation")
 	}
 
 	projectRunner := runnerTestDesired(11, testrunners.RunnerOwnerProject, projectID, tenantID)
@@ -147,10 +147,8 @@ func TestRunnerCreateReplayAndCombinedTenantQuota(t *testing.T) {
 			if store.revision != before {
 				t.Fatal("replay allocated or rewrote Runner state")
 			}
-			outcome, marker, conflict, classifyErr := replay.Classify()
-			if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownExisting ||
-				marker.TaskID != fixture.task.ID {
-				t.Fatalf("CreateRunnerWithTask(replay) = %v, %#v, %v, %v", outcome, marker, conflict, classifyErr)
+			if replay.Applied || replay.ReplayTaskID != fixture.task.ID {
+				t.Fatalf("Runner acceptance replay = %#v", replay)
 			}
 		}
 	}

@@ -360,3 +360,36 @@ func (bundle *backingHookTaskInputBundle) clear() {
 	bundle.Values = nil
 	bundle.SecretSources = nil
 }
+
+// BindBackingHookSecretReferences selects only stable Secret identities. Values
+// remain uncaptured until the accepted Task is ready to prepare its execution.
+func (service *FactService) BindBackingHookSecretReferences(ctx context.Context, projectID string,
+	configuration backinghook.Configuration,
+) (backinghook.Configuration, []string, error) {
+	if service == nil || service.secrets == nil {
+		return backinghook.Configuration{}, nil, errs.New(
+			errs.KindInternal,
+			"Backing hook Secret resolver is unavailable",
+		)
+	}
+	configuration.Inputs = append([]backinghook.InputDefinition(nil), configuration.Inputs...)
+	var ids []string
+	var revision int64
+	for index := range configuration.Inputs {
+		definition := &configuration.Inputs[index]
+		if definition.SecretRef == "" {
+			continue
+		}
+		current, err := service.secrets.ResolveSecretAtRevision(ctx, projectID, definition.SecretRef, revision)
+		if err != nil {
+			return backinghook.Configuration{}, nil, err
+		}
+		if revision == 0 {
+			revision = current.ReadRevision
+		}
+		definition.SecretRef = current.Record.Secret.ID
+		ids = append(ids, definition.SecretRef)
+	}
+	slices.Sort(ids)
+	return configuration, slices.Compact(ids), nil
+}

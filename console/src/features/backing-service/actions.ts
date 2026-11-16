@@ -1,84 +1,50 @@
 import { controllerRequest } from "@/lib/controller-json-request";
-import type { Project, Tenant, ServiceRuntimeIntent } from "@/lib/types";
 import type { operations } from "@/lib/api.generated";
 import { requireTaskId } from "@/features/task/journal-model";
 import type {
   BackingServiceCreateRequest,
-  BackingServiceCreatedResponse,
+  BackingServiceCreateAccepted,
 } from "./api";
-import { listAllBackingProjects } from "./workspace-read";
 type BackingRuntimeTaskAccepted =
   operations["backing-service.start"]["responses"][202]["content"]["application/json"];
 
-type BackingWorkspace = {
-  tenantProjects: Project[];
-  tenants: Tenant[];
-  backingProjects: Project[];
-  backingProjectError: string | null;
-};
 export type BackingServiceActions = {
-  deleteBackingService: (id: string) => Promise<string>;
+  deleteBackingService: (id: string, after?: string[]) => Promise<string>;
   runBackingRuntimeAction: (
     id: string,
     action: "start" | "stop" | "destroy",
+    after?: string[],
   ) => Promise<string>;
   addBackingProject: (
     input: BackingServiceCreateRequest,
-  ) => Promise<BackingServiceCreatedResponse>;
+  ) => Promise<BackingServiceCreateAccepted>;
 };
-export function createBackingServiceActions(
-  state: BackingWorkspace,
-  update: (change: (draft: BackingWorkspace) => void) => void,
-): BackingServiceActions {
+export function createBackingServiceActions(): BackingServiceActions {
   return {
-    deleteBackingService: async (id) => {
+    deleteBackingService: async (id, after = []) => {
       const accepted = await controllerRequest<
         operations["backing-service.delete"]["responses"][202]["content"]["application/json"]
       >(`/backing-services/${encodeURIComponent(id)}`, 202, {
         method: "DELETE",
+        body: { after },
       });
       return requireTaskId(accepted, "Backing Service deletion");
     },
-    runBackingRuntimeAction: async (id, action) => {
+    runBackingRuntimeAction: async (id, action, after = []) => {
       const accepted = await controllerRequest<BackingRuntimeTaskAccepted>(
         `/backing-services/${encodeURIComponent(id)}/${action}`,
         202,
-        { method: "POST" },
+        { method: "POST", body: { after } },
       );
-      const intent: ServiceRuntimeIntent =
-        action === "start"
-          ? "running"
-          : action === "stop"
-            ? "stopped"
-            : "absent";
-      update((d) => {
-        const project = d.backingProjects.find(
-          (candidate) => candidate.id === id,
-        );
-        project?.environments?.forEach((environment) => {
-          environment.services.forEach((service) => {
-            service.runtimeIntent = intent;
-          });
-        });
-      });
       return requireTaskId(accepted, `Backing service ${action}`);
     },
     addBackingProject: async (input) => {
-      const created = await controllerRequest<BackingServiceCreatedResponse>(
+      const created = await controllerRequest<BackingServiceCreateAccepted>(
         "/backing-services",
-        201,
+        202,
         { method: "POST", body: input },
       );
       requireTaskId(created, "Backing service creation");
-      const backingProjects = await listAllBackingProjects(
-        state.tenantProjects,
-        state.tenants,
-        new AbortController().signal,
-      );
-      update((draft) => {
-        draft.backingProjects = backingProjects;
-        draft.backingProjectError = null;
-      });
       return created;
     },
   };

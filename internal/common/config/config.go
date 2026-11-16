@@ -329,8 +329,13 @@ func validateAgentRuntime(label string, runtime AgentRuntimeConfig) error {
 	if runtime.PullIntervalSeconds <= 0 {
 		return fmt.Errorf("config: %s.pull_interval_seconds must be positive", label)
 	}
-	if runtime.MaxConcurrentTasks < 1 || runtime.MaxConcurrentTasks > 256 || runtime.MaxParallelOperationsPerTask < 1 || runtime.MaxParallelOperationsPerTask > 256 || runtime.MaxConcurrentTasks*runtime.MaxParallelOperationsPerTask > 256 {
-		return fmt.Errorf("config: %s task and per-Task operation limits must each be 1..256 with at most 256 total operations", label)
+	if runtime.MaxConcurrentTasks < 1 || runtime.MaxConcurrentTasks > 256 || runtime.MaxParallelOperationsPerTask < 1 ||
+		runtime.MaxParallelOperationsPerTask > 256 ||
+		runtime.MaxConcurrentTasks*runtime.MaxParallelOperationsPerTask > 256 {
+		return fmt.Errorf(
+			"config: %s task and per-Task operation limits must each be 1..256 with at most 256 total operations",
+			label,
+		)
 	}
 	for key, value := range runtime.Labels {
 		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 ||

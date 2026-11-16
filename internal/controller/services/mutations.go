@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -31,6 +32,7 @@ type serviceMutationService struct {
 	repository  serviceMutationRepository
 	idempotency serviceMutationIdempotency
 	lifecycle   *serviceLifecycleService
+	accepted    *acceptedaction.Submitter
 	now         func() time.Time
 }
 
@@ -38,14 +40,16 @@ func NewMutationService(
 	repository serviceMutationRepository,
 	idempotency serviceMutationIdempotency,
 	lifecycle *serviceLifecycleService,
+	accepted *acceptedaction.Submitter,
 ) (*serviceMutationService, error) {
-	if repository == nil || idempotency == nil {
+	if repository == nil || idempotency == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Service mutation service is not configured")
 	}
 	return &serviceMutationService{
 		repository:  repository,
 		idempotency: idempotency,
 		lifecycle:   lifecycle,
+		accepted:    accepted,
 		now:         time.Now,
 	}, nil
 }

@@ -300,11 +300,12 @@ Public registries use anonymous access over HTTPS. Only GP's registry receives
 its installer-managed credentials; external private-registry logins are not
 supported.
 
-Fetch returns an immutable reference and a Task. Wait for completion, then select
-the current local tag or that exact reference when creating a Service or deploying
-it. A successful tagged Fetch assigns that local Docker tag to its verified
+Fetch returns a Task ID; a mutable tag is resolved only when the accepted action
+is prepared, after any whole-Task prerequisites succeed and settle. Wait for Task
+completion, then select the current local tag or its observed exact reference
+when creating a Service or deploying it. A successful tagged Fetch assigns that local Docker tag to its verified
 content; a new successful Fetch can move the tag. It does not change a Service
-or start containers. Retry retains the accepted content and cannot move a tag
+or start containers. After content is captured, Retry retains it and cannot move a tag
 backward over a newer accepted selection. Deploy's optional `--image` chooses a
 reference for that Release without editing the Service; it cannot accompany
 `--tag`. Service forms and Deploy offer the images currently on the host.

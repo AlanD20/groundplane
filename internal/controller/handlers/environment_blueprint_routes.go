@@ -33,6 +33,7 @@ type EnvironmentBlueprintService interface {
 		core.BlueprintBundle,
 		string,
 		string,
+		[]string,
 	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
@@ -125,7 +126,7 @@ func blueprintMultipartSchema() *huma.Schema {
 	return &huma.Schema{
 		Type:        "string",
 		Format:      "binary",
-		Description: "Deterministic Blueprint multipart stream: manifest first, then declared file parts in order. Optional manifest.service selects one Compose Service; unrelated desired changes are rejected. Workloads use their declared release strategy.",
+		Description: "Deterministic Blueprint multipart stream: manifest first, then declared file parts in order. Optional manifest.after lists up to 16 whole-Task prerequisites for Apply only. Optional manifest.service selects one Compose Service; unrelated desired changes are rejected. Workloads use their declared release strategy.",
 	}
 }
 
@@ -162,8 +163,11 @@ func (s *Server) validateEnvironmentBlueprint(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	defer clearBlueprintBundle(bundle)
-	validation, err := s.environmentBlueprints.ValidateBlueprint(ctx, request.ID, bundle, revision)
+	defer clearBlueprintBundle(bundle.Bundle)
+	if len(bundle.After) > 0 {
+		return nil, errs.New(errs.KindValidationFailed, "Run after applies only to Blueprint Apply, not validation")
+	}
+	validation, err := s.environmentBlueprints.ValidateBlueprint(ctx, request.ID, bundle.Bundle, revision)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -186,9 +190,9 @@ func (s *Server) applyEnvironmentBlueprint(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	defer clearBlueprintBundle(bundle)
+	defer clearBlueprintBundle(bundle.Bundle)
 	response, err := s.environmentBlueprints.ApplyBlueprint(
-		ctx, request.ID, bundle, revision, request.IdempotencyKey,
+		ctx, request.ID, bundle.Bundle, revision, request.IdempotencyKey, bundle.After,
 	)
 	if err != nil {
 		if s.Logger != nil {
@@ -199,9 +203,9 @@ func (s *Server) applyEnvironmentBlueprint(
 	return s.environmentMutationResponse(response, "apply Blueprint"), nil
 }
 
-func decodeEnvironmentBlueprintRequest(id, contentType string, rawBody []byte) (core.BlueprintBundle, error) {
+func decodeEnvironmentBlueprintRequest(id, contentType string, rawBody []byte) (blueprintSubmission, error) {
 	if ids.Validate(ids.KindEnvironment, id) != nil {
-		return core.BlueprintBundle{}, errs.New(errs.KindValidationFailed, "Environment id is invalid")
+		return blueprintSubmission{}, errs.New(errs.KindValidationFailed, "Environment id is invalid")
 	}
 	multipartRequest := &http.Request{
 		Header: http.Header{"Content-Type": []string{contentType}},

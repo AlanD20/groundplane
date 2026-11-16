@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { readCheckTaskResult } from "@/features/task/check-result";
+import type { TaskResponse } from "@/features/task/api";
 import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { newULID } from "@/lib/utils";
 import { retryTask, type TaskRetryRequest } from "@/features/task/api";
@@ -19,6 +21,7 @@ export function useBackingCheck(
   initialTaskId?: string,
 ) {
   const [taskId, setTaskId] = useState(initialTaskId ?? "");
+  const [taskDetail, setTaskDetail] = useState<TaskResponse | null>(null);
   const [result, setResult] = useState<BackingCheckResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,6 +45,7 @@ export function useBackingCheck(
     const controller = new AbortController();
     scope.current = controller;
     setTaskId(initialTaskId ?? "");
+    setTaskDetail(null);
     setResult(null);
     setError(null);
     setSending(false);
@@ -98,18 +102,21 @@ export function useBackingCheck(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
-        const next = await getBackingCheck(environmentId, controller.signal, {
+        const next = await readCheckTaskResult(
           taskId,
-        });
+          controller.signal,
+          () => getBackingCheck(environmentId, controller.signal, { taskId }),
+          setTaskDetail,
+        );
         if (controller.signal.aborted) return;
-        setResult(next);
+        setResult(next.result);
         setError(null);
         // Refresh terminal metadata too: a saved check must become stale when
         // its credentials or deployed consumer change while this panel is open.
         // This reads the recorded result; it never reruns the access probe.
         timer = setTimeout(
           () => void poll(),
-          ["ready", "checking", "cleaning"].includes(next.phase) ? 1000 : 10000,
+          next.taskDetail.task.finished_at ? 10000 : 1000,
         );
       } catch (cause) {
         if (!controller.signal.aborted)
@@ -126,7 +133,7 @@ export function useBackingCheck(
       if (timer) clearTimeout(timer);
     };
   }, [environmentId, taskId, open, reload]);
-  async function run() {
+  async function run(after: string[] = []) {
     if (
       busy.current ||
       loading ||
@@ -143,12 +150,7 @@ export function useBackingCheck(
     intent.current ??= { key: newULID() };
     const pending = intent.current;
     try {
-      pending.body ??= await backingCheckRequest(
-        environmentId,
-        attachId,
-        grantId,
-        signal,
-      );
+      pending.body ??= backingCheckRequest(attachId, grantId, after);
       const accepted = await startBackingCheck(
         environmentId,
         pending.body,
@@ -157,6 +159,7 @@ export function useBackingCheck(
       );
       if (generation.current === current) {
         intent.current = null;
+        setTaskDetail(null);
         setResult(null);
         setTaskId(accepted);
         setReload((value) => value + 1);
@@ -196,8 +199,10 @@ export function useBackingCheck(
       const next = await retryTask(taskId, captured.input, captured.key);
       if (generation.current === current) {
         cleanupIntent.current = null;
+        setTaskDetail(null);
         setResult(null);
         setTaskId(next);
+        setReload((value) => value + 1);
       }
     } catch (cause) {
       if (generation.current === current)
@@ -215,15 +220,15 @@ export function useBackingCheck(
   }
   return {
     taskId,
+    taskDetail,
+    uncertain: intent.current !== null,
     result,
     error,
     sending,
     loading,
     run,
     cleanup,
-    active:
-      !!taskId &&
-      (!result || ["ready", "checking", "cleaning"].includes(result.phase)),
+    active: !!taskId && !taskDetail?.task.finished_at,
     refresh: () => setReload((value) => value + 1),
   };
 }

@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumework"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"math"
 	"time"
 
@@ -68,7 +69,15 @@ type MutationRepository interface {
 		context.Context,
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error)
-	PublishVolumeWork(context.Context, etcd.VolumeWorkPublication) (etcd.IdempotencyTransactionResult, error)
+	PrepareVolumeWork(context.Context, etcd.VolumeWorkPublication) (workqueue.Change, error)
+	FinishNativePreparationDraft(context.Context, string, bool) (bool, error)
+	CleanupNativePreparationDraft(
+		context.Context,
+		workqueue.TaskSnapshot,
+		time.Time,
+	) (blueprints.EnvironmentBlueprintStageClaim, bool, error)
+	AbandonVolumeWorkInput(context.Context, workqueue.TaskSnapshot, string) (bool, error)
+	AbandonEnvironmentBlueprintStage(context.Context, blueprints.EnvironmentBlueprintStageClaim) error
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironmentBlueprintHead(

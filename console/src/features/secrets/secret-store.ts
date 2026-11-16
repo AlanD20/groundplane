@@ -32,7 +32,7 @@ export type ReusableSecretActions = {
   createReusableSecret: (
     input: ReusableSecretCreateInput,
   ) => Promise<ReusableSecret>;
-  removeReusableSecret: (id: string) => Promise<{ task_id: string }>;
+  removeReusableSecret: (id: string, after?: string[]) => Promise<{ task_id: string }>;
   refreshReusableSecrets: (signal?: AbortSignal) => Promise<void>;
   revealReusableSecret: (id: string) => Promise<string>;
 };
@@ -192,7 +192,7 @@ export function createSecretActions(
       });
       return created;
     },
-    removeReusableSecret: async (id) => {
+    removeReusableSecret: async (id, after = []) => {
       const secret = state.reusableSecrets.find(
         (candidate) => candidate.id === id,
       );
@@ -207,7 +207,7 @@ export function createSecretActions(
         const accepted = await controllerRequest<SecretTaskAccepted>(
           "/secrets/" + encodeURIComponent(id),
           202,
-          { method: "DELETE" },
+          { method: "DELETE", body: after.length ? {after} : {} },
         );
         if (!accepted.task_id)
           throw new Error("Controller response is missing task_id");

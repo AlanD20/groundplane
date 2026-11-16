@@ -14,6 +14,7 @@ export type BlueprintInterpolation = {
 }
 
 export type BlueprintBundleManifest = {
+  after?: string[]
   service?: string
   root: string
   compose_sources: string[]

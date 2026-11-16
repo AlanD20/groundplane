@@ -1,3 +1,5 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
+import { TaskExecution } from "@/features/task/task-execution";
 import { useState } from "react";
 import { Check, Circle, LoaderCircle, PlugZap, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +56,7 @@ export function RouteAccessCheck({
   open: boolean;
 }) {
   const connectors = components.filter(
-    (component) => component.kind === "cloudflare-tunnel" && component.enabled,
+    (component) => component.kind === "cloudflare-tunnel",
   );
   const [expanded, setExpanded] = useState(false);
   const [connectorId, setConnectorId] = useState(connectors[0]?.id ?? "");
@@ -83,7 +85,7 @@ export function RouteAccessCheck({
             onValueChange={setConnectorId}
             options={connectors.map((connector, index) => ({
               value: connector.id,
-              label: `Tunnel ${index + 1}`,
+              label: `Tunnel ${index + 1}${connector.enabled ? "" : " (disabled)"}`,
             }))}
           />
         )}
@@ -107,7 +109,13 @@ export function RouteAccessCheck({
           connectorId={selectedConnectorId}
           path={path}
           open={open && expanded}
-          disabled={route.status !== "served" || !selectedConnectorId || !path}
+          disabled={!selectedConnectorId || !path}
+          waitingForRuntime={
+            route.status !== "served" ||
+            !connectors.find(
+              (connector) => connector.id === selectedConnectorId,
+            )?.enabled
+          }
         />
       </div>
     </Disclosure>
@@ -122,6 +130,7 @@ export function EdgeCheckPanel({
   taskId,
   open,
   disabled = false,
+  waitingForRuntime = false,
   tunnel,
 }: {
   environmentId: string;
@@ -131,8 +140,11 @@ export function EdgeCheckPanel({
   taskId?: string;
   open: boolean;
   disabled?: boolean;
+  waitingForRuntime?: boolean;
   tunnel?: TunnelCheckSelection;
 }) {
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterBusy, setAfterBusy] = useState(false);
   const check = useEdgeCheck(
     environmentId,
     open,
@@ -162,26 +174,40 @@ export function EdgeCheckPanel({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Public access check</h3>
-        {(routeId || tunnel) && (
+        {(routeId || tunnel) && !taskId && (
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={
-              disabled || check.sending || check.loading || check.active
+              disabled ||
+              (waitingForRuntime && after.length === 0) ||
+              afterBusy ||
+              check.sending ||
+              check.loading ||
+              check.active
             }
-            onClick={() => void check.run()}
+            onClick={() => void check.run(after)}
           >
             {check.sending ? (
               <LoaderCircle className="size-3.5 animate-spin" />
             ) : (
               <PlugZap className="size-3.5" />
             )}
-            Test access
+            {check.uncertain ? "Resolve submission" : "Test access"}
           </Button>
         )}
       </div>
-      {disabled && (
+      {(routeId || tunnel) && !taskId && (
+        <fieldset disabled={check.sending || check.active || check.uncertain}>
+          <TaskRunAfterSelector
+            value={after}
+            onChange={setAfter}
+            onBusyChange={setAfterBusy}
+          />
+        </fieldset>
+      )}
+      {(disabled || waitingForRuntime) && (
         <p className="text-xs text-muted-foreground">
           Apply the public Route and enable its Tunnel first. Wildcard Routes
           need a concrete request path.
@@ -205,6 +231,9 @@ export function EdgeCheckPanel({
         <TaskLink taskId={check.taskId}>
           {check.active ? "Inspect running check" : "Inspect check Task"}
         </TaskLink>
+      )}
+      {!check.result && check.taskDetail && (
+        <TaskExecution detail={check.taskDetail} />
       )}
       {result && (
         <>

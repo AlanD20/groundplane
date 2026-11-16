@@ -2,8 +2,7 @@ package connectors
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorremoval"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
@@ -14,16 +13,18 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const (
-	connectorDeletionRoute           = "/connectors/{id}"
-	connectorDeletionTimeoutSeconds  = int64(30)
-	maximumConnectorDeletionAttempts = 3
+	connectorDeletionRoute          = "/connectors/{id}"
+	connectorDeletionTimeoutSeconds = int64(30)
 )
 
 type connectorDeletionRepository interface {
@@ -40,15 +41,14 @@ type connectorDeletionRepository interface {
 		string,
 		time.Time,
 	) (connectorremoval.Input, error)
-	PublishConnectorRemoval(
+	PrepareConnectorRemovalAuthority(
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[connectorrecord.Record],
 		connectorremoval.Input,
 		workexecution.Task,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	) (workqueue.Change, workexecution.Item, error)
 }
 
 type connectorDeletionEvidence struct {
@@ -64,23 +64,12 @@ type connectorDeletionIdempotency interface {
 		string,
 		string,
 	) (idempotencyrecord.IdempotencyLocator, bool, error)
-	Prepare(context.Context, idempotencyrecord.IdempotencyLocator, string) (connectorDeletionEvidence, error)
+	Prepare(context.Context, idempotencyrecord.IdempotencyLocator, string, []string) (connectorDeletionEvidence, error)
 	ResolveExisting(
 		context.Context,
 		idempotencyrecord.IdempotencyLocator,
 		connectorDeletionEvidence,
 	) (requestidempotency.Resolution, bool, error)
-	ResolveKnown(
-		context.Context,
-		connectorDeletionEvidence,
-		etcd.IdempotencyTransactionResult,
-	) (requestidempotency.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		connectorDeletionEvidence,
-		error,
-	) (requestidempotency.Resolution, error)
 }
 
 type durableConnectorDeletionIdempotency struct {
@@ -112,6 +101,7 @@ func (service *durableConnectorDeletionIdempotency) Prepare(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
 	connectorID string,
+	after []string,
 ) (connectorDeletionEvidence, error) {
 	if locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment {
 		return connectorDeletionEvidence{}, errs.New(errs.KindInternal, "connector deletion replay scope is invalid")
@@ -120,7 +110,7 @@ func (service *durableConnectorDeletionIdempotency) Prepare(
 		Method: http.MethodDelete, Route: connectorDeletionRoute,
 		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: locator.ScopeID},
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: connectorID}},
-		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
+		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(after)})),
 	})
 	if err != nil {
 		return connectorDeletionEvidence{}, err
@@ -145,219 +135,196 @@ func (service *durableConnectorDeletionIdempotency) ResolveExisting(
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
-func (service *durableConnectorDeletionIdempotency) ResolveKnown(
-	ctx context.Context,
-	evidence connectorDeletionEvidence,
-	result etcd.IdempotencyTransactionResult,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
-}
-
-func (service *durableConnectorDeletionIdempotency) ResolveUnknown(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence connectorDeletionEvidence,
-	original error,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
-}
-
 type connectorDeletionService struct {
 	repository  connectorDeletionRepository
 	idempotency connectorDeletionIdempotency
 	now         func() time.Time
+	accepted    *acceptedaction.Submitter
 }
 
 func NewDeletionService(
 	repository connectorDeletionRepository,
 	idempotency connectorDeletionIdempotency,
+	accepted *acceptedaction.Submitter,
 ) (*connectorDeletionService, error) {
-	if repository == nil || idempotency == nil {
+	if repository == nil || idempotency == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "connector deletion service is not configured")
 	}
-	return &connectorDeletionService{repository: repository, idempotency: idempotency, now: time.Now}, nil
+	return &connectorDeletionService{
+		repository:  repository,
+		idempotency: idempotency,
+		now:         time.Now,
+		accepted:    accepted,
+	}, nil
+}
+
+type acceptedConnectorRemoval struct {
+	After []string `json:"after,omitempty"`
 }
 
 func (service *connectorDeletionService) DeleteConnector(
 	ctx context.Context,
 	connectorID string,
-	idempotencyKey string,
+	request apiTypes.TaskRunAfterRequest,
+	key string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"connector deletion context is required",
-		)
-	}
 	if ids.Validate(ids.KindConnector, connectorID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "connector id is invalid")
 	}
-	for attempt := 0; attempt < maximumConnectorDeletionAttempts; attempt++ {
-		response, err := service.deleteConnectorOnce(ctx, connectorID, idempotencyKey)
-		if err == nil {
-			return response, nil
-		}
-		kind, ok := errs.KindOf(err)
-		if !ok || kind != errs.KindStateConflict || attempt == maximumConnectorDeletionAttempts-1 {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(
-		errs.KindInternal,
-		"connector deletion retry bound was not enforced",
-	)
-}
-
-func (service *connectorDeletionService) deleteConnectorOnce(
-	ctx context.Context,
-	connectorID string,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
 	target := idempotencyrecord.IdempotencyReplayTarget{
 		Kind: idempotencyrecord.IdempotencyReplayTargetConnector,
 		ID:   connectorID,
 	}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
-		ctx, target, http.MethodDelete, connectorDeletionRoute, idempotencyKey,
+		ctx,
+		target,
+		http.MethodDelete,
+		connectorDeletionRoute,
+		key,
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if indexed {
-		return service.replayConnectorDeletion(ctx, locator, connectorID)
+	var current etcdstore.Versioned[connectorrecord.Record]
+	var project etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	if !indexed {
+		current, err = service.repository.GetConnector(ctx, connectorID)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		environment, readErr := service.repository.GetEnvironment(ctx, current.Record.Connector.EnvironmentID)
+		if readErr != nil {
+			return idempotencyrecord.IdempotencyResponse{}, readErr
+		}
+		project, err = service.repository.GetProject(ctx, environment.Record.ProjectID)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		locator = idempotencyrecord.IdempotencyLocator{
+			ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
+			ScopeID:   environment.Record.ID,
+			Method:    http.MethodDelete,
+			Route:     connectorDeletionRoute,
+			Key:       key,
+		}
 	}
-
-	current, err := service.repository.GetConnector(ctx, connectorID)
+	evidence, err := service.idempotency.Prepare(ctx, locator, connectorID, request.After)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	defer evidence.candidate.Destroy()
+	defer clear(evidence.durable.Ciphertext)
+	resolution, exists, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	if exists {
+		return requestidempotency.CloneResponse(resolution.Response), nil
+	}
+	if indexed {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"connector replay target is inconsistent",
+		)
+	}
+	at := service.now().UTC()
+	task := workexecution.Task{
+		ID:         ids.New(ids.KindTask),
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionRemove,
+		TargetID:   connectorID,
+		TargetName: current.Record.Connector.Name,
+		Scope: workexecution.Scope{
+			TenantID:      project.Record.TenantID,
+			ProjectID:     project.Record.ID,
+			EnvironmentID: locator.ScopeID,
+		},
+		After:     request.After,
+		CreatedAt: at,
+		UpdatedAt: at,
+		Deadline:  at.Add(acceptedaction.QueueTimeout),
+	}
+	return acceptedaction.Submit(
+		ctx,
+		service.accepted,
+		acceptedaction.Submission{
+			Task:         task,
+			Kind:         "connector-remove",
+			ReplayTarget: &target,
+			Locator:      locator,
+			Intent:       evidence.durable,
+			Evidence:     evidence.candidate,
+		},
+		acceptedConnectorRemoval{After: request.After},
+	)
+}
+
+func (service *connectorDeletionService) AcceptedPreparations() []taskdependencies.Registration {
+	return []taskdependencies.Registration{
+		acceptedaction.Registration(
+			service.accepted,
+			"connector-remove",
+			workexecution.ActionRemove,
+			ids.KindConnector,
+			service.prepareAcceptedRemoval,
+		),
+	}
+}
+
+func (service *connectorDeletionService) prepareAcceptedRemoval(
+	ctx context.Context,
+	snapshot workqueue.TaskSnapshot,
+	_ int64,
+	at time.Time,
+	_ acceptedConnectorRemoval,
+) (taskdependencies.Prepared, error) {
+	task := snapshot.Task
+	current, err := service.repository.GetConnector(ctx, task.TargetID)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
 	}
 	environment, err := service.repository.GetEnvironment(ctx, current.Record.Connector.EnvironmentID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	locator = idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
-		Method: http.MethodDelete, Route: connectorDeletionRoute, Key: idempotencyKey,
+	if task.Scope != (workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID}) {
+		return taskdependencies.Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"Connector ownership changed while waiting",
+		)
 	}
-	evidence, err := service.idempotency.Prepare(ctx, locator, connectorID)
+	input, err := service.repository.CaptureConnectorRemoval(
+		ctx,
+		environment,
+		project,
+		current,
+		task.ID,
+		ids.DeriveAt(ids.KindWorkItem, task.CreatedAt, task.ID, "connector-remove-work"),
+		ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "connector-remove-input"),
+		at,
+	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	defer clear(evidence.durable.Ciphertext)
-	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	task.Intent, err = input.Reference()
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	if existing {
-		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"connector deletion replay resolution is invalid",
-			)
-		}
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	}
-
-	now := service.now().UTC()
-	connector := current.Record.Connector
-	input, err := service.repository.CaptureConnectorRemoval(ctx, environment, project, current,
-		ids.New(ids.KindTask), ids.New(ids.KindWorkItem), ids.New(ids.KindPlan), now)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	ref, err := input.Reference()
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task := workexecution.Task{ID: input.TaskID, Actor: workexecution.OperatorActor,
-		Scope: workexecution.Scope{
-			TenantID:      input.TenantID,
-			ProjectID:     input.ProjectID,
-			EnvironmentID: input.EnvironmentID,
-		},
-		Action: workexecution.ActionRemove, TargetID: input.ConnectorID, TargetName: connector.Name,
-		Intent: ref, ExpectedItems: 1, CreatedAt: now, UpdatedAt: now,
-		Deadline: now.Add(time.Duration(connectorDeletionTimeoutSeconds) * time.Second)}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: append([]byte(nil), responseBody...),
-	}
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
-		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
-	}
-	result, deleteErr := service.repository.PublishConnectorRemoval(
+	task.ExpectedItems = 1
+	task.UpdatedAt = at
+	authority, item, err := service.repository.PrepareConnectorRemovalAuthority(
 		ctx,
 		environment,
 		project,
 		current,
 		input,
 		task,
-		marker,
 	)
-	if deleteErr != nil {
-		if !isUnknownConnectorDeletionOutcome(deleteErr) {
-			return idempotencyrecord.IdempotencyResponse{}, deleteErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, deleteErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return requestidempotency.CloneResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"connector deletion resolution is invalid",
-		)
-	}
-}
-
-func (service *connectorDeletionService) replayConnectorDeletion(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	connectorID string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	evidence, err := service.idempotency.Prepare(ctx, locator, connectorID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(evidence.durable.Ciphertext)
-	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"connector deletion replay target is inconsistent",
-		)
-	}
-	return requestidempotency.CloneResponse(resolution.Response), nil
-}
-
-func isUnknownConnectorDeletionOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
+	return taskdependencies.Prepared{Task: task, Graph: []workexecution.Item{item}, Authority: authority}, err
 }
 
 type durableConnectorDeletionRepository struct {
@@ -407,14 +374,13 @@ func (repository *durableConnectorDeletionRepository) CaptureConnectorRemoval(
 	return repository.connectors.CaptureConnectorRemoval(ctx, environment, project, current, taskID, workID, planID, at)
 }
 
-func (repository *durableConnectorDeletionRepository) PublishConnectorRemoval(
+func (repository *durableConnectorDeletionRepository) PrepareConnectorRemovalAuthority(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	current etcdstore.Versioned[connectorrecord.Record],
 	input connectorremoval.Input,
 	task workexecution.Task,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.connectors.PublishConnectorRemoval(ctx, environment, project, current, input, task, marker)
+) (workqueue.Change, workexecution.Item, error) {
+	return repository.connectors.PrepareConnectorRemovalAuthority(ctx, environment, project, current, input, task)
 }

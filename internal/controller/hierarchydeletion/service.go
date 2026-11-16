@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -22,11 +24,16 @@ type Repository interface {
 }
 
 type DeletionTargetResolution struct {
+	TaskScope  workexecution.Scope
+	TargetName string
 	TargetKind TargetKind
 	ScopeKind  TargetKind
 	ScopeID    string
 }
 type BeginDeletion struct {
+	After             []string
+	TaskScope         workexecution.Scope
+	TargetName        string
 	OperationID       string
 	OperationKind     OperationKind
 	TargetKind        TargetKind
@@ -103,9 +110,10 @@ type SystemClock struct{}
 func (SystemClock) Now() time.Time { return time.Now().UTC() }
 
 type Service struct {
-	repository Repository
-	ids        IDGenerator
-	clock      Clock
+	preparations []taskdependencies.Registration
+	repository   Repository
+	ids          IDGenerator
+	clock        Clock
 }
 
 func NewService(repository Repository, ids IDGenerator, clock Clock) *Service {
@@ -137,7 +145,10 @@ func (s *Service) Delete(ctx context.Context, request DeleteRequest) (TaskAccept
 	result, err := s.repository.BeginDeletion(
 		ctx,
 		BeginDeletion{
-			OperationID:     operationID,
+			OperationID: operationID,
+			After: append(
+				[]string(nil),
+				request.After...), TaskScope: resolved.TaskScope, TargetName: resolved.TargetName,
 			OperationKind:   kind,
 			TargetKind:      resolved.TargetKind,
 			TargetID:        request.TargetID,

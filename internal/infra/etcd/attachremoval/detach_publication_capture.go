@@ -61,7 +61,10 @@ func (repository *InputRepository) PrepareDetachPublicationCapture(
 			"Detach capture is not eligible for initial publication",
 		)
 	}
-	if snapshot.Revision > 0 && (input.Cascade == nil || task.Action != workexecution.ActionRemove ||
+	directAccepted := snapshot.Revision > 0 && task.AcceptedIntent != nil &&
+		task.Action == workexecution.ActionDetach &&
+		input.Cascade == nil
+	if snapshot.Revision > 0 && !directAccepted && (input.Cascade == nil || task.Action != workexecution.ActionRemove ||
 		input.Cascade.Validate(input.Snapshot) != nil || input.Cascade.ZoneID != task.TargetID ||
 		task.ExpectedItems != input.Cascade.Count+1 || task.Scope.TenantID != "" ||
 		task.Scope.ProjectID != input.Snapshot.Source.Attach.BackingProjectID ||
@@ -81,7 +84,7 @@ func (repository *InputRepository) PrepareDetachPublicationCapture(
 		keyvalue.Condition{Key: workqueue.ItemKey(item.ID)},
 		keyvalue.Condition{Key: WorkCaptureKey(item.ID)},
 	)
-	if snapshot.Revision == 0 {
+	if snapshot.Revision == 0 || directAccepted {
 		change.Conditions = append(change.Conditions, keyvalue.Condition{Key: DetachInputKey(item.ID)})
 	} else {
 		view.ReadRevision = snapshot.Revision
@@ -143,7 +146,7 @@ func (repository *InputRepository) PrepareDetachPublicationCapture(
 		change.Mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: WorkCaptureKey(item.ID), Value: raw},
 	)
-	if snapshot.Revision > 0 {
+	if snapshot.Revision > 0 && !directAccepted {
 		change.Mutations = append(
 			change.Mutations,
 			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: preparedCascadeCaptureKey(item.ID)},

@@ -145,19 +145,25 @@ func (c *Client) ShowComponentConfig(ctx context.Context, id string) (apiTypes.C
 	return envelope, nil
 }
 
+type ComponentConfigSaveResult struct {
+	Saved *apiTypes.ComponentConfigMutationResult
+	Task  *apiTypes.TaskAccepted
+}
+
 func (c *Client) SetComponentConfig(
 	ctx context.Context,
 	id string,
 	config apiTypes.ComponentConfigMutationInput,
-) (apiTypes.ComponentConfigMutationResult, error) {
+	after []string,
+) (ComponentConfigSaveResult, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.ComponentConfigMutationResult{}, err
+		return ComponentConfigSaveResult{}, err
 	}
 	path := "/api/v1/components/" + id + "/config"
-	body, err := json.Marshal(apiTypes.ComponentConfigMutationRequest{Config: config})
+	body, err := json.Marshal(apiTypes.ComponentConfigMutationRequest{Config: config, After: after})
 	if err != nil {
-		return apiTypes.ComponentConfigMutationResult{}, err
+		return ComponentConfigSaveResult{}, err
 	}
 	response, err := client.ComponentConfigSetWithBodyWithResponse(
 		ctx,
@@ -167,18 +173,29 @@ func (c *Client) SetComponentConfig(
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return apiTypes.ComponentConfigMutationResult{}, generatedCallError(ctx, http.MethodPut, path, err)
+		return ComponentConfigSaveResult{}, generatedCallError(ctx, http.MethodPut, path, err)
+	}
+	expectedStatus := http.StatusOK
+	if response.HTTPResponse != nil && response.HTTPResponse.StatusCode == http.StatusAccepted {
+		expectedStatus = http.StatusAccepted
 	}
 	if err := generatedResponseError(
-		http.MethodPut, path, response.HTTPResponse, response.Body, http.StatusOK,
+		http.MethodPut, path, response.HTTPResponse, response.Body, expectedStatus,
 	); err != nil {
-		return apiTypes.ComponentConfigMutationResult{}, err
+		return ComponentConfigSaveResult{}, err
 	}
-	var result apiTypes.ComponentConfigMutationResult
-	if err := decodeSingleJSON(http.MethodPut, path, bytes.NewReader(response.Body), &result); err != nil {
-		return apiTypes.ComponentConfigMutationResult{}, err
+	if response.HTTPResponse.StatusCode == http.StatusAccepted {
+		var task apiTypes.TaskAccepted
+		if err := decodeSingleJSON(http.MethodPut, path, bytes.NewReader(response.Body), &task); err != nil {
+			return ComponentConfigSaveResult{}, err
+		}
+		return ComponentConfigSaveResult{Task: &task}, nil
 	}
-	return result, nil
+	var saved apiTypes.ComponentConfigMutationResult
+	if err := decodeSingleJSON(http.MethodPut, path, bytes.NewReader(response.Body), &saved); err != nil {
+		return ComponentConfigSaveResult{}, err
+	}
+	return ComponentConfigSaveResult{Saved: &saved}, nil
 }
 
 func (c *Client) EnableComponent(
@@ -192,7 +209,7 @@ func (c *Client) EnableComponent(
 	}
 	path := "/api/v1/components/" + id + "/enable"
 	var body []byte
-	if request.Config != nil {
+	if request.Config != nil || len(request.After) > 0 {
 		body, err = json.Marshal(request)
 		if err != nil {
 			return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
@@ -211,7 +228,7 @@ func (c *Client) EnableComponent(
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
-func (c *Client) DisableComponent(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) DisableComponent(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -219,6 +236,7 @@ func (c *Client) DisableComponent(ctx context.Context, id string) (apiTypes.Task
 	path := "/api/v1/components/" + id + "/disable"
 	response, err := client.ComponentDisableWithResponse(
 		ctx, id, &generated.ComponentDisableParams{IdempotencyKey: ids.NewULID()},
+		generated.ComponentDisableJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
@@ -231,7 +249,7 @@ func (c *Client) DisableComponent(ctx context.Context, id string) (apiTypes.Task
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
-func (c *Client) UpdateComponent(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) UpdateComponent(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -239,6 +257,7 @@ func (c *Client) UpdateComponent(ctx context.Context, id string) (apiTypes.TaskA
 	path := "/api/v1/components/" + id + "/update"
 	response, err := client.ComponentUpdateWithResponse(
 		ctx, id, &generated.ComponentUpdateParams{IdempotencyKey: ids.NewULID()},
+		generated.ComponentUpdateJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)

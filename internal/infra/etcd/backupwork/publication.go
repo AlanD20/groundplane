@@ -36,7 +36,7 @@ func NewItem(
 	item := workexecution.Item{ID: workID, TaskID: task.ID, Operation: operation(input.Operation),
 		TargetID: task.TargetID, TargetName: task.TargetName, Placement: workexecution.Placement{Executor: workexecution.Agent, HostID: hostID},
 		Input: &reference, Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
-		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline,
+		CreatedAt: task.UpdatedAt, UpdatedAt: task.UpdatedAt, Deadline: executionDeadline(task, input.Operation),
 		Claims: claims(input, hostID)}
 	if err := item.Validate(); err != nil {
 		return workexecution.Item{}, err
@@ -44,43 +44,50 @@ func NewItem(
 	return item, nil
 }
 
-// PrepareCapturePublication creates native execution records and captured input.
-// The run publisher must join its frozen policy/source/credential comparisons,
-// run record, exclusion locks and secret pins before committing this change.
-func PrepareCapturePublication(task workexecution.Task, item workexecution.Item,
-	input *agentpb.BackupWorkInput, run backupruntime.BackupRunRecord,
-	marker idempotency.IdempotencyMarker,
+// PrepareCaptureAuthority validates source order and returns native capture data
+// to join the existing accepted Task promotion.
+func PrepareCaptureAuthority(task workexecution.Task, item workexecution.Item, input *agentpb.BackupWorkInput,
+	run backupruntime.BackupRunRecord,
 ) (workqueue.Change, error) {
+	if err := validateCapturePublication(task, item, input, run); err != nil {
+		return workqueue.Change{}, err
+	}
+	return PrepareExecutionAuthority(task, item, input)
+}
+
+func validateCapturePublication(task workexecution.Task, item workexecution.Item,
+	input *agentpb.BackupWorkInput, run backupruntime.BackupRunRecord,
+) error {
 	if input == nil || input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_CAPTURE ||
 		run.TaskID != task.ID || run.State != backupruntime.BackupRunQueued ||
 		run.EnvironmentID != input.EnvironmentId || task.TargetID != input.EnvironmentId ||
-		!run.CreatedAt.Equal(task.CreatedAt) || !task.Deadline.Equal(run.CreatedAt.Add(6*time.Hour)) ||
+		!run.CreatedAt.Equal(task.UpdatedAt) || task.CreatedAt.After(run.CreatedAt) ||
 		len(run.Sources) != len(input.Steps) {
-		return workqueue.Change{}, conflict("Backup capture publication differs from its frozen run")
+		return conflict("Backup capture publication differs from its frozen run")
 	}
 	switch run.Initiator {
 	case backupruntime.BackupRunInitiatorOperator:
 		if task.Actor != workexecution.OperatorActor {
-			return workqueue.Change{}, conflict("Manual Backup requires an operator action")
+			return conflict("Manual Backup requires an operator action")
 		}
 	case backupruntime.BackupRunInitiatorSchedule:
 		if task.Actor != workexecution.SystemActor {
-			return workqueue.Change{}, conflict("Scheduled Backup requires a system action")
+			return conflict("Scheduled Backup requires a system action")
 		}
 	default:
-		return workqueue.Change{}, conflict("Backup initiator is invalid")
+		return conflict("Backup initiator is invalid")
 	}
 	scope := &agentpb.BackupPlanScope{ProjectId: input.ProjectId, Project: input.Project,
 		EnvironmentId: input.EnvironmentId, Environment: input.Environment, Services: input.Services}
 	for index, source := range run.Sources {
 		if source.Ordinal != uint32(index) {
-			return workqueue.Change{}, conflict("Backup capture source order changed")
+			return conflict("Backup capture source order changed")
 		}
 		if err := backupplanning.ValidateBackupRunStepAuthority(run, source, input.Steps[index], scope); err != nil {
-			return workqueue.Change{}, err
+			return err
 		}
 	}
-	return PrepareExecutionPublication(task, item, input, marker)
+	return nil
 }
 
 // PrepareExecutionPublication initializes one captured Backup, Restore or prune
@@ -88,6 +95,23 @@ func PrepareCapturePublication(task workexecution.Task, item workexecution.Item,
 // exclusions and credential pins. This function does not commit independently.
 func PrepareExecutionPublication(task workexecution.Task, item workexecution.Item,
 	input *agentpb.BackupWorkInput, marker idempotency.IdempotencyMarker,
+) (workqueue.Change, error) {
+	authority, err := PrepareExecutionAuthority(task, item, input)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	native, err := workqueue.PrepareSingleTask(task, item, marker)
+	if err != nil {
+		keyvalue.ClearMutationValues(authority.Mutations)
+		return workqueue.Change{}, err
+	}
+	return workqueue.JoinChanges(native, authority)
+}
+
+// PrepareExecutionAuthority returns captured input/progress only; the caller joins
+// promotion of the already accepted Task rather than publishing another Task.
+func PrepareExecutionAuthority(task workexecution.Task, item workexecution.Item,
+	input *agentpb.BackupWorkInput,
 ) (workqueue.Change, error) {
 	expected, err := NewItem(task, item.ID, item.Placement.HostID, input)
 	if err != nil {
@@ -103,10 +127,7 @@ func PrepareExecutionPublication(task workexecution.Task, item workexecution.Ite
 		!item.UpdatedAt.Equal(expected.UpdatedAt) {
 		return workqueue.Change{}, conflict("Backup work item differs from its initial admission")
 	}
-	change, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		return workqueue.Change{}, err
-	}
+	change := workqueue.Change{}
 	captured, err := PrepareInput(item, input)
 	if err != nil {
 		keyvalue.ZeroMutationBytes(change.Mutations)
@@ -144,4 +165,16 @@ func actionMatches(action workexecution.Action, operation agentpb.BackupWorkOper
 	default:
 		return false
 	}
+}
+
+func executionDeadline(task workexecution.Task, operation agentpb.BackupWorkOperation) time.Time {
+	duration := 6 * time.Hour
+	if operation == agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_PRUNE {
+		duration = 30 * time.Minute
+	}
+	deadline := task.UpdatedAt.Add(duration)
+	if task.Deadline.Before(deadline) {
+		return task.Deadline
+	}
+	return deadline
 }

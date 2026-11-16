@@ -6,9 +6,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupwork"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -25,13 +25,13 @@ type restoreWorkPublication struct {
 	mutations  []keyvalue.Mutation
 }
 
-func (repository *BackupRuntimeRepository) publishRestoreWork(ctx context.Context,
+func (repository *BackupRuntimeRepository) prepareRestoreWorkAuthority(ctx context.Context,
 	captured restoreWorkPublication, task workexecution.Task, item workexecution.Item,
-	input *agentpb.BackupWorkInput, marker idempotency.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+	input *agentpb.BackupWorkInput,
+) (workqueue.Change, error) {
 	defer keyvalue.ClearMutationValues(captured.mutations)
-	invalid := func() (IdempotencyTransactionResult, error) {
-		return IdempotencyTransactionResult{}, errs.New(
+	invalid := func() (workqueue.Change, error) {
+		return workqueue.Change{}, errs.New(
 			errs.KindValidationFailed,
 			"Restore captured publication changed",
 		)
@@ -59,15 +59,9 @@ func (repository *BackupRuntimeRepository) publishRestoreWork(ctx context.Contex
 			return invalid()
 		}
 	}
-	if marker.Kind != idempotency.IdempotencyMarkerTask || marker.State != idempotency.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != captured.restore.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) {
-		return invalid()
-	}
-	change, err := backupwork.PrepareRestorePublication(task, item, input, captured.restore, marker)
+	change, err := backupwork.PrepareRestoreAuthority(task, item, input, captured.restore)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer keyvalue.ClearMutationValues(change.Mutations)
 	conditions := append(change.Conditions, captured.conditions...)
@@ -75,7 +69,7 @@ func (repository *BackupRuntimeRepository) publishRestoreWork(ctx context.Contex
 	defer keyvalue.ClearMutationValues(mutations)
 	initiation, err := newTaskInitiation(captured.owner, taskjournal.TaskActorOperator)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*keyvalue.KeyValue) error {
 		return errs.New(
@@ -83,20 +77,9 @@ func (repository *BackupRuntimeRepository) publishRestoreWork(ctx context.Contex
 			"Restore source or destination changed before admission; submit a new action",
 		)
 	})
-	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
+	conditions, _, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, classify)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := plan.enforceTransactionBounds(backupruntime.ValidateBackupRuntimeTransactionBounds); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	receipts, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return receipts.Apply(ctx, marker, plan)
+	return workqueue.Change{Conditions: conditions, Mutations: keyvalue.CloneMutations(mutations)}, nil
 }

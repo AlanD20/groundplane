@@ -1,3 +1,4 @@
+import { HierarchyDeleteDialog } from "@/components/common/hierarchy-delete-dialog";
 import { useEditorSession } from "@/components/common/editor-session";
 import { NetworkRange } from "@/components/common/network-range";
 import {
@@ -28,12 +29,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { CopyButton } from "@/components/common/copy-button";
 import { cn } from "@/lib/utils";
 import type { Environment } from "@/lib/types";
 import { TaskLink } from "@/components/common/task-link";
 import { useBackupRefresh } from "@/features/backup/use-backup-refresh";
 import { TaskAlertSettings } from "@/features/task-alerts/task-alert-settings";
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 
 // ---- Shared-infra facts ----
 
@@ -53,11 +54,10 @@ export function SettingsCard({ env }: { env: Environment }) {
   const [networkPoolError, setNetworkPoolError] = useState<string | null>(null);
   const [renameSaving, setRenameSaving] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
-  const [deleteSaving, setDeleteSaving] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [confirmTyped, setConfirmTyped] = useState("");
   const [keyAction, setKeyAction] = useState<"rotate" | "export" | null>(null);
   const [rotateOpen, setRotateOpen] = useState(false);
+  const [rotateAfter, setRotateAfter] = useState<string[]>([]);
+  const [rotateAfterLoading, setRotateAfterLoading] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
   const [keyTaskId, setKeyTaskId] = useState<string | null>(null);
   const backupState = store.getBackupPolicyState(env.id);
@@ -176,6 +176,13 @@ export function SettingsCard({ env }: { env: Environment }) {
               {keyError}
             </p>
           )}
+          <fieldset disabled={!!keyAction}>
+            <TaskRunAfterSelector
+              value={rotateAfter}
+              onChange={setRotateAfter}
+              onBusyChange={setRotateAfterLoading}
+            />
+          </fieldset>
           <DialogFooter>
             <Button
               variant="outline"
@@ -187,6 +194,7 @@ export function SettingsCard({ env }: { env: Environment }) {
             <Button
               disabled={
                 !!keyAction ||
+                rotateAfterLoading ||
                 !backupState.loaded ||
                 !!backupState.loadError ||
                 !backup.ageRecipient
@@ -202,7 +210,10 @@ export function SettingsCard({ env }: { env: Environment }) {
                 setKeyAction("rotate");
                 setKeyError(null);
                 try {
-                  const taskID = await store.rotateBackupKey(env.id);
+                  const taskID = await store.rotateBackupKey(
+                    env.id,
+                    rotateAfter,
+                  );
                   setKeyTaskId(taskID);
                   setRotateOpen(false);
                 } catch (error) {
@@ -304,6 +315,7 @@ export function SettingsCard({ env }: { env: Environment }) {
             }
             onClick={() => {
               setKeyError(null);
+              setRotateAfter([]);
               setRotateOpen(true);
             }}
           >
@@ -504,73 +516,17 @@ export function SettingsCard({ env }: { env: Environment }) {
         </DialogFooter>
       </ResourceForm>
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete {env.name}?</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <p className="text-xs text-muted-foreground">
-              This permanently removes the environment{" "}
-              <span className="font-mono">{env.id}</span> and its env-scoped
-              secrets, backups, and recovery points. Cannot be undone.
-            </p>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="del-confirm">
-                  Type the required value to confirm
-                </Label>
-                <CopyButton value={env.name} label="copy required value" />
-              </div>
-              <code className="select-all rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-xs text-foreground">
-                {env.name}
-              </code>
-              <Input
-                id="del-confirm"
-                placeholder={env.name}
-                onChange={(e) => setConfirmTyped(e.target.value)}
-                autoFocus
-              />
-            </div>
-            {(deleteError ?? deletionFailure?.message) && (
-              <p className="text-xs text-destructive" role="alert">
-                {deleteError ?? deletionFailure?.message}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={deleteSaving}
-              onClick={() => setDeleteOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteSaving || confirmTyped !== env.name}
-              onClick={async () => {
-                setDeleteSaving(true);
-                setDeleteError(null);
-                try {
-                  await store.deleteEnvironment(env.id);
-                  navigate(`/t/${params.tenant}/${params.project}`);
-                } catch (error) {
-                  setDeleteError(
-                    error instanceof Error
-                      ? error.message
-                      : "Unable to delete Environment",
-                  );
-                  setDeleteSaving(false);
-                }
-              }}
-            >
-              <Trash2 className="size-4" />{" "}
-              {deleteSaving ? "Deleting…" : "Delete environment"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <HierarchyDeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        kind="environment"
+        name={env.name}
+        id={env.id}
+        workspace={params.tenant}
+        description={`Permanently removes this Environment, its workloads, Configuration, backups, recovery points and persistent Volume data. ${deletionFailure?.message ?? ""}`}
+        onDispatch={(after) => store.deleteEnvironment(env.id, after)}
+        onCommit={() => navigate(`/t/${params.tenant}/${params.project}`)}
+      />
     </>
   );
 }

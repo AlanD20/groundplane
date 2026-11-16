@@ -303,13 +303,13 @@ func TestEntryRemoveRouteUsesProtectedMutation(t *testing.T) {
 }
 
 // Rationale: unprotected body or query inputs would be absent from Entry-removal replay evidence and must fail at the HTTP boundary.
-func TestEntryRemoveRouteRejectsBodyAndQuery(t *testing.T) {
+func TestEntryRemoveRouteRejectsMalformedBodyAndQuery(t *testing.T) {
 	entryID := "ev_" + ids.NewULID()
 	for name, test := range map[string]struct {
 		path string
 		body io.Reader
 	}{
-		"body":  {path: "/api/v1/entries/" + entryID, body: strings.NewReader(`{}`)},
+		"body":  {path: "/api/v1/entries/" + entryID, body: strings.NewReader(`{`)},
 		"query": {path: "/api/v1/entries/" + entryID + "?force=true"},
 	} {
 		t.Run(name, func(t *testing.T) {

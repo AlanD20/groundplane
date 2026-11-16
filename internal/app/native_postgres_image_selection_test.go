@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -22,13 +21,10 @@ func TestNativePostgresCreationHonorsImageSelection(t *testing.T) {
 		Adapter: "postgres", AdapterVersion: "16", Image: images.plan.Requested,
 		NetworkPool: "10.205.0.0/24", Zone: api.BackingServiceZoneCreate{Name: "data", Subnet: "10.205.0.0/28", Internal: true}}
 	response, err := service.CreateBackingService(t.Context(), request, "native-postgres-selected-image")
-	if err != nil || response.Status != 201 {
+	if err != nil || response.Status != 202 {
 		t.Fatalf("creation: %v, status %d", err, response.Status)
 	}
-	var created api.BackingServiceCreated
-	if err := json.Unmarshal(response.Body, &created); err != nil {
-		t.Fatal(err)
-	}
+	created := nativeBackingCreationResult(t, f, response)
 	repository, err := etcd.NewServiceRepository(f.store)
 	if err != nil {
 		t.Fatal(err)

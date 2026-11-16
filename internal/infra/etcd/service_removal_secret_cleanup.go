@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -22,8 +23,12 @@ func (repository *ServiceRepository) abandonRemovalSecretPreparation(
 ) error {
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	key := workqueue.TaskKey(input.TaskID)
-	read, err := repository.store.GetMany(cleanup, keyvalue.GetManyRequest{Keys: []string{key}})
+	keys := []string{
+		workqueue.TaskKey(input.TaskID),
+		workqueue.ItemKey(input.WorkItemID),
+		serviceremovalwork.InputKey(input.WorkItemID),
+	}
+	read, err := repository.store.GetMany(cleanup, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		return errors.Join(cause, err)
 	}
@@ -34,14 +39,30 @@ func (repository *ServiceRepository) abandonRemovalSecretPreparation(
 		)
 	}
 	defer keyvalue.ClearValues(read.Values)
-	if len(read.Values) != 1 || read.ReadRevision <= 0 {
+	if len(read.Values) != len(keys) || read.ReadRevision <= 0 {
 		return errors.Join(
 			cause,
 			errs.New(errs.KindStorageUnavailable, "Removal publication observation is incomplete"),
 		)
 	}
+	if read.Values[1] != nil || read.Values[2] != nil {
+		if read.Values[0] != nil && read.Values[1] != nil && read.Values[2] != nil {
+			return cause
+		}
+		return errors.Join(
+			cause,
+			errs.New(errs.KindStateConflict, "removal publication is incomplete; Secret protections were retained"),
+		)
+	}
 	if read.Values[0] != nil {
-		return cause
+		task, err := workqueue.DecodeTask(read.Values[0].Value)
+		if err != nil {
+			return errors.Join(cause, err)
+		}
+		if task.ID != input.TaskID || task.AcceptedIntent == nil || task.Intent != (workexecution.Input{}) ||
+			task.ExpectedItems != 0 {
+			return cause
+		}
 	}
 	pins, err := tasksecretpins.NewEtcdRepository(repository.store, input.Scope.ProjectID)
 	if err != nil {

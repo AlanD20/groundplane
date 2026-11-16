@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/controller/backup"
 	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
@@ -62,7 +61,6 @@ func newControllerDataComposition(
 ) (controllerDataComposition, error) {
 	entryValues, err := entryvalues.New(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf(
 			"controller: initialize Entry value generation repository: %w",
 			err,
@@ -70,32 +68,26 @@ func newControllerDataComposition(
 	}
 	entryRecords, err := etcd.NewEntryRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Entry repository: %w", err)
 	}
 	entryReadRepository, err := entryoperations.NewReadRepository(authority.hierarchyRecords, entryRecords, entryValues)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Entry read repositories: %w", err)
 	}
 	entryReads, err := entryoperations.NewReadService(entryReadRepository, authority.intentProtector)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Entry reads: %w", err)
 	}
 	serviceRecords, err := etcd.NewServiceRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Service repository: %w", err)
 	}
 	routeRecords, err := etcd.NewRouteRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Route repository: %w", err)
 	}
 	scriptRecords, err := etcd.NewScriptRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Script repository: %w", err)
 	}
 	scriptReadRepository, err := scriptoperations.NewReadRepository(
@@ -104,22 +96,18 @@ func newControllerDataComposition(
 		scriptRecords,
 	)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Script read repositories: %w", err)
 	}
 	scriptReads, err := scriptoperations.NewReadService(scriptReadRepository)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Script reads: %w", err)
 	}
 	zoneRecords, err := etcd.NewZoneRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Zone repository: %w", err)
 	}
 	serviceDesiredRevisionRecords, err := desiredrevisionstore.NewRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf(
 			"controller: initialize Service desired revision repository: %w",
 			err,
@@ -129,24 +117,20 @@ func newControllerDataComposition(
 		authority.hierarchyRecords, serviceRecords, zoneRecords, serviceDesiredRevisionRecords, authority.releaseLedger,
 	)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Service mutation repositories: %w", err)
 	}
 	scriptMutationRepository, err := scriptoperations.NewMutationRepository(
 		authority.hierarchyRecords, serviceRecords, scriptRecords, authority.releaseLedger,
 	)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Script mutation repositories: %w", err)
 	}
 	componentRecords, err := etcd.NewComponentRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Component repository: %w", err)
 	}
 	resolverBaselines, err := resolverbaseline.New(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf(
 			"controller: initialize host resolver baseline repository: %w",
 			err,
@@ -154,7 +138,6 @@ func newControllerDataComposition(
 	}
 	resolutionProjections, err := resolutionrecord.New(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf(
 			"controller: initialize host-resolution projection repository: %w",
 			err,
@@ -162,91 +145,75 @@ func newControllerDataComposition(
 	}
 	platformComponents, err := platformcomponents.DefaultPlatformComponents(detectTailnetDelegationDefault())
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize platform Components: %w", err)
 	}
 	if _, err := componentRecords.EnsurePlatformComponents(ctx, platformComponents); err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: bootstrap platform Components: %w", err)
 	}
 	backingServiceRecords, err := backingrecords.NewRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize backing-service repository: %w", err)
 	}
 	backingServiceReads, err := backingservices.NewReadService(backingServiceRecords)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize backing-service reads: %w", err)
 	}
 	secretRecords, err := etcd.NewSecretRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Secret repository: %w", err)
 	}
 	secretReadRepository, err := secrets.NewRepository(authority.hierarchyRecords, secretRecords)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Secret read repositories: %w", err)
 	}
 	secretReads, err := secrets.NewReadService(secretReadRepository, authority.intentProtector)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Secret reads: %w", err)
 	}
 	connectorRecords, err := etcd.NewConnectorRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Connector repository: %w", err)
 	}
 	connectorReadRepository, err := connectors.NewReadRepository(authority.hierarchyRecords, connectorRecords)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Connector read repositories: %w", err)
 	}
 	connectorReads, err := connectors.NewReadService(connectorReadRepository)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Connector reads: %w", err)
 	}
 	volumeReads, err := volume.NewReadService(authority.hierarchyRecords)
 	if err != nil {
-		closeErr := store.Close()
-		return controllerDataComposition{}, errs.Wrap(errs.KindInternal, errors.Join(
+		return controllerDataComposition{}, errs.Wrap(
+			errs.KindInternal,
 			wrapControllerRunError("initialize volume reads", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
+		)
 	}
 	backupPolicyRecords, err := etcd.NewBackupPolicyRepository(store)
 	if err != nil {
-		closeErr := store.Close()
-		return controllerDataComposition{}, errs.Wrap(errs.KindInternal, errors.Join(
+		return controllerDataComposition{}, errs.Wrap(
+			errs.KindInternal,
 			wrapControllerRunError("initialize backup policy repository", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
+		)
 	}
 	backupKeyRecords, err := backuppolicy.NewKeyRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize backup key repository: %w", err)
 	}
 	backupRuntime, err := etcd.NewBackupRuntimeRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize backup runtime repository: %w", err)
 	}
 	scriptCheckpoints, err := taskcheckpoint.NewScriptCheckpointService(scriptRecords, store)
 	if err != nil {
-		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Script checkpoint service: %w", err)
 	}
 	backupPolicyRepository, err := backup.NewDurableBackupPolicyRepository(backupPolicyRecords)
 	if err != nil {
-		closeErr := store.Close()
-		return controllerDataComposition{}, errs.Wrap(errs.KindInternal, errors.Join(
+		return controllerDataComposition{}, errs.Wrap(
+			errs.KindInternal,
 			wrapControllerRunError("initialize backup policy repository adapter", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
+		)
 	}
 	return controllerDataComposition{
 		entryValues:                   entryValues,

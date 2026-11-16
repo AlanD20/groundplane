@@ -91,10 +91,9 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := firstFixture.publish(t, repository)
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
-		outcome != IdempotencyKnownApplied {
-		t.Fatalf("first create = %v, %v, %v", outcome, conflict, classifyErr)
+	created := firstFixture.publish(t, repository)
+	if !created.Applied {
+		t.Fatal("Runner allocation was not published")
 	}
 	resolved, err := repository.ResolveRunner(ctx, tenantID, "shared")
 	if err != nil || resolved.Record.Desired.ID != first.ID {
@@ -107,11 +106,9 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result = secondFixture.publish(t, repository)
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil ||
-		outcome != IdempotencyKnownConflict ||
-		!isKind(conflict, errs.KindRunnerSlugConflict) {
-		t.Fatalf("slug collision = %v, %v, %v", outcome, conflict, classifyErr)
+	collision := secondFixture.publish(t, repository)
+	if collision.Applied {
+		t.Fatal("Runner slug collision overwrote an existing owner")
 	}
 
 	ready, err := testrunners.BindRunnerContainerID(
@@ -156,7 +153,7 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 		ID:   first.ID,
 	}
 	marker.Response.Body = []byte(`{"id":"` + first.ID + `","slug":"renamed"}`)
-	result, err = repository.ReplaceRunnerSettingsIdempotent(ctx, first.ID, "renamed", nil, marker)
+	result, err := repository.ReplaceRunnerSettingsIdempotent(ctx, first.ID, "renamed", nil, marker)
 	if err != nil {
 		t.Fatal(err)
 	}

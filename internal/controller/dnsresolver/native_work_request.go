@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -13,11 +14,20 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
-// PrepareHostWork selects the enrolled target once. Assignment consumes this
+// PrepareSystemHostWork selects the enrolled target once. Assignment consumes this
 // captured identity and platform; it never consults Controller-local GOARCH.
-func (planner *PlatformRenderPlanner) PrepareHostWork(ctx context.Context, tasks *etcd.TaskRepository,
-	current keyvalue.Versioned[componentrecord.Record], desired core.Component, actor workexecution.Actor,
+func (planner *PlatformRenderPlanner) PrepareSystemHostWork(ctx context.Context, tasks *etcd.TaskRepository,
+	current keyvalue.Versioned[componentrecord.Record], desired core.Component,
 	action workexecution.Action, ensureRuntime bool, createdAt time.Time, timeout time.Duration,
+) (PreparedWork, error) {
+	return planner.prepareHostWork(ctx, tasks, current, desired, WorkRequest{
+		TaskID: ids.New(ids.KindTask), WorkID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
+		OperationID: ids.New(ids.KindOperation), Actor: workexecution.SystemActor, Action: action,
+		CreatedAt: createdAt, Deadline: createdAt.Add(timeout), EnsureRuntime: ensureRuntime})
+}
+
+func (planner *PlatformRenderPlanner) prepareHostWork(ctx context.Context, tasks *etcd.TaskRepository,
+	current keyvalue.Versioned[componentrecord.Record], desired core.Component, request WorkRequest,
 ) (PreparedWork, error) {
 	host, err := tasks.SelectResolverHost(ctx)
 	if err != nil {
@@ -28,11 +38,8 @@ func (planner *PlatformRenderPlanner) PrepareHostWork(ctx context.Context, tasks
 		return PreparedWork{}, err
 	}
 	current.ReadRevision = max(current.ReadRevision, host.ReadRevision)
-	prepared, err := planner.PrepareWork(ctx, records, current, desired, WorkRequest{
-		TaskID: ids.New(ids.KindTask), WorkID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
-		OperationID: ids.New(ids.KindOperation), HostID: host.Record.HostID,
-		ImageOS: host.Record.OS, ImageArchitecture: host.Record.Architecture,
-		Actor: actor, Action: action, CreatedAt: createdAt, Deadline: createdAt.Add(timeout), EnsureRuntime: ensureRuntime})
+	request.HostID, request.ImageOS, request.ImageArchitecture = host.Record.HostID, host.Record.OS, host.Record.Architecture
+	prepared, err := planner.PrepareWork(ctx, records, current, desired, request)
 	if err != nil {
 		return PreparedWork{}, err
 	}
@@ -44,13 +51,18 @@ func (planner *PlatformRenderPlanner) PrepareHostWork(ctx context.Context, tasks
 	return prepared, prepared.Capture.Validate(prepared.Input)
 }
 
-func (repository *PlatformMutationService) prepareMutation(
-	ctx context.Context,
-	current keyvalue.Versioned[componentrecord.Record],
-	desired core.Component,
-	action workexecution.Action,
-	ensure bool,
+func (service *PlatformMutationService) prepareAcceptedMutation(
+	ctx context.Context, current keyvalue.Versioned[componentrecord.Record], desired core.Component,
+	task workexecution.Task, ensure bool, at time.Time,
 ) (PreparedWork, error) {
-	return repository.planner.PrepareHostWork(ctx, repository.tasks, current, desired, workexecution.OperatorActor,
-		action, ensure, repository.now().UTC(), time.Duration(platformComponentTaskTimeoutSeconds)*time.Second)
+	return service.planner.prepareHostWork(ctx, service.tasks, current, desired, WorkRequest{
+		TaskID: task.ID, WorkID: ids.DeriveAt(ids.KindWorkItem, task.CreatedAt, task.ID, "resolver-work"),
+		PlanID:      ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "resolver-input"),
+		OperationID: ids.DeriveAt(ids.KindOperation, task.CreatedAt, task.ID, "resolver-operation"),
+		Actor:       workexecution.OperatorActor, Action: task.Action, CreatedAt: at,
+		Deadline: acceptedaction.ExecutionDeadline(
+			task,
+			at,
+			time.Duration(platformComponentTaskTimeoutSeconds)*time.Second,
+		), EnsureRuntime: ensure})
 }

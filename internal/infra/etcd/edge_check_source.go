@@ -49,7 +49,7 @@ func (repository *RouteRepository) LoadEdgeCheckSource(ctx context.Context, envi
 	routeRevision int64, connectorID, path string,
 ) (EdgeCheckSource, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindRoute, routeID) != nil ||
-		ids.Validate(ids.KindComponent, connectorID) != nil || routeRevision <= 0 {
+		ids.Validate(ids.KindComponent, connectorID) != nil || routeRevision < 0 {
 		return EdgeCheckSource{}, errs.New(
 			errs.KindValidationFailed,
 			"Tunnel check requires an Environment, Route revision and connector",
@@ -60,7 +60,7 @@ func (repository *RouteRepository) LoadEdgeCheckSource(ctx context.Context, envi
 		return EdgeCheckSource{}, err
 	}
 	projection := source.projection
-	if projection.Revision != routeRevision {
+	if routeRevision != 0 && projection.Revision != routeRevision {
 		return EdgeCheckSource{}, errs.New(
 			errs.KindStateConflict,
 			"Route configuration changed or is unavailable; refresh before checking public access",

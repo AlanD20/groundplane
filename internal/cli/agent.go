@@ -50,19 +50,26 @@ func newAgentCmd() *cobra.Command {
 		},
 	})
 
-	cmd.AddCommand(&cobra.Command{
+	var joinAfter []string
+	join := &cobra.Command{
 		Use:   "join",
 		Short: "Create and start the local Agent",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			after, err := validatedTaskAfter(joinAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
-			accepted, err := app.Client.JoinAgent(cmd.Context())
+			accepted, err := app.Client.JoinAgent(cmd.Context(), after)
 			if err != nil {
 				return err
 			}
 			return renderDispatchedTask(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(join, &joinAfter)
+	cmd.AddCommand(join)
 
 	config := &cobra.Command{
 		Use:   "config",
@@ -121,7 +128,8 @@ func newAgentCmd() *cobra.Command {
 	}
 	set.Flags().IntVar(&pullInterval, "pull-interval", 0, "seconds between idle Ready heartbeats")
 	set.Flags().IntVar(&maxConcurrent, "max-concurrent-tasks", 0, "maximum distinct in-flight Tasks (1..256)")
-	set.Flags().IntVar(&maxParallel, "max-parallel-operations-per-task", 0, "maximum parallel operations per Task (1..256; product with Tasks at most 256)")
+	set.Flags().
+		IntVar(&maxParallel, "max-parallel-operations-per-task", 0, "maximum parallel operations per Task (1..256; product with Tasks at most 256)")
 	set.Flags().
 		StringSliceVar(&labels, "label", nil, "repeatable: key=value, for targeted dispatch")
 	config.AddCommand(set)
@@ -129,6 +137,7 @@ func newAgentCmd() *cobra.Command {
 
 	var updateAll bool
 	var updateImage string
+	var updateAfter []string
 	update := &cobra.Command{
 		Use:   "update [id]",
 		Short: "Update an agent through the Controller-owned container lifecycle",
@@ -148,6 +157,10 @@ func newAgentCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(updateAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			agentID := ""
 			if updateAll {
@@ -165,7 +178,7 @@ func newAgentCmd() *cobra.Command {
 			} else {
 				agentID = target(app, args[0])
 			}
-			accepted, err := app.Client.UpdateAgent(cmd.Context(), agentID, updateImage)
+			accepted, err := app.Client.UpdateAgent(cmd.Context(), agentID, updateImage, after)
 			if err != nil {
 				return err
 			}
@@ -174,21 +187,29 @@ func newAgentCmd() *cobra.Command {
 	}
 	update.Flags().BoolVar(&updateAll, "all", false, "update the singleton local Agent")
 	update.Flags().StringVar(&updateImage, "image", "", "digest-pinned Agent release image")
+	addTaskAfterFlag(update, &updateAfter)
 	cmd.AddCommand(update)
 
-	cmd.AddCommand(&cobra.Command{
+	var removeAfter []string
+	remove := &cobra.Command{
 		Use:   "remove <id>",
 		Short: "Remove an agent container and revoke its channel token",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(removeAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
-			accepted, err := app.Client.RemoveAgent(cmd.Context(), target(app, args[0]))
+			accepted, err := app.Client.RemoveAgent(cmd.Context(), target(app, args[0]), after)
 			if err != nil {
 				return err
 			}
 			return renderDispatchedTask(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &removeAfter)
+	cmd.AddCommand(remove)
 
 	return cmd
 }

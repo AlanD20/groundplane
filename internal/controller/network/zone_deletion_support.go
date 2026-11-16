@@ -2,7 +2,6 @@ package network
 
 import (
 	"context"
-	"errors"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -14,8 +13,9 @@ func (service *zoneDeletionService) replayZoneDeletion(
 	locator idempotencyrecord.IdempotencyLocator,
 	target idempotencyrecord.IdempotencyReplayTarget,
 	impactToken string,
+	after []string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	evidence, err := service.idempotency.Prepare(ctx, locator, target.ID, impactToken)
+	evidence, err := service.idempotency.Prepare(ctx, locator, target.ID, impactToken, after)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -31,12 +31,4 @@ func (service *zoneDeletionService) replayZoneDeletion(
 		)
 	}
 	return cloneIdempotencyResponse(resolution.Response), nil
-}
-
-func isUnknownZoneDeletionOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
 }

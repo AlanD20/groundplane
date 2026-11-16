@@ -2,7 +2,7 @@ package etcd
 
 import (
 	"context"
-	"net/http"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	connectormutations "github.com/AlanD20/groundplane/internal/infra/etcd/connectormutations"
@@ -10,7 +10,6 @@ import (
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -19,53 +18,34 @@ import (
 
 const connectorDeletionRoute = "/connectors/{id}"
 
-func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Context,
+func (repository *ConnectorRepository) PrepareConnectorRemovalAuthority(ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	current etcdstore.Versioned[connectorrecord.Record],
-	input connectorremoval.Input, task workexecution.Task, marker idempotencyrecord.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+	input connectorremoval.Input, task workexecution.Task,
+) (workqueue.Change, workexecution.Item, error) {
 	if err := connectormutations.ValidateConnectorHierarchy(ctx, environment, project, current.Record); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	if err := connectorrecord.ValidateConnectorVersion(current); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	connector := current.Record.Connector
 	ref, err := input.Reference()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	if task.Validate() != nil || input.TaskID != task.ID || input.ConnectorID != connector.ID ||
 		input.ConnectorRevision != current.Revision || input.EnvironmentID != connector.EnvironmentID ||
 		input.ProjectID != project.Record.ID || input.TenantID != project.Record.TenantID ||
 		task.Scope != (workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID}) ||
 		task.Action != workexecution.ActionRemove || task.Actor != workexecution.OperatorActor ||
-		task.TargetID != connector.ID || task.TargetName != connector.Name || task.Intent != ref || task.ExpectedItems != 1 ||
-		!task.CreatedAt.Equal(input.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
+		task.TargetID != connector.ID || task.Intent != ref || task.ExpectedItems != 1 ||
+		task.CreatedAt.After(input.CreatedAt) || !task.UpdatedAt.Equal(input.CreatedAt) {
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
 			errs.KindValidationFailed,
 			"Connector removal Task differs from captured input",
 		)
-	}
-	target := idempotencyrecord.IdempotencyReplayTarget{
-		Kind: idempotencyrecord.IdempotencyReplayTargetConnector,
-		ID:   connector.ID,
-	}
-	if idempotencyrecord.ValidateIdempotencyMarker(marker) != nil ||
-		marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != connector.EnvironmentID || marker.Locator.Method != http.MethodDelete ||
-		marker.Locator.Route != connectorDeletionRoute || marker.ReplayTarget == nil || *marker.ReplayTarget != target ||
-		!idempotencyrecord.ValidTaskResponse(marker.Response, task.ID) || !marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(task.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"Connector removal replay marker is invalid",
-		)
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
-		return existing, err
 	}
 	tombstoneKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)
 	keys := []string{connectorrecord.RecordKey(connector.ID), connectorrecord.CredentialValueKey(connector.ID),
@@ -73,17 +53,20 @@ func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Conte
 		connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name), tombstoneKey}
 	fence, fixed, err := repository.LoadConnectorMutationFence(ctx, environment, project, keys)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	if fixed == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Connector publication read is missing")
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
+			errs.KindInternal,
+			"Connector publication read is missing",
+		)
 	}
 	defer etcdstore.ClearValues(fixed.Values)
 	if len(fixed.Values) != len(keys)+2 || fixed.Values[0] == nil || fixed.Values[1] == nil ||
 		fixed.Values[0].ModRevision != input.ConnectorRevision || fixed.Values[1].ModRevision != input.CredentialRevision ||
 		fixed.Values[2] == nil || string(fixed.Values[2].Value) != connector.ID ||
 		fixed.Values[3] == nil || string(fixed.Values[3].Value) != connector.ID || fixed.Values[4] != nil {
-		return IdempotencyTransactionResult{}, errs.New(
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
 			errs.KindStateConflict,
 			"Connector or removal state changed; refresh before removing",
 		)
@@ -96,35 +79,33 @@ func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Conte
 		fence.ReadRevision(),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	item := workexecution.Item{ID: input.WorkItemID, TaskID: task.ID, Operation: workexecution.ConnectorRemoval,
 		TargetID: connector.ID, Placement: workexecution.Placement{Executor: workexecution.Controller},
 		Claims: []workexecution.Claim{{ScopeID: connector.ID}}, Input: &ref, Phase: workexecution.Ready,
-		Cleanup: workexecution.CleanupNone, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
-	work, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		Cleanup: workexecution.CleanupNone, CreatedAt: input.CreatedAt, UpdatedAt: input.CreatedAt, Deadline: input.CreatedAt.Add(30 * time.Second)}
+	if item.Deadline.After(task.Deadline) {
+		item.Deadline = task.Deadline
 	}
-	defer etcdstore.ClearMutationValues(work.Mutations)
 	captureConditions, captureWrites, err := connectorremoval.PreparePublication(input)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	defer etcdstore.ClearMutationValues(captureWrites)
 	tombstone, err := deletionrecord.EncodeDeletionTombstone(deletionrecord.DeletionTombstoneRecord{
 		TargetKind: deletionrecord.DeletionTargetConnector, TargetID: connector.ID, TargetRevision: current.Revision,
-		TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt})
+		TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: input.CreatedAt, UpdatedAt: input.CreatedAt})
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	defer clear(tombstone)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	defer clear(epoch.Value)
-	conditions := append(work.Conditions, captureConditions...)
+	conditions := append([]etcdstore.Condition(nil), captureConditions...)
 	conditions = append(conditions, refs...)
 	conditions = append(conditions, fence.TransactionConditions()...)
 	for index, key := range keys {
@@ -133,7 +114,7 @@ func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Conte
 			etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(fixed.Values[index])},
 		)
 	}
-	mutations := append(work.Mutations, captureWrites...)
+	mutations := append([]etcdstore.Mutation(nil), captureWrites...)
 	mutations = append(
 		mutations,
 		epoch,
@@ -141,11 +122,11 @@ func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Conte
 	)
 	tenant, err := loadConnectorTaskInitiationTenantAtRevision(ctx, repository.store, project, fence.ReadRevision())
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	initiation, err := newEnvironmentTaskInitiation(tenant, project, environment, taskjournal.TaskActorOperator)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*etcdstore.KeyValue) error {
 		return errs.New(
@@ -155,22 +136,11 @@ func (repository *ConnectorRepository) PublishConnectorRemoval(ctx context.Conte
 	})
 	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(
-		idempotencyrecord.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		classify,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	receipts, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return receipts.Apply(ctx, marker, plan)
+	_ = classify
+
+	return workqueue.Change{Conditions: conditions, Mutations: etcdstore.CloneMutations(mutations)}, item, nil
 }
 
 func loadConnectorTaskInitiationTenantAtRevision(

@@ -101,14 +101,13 @@ func TestNativeVolumeCreateRemoveAndReceiptReplay(t *testing.T) {
 		t.Context(),
 		f.created.Volume.ID,
 		impact,
-		"data",
-		"native-volume-remove-key",
+		"data", api.TaskRunAfterRequest{}, "native-volume-remove-key",
 	)
 	if err != nil || !bytes.Equal(replayed.Body, response.Body) || replayed.Status != response.Status ||
 		f.store.revision != before {
 		t.Fatalf("deleted Volume did not replay the original accepted response read-only: %v", err)
 	}
-	if _, err := f.mutations.RemoveVolume(t.Context(), f.created.Volume.ID, impact, "different", "native-volume-remove-key"); !errors.Is(
+	if _, err := f.mutations.RemoveVolume(t.Context(), f.created.Volume.ID, impact, "different", api.TaskRunAfterRequest{}, "native-volume-remove-key"); !errors.Is(
 		err,
 		errs.New(errs.KindIdempotencyMismatch, ""),
 	) {
@@ -332,8 +331,7 @@ func (f *nativeVolumeFixture) remove(t *testing.T) (workqueue.ResumeView, idempo
 		t.Context(),
 		f.created.Volume.ID,
 		impact.ImpactToken,
-		"data",
-		"native-volume-remove-key",
+		"data", api.TaskRunAfterRequest{}, "native-volume-remove-key",
 	)
 	if err != nil {
 		t.Fatal(err)

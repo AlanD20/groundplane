@@ -1,3 +1,8 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
+import {
+  BlueprintTaskReview,
+  validExpectedBlueprintRevision,
+} from "./blueprint-task-review";
 import { FormActions } from "@/components/common/form-actions";
 ("use client");
 
@@ -63,7 +68,8 @@ import type { Environment } from "@/lib/types";
 
 type PreparedBlueprint = {
   request: BlueprintApplyRequest;
-  validation: BlueprintValidationResponse;
+  validation: BlueprintValidationResponse | null;
+  revision: string;
   key: string;
   document: string;
   service: string;
@@ -94,6 +100,8 @@ export function BlueprintWorkspace({
   const selectedService = serviceName ?? scope;
   const [savedDocument, setSavedDocument] = useState("");
   const [error, setError] = useState("");
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const [prepared, setPrepared] = useState<PreparedBlueprint | null>(null);
   const submitted = useRef<{
     taskId: string;
@@ -262,14 +270,18 @@ export function BlueprintWorkspace({
         : draft;
       const request = await createBlueprintTextApplyRequest(document);
       if (selectedService) request.manifest.service = selectedService;
-      const validation = await store.validateBlueprint(
-        environment.id,
-        request,
-        snapshot.revision,
-      );
+      if (after.length) request.manifest.after = [...after];
+      const validation = after.length
+        ? null
+        : await store.validateBlueprint(
+            environment.id,
+            request,
+            snapshot.revision,
+          );
       setPrepared({
         request,
         validation,
+        revision: snapshot.revision,
         key: newULID(),
         document: draft,
         service: selectedService,
@@ -457,36 +469,45 @@ export function BlueprintWorkspace({
               onValueChange={setDraft}
             />
             {editing && (
-              <FormActions
-                onDiscard={() => {
-                  setDraft(savedDocument);
-                  setEditing(false);
-                }}
-                className={`${editorFooterClassName} flex flex-wrap justify-end gap-2`}
-              >
-                <Button
-                  variant="outline"
-                  disabled={working}
-                  onClick={() => {
+              <>
+                <TaskRunAfterSelector
+                  value={after}
+                  onChange={setAfter}
+                  onBusyChange={setAfterLoading}
+                />
+                <FormActions
+                  onDiscard={() => {
                     setDraft(savedDocument);
                     setEditing(false);
-                    setError("");
                   }}
+                  className={`${editorFooterClassName} flex flex-wrap justify-end gap-2`}
                 >
-                  Cancel
-                </Button>
-                <Button
-                  disabled={working || !draft.trim() || applyBlocked}
-                  onClick={() => void reviewDraft()}
-                >
-                  <Upload />
-                  {working
-                    ? "Validating…"
-                    : selectedService
-                      ? `Review ${selectedService} changes`
-                      : "Review Environment changes"}
-                </Button>
-              </FormActions>
+                  <Button
+                    variant="outline"
+                    disabled={working}
+                    onClick={() => {
+                      setDraft(savedDocument);
+                      setEditing(false);
+                      setError("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    disabled={
+                      working || afterLoading || !draft.trim() || applyBlocked
+                    }
+                    onClick={() => void reviewDraft()}
+                  >
+                    <Upload />
+                    {working
+                      ? "Validating…"
+                      : selectedService
+                        ? `Review ${selectedService} changes`
+                        : "Review Environment changes"}
+                  </Button>
+                </FormActions>
+              </>
             )}
           </div>
           {error && (
@@ -512,14 +533,26 @@ export function BlueprintWorkspace({
           type="update"
           target={environment.id}
           workspace={workspace}
-          review={<BlueprintReview validation={prepared.validation} />}
+          review={
+            <BlueprintTaskReview
+              validation={prepared.validation}
+              after={prepared.request.manifest.after ?? []}
+              revision={prepared.revision}
+              onRevisionChange={(revision) =>
+                setPrepared((current) =>
+                  current ? { ...current, revision, key: newULID() } : null,
+                )
+              }
+            />
+          }
+          startDisabled={!validExpectedBlueprintRevision(prepared.revision)}
           startLabel="Confirm and apply"
           onDispatch={async () => {
             try {
               const accepted = await store.applyBlueprint(
                 environment.id,
                 prepared.request,
-                snapshot.revision,
+                prepared.revision,
                 prepared.key,
               );
               submitted.current = {

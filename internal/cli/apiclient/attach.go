@@ -69,6 +69,7 @@ func (c *Client) CreateAttach(ctx context.Context, input apiTypes.AttachRequest)
 		return apiTypes.TaskAccepted{}, err
 	}
 	body := generated.AttachCreateJSONRequestBody{
+		After:            optionalServiceStrings(input.After),
 		BackingServiceId: input.BackingServiceID,
 		ServiceId:        input.ServiceID,
 		Credential: generated.AttachCredential{
@@ -101,7 +102,7 @@ func (c *Client) CreateAttach(ctx context.Context, input apiTypes.AttachRequest)
 	return generatedTaskAccepted(http.MethodPost, "/api/v1/attaches", response.Body, response.JSON202)
 }
 
-func (c *Client) DetachAttach(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) DetachAttach(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -111,6 +112,7 @@ func (c *Client) DetachAttach(ctx context.Context, id string) (apiTypes.TaskAcce
 		ctx,
 		id,
 		&generated.AttachDetachParams{IdempotencyKey: ids.NewULID()},
+		generated.AttachDetachJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
@@ -257,21 +259,6 @@ func generatedHierarchyTaskAccepted(
 ) (apiTypes.TaskAccepted, error) {
 	if parsed == nil {
 		parsed = &generated.HierarchyDeleteOutputBody{}
-		if err := decodeSingleJSON(method, path, bytes.NewReader(body), parsed); err != nil {
-			return apiTypes.TaskAccepted{}, err
-		}
-	}
-	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, nil
-}
-
-func generatedReleaseTaskAccepted(
-	method string,
-	path string,
-	body []byte,
-	parsed *generated.ReleaseTaskAccepted,
-) (apiTypes.TaskAccepted, error) {
-	if parsed == nil {
-		parsed = &generated.ReleaseTaskAccepted{}
 		if err := decodeSingleJSON(method, path, bytes.NewReader(body), parsed); err != nil {
 			return apiTypes.TaskAccepted{}, err
 		}

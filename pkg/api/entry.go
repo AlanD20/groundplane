@@ -37,6 +37,7 @@ type EntryCreateRequest struct {
 	Source        EntrySource `json:"source"`
 	Exposure      []string    `json:"exposure"`
 	Secret        bool        `json:"secret"`
+	After         []string    `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 }
 
 type EntryValue struct {

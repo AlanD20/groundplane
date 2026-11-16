@@ -34,7 +34,9 @@ func TestLocalAgentConfigReplacementCommitsWithIdempotencyMarker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSingleton() error = %v", err)
 	}
-	responseBody := []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"labels":{"zone":"edge"}}`)
+	responseBody := []byte(
+		`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"labels":{"zone":"edge"}}`,
+	)
 	marker := agentConfigurationTestMarker()
 	marker.Locator = testidempotency.IdempotencyLocator{
 		ScopeKind: testidempotency.IdempotencyScopePlatform,

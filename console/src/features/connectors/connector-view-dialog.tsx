@@ -6,7 +6,6 @@ import { CopyButton } from "@/components/common/copy-button";
 import type { Connector } from "@/lib/types";
 import { toYAML } from "@/lib/yaml";
 import { credentialLabel, connectorDocument } from "./connector-display";
-import { getConnectorEditSnapshot, connectorSnapshotRevision } from "./api";
 import { ConnectorCheckPanel } from "./connector-check-panel";
 export function ConnectorViewDialog({
   connector,
@@ -56,16 +55,10 @@ export function ConnectorViewDialog({
             identity={connector.id}
             connectorId={connector.id}
             open
-            getRequest={async () => {
-              const snapshot = await getConnectorEditSnapshot(
-                connector.id,
-                new AbortController().signal,
-              );
-              return {
-                connector_id: connector.id,
-                revision: connectorSnapshotRevision(snapshot),
-              };
-            }}
+            getRequest={async () => ({
+              connector_id: connector.id,
+              revision: 0,
+            })}
           />
           <Disclosure summary="YAML" summaryClassName="text-xs font-medium">
             <div className="mt-3 flex flex-col gap-1.5">

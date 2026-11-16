@@ -149,7 +149,7 @@ func TestNativeBackupPruneDispatcherKeepsUnselectedPointsQueued(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := backup.NewBackupPruneService(runtime, protected)
+	service, err := backup.NewBackupPruneService(runtime, protected, nil, coordinator)
 	if err != nil {
 		t.Fatal(err)
 	}

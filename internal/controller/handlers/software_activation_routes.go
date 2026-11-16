@@ -13,17 +13,19 @@ import (
 )
 
 type SoftwareActivator interface {
-	Start(context.Context, string, string) (activation.Accepted, error)
+	Start(context.Context, string, []string, string) (activation.Accepted, error)
 	Get(context.Context, string) (etcdstore.Versioned[activationrecord.Record], error)
 }
 
 type softwareApplyInput struct {
-	Task string `path:"task" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Key  string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Task string                        `path:"task" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Key  string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 type softwareActivationOutput struct{ Body apiTypes.SoftwareActivation }
 
 func (s *Server) registerSoftwareActivation() {
+	s.setRoutePolicy("POST /api/v1/software/preparations/{task}/apply", routePolicy{body: jsonBody})
 	huma.Register(s.API, huma.Operation{OperationID: "software.apply", Method: http.MethodPost,
 		Path: "/software/preparations/{task}/apply", Summary: "Apply a verified software preparation",
 		Tags: []string{"Software"}, DefaultStatus: http.StatusAccepted}, s.applySoftware)
@@ -36,7 +38,7 @@ func (s *Server) applySoftware(ctx context.Context, input *softwareApplyInput) (
 	if s.softwareActivator == nil {
 		return nil, errs.New(errs.KindStrategyNotImplemented, "software activation is unavailable on this host")
 	}
-	accepted, err := s.softwareActivator.Start(ctx, input.Task, input.Key)
+	accepted, err := s.softwareActivator.Start(ctx, input.Task, taskRunAfter(input.Body).After, input.Key)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}

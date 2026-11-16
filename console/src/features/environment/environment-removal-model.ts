@@ -7,12 +7,14 @@ export type PendingResourceRemoval =
       projectId: string;
       resourceId: string;
       generation: number;
+      after?: string[];
     }
   | {
       kind: "service" | "route" | "entry" | "script";
       environmentId: string;
       resourceId: string;
       generation?: number;
+      after?: string[];
     };
 
 export type EnvironmentMutationKind =

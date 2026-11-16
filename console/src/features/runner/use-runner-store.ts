@@ -39,6 +39,7 @@ export type RunnerActions = {
     memoryBytes: number;
     labels: string[];
     registrationToken: string;
+    after?: string[];
   }) => Promise<string>;
   editRunner: (
     runnerId: string,
@@ -46,7 +47,7 @@ export type RunnerActions = {
     autoUpdate?: boolean,
   ) => Promise<Runner>;
   retryRunner: (runnerId: string, registrationToken: string) => Promise<string>;
-  removeRunner: (runnerId: string) => Promise<string>;
+  removeRunner: (runnerId: string, after?: string[]) => Promise<string>;
 };
 type UpdateRunners = (change: (draft: RunnerState) => void) => void;
 export function useRunnerStore(update: UpdateRunners): RunnerActions {
@@ -126,6 +127,7 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
       memoryBytes: number;
       labels: string[];
       registrationToken: string;
+      after?: string[];
     }) => {
       const body: RunnerCreateRequest = {
         slug: input.slug,
@@ -140,6 +142,7 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
         tenant_id: input.tenantId,
         project_id: input.projectId,
         environment_id: input.environmentId,
+        after: input.after ?? [],
       };
       const response = await controllerRequest<RunnerCreateResponse>(
         "/runners",
@@ -213,16 +216,21 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
     },
     [],
   );
-  const removeRunner = useCallback(async (runnerId: string) => {
-    const response = await controllerRequest<RunnerRemoveResponse>(
-      `/runners/${encodeURIComponent(runnerId)}`,
-      202,
-      { method: "DELETE" },
-    );
-    if (!response.task_id)
-      throw new Error("Controller response is missing Runner removal task_id");
-    return response.task_id;
-  }, []);
+  const removeRunner = useCallback(
+    async (runnerId: string, after: string[] = []) => {
+      const response = await controllerRequest<RunnerRemoveResponse>(
+        `/runners/${encodeURIComponent(runnerId)}`,
+        202,
+        { method: "DELETE", body: { after } },
+      );
+      if (!response.task_id)
+        throw new Error(
+          "Controller response is missing Runner removal task_id",
+        );
+      return response.task_id;
+    },
+    [],
+  );
 
   return {
     refreshRunners,

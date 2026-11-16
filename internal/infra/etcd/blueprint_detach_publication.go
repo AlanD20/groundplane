@@ -48,6 +48,10 @@ func (repository *EnvironmentBlueprintRepository) prepareBlueprintDetachInputs(c
 		)
 	}
 	seen := make(map[string]bool, len(inputs))
+	taskGuard, err := blueprintStagingTaskCondition(ctx, repository.store, parent)
+	if err != nil {
+		return preparedBlueprintDetachInputs{}, err
+	}
 	for _, input := range inputs {
 		if err := input.Validate(ctx, false); err != nil {
 			return preparedBlueprintDetachInputs{}, err
@@ -79,7 +83,7 @@ func (repository *EnvironmentBlueprintRepository) prepareBlueprintDetachInputs(c
 			)
 		}
 		key := attachremoval.BlueprintInputKey(input.EnvironmentID, input.TaskID, input.WorkItemID)
-		stagingGuards := append(slices.Clone(guards), descriptor, keyvalue.Condition{Key: workqueue.TaskKey(parent.ID)},
+		stagingGuards := append(slices.Clone(guards), descriptor, taskGuard,
 			keyvalue.Condition{Key: key})
 		if len(input.Sources) != 0 {
 			pins, err := tasksecretpins.NewEtcdRepository(
@@ -94,7 +98,7 @@ func (repository *EnvironmentBlueprintRepository) prepareBlueprintDetachInputs(c
 				blueprintDetachPinPreparation{repository: pins, operationID: input.OperationID},
 			)
 			pinGuards := []tasksecretpins.Condition{
-				{Key: workqueue.TaskKey(parent.ID)},
+				{Key: taskGuard.Key, ModRevision: taskGuard.ModRevision},
 				{Key: workqueue.ItemKey(input.WorkItemID)},
 				{Key: descriptor.Key, ModRevision: descriptor.ModRevision},
 				{Key: key},
@@ -196,7 +200,9 @@ func (prepared *preparedBlueprintDetachInputs) finish(ctx context.Context, store
 			task.Action != workexecution.ActionApply {
 			return errors.Join(publicationErr, errs.New(errs.KindInternal, "Detach publication owner is invalid"))
 		}
-		return publicationErr
+		if task.AcceptedIntent == nil || task.Intent != (workexecution.Input{}) {
+			return publicationErr
+		}
 	}
 	return errors.Join(publicationErr, prepared.abandon(cleanupCtx))
 }

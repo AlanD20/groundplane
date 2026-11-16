@@ -11,6 +11,7 @@ import (
 
 func normalizeAttachRequest(request apiTypes.AttachRequest) (apiTypes.AttachRequest, error) {
 	request.GrantAttachIDs = append([]string(nil), request.GrantAttachIDs...)
+	request.After = append([]string(nil), request.After...)
 	if ids.Validate(ids.KindService, request.ServiceID) != nil ||
 		ids.Validate(ids.KindService, request.BackingServiceID) != nil {
 		return apiTypes.AttachRequest{}, errs.New(

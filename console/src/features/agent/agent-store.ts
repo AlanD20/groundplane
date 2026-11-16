@@ -25,9 +25,16 @@ export type AgentActions = {
     agentId: string,
     config: AgentConfigRequest,
   ) => Promise<AgentConfigResponse>;
-  joinAgent: () => Promise<AgentTaskAccepted>;
-  updateAgent: (agentId: string, image: string) => Promise<AgentTaskAccepted>;
-  removeAgent: (agentId: string) => Promise<AgentTaskAccepted>;
+  joinAgent: (after?: string[]) => Promise<AgentTaskAccepted>;
+  updateAgent: (
+    agentId: string,
+    image: string,
+    after?: string[],
+  ) => Promise<AgentTaskAccepted>;
+  removeAgent: (
+    agentId: string,
+    after?: string[],
+  ) => Promise<AgentTaskAccepted>;
   // selectors
 };
 export function useAgentRefresh(update: Update): AgentActions["refreshAgents"] {
@@ -121,29 +128,29 @@ export function createAgentActions(
       });
       return updated;
     },
-    joinAgent: async () => {
+    joinAgent: async (after = []) => {
       const accepted = await controllerRequest<AgentTaskAccepted>(
         "/agents",
         202,
-        { method: "POST" },
+        { method: "POST", body: { after } },
       );
       await refreshAgents();
       return accepted;
     },
-    updateAgent: async (agentId, image) => {
+    updateAgent: async (agentId, image, after = []) => {
       const accepted = await controllerRequest<AgentTaskAccepted>(
         `/agents/${encodeURIComponent(agentId)}/update`,
         202,
-        { method: "POST", body: { image } },
+        { method: "POST", body: { image, after } },
       );
       await refreshAgents();
       return accepted;
     },
-    removeAgent: async (agentId) => {
+    removeAgent: async (agentId, after = []) => {
       const accepted = await controllerRequest<AgentTaskAccepted>(
         `/agents/${encodeURIComponent(agentId)}`,
         202,
-        { method: "DELETE" },
+        { method: "DELETE", body: { after } },
       );
       await refreshAgents();
       return accepted;

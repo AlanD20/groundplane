@@ -2,7 +2,9 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,8 +17,8 @@ import (
 )
 
 // Rationale: lifecycle admission must atomically publish captured input, work,
-// runtime intent and replay receipt; overlapping publication fragments previously
-// duplicated the Task/item comparisons and rejected every action before execution.
+// runtime intent under the original pure accepted Task. Replay cannot create a
+// second Task, and acceptance alone must not expose executable work.
 func TestServiceLifecyclePublicationCommitsAndReplays(t *testing.T) {
 	for _, action := range []workexecution.Action{workexecution.ActionStart, workexecution.ActionStop, workexecution.ActionDestroy} {
 		t.Run(string(action), func(t *testing.T) {
@@ -43,7 +45,7 @@ func TestServiceLifecyclePublicationCommitsAndReplays(t *testing.T) {
 					ProjectID:     project.Record.ID,
 					EnvironmentID: environment.Record.ID,
 				},
-				CreatedAt: now,
+				CreatedAt: now.Add(time.Second),
 			}
 			marker := testDirectMarker()
 			marker.Kind, marker.State, marker.TaskID = idempotency.IdempotencyMarkerTask, idempotency.IdempotencyMarkerPending, input.TaskID
@@ -55,20 +57,36 @@ func TestServiceLifecyclePublicationCommitsAndReplays(t *testing.T) {
 				ID:   input.ServiceID,
 			}
 			marker.Response.Status, marker.Response.Body = http.StatusAccepted, []byte(`{"task_id":"`+input.TaskID+`"}`)
+			queue, err := workqueue.NewRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			receipts, err := NewIdempotencyRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pure := workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: strings.Repeat("a", 64)}
+			task := workexecution.Task{
+				ID:             input.TaskID,
+				Actor:          workexecution.OperatorActor,
+				Action:         action,
+				Scope:          input.Scope,
+				TargetID:       input.ServiceID,
+				TargetName:     current.Record.Desired.Name,
+				AcceptedIntent: &pure,
+				CreatedAt:      now,
+				UpdatedAt:      now,
+				Deadline:       now.Add(24 * time.Hour),
+			}
 			for attempt := range 2 {
-				result, err := repository.PublishServiceLifecycle(
-					ctx,
-					&tenant,
-					project,
-					environment,
-					current,
-					input,
-					nil,
-					now.Add(time.Minute),
-					marker,
-				)
+				acceptance, err := queue.PrepareAcceptedTask(ctx, task, marker)
 				if err != nil {
-					t.Fatalf("publication %d: %v", attempt, err)
+					t.Fatal(err)
+				}
+				result, err := receipts.PublishAcceptedAction(ctx, marker, acceptance)
+				keyvalue.ClearMutationValues(acceptance.Mutations)
+				if err != nil {
+					t.Fatalf("acceptance %d: %v", attempt, err)
 				}
 				outcome, _, conflict, err := result.Classify()
 				want := IdempotencyKnownApplied
@@ -76,8 +94,65 @@ func TestServiceLifecyclePublicationCommitsAndReplays(t *testing.T) {
 					want = IdempotencyKnownExisting
 				}
 				if err != nil || conflict != nil || outcome != want {
-					t.Fatalf("publication %d: %v / %v / %v", attempt, outcome, conflict, err)
+					t.Fatalf("acceptance %d: %v / %v / %v", attempt, outcome, conflict, err)
 				}
+			}
+			// Pure acceptance cannot change runtime intent or expose executable work.
+			before, err := store.Get(ctx, workqueue.ItemKey(input.WorkItemID))
+			if err != nil || before.Entry != nil {
+				t.Fatalf("work existed before capture: %v", err)
+			}
+			unchanged, err := repository.GetService(ctx, input.ServiceID)
+			if err != nil ||
+				unchanged.Record.Runtime.UnconfirmedLifecycleTaskID != current.Record.Runtime.UnconfirmedLifecycleTaskID ||
+				unchanged.Record.Runtime.RuntimeIntent != current.Record.Runtime.RuntimeIntent {
+				t.Fatalf("pure lifecycle acceptance changed runtime intent: %v", err)
+			}
+			accepted, _, err := queue.ReadTask(ctx, task.ID, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			publication, err := repository.PrepareServiceLifecycle(
+				ctx,
+				&tenant,
+				project,
+				environment,
+				current,
+				input,
+				nil,
+				input.CreatedAt.Add(time.Minute),
+				accepted,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer keyvalue.ClearMutationValues(publication.Change.Mutations)
+			task = accepted.Task
+			task.Intent, err = publication.Input.Reference()
+			if err != nil {
+				t.Fatal(err)
+			}
+			task.ExpectedItems, task.UpdatedAt = 1, input.CreatedAt
+			promotion, err := queue.PrepareAcceptedTaskPromotion(
+				ctx,
+				accepted,
+				task,
+				[]workexecution.Item{publication.Item},
+				nil,
+				false,
+				input.CreatedAt,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer keyvalue.ClearMutationValues(promotion.Mutations)
+			result, err := queue.Commit(ctx, promotion, publication.Change)
+			keyvalue.ClearValues(result.FailureReads)
+			if finishErr := publication.Finish(ctx, err == nil && result.Succeeded); finishErr != nil {
+				t.Fatal(finishErr)
+			}
+			if err != nil || !result.Succeeded {
+				t.Fatalf("native lifecycle promotion: %v / %v", result.Succeeded, err)
 			}
 			for _, key := range []string{workqueue.TaskKey(input.TaskID), workqueue.ItemKey(input.WorkItemID), servicelifecyclework.InputKey(input.WorkItemID)} {
 				read, err := store.Get(ctx, key)

@@ -12,6 +12,8 @@ import (
 
 func newConnectorCheckCmd() *cobra.Command {
 	var draftFile, changesFile string
+	var runAfter []string
+	var revision int64
 	cmd := &cobra.Command{Use: "check [name]", Short: "Test Connector storage permissions without saving",
 		Long: "Check a saved Connector, optionally with unsaved JSON edits, or an unsaved JSON creation draft. Cleanup Retry uses task retry and never repeats the permission probe.",
 		Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
@@ -25,7 +27,11 @@ func newConnectorCheckCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			input := apiTypes.ConnectorCheckRequest{}
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
+			input := apiTypes.ConnectorCheckRequest{After: after, Revision: revision}
 			if draftFile != "" {
 				input.Draft = &apiTypes.ConnectorCreateRequest{}
 				if err := readConnectorCheckJSON(cmd, draftFile, input.Draft); err != nil {
@@ -54,6 +60,9 @@ func newConnectorCheckCmd() *cobra.Command {
 	cmd.Flags().
 		StringVar(&draftFile, "draft-file", "", "unsaved Connector creation JSON from PATH or -; values are write-only")
 	cmd.Flags().StringVar(&changesFile, "changes-file", "", "unsaved Connector edit JSON from PATH or -")
+	cmd.Flags().
+		Int64Var(&revision, "revision", 0, "optional exact saved Connector revision; edits use the current revision when omitted")
+	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
 

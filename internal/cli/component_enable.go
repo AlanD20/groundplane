@@ -9,6 +9,8 @@ import (
 )
 
 func newComponentEnableCmd() *cobra.Command {
+	var runAfter []string
+	var authoredConfigFile string
 	var configFile string
 	var alias string
 	var templateFile string
@@ -20,8 +22,31 @@ func newComponentEnableCmd() *cobra.Command {
 		Short: "Enable a component",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			id := target(app, args[0])
+			if authoredConfigFile != "" {
+				if err := rejectComponentConfigFlagMix(cmd); err != nil {
+					return err
+				}
+				config, err := readAuthoredComponentConfig(cmd, authoredConfigFile)
+				if err != nil {
+					return err
+				}
+				accepted, err := app.Client.EnableComponent(
+					cmd.Context(),
+					id,
+					apiTypes.ComponentEnableRequest{Config: &config, After: after},
+				)
+				if err != nil {
+					return err
+				}
+				return renderDispatchedTask(cmd, accepted)
+			}
+
 			configChanged := cmd.Flags().Changed("implementation") || cmd.Flags().Changed("alias") ||
 				cmd.Flags().Changed("file") ||
 				cmd.Flags().Changed("template-file") ||
@@ -30,12 +55,18 @@ func newComponentEnableCmd() *cobra.Command {
 				cmd.Flags().Changed("create-internal-zone")
 			if !configChanged {
 				accepted, err := app.Client.EnableComponent(
-					cmd.Context(), id, apiTypes.ComponentEnableRequest{},
+					cmd.Context(), id, apiTypes.ComponentEnableRequest{After: after},
 				)
 				if err != nil {
 					return err
 				}
 				return renderDispatchedTask(cmd, accepted)
+			}
+
+			if len(after) > 0 {
+				return fmt.Errorf(
+					"--after with Component configuration requires --config-file containing the complete authored config; create Zones separately",
+				)
 			}
 
 			component, err := app.Client.ShowComponent(cmd.Context(), id)
@@ -44,7 +75,7 @@ func newComponentEnableCmd() *cobra.Command {
 			}
 			if component.Owner == "platform" || component.Kind == "coredns" {
 				return fmt.Errorf(
-					"platform Component enable does not accept config; use component config set, then run a bodyless enable",
+					"platform Component enable does not accept config; use component config set, then enable the Component",
 				)
 			}
 			zoneOperation := cmd.Flags().Changed("zone") || cmd.Flags().Changed("create-zone") ||
@@ -90,7 +121,7 @@ func newComponentEnableCmd() *cobra.Command {
 				return returnWithRetainedComponentZones(cmd, created, validationErr)
 			}
 			accepted, enableErr := app.Client.EnableComponent(
-				cmd.Context(), id, apiTypes.ComponentEnableRequest{Config: config},
+				cmd.Context(), id, apiTypes.ComponentEnableRequest{Config: config, After: after},
 			)
 			if enableErr != nil {
 				return returnWithRetainedComponentZones(cmd, created, enableErr)
@@ -98,6 +129,8 @@ func newComponentEnableCmd() *cobra.Command {
 			return renderDispatchedTask(cmd, accepted)
 		},
 	}
+	cmd.Flags().
+		StringVar(&authoredConfigFile, "config-file", "", "complete authored Component config JSON file; - reads stdin")
 	cmd.Flags().
 		StringVar(&configFile, "file", "", "read a Caddyfile template (Caddy) or complete JSON config (other kinds) from PATH, or -")
 	cmd.Flags().StringVar(&alias, "alias", "", "optional router primary-Zone alias; empty clears it")
@@ -108,6 +141,7 @@ func newComponentEnableCmd() *cobra.Command {
 		StringArrayVar(&ordinaryZones, "create-zone", nil, "repeatable NAME=CIDR Zone to create and select before enabling")
 	cmd.Flags().
 		StringArrayVar(&internalZones, "create-internal-zone", nil, "repeatable internal NAME=CIDR Zone to create and select before enabling")
+	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
 
@@ -253,4 +287,25 @@ func appendComponentZoneIDs(input *apiTypes.ComponentConfigMutationInput, zoneID
 	if input.CloudflareTunnel != nil {
 		input.CloudflareTunnel.ZoneIDs = append(input.CloudflareTunnel.ZoneIDs, zoneIDs...)
 	}
+}
+
+func readAuthoredComponentConfig(cmd *cobra.Command, path string) (apiTypes.ComponentConfigMutationInput, error) {
+	value, err := readValueFile(path, cmd.InOrStdin(), 64<<10, "Component config")
+	if err != nil {
+		return apiTypes.ComponentConfigMutationInput{}, err
+	}
+	var config apiTypes.ComponentConfigMutationInput
+	if err := json.Unmarshal([]byte(value), &config); err != nil {
+		return config, err
+	}
+	return config, config.Validate()
+}
+
+func rejectComponentConfigFlagMix(cmd *cobra.Command) error {
+	for _, name := range []string{"file", "template-file", "implementation", "alias", "zone", "create-zone", "create-internal-zone", "upstream-auto", "upstream", "forward", "tailnet-delegation"} {
+		if cmd.Flags().Changed(name) {
+			return fmt.Errorf("--config-file cannot be combined with --%s", name)
+		}
+	}
+	return nil
 }

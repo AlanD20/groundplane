@@ -6,11 +6,13 @@ import (
 	"log/slog"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	"github.com/AlanD20/groundplane/internal/controller/controllerupgrade"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/controller/softwareactivation"
 	"github.com/AlanD20/groundplane/internal/controller/softwarepreparation"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
@@ -26,6 +28,7 @@ import (
 )
 
 type Dependencies struct {
+	Submitter         *acceptedaction.Submitter
 	Store             etcdstore.Store
 	Tasks             *etcd.TaskRepository
 	Evidence          *etcd.IdempotencyRepository
@@ -44,8 +47,8 @@ type Composition struct {
 }
 
 func New(deps Dependencies) (*Composition, error) {
-	if deps.Logger == nil {
-		return nil, errs.New(errs.KindInternal, "software runtime logging is required")
+	if deps.Logger == nil || deps.Submitter == nil {
+		return nil, errs.New(errs.KindInternal, "software runtime logging and accepted action submission are required")
 	}
 	preparer, err := preparation.NewPreparer(runner.New(deps.Logger), deps.WorkspaceRoot)
 	if err != nil {
@@ -64,7 +67,7 @@ func New(deps Dependencies) (*Composition, error) {
 		return nil, err
 	}
 	preparations, err := softwarepreparation.NewService(softwarepreparation.ServiceDependencies{
-		Preparer: preparer, Records: records, Tasks: deps.Tasks, Evidence: deps.Evidence, Intents: deps.Intents,
+		Submitter: deps.Submitter, Preparer: preparer, Records: records, Tasks: deps.Tasks, Evidence: deps.Evidence, Intents: deps.Intents,
 		Queue: queue, Diagnostics: diagnostics,
 	})
 	if err != nil {
@@ -93,9 +96,18 @@ func New(deps Dependencies) (*Composition, error) {
 		return nil, err
 	}
 	result.Activations, err = softwareactivation.NewService(softwareactivation.ServiceDependencies{
-		Preparations: records, Records: activations, Tasks: deps.Tasks, Health: deps.Agents, Stager: stager,
+		Submitter: deps.Submitter, Preparations: records, Records: activations, Tasks: deps.Tasks, Health: deps.Agents, Stager: stager,
 		ControllerSource: deps.ControllerUpdates, Queue: queue, Diagnostics: diagnostics, ControllerRecords: controllerRecords, AgentRecords: agentRecords,
 		Evidence: deps.Evidence, Intents: deps.Intents,
 	})
 	return result, err
+}
+
+// AcceptedPreparations exposes only capabilities installed in this process.
+func (composition *Composition) AcceptedPreparations() []taskdependencies.Registration {
+	registrations := composition.Preparations.AcceptedPreparations()
+	if composition.Activations != nil {
+		registrations = append(registrations, composition.Activations.AcceptedPreparations()...)
+	}
+	return registrations
 }

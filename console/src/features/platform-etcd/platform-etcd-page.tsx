@@ -22,6 +22,8 @@ import { DetailRow } from "@/components/common/detail-row";
 import { newULID } from "@/lib/utils";
 import { useStore } from "@/lib/store";
 import { StorageMaintenanceStatus } from "./storage-maintenance-status";
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
+import { controllerUpdateRejected } from "@/lib/controller-request-errors";
 
 type Document =
   operations["etcd.config.show"]["responses"][200]["content"]["application/json"];
@@ -39,10 +41,12 @@ export default function PlatformEtcdPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [confirm, setConfirm] = useState(false);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const [taskID, setTaskID] = useState<string>();
-  const applyIntent = useRef<{ revision: string; key: string } | undefined>(
-    undefined,
-  );
+  const applyIntent = useRef<
+    { revision: string; key: string; after: string[] } | undefined
+  >(undefined);
   const load = useCallback(async (signal?: AbortSignal) => {
     const next = await controllerRequest<Document>("/etcd/config", 200, {
       signal,
@@ -137,18 +141,25 @@ export default function PlatformEtcdPage() {
     }
   }
   async function apply() {
-    if (!document) return;
+    if (!document || afterLoading) return;
     setBusy(true);
     setError(undefined);
     if (applyIntent.current?.revision !== document.revision)
-      applyIntent.current = { revision: document.revision, key: newULID() };
+      applyIntent.current = {
+        revision: document.revision,
+        key: newULID(),
+        after: [...after],
+      };
     try {
       const accepted = await controllerRequest<Accepted>(
         "/etcd/config/apply",
         202,
         {
           method: "POST",
-          body: { expected_revision: document.revision },
+          body: {
+            expected_revision: applyIntent.current.revision,
+            after: applyIntent.current.after,
+          },
           idempotencyKey: applyIntent.current.key,
         },
       );
@@ -156,6 +167,7 @@ export default function PlatformEtcdPage() {
       setConfirm(false);
       applyIntent.current = undefined;
     } catch (cause) {
+      if (controllerUpdateRejected(cause)) applyIntent.current = undefined;
       setError(message(cause));
     } finally {
       setBusy(false);
@@ -277,11 +289,21 @@ export default function PlatformEtcdPage() {
               the previous etcd configuration.
             </DialogDescription>
           </DialogHeader>
+          <fieldset disabled={busy || !!applyIntent.current}>
+            <TaskRunAfterSelector
+              value={after}
+              onChange={setAfter}
+              onBusyChange={setAfterLoading}
+            />
+          </fieldset>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirm(false)}>
               Cancel
             </Button>
-            <Button disabled={busy} onClick={() => void apply()}>
+            <Button
+              disabled={busy || afterLoading}
+              onClick={() => void apply()}
+            >
               {busy ? "Submitting…" : "Apply"}
             </Button>
           </DialogFooter>

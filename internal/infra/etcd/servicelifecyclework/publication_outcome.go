@@ -2,6 +2,7 @@ package servicelifecyclework
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -43,6 +44,16 @@ func (publication *Publication) ReconcilePreparation(ctx context.Context) error 
 	}
 	if present == len(keys) {
 		return nil
+	}
+	if read.Values[0] == nil && read.Values[2] == nil && read.Values[1] != nil {
+		task, err := workqueue.DecodeTask(read.Values[1].Value)
+		if err != nil {
+			return err
+		}
+		if task.ID == publication.Input.TaskID && task.AcceptedIntent != nil &&
+			task.Intent == (workexecution.Input{}) && task.ExpectedItems == 0 {
+			return publication.Abandon(ctx)
+		}
 	}
 	if present != 0 {
 		return conflict("Service lifecycle publication records are incomplete; Secret protections were retained")

@@ -8,7 +8,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -28,45 +27,34 @@ func routeDefinitionKey(itemID string) string { return "/v1/route-definition-res
 // PrepareRouteDefinition records an atomic metadata decision. The publishing
 // transaction must also prove no router runtime needs changing; this function
 // does not substitute success for a missing host execution.
-func PrepareRouteDefinition(
+func PrepareRouteDefinitionCapture(
 	task workexecution.Task,
 	item workexecution.Item,
-	marker idempotency.IdempotencyMarker,
 	at time.Time,
-) (workqueue.Change, error) {
+) (workexecution.Input, workqueue.Change, error) {
 	if item.Operation != workexecution.Component || item.Placement.Executor != workexecution.Controller ||
 		item.TargetID != task.TargetID || ids.Validate(ids.KindRoute, task.TargetID) != nil ||
 		(task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove) {
-		return workqueue.Change{}, conflict("Route definition requires its Controller-only action")
+		return workexecution.Input{}, workqueue.Change{}, conflict(
+			"Route definition requires its Controller-only action",
+		)
 	}
 	value, err := recordcodec.Encode("route-definition-result", RouteDefinitionResult{
 		TaskID: task.ID, WorkItemID: item.ID, EnvironmentID: task.Scope.EnvironmentID,
 		RouteID: task.TargetID, Removed: task.Action == workexecution.ActionRemove, At: at,
 	})
 	if err != nil {
-		return workqueue.Change{}, err
+		return workexecution.Input{}, workqueue.Change{}, err
 	}
 	digest := sha256.Sum256(value)
-	change, err := workqueue.PrepareSettledDecision(task, item, workexecution.Input{
-		ID: ids.DeriveAt(
-			ids.KindPlan,
-			item.CreatedAt,
-			item.ID,
-			"route-definition-result",
-		), SHA256: hex.EncodeToString(digest[:]),
-	}, marker, at)
-	if err != nil {
-		clear(value)
-		return workqueue.Change{}, err
+	evidence := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "route-definition-result"),
+		SHA256: hex.EncodeToString(digest[:]),
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: routeDefinitionKey(item.ID)})
-	change.Mutations = append(
-		change.Mutations,
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: routeDefinitionKey(item.ID), Value: value},
-	)
-	return change, nil
+	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: routeDefinitionKey(item.ID)}},
+		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: routeDefinitionKey(item.ID), Value: value}}}
+	return evidence, change, nil
 }
-
 func (repository *InputRepository) RetireRouteDefinition(
 	ctx context.Context,
 	view workqueue.View,

@@ -1,3 +1,4 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { CreationButton } from "@/components/common/creation-button";
 import { useEditorSession } from "@/components/common/editor-session";
 import { EnvironmentsTable } from "@/features/environment/environments-table";
@@ -42,6 +43,8 @@ export default function TenantProjectPage() {
   const [name, setName] = useState("");
   const [networkPool, setNetworkPool] = useState("");
   const [creating, setCreating] = useState(false);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const [createError, setCreateError] = useState<string>();
   const [removingEnvironment, setRemovingEnvironment] =
     useState<Environment | null>(null);
@@ -150,6 +153,11 @@ export default function TenantProjectPage() {
             />
           </div>
         </div>
+        <TaskRunAfterSelector
+          value={after}
+          onChange={setAfter}
+          onBusyChange={setAfterLoading}
+        />
         {createError && (
           <p role="alert" className="text-sm text-destructive">
             {createError}
@@ -160,7 +168,9 @@ export default function TenantProjectPage() {
             Cancel
           </Button>
           <Button
-            disabled={creating || !name.trim() || !networkPool.trim()}
+            disabled={
+              creating || afterLoading || !name.trim() || !networkPool.trim()
+            }
             onClick={async () => {
               const slug = name
                 .trim()
@@ -173,11 +183,13 @@ export default function TenantProjectPage() {
                   project.id,
                   slug,
                   networkPool.trim(),
+                  after,
                 );
                 editorSession?.finish();
                 setOpen(false);
                 setName("");
                 setNetworkPool("");
+                setAfter([]);
               } catch (error) {
                 setCreateError(
                   error instanceof Error
@@ -225,7 +237,9 @@ export default function TenantProjectPage() {
           id={removingEnvironment.id}
           workspace={tenant.slug}
           description="Permanently removes this Environment and every workload, volume, Entry, Attach, backup, recovery point, and Component state it owns."
-          onDispatch={() => store.deleteEnvironment(removingEnvironment.id)}
+          onDispatch={(after) =>
+            store.deleteEnvironment(removingEnvironment.id, after)
+          }
           onCommit={() => setRemovingEnvironment(null)}
         />
       ) : null}

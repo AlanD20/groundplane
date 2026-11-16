@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
@@ -17,7 +16,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/api"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // TASK-162: extend the actual Custom Attach journey through queued Detach expiry,
@@ -53,22 +51,32 @@ func nativeUnstartedDetachJourney(t *testing.T, f *nativeVolumeFixture,
 			t.Fatal(err)
 		}
 		clear(raw)
-		before := f.store.revision
-		_, err = mutations.DetachAttach(ctx, attachID, "native-detach-refuse-"+stage)
-		if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || f.store.revision != before {
-			t.Fatalf("Detach ignored %s execution authority without an acknowledged runtime: %v", stage, err)
+		response, err := mutations.DetachAttach(ctx, attachID, api.TaskRunAfterRequest{}, "native-detach-refuse-"+stage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var accepted api.TaskAccepted
+		if err := json.Unmarshal(response.Body, &accepted); err != nil {
+			t.Fatal(err)
+		}
+		task := nativePrepareAttach(t, f, mutations, accepted.TaskID)
+		if task.Outcome != workexecution.Failed || task.ExpectedItems != 0 {
+			t.Fatalf("Detach ignored %s execution authority without an acknowledged runtime", stage)
 		}
 		if _, err := f.store.Delete(ctx, projectionKey); err != nil {
 			t.Fatal(err)
 		}
 	}
-	response, err := mutations.DetachAttach(ctx, attachID, "native-custom-detach")
+	response, err := mutations.DetachAttach(ctx, attachID, api.TaskRunAfterRequest{}, "native-custom-detach")
 	if err != nil {
 		t.Fatalf("native Detach publication: %v", err)
 	}
 	var accepted api.TaskAccepted
 	if err := json.Unmarshal(response.Body, &accepted); err != nil || accepted.TaskID == "" {
 		t.Fatalf("native Detach response: %v", err)
+	}
+	if task := nativePrepareAttach(t, f, mutations, accepted.TaskID); task.Outcome != "" {
+		t.Fatalf("native Detach capture failed: %+v", task)
 	}
 	page, err := f.queue.ListWork(ctx, accepted.TaskID, "", 10, 0)
 	if err != nil || len(page.Items) != 1 {

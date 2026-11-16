@@ -6,34 +6,17 @@ export type DNSCheckQuery = components["schemas"]["DNSCheckQuery"];
 export type DNSCheckRequest = components["schemas"]["DNSCheckRequest"];
 export type DNSCheckResult = components["schemas"]["DNSCheckResult"];
 export type DNSCheckAnswer = components["schemas"]["DNSCheckAnswer"];
-type Component =
-  operations["component.show"]["responses"][200]["content"]["application/json"];
 type Accepted =
   operations["component.dns-check"]["responses"][202]["content"]["application/json"];
 
-export async function dnsCheckRequest(
-  componentId: string,
+export function dnsCheckRequest(
   queries: DNSCheckQuery[],
-  signal: AbortSignal,
-): Promise<DNSCheckRequest> {
-  const component = await controllerRequest<Component>(
-    `/components/${encodeURIComponent(componentId)}`,
-    200,
-    { signal },
-  );
-  if (
-    component.id !== componentId ||
-    component.kind !== "coredns" ||
-    component.owner !== "platform" ||
-    !Number.isSafeInteger(component.revision) ||
-    component.revision <= 0
-  )
-    throw new Error(
-      "The CoreDNS snapshot is unavailable. Refresh before testing.",
-    );
+  after: string[],
+): DNSCheckRequest {
   return {
-    revision: component.revision,
+    revision: 0,
     queries: queries.map((query) => ({ ...query })),
+    after: [...after],
   };
 }
 

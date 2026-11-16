@@ -17,6 +17,7 @@ export function RemoveImageDialog({
   const key = useRef(newULID());
   return (
     <TaskRunnerDialog
+      runAfter
       open
       onOpenChange={(open) => {
         if (!open) onClose();
@@ -54,8 +55,8 @@ export function RemoveImageDialog({
           </p>
         </div>
       }
-      onDispatch={async () =>
-        (await removeImage(image.id, key.current)).task_id
+      onDispatch={async (after) =>
+        (await removeImage(image.id, key.current, after)).task_id
       }
       onSettled={onSettled}
     />

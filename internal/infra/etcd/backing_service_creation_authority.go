@@ -14,7 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func backingServiceCreationConditions(creation BackingServiceCreation,
@@ -97,32 +96,4 @@ func backingServiceCreationConditions(creation BackingServiceCreation,
 		)
 	}
 	return conditions
-}
-
-func classifyBackingServiceCreation(
-	creation BackingServiceCreation,
-	conditions []keyvalue.Condition,
-) idempotencyPlanClassifier {
-	classify := resourceWorkPublicationConflict(conditions)
-	return func(revision int64, values []*keyvalue.KeyValue) error {
-		if len(values) != len(conditions) {
-			return errs.New(errs.KindInternal, "backing creation compare evidence is incomplete")
-		}
-		for index, condition := range conditions {
-			value := values[index]
-			if value == nil {
-				continue
-			}
-			if value.Key != condition.Key || value.ModRevision <= 0 || value.ModRevision > revision {
-				return errs.New(errs.KindInternal, "backing creation compare evidence has an invalid identity")
-			}
-			if condition.Key == hierarchyrecord.ProjectSlugKey(creation.Project) {
-				return errs.New(errs.KindNameConflict, "backing-service slug is already in use")
-			}
-			if condition.Key == hierarchyrecord.EnvironmentNameKey(creation.Project.ID, creation.Environment.Name) {
-				return errs.New(errs.KindNameConflict, "backing-service Environment name is already in use")
-			}
-		}
-		return classify(revision, values)
-	}
 }

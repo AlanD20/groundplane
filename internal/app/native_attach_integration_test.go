@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/attachwork"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/core"
 	releasedomain "github.com/AlanD20/groundplane/internal/core/release"
@@ -62,10 +63,7 @@ func nativeControllerAttachJourney(t *testing.T, adapter string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var backing api.BackingServiceCreated
-	if err := json.Unmarshal(created.Body, &backing); err != nil {
-		t.Fatal(err)
-	}
+	backing := nativeBackingCreationResult(t, f.base, created)
 	environment, err := f.base.blueprint.GetEnvironment(t.Context(), backing.BackingService.EnvironmentID)
 	if err != nil {
 		t.Fatal(err)
@@ -98,11 +96,17 @@ func nativeControllerAttachJourney(t *testing.T, adapter string) {
 			t.Fatal(err)
 		}
 		clear(value)
-		revision := f.base.store.revision
-		if _, err := mutations.CreateAttach(t.Context(), request, "native-attach-refuse-"+stage); !errors.Is(
-			err, errs.New(errs.KindStateConflict, ""),
-		) || f.base.store.revision != revision {
-			t.Fatalf("Attach mistook %s execution with missing runtime for an undeployed Service: %v", stage, err)
+		response, err := mutations.CreateAttach(t.Context(), request, "native-attach-refuse-"+stage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var accepted api.TaskAccepted
+		if err := json.Unmarshal(response.Body, &accepted); err != nil {
+			t.Fatal(err)
+		}
+		task := nativePrepareAttach(t, f.base, mutations, accepted.TaskID)
+		if task.Outcome != workexecution.Failed || task.ExpectedItems != 0 {
+			t.Fatalf("Attach mistook %s execution with missing runtime for an undeployed Service", stage)
 		}
 		if _, err := f.base.store.Delete(t.Context(), projectionKey); err != nil {
 			t.Fatal(err)
@@ -115,6 +119,9 @@ func nativeControllerAttachJourney(t *testing.T, adapter string) {
 	var accepted api.TaskAccepted
 	if err := json.Unmarshal(response.Body, &accepted); err != nil || accepted.TaskID == "" {
 		t.Fatalf("native Attach response: %v", err)
+	}
+	if task := nativePrepareAttach(t, f.base, mutations, accepted.TaskID); task.Outcome != "" {
+		t.Fatalf("native Attach capture failed: %+v", task)
 	}
 	page, err := f.base.queue.ListWork(t.Context(), accepted.TaskID, "", 10, 0)
 	if err != nil || len(page.Items) != 1 {
@@ -348,9 +355,41 @@ func nativeAttachMutations(
 	if err != nil {
 		t.Fatal(err)
 	}
-	mutations, err := attachmentcontroller.NewMutationService(repository, facts, idempotency)
+	accepted, err := newAcceptedActions(f.store, protector, f.queue, replays, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations, err := attachmentcontroller.NewMutationService(repository, facts, idempotency, accepted)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return mutations, records
+}
+
+func nativePrepareAttach(
+	t *testing.T,
+	f *nativeVolumeFixture,
+	mutations *attachmentcontroller.MutationService,
+	taskID string,
+) workexecution.Task {
+	t.Helper()
+	preparations, err := taskdependencies.NewPreparations(f.queue, mutations.AcceptedPreparations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		task, _, err := f.queue.ReadTask(t.Context(), taskID, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !task.Task.PendingPreparation() {
+			return task.Task
+		}
+		changed, err := preparations.Advance(t.Context(), taskID, time.Now().UTC())
+		if err != nil || !changed {
+			t.Fatalf("native Attach preparation: changed=%t error=%v", changed, err)
+		}
+	}
+	t.Fatal("native Attach preparation did not settle")
+	return workexecution.Task{}
 }

@@ -3,26 +3,25 @@ package releaseoperation
 import (
 	"context"
 
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 )
 
-func (service *Service) publishServiceWork(ctx context.Context, scope releasequeries.ReleasePlanningScope,
-	candidate releaseCandidateInput, locator idempotency.IdempotencyLocator,
-	durable idempotency.ProtectedIntentRecord, protected requestidempotency.ProtectedEvidence,
-) (idempotency.IdempotencyResponse, error) {
+func (service *Service) prepareServiceWork(ctx context.Context, scope releasequeries.ReleasePlanningScope,
+	candidate releaseCandidateInput, accepted workexecution.Task,
+) (taskdependencies.Prepared, error) {
 	candidates := []releaseCandidateInput{candidate}
 	if err := service.sealCandidates(ctx, candidates); err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	candidate = candidates[0]
 	projection, err := service.captureDesiredProjection(ctx, scope)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	proxy := candidate.planning.Service.Record.Desired
 	proxy.Expose = proxy.ProxyExposures()
@@ -33,7 +32,7 @@ func (service *Service) publishServiceWork(ctx context.Context, scope releaseque
 		[]core.Service{proxy},
 	)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	defer addresses.Clear()
 	task, item, request, rollout, err := service.captureServiceWork(
@@ -42,34 +41,27 @@ func (service *Service) publishServiceWork(ctx context.Context, scope releaseque
 		projection,
 		candidate,
 		addresses,
-		durable.CiphertextDigest,
+		accepted,
 	)
 	defer clear(rollout.CandidateArtifact)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	response, _, err := releaseAcceptedResponse("", task.ID, request.Intent.OperationID,
-		[]domain.GroupMember{{Ordinal: 1, ServiceID: item.TargetID, ReleaseID: request.Intent.ID}})
+	authority, err := service.ledger.PrepareDirectReleaseCapture(ctx, task, item, request, rollout, addresses)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	marker := idempotency.IdempotencyMarker{Kind: idempotency.IdempotencyMarkerTask,
-		State: idempotency.IdempotencyMarkerPending, Locator: locator, Intent: durable,
-		Response: response, TaskID: task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt}
-	result, err := service.ledger.PublishDirectReleaseWithWork(ctx, task, item, request, rollout, addresses, marker)
+	authority.Mutations = keyvalue.CloneMutations(authority.Mutations)
+	graph, err := request.WorkGraph(task, item)
 	if err != nil {
-		if !releaseGroupUnknownOutcome(err) {
-			return idempotency.IdempotencyResponse{}, err
-		}
-		resolution, resolveErr := service.coordinator.ResolveUnknown(ctx, service.idempotency, locator, protected, err)
-		if resolveErr != nil {
-			return idempotency.IdempotencyResponse{}, resolveErr
-		}
-		return releaseOperationResolution(resolution, response)
+		keyvalue.ClearMutationValues(authority.Mutations)
+		return taskdependencies.Prepared{}, err
 	}
-	resolution, err := service.coordinator.ResolveKnown(ctx, protected, result)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	return releaseOperationResolution(resolution, response)
+	return taskdependencies.Prepared{
+		Task:      task,
+		Graph:     graph,
+		Initial:   []workexecution.Item{item},
+		Authority: authority,
+		Staged:    len(graph) > 1,
+	}, nil
 }

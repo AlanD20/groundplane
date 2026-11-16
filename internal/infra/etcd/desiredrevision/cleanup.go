@@ -39,7 +39,7 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	if err != nil {
 		return err
 	}
-	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(claim.Locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(blueprints.EnvironmentBlueprintTaskLocator(claim))
 	if err != nil {
 		return err
 	}
@@ -52,19 +52,29 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	if err != nil {
 		return err
 	}
-	if evidence == nil || len(evidence.Values) != 4 || evidence.Values[0] == nil {
+	if evidence == nil || len(evidence.Values) != 4 {
 		return blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	defer clearKeyValues(evidence.Values)
+	if evidence.Values[0] == nil {
+		return repository.verifyRetiredAcceptedBlueprintDraft(ctx, claim, descriptorKey, locatorKey, evidence.Values)
+	}
+
 	descriptor, err := blueprints.DecodeEnvironmentBlueprintStageDescriptor(evidence.Values[0].Value)
 	if err != nil || !blueprints.SameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) {
 		return blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	if descriptor.State == blueprints.EnvironmentBlueprintStageAbandoned {
+		if claim.TaskLocator != nil {
+			return repository.retireAcceptedBlueprintDraft(ctx, descriptor)
+		}
 		return nil
 	}
-	if descriptor.State == blueprints.EnvironmentBlueprintStagePublished || evidence.Values[1] == nil ||
-		evidence.Values[2] != nil || evidence.Values[3] != nil {
+	ownerConditions, uncaptured, err := uncapturedOwnerConditions(evidence.Values[2], evidence.Values[3], descriptor)
+	if err != nil {
+		return err
+	}
+	if descriptor.State == blueprints.EnvironmentBlueprintStagePublished || evidence.Values[1] == nil || !uncaptured {
 		return errs.New(errs.KindStateConflict, "Blueprint staging claim cannot be abandoned")
 	}
 	owned, err := environmentBlueprintLocatorOwnedBy(evidence.Values[1].Value, descriptor)
@@ -82,12 +92,13 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	conditions := []etcdstore.Condition{
 		{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision},
 		{Key: locatorKey, ModRevision: evidence.Values[1].ModRevision},
-		{Key: markerKey},
-		{Key: workqueue.TaskKey(claim.TaskID)},
 	}
-	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value},
-		{Type: etcdstore.MutationDelete, Key: locatorKey},
+	conditions = append(conditions, ownerConditions...)
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value}}
+	// Keep the accepted Task private locator as a retirement fence. A new draft
+	// with the same immutable Task/revision ID cannot race old chunk cleanup.
+	if claim.TaskLocator == nil {
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: locatorKey})
 	}
 	if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, 6, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return err
@@ -99,12 +110,15 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	if !result.Succeeded {
 		return errs.New(errs.KindStateConflict, "Blueprint staging abandonment evidence changed")
 	}
+	if claim.TaskLocator != nil {
+		return repository.retireAcceptedBlueprintDraft(ctx, abandoned)
+	}
 	return nil
 }
 
 // CleanupEnvironmentBlueprintStaging performs bounded leader-owned private
 // staging cleanup. Each invocation processes at most limit descriptors and at
-// most one 32-record revision batch per descriptor.
+// most one 29-record revision batch per descriptor.
 func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 	ctx context.Context,
 	now time.Time,
@@ -216,7 +230,9 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 	if err != nil {
 		return false, err
 	}
-	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(descriptor.Claim.Locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(
+		blueprints.EnvironmentBlueprintTaskLocator(descriptor.Claim),
+	)
 	if err != nil {
 		return false, err
 	}
@@ -238,7 +254,11 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 	// A deferred Entry cleanup keeps its candidate private while its durable
 	// Task exists, even after the root response expires. Task publication also
 	// advances the descriptor, so the existing CAS closes a late publication.
-	if evidence.Values[0].ModRevision != descriptorRevision || evidence.Values[2] != nil || evidence.Values[3] != nil {
+	ownerConditions, uncaptured, err := uncapturedOwnerConditions(evidence.Values[2], evidence.Values[3], descriptor)
+	if err != nil {
+		return false, err
+	}
+	if evidence.Values[0].ModRevision != descriptorRevision || !uncaptured {
 		return false, nil
 	}
 	owned, err := environmentBlueprintLocatorOwnedBy(evidence.Values[1].Value, descriptor)
@@ -259,12 +279,11 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 	conditions := []etcdstore.Condition{
 		{Key: descriptorKey, ModRevision: descriptorRevision},
 		{Key: locatorKey, ModRevision: evidence.Values[1].ModRevision},
-		{Key: markerKey},
-		{Key: workqueue.TaskKey(descriptor.Claim.TaskID)},
 	}
-	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value},
-		{Type: etcdstore.MutationDelete, Key: locatorKey},
+	conditions = append(conditions, ownerConditions...)
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value}}
+	if descriptor.Claim.TaskLocator == nil {
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: locatorKey})
 	}
 	if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, 6, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return false, err
@@ -301,17 +320,24 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 	if err != nil {
 		return false, err
 	}
-	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(descriptor.Claim.Locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(
+		blueprints.EnvironmentBlueprintTaskLocator(descriptor.Claim),
+	)
 	if err != nil {
 		return false, err
 	}
 	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{descriptorKey, locatorKey, markerKey}, Revision: page.ReadRevision,
+		Keys: []string{
+			descriptorKey,
+			locatorKey,
+			markerKey,
+			workqueue.TaskKey(descriptor.Claim.TaskID),
+		}, Revision: page.ReadRevision,
 	})
 	if err != nil {
 		return false, err
 	}
-	if evidence == nil || len(evidence.Values) != 3 || evidence.Values[0] == nil {
+	if evidence == nil || len(evidence.Values) != 4 || evidence.Values[0] == nil {
 		return false, blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	defer clearKeyValues(evidence.Values)
@@ -320,21 +346,31 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		!blueprints.SameEnvironmentBlueprintStageClaim(stored.Claim, descriptor.Claim) {
 		return false, blueprints.CorruptEnvironmentBlueprintStage()
 	}
+	locatorCondition := etcdstore.Condition{Key: locatorKey}
 	if evidence.Values[1] != nil {
 		owned, locatorErr := environmentBlueprintLocatorOwnedBy(evidence.Values[1].Value, stored)
-		if locatorErr != nil || owned {
-			return false, blueprints.CorruptEnvironmentBlueprintStage()
+		if locatorErr != nil {
+			return false, locatorErr
+		}
+		if owned {
+			if stored.Claim.TaskLocator == nil {
+				return false, blueprints.CorruptEnvironmentBlueprintStage()
+			}
+			locatorCondition.ModRevision = evidence.Values[1].ModRevision
+		} else {
+			return false, nil
 		}
 	}
-	if evidence.Values[2] != nil {
-		owned, markerErr := environmentBlueprintMarkerOwnedBy(evidence.Values[2].Value, stored)
-		if markerErr != nil || owned {
-			return false, blueprints.CorruptEnvironmentBlueprintStage()
-		}
+	ownerConditions, uncaptured, err := uncapturedOwnerConditions(evidence.Values[2], evidence.Values[3], stored)
+	if err != nil {
+		return false, err
+	}
+	if !uncaptured {
+		return false, nil
 	}
 	count := len(page.Values)
-	if count > 31 {
-		count = 31
+	if count > 29 {
+		count = 29
 	}
 	final := count == len(page.Values) && !page.More
 	conditions := make([]etcdstore.Condition, 0, count+1)
@@ -351,6 +387,8 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		conditions,
 		etcdstore.Condition{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision},
 	)
+	conditions = append(conditions, ownerConditions...)
+	conditions = append(conditions, locatorCondition)
 	if final {
 		// Direct Volume input chunks are staged under the same descriptor before
 		// publication. Retire them with their abandoned owner, never through
@@ -358,7 +396,6 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		// native Task/item/root absence protects any published execution.
 		workID := ids.DeriveAt(ids.KindWorkItem, stored.Claim.CreatedAt, stored.Claim.TaskID, "volume")
 		conditions = append(conditions,
-			etcdstore.Condition{Key: workqueue.TaskKey(stored.Claim.TaskID)},
 			etcdstore.Condition{Key: workqueue.ItemKey(workID)},
 			etcdstore.Condition{Key: volumework.InputKey(workID)},
 		)
@@ -369,6 +406,9 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 			Type: etcdstore.MutationDelete, Key: blueprintattachinputs.ParentPrefix(stored.Claim.TaskID), Prefix: true,
 		})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: descriptorKey})
+		if locatorCondition.ModRevision > 0 {
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: locatorKey})
+		}
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete,
 			Key: blueprintunits.CapturedGraphKey(stored.Claim.EnvironmentID, stored.Claim.TaskID)})
 	} else {
@@ -402,7 +442,9 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 	if err != nil {
 		return false, err
 	}
-	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(descriptor.Claim.Locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(
+		blueprints.EnvironmentBlueprintTaskLocator(descriptor.Claim),
+	)
 	if err != nil {
 		return false, err
 	}
@@ -504,7 +546,10 @@ func environmentBlueprintMarkerOwnedBy(
 	value []byte,
 	descriptor blueprints.EnvironmentBlueprintStageDescriptor,
 ) (bool, error) {
-	marker, err := idempotencyrecord.DecodeIdempotencyMarker(value, descriptor.Claim.Locator)
+	marker, err := idempotencyrecord.DecodeIdempotencyMarker(
+		value,
+		blueprints.EnvironmentBlueprintTaskLocator(descriptor.Claim),
+	)
 	if err != nil {
 		return false, err
 	}

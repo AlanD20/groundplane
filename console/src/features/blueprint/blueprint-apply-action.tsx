@@ -1,10 +1,14 @@
-import { ReorderList, ReorderItem, reorderItems } from "@/components/common/reorder-list";
+import { BlueprintComposeSources } from "./blueprint-compose-sources";
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
+import {
+  BlueprintTaskReview,
+  validExpectedBlueprintRevision,
+} from "./blueprint-task-review";
+import { reorderItems } from "@/components/common/reorder-list";
 ("use client");
 
-import { Select } from "@/components/ui/select";
-
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { ArrowDown, ArrowUp, FileArchive, FolderOpen, Plus, Trash2, Upload } from "lucide-react";
+import { FileArchive, FolderOpen, Plus, Trash2, Upload } from "lucide-react";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { BlueprintReview } from "@/features/blueprint/blueprint-review";
 import { BlueprintApplyScope } from "./blueprint-apply-scope";
@@ -40,7 +44,8 @@ type InterpolationEntry = BlueprintInterpolation & {
 
 type PreparedBlueprint = {
   request: BlueprintApplyRequest;
-  validation: BlueprintValidationResponse;
+  validation: BlueprintValidationResponse | null;
+  revision: string;
   key: string;
 };
 
@@ -67,6 +72,8 @@ export function BlueprintApplyAction({
   const [reading, setReading] = useState(false);
   const [readError, setReadError] = useState("");
   const [reviewError, setReviewError] = useState("");
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const [prepared, setPrepared] = useState<PreparedBlueprint | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [selectedService, setSelectedService] = useState("");
@@ -79,7 +86,10 @@ export function BlueprintApplyAction({
     [composeSources, entries, files, rootPath],
   );
 
-  async function selectFiles(event: ChangeEvent<HTMLInputElement>, directorySelection: boolean) {
+  async function selectFiles(
+    event: ChangeEvent<HTMLInputElement>,
+    directorySelection: boolean,
+  ) {
     const selected = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = "";
     setReading(true);
@@ -125,7 +135,10 @@ export function BlueprintApplyAction({
 
   function addEntry() {
     entrySequence.current += 1;
-    setEntries((current) => [...current, { id: entrySequence.current, key: "", value: "" }]);
+    setEntries((current) => [
+      ...current,
+      { id: entrySequence.current, key: "", value: "" },
+    ]);
   }
 
   async function prepareApply() {
@@ -134,13 +147,32 @@ export function BlueprintApplyAction({
     setReviewing(true);
     setReviewError("");
     try {
-      const request = createBlueprintApplyRequest(files, rootPath, composeSources, entries);
+      const request = createBlueprintApplyRequest(
+        files,
+        rootPath,
+        composeSources,
+        entries,
+      );
       if (selectedService) request.manifest.service = selectedService;
       const current = await store.getBlueprint(environment.id);
-      const validation = await store.validateBlueprint(environment.id, request, current.revision);
-      setPrepared({ request, validation, key: newULID() });
+      if (after.length) request.manifest.after = [...after];
+      const validation = after.length
+        ? null
+        : await store.validateBlueprint(
+            environment.id,
+            request,
+            current.revision,
+          );
+      setPrepared({
+        request,
+        validation,
+        revision: current.revision,
+        key: newULID(),
+      });
     } catch (cause) {
-      setReviewError(cause instanceof Error ? cause.message : "Blueprint validation failed.");
+      setReviewError(
+        cause instanceof Error ? cause.message : "Blueprint validation failed.",
+      );
     } finally {
       setReviewing(false);
     }
@@ -148,6 +180,8 @@ export function BlueprintApplyAction({
 
   function reset() {
     setSelectedService("");
+    setAfter([]);
+    setAfterLoading(false);
     setFiles([]);
     setRootPath("");
     setComposeSources([]);
@@ -170,7 +204,8 @@ export function BlueprintApplyAction({
     label: entry.path,
   }));
   const sourceOptions = inputOptions.filter(
-    (option) => option.value !== rootPath && !composeSources.includes(option.value),
+    (option) =>
+      option.value !== rootPath && !composeSources.includes(option.value),
   );
 
   return (
@@ -184,9 +219,12 @@ export function BlueprintApplyAction({
       >
         <DialogHeader className="pr-8">
           <DialogTitle className="flex items-center gap-2">
-            <FileArchive className="size-5 text-primary" /> Import Blueprint bundle
+            <FileArchive className="size-5 text-primary" /> Import Blueprint
+            bundle
           </DialogTitle>
-          <DialogDescription>Select a Blueprint and any referenced files.</DialogDescription>
+          <DialogDescription>
+            Select a Blueprint and any referenced files.
+          </DialogDescription>
         </DialogHeader>
 
         {environment.lastAppliedBlueprint && (
@@ -246,7 +284,9 @@ export function BlueprintApplyAction({
             <Badge variant="outline">
               {formatBlueprintBytes(BLUEPRINT_BUNDLE_LIMITS.fileBytes)} per file
             </Badge>
-            <Badge variant="outline">{BLUEPRINT_BUNDLE_LIMITS.pathBytes}-byte paths</Badge>
+            <Badge variant="outline">
+              {BLUEPRINT_BUNDLE_LIMITS.pathBytes}-byte paths
+            </Badge>
           </div>
           {reading && (
             <p role="status" className="text-xs text-info">
@@ -260,100 +300,28 @@ export function BlueprintApplyAction({
           )}
         </section>
 
-        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <div>
-            <h3 className="text-sm font-medium">2. Ordered Compose sources</h3>
-            <p className="text-xs text-muted-foreground">
-              The root stays first; drag additional sources to reorder.
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="blueprint-root">Root Blueprint</Label>
-            <Select
-              id="blueprint-root"
-              value={rootPath}
-              onValueChange={changeRoot}
-              options={inputOptions}
-              placeholder="Select the root file…"
-            />
-          </div>
-          {rootPath && (
-            <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-              <span className="font-mono text-xs text-muted-foreground">01</span>
-              <span className="min-w-0 truncate font-mono">{rootPath}</span>
-              <Badge className="ml-auto" variant="outline">
-                root
-              </Badge>
-            </div>
-          )}
-          <ReorderList
-            className="space-y-2"
-            onMove={(from, to) => setComposeSources((current) => reorderItems(current, from, to))}
-          >
-            {composeSources.map((source, index) => (
-              <ReorderItem
-                index={index}
-                label={source}
-                key={source}
-                className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              >
-                <span className="font-mono text-xs text-muted-foreground">
-                  {String(index + 2).padStart(2, "0")}
-                </span>
-                <span className="min-w-0 flex-1 truncate font-mono">{source}</span>
-                <Button
-                  aria-label={`Move ${source} up`}
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={index === 0}
-                  onClick={() => moveSource(index, -1)}
-                >
-                  <ArrowUp />
-                </Button>
-                <Button
-                  aria-label={`Move ${source} down`}
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={index === composeSources.length - 1}
-                  onClick={() => moveSource(index, 1)}
-                >
-                  <ArrowDown />
-                </Button>
-                <Button
-                  aria-label={`Remove ${source} source`}
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() =>
-                    setComposeSources((current) =>
-                      current.filter((candidate) => candidate !== source),
-                    )
-                  }
-                >
-                  <Trash2 />
-                </Button>
-              </ReorderItem>
-            ))}
-          </ReorderList>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Select
-              id="blueprint-compose-source"
-              aria-label="Additional Compose source"
-              value={sourceCandidate}
-              onValueChange={setSourceCandidate}
-              options={sourceOptions}
-              placeholder="Select an additional source…"
-            />
-            <Button variant="outline" disabled={!sourceCandidate} onClick={addSource}>
-              <Plus /> Add source
-            </Button>
-          </div>
-        </section>
+        <BlueprintComposeSources
+          rootPath={rootPath}
+          changeRoot={changeRoot}
+          inputOptions={inputOptions}
+          composeSources={composeSources}
+          setComposeSources={setComposeSources}
+          moveSource={moveSource}
+          sourceCandidate={sourceCandidate}
+          setSourceCandidate={setSourceCandidate}
+          sourceOptions={sourceOptions}
+          addSource={addSource}
+        />
 
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-medium">3. Non-secret interpolation</h3>
-              <p className="text-xs text-muted-foreground">Do not include secrets.</p>
+              <h3 className="text-sm font-medium">
+                3. Non-secret interpolation
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Do not include secrets.
+              </p>
             </div>
             <Button variant="outline" size="sm" onClick={addEntry}>
               <Plus /> Variable
@@ -402,7 +370,9 @@ export function BlueprintApplyAction({
                 variant="ghost"
                 size="icon"
                 onClick={() =>
-                  setEntries((current) => current.filter((candidate) => candidate.id !== entry.id))
+                  setEntries((current) =>
+                    current.filter((candidate) => candidate.id !== entry.id),
+                  )
                 }
               >
                 <Trash2 />
@@ -410,13 +380,17 @@ export function BlueprintApplyAction({
             </div>
           ))}
           {entries.length === 0 && (
-            <p className="text-xs text-muted-foreground">No interpolation values supplied.</p>
+            <p className="text-xs text-muted-foreground">
+              No interpolation values supplied.
+            </p>
           )}
         </section>
 
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
           <div>
-            <h3 className="text-sm font-medium">4. Deterministic manifest preview</h3>
+            <h3 className="text-sm font-medium">
+              4. Deterministic manifest preview
+            </h3>
           </div>
           <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-border bg-background p-2">
             {sortedFiles.map((entry) => (
@@ -425,12 +399,15 @@ export function BlueprintApplyAction({
                 className="grid gap-x-3 rounded-md px-2 py-1.5 text-xs sm:grid-cols-[7rem_minmax(0,1fr)_auto]"
               >
                 <code className="text-muted-foreground">{entry.part}</code>
-                <code className="min-w-0 break-all">{entry.path || "(invalid path)"}</code>
+                <code className="min-w-0 break-all">
+                  {entry.path || "(invalid path)"}
+                </code>
                 <span className="text-muted-foreground sm:text-right">
                   {formatBlueprintBytes(entry.size)}
                 </span>
                 <code className="break-all text-xs text-muted-foreground sm:col-span-3">
-                  SHA-256 {entry.sha256 || "not computed while bundle limits fail"}
+                  SHA-256{" "}
+                  {entry.sha256 || "not computed while bundle limits fail"}
                 </code>
               </div>
             ))}
@@ -447,7 +424,9 @@ export function BlueprintApplyAction({
             role="alert"
             className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"
           >
-            <p className="mb-1 text-xs font-medium text-destructive">Resolve before applying</p>
+            <p className="mb-1 text-xs font-medium text-destructive">
+              Resolve before applying
+            </p>
             <ul className="space-y-1 text-xs text-destructive">
               {errors.map((error) => (
                 <li key={error}>· {error}</li>
@@ -467,12 +446,17 @@ export function BlueprintApplyAction({
           onChange={setSelectedService}
           disabled={reading || reviewing}
         />
+        <TaskRunAfterSelector
+          value={after}
+          onChange={setAfter}
+          onBusyChange={setAfterLoading}
+        />
         <ResourceFormFooter>
           <Button variant="outline" onClick={closeEditor}>
             Cancel
           </Button>
           <Button
-            disabled={reading || reviewing || errors.length > 0}
+            disabled={reading || reviewing || afterLoading || errors.length > 0}
             onClick={() => void prepareApply()}
           >
             <Upload /> {reviewing ? "Validating…" : "Review Apply task"}
@@ -507,24 +491,41 @@ export function BlueprintApplyAction({
                   <span className="text-muted-foreground">Files </span>
                   {prepared.request.manifest.files.length} ·{" "}
                   {formatBlueprintBytes(
-                    prepared.request.manifest.files.reduce((sum, file) => sum + file.size, 0),
+                    prepared.request.manifest.files.reduce(
+                      (sum, file) => sum + file.size,
+                      0,
+                    ),
                   )}
                 </p>
                 <p>
-                  <span className="text-muted-foreground">Interpolation keys </span>
-                  {Object.keys(prepared.request.manifest.interpolation).join(", ") || "none"}
+                  <span className="text-muted-foreground">
+                    Interpolation keys{" "}
+                  </span>
+                  {Object.keys(prepared.request.manifest.interpolation).join(
+                    ", ",
+                  ) || "none"}
                 </p>
               </div>
-              <BlueprintReview validation={prepared.validation} />
+              <BlueprintTaskReview
+                validation={prepared.validation}
+                after={prepared.request.manifest.after ?? []}
+                revision={prepared.revision}
+                onRevisionChange={(revision) =>
+                  setPrepared((current) =>
+                    current ? { ...current, revision, key: newULID() } : null,
+                  )
+                }
+              />
             </>
           }
+          startDisabled={!validExpectedBlueprintRevision(prepared.revision)}
           startLabel="Confirm and apply"
           onDispatch={async () => {
             try {
               const accepted = await store.applyBlueprint(
                 environment.id,
                 prepared.request,
-                prepared.validation.revision,
+                prepared.revision,
                 prepared.key,
               );
               setCompleted(true);

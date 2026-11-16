@@ -8,13 +8,18 @@ import (
 
 func newControllerUpdateCmd() *cobra.Command {
 	var release string
+	var runAfter []string
 	cmd := &cobra.Command{
 		Use: "update", Short: "Update the native Controller from a staged immutable release", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			if !controllerupgrade.Digest(release).Valid() {
 				return errs.New(errs.KindValidationFailed, "release must be sha256 followed by 64 lowercase hex digits")
 			}
-			accepted, err := fromContext(cmd).Client.UpdateController(cmd.Context(), release)
+			accepted, err := fromContext(cmd).Client.UpdateController(cmd.Context(), release, after)
 			if err != nil {
 				return err
 			}
@@ -23,5 +28,6 @@ func newControllerUpdateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&release, "release", "", "digest of the staged release manifest (sha256:…)")
 	_ = cmd.MarkFlagRequired("release")
+	addTaskAfterFlag(cmd, &runAfter)
 	return withExecutionClass(cmd, executionAPI)
 }

@@ -4,137 +4,124 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
-	"net/http"
 )
 
 const entryBulkUpsertRoute = "/entries/bulk"
 
 type entryBulkUpsertService struct {
-	desired     *entryDesiredMutationService
-	idempotency entryBulkUpsertIdempotency
+	desired  *entryDesiredMutationService
+	accepted *acceptedaction.Submitter
 }
 
 func NewBulkUpsertService(
 	desired *entryDesiredMutationService,
-	idempotency entryBulkUpsertIdempotency,
+	accepted *acceptedaction.Submitter,
 ) (*entryBulkUpsertService, error) {
-	if desired == nil || idempotency == nil {
+	if desired == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Entry bulk upsert service is not configured")
 	}
-	return &entryBulkUpsertService{desired: desired, idempotency: idempotency}, nil
+	return &entryBulkUpsertService{desired: desired, accepted: accepted}, nil
 }
 
-func (service *entryBulkUpsertService) BulkUpsertEntries(
+func (service *entryBulkUpsertService) prepareAcceptedBulk(
 	ctx context.Context,
-	request apiTypes.EntryBulkUpsertRequest,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Entry bulk upsert context is required",
+	accepted workqueue.TaskSnapshot,
+	_ int64,
+	at time.Time,
+	request acceptedEntryBulkUpsert,
+) (taskdependencies.Prepared, error) {
+	defer clear(request.Intent.Ciphertext)
+	defer func() {
+		for _, entry := range request.Entries {
+			clear(entry.Value)
+		}
+	}()
+	input, err := request.input()
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	if accepted.Task.TargetID != input.environmentID || accepted.Task.Scope.EnvironmentID != input.environmentID {
+		return taskdependencies.Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"Entry Environment changed after acceptance",
 		)
 	}
-	input, err := prepareEntryBulkUpsert(request)
+	exposure, err := service.desired.work.ResolveEntryMutationExposure(ctx, input.environmentID, request.Bindings)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	for attempt := 0; attempt < maximumEntryEditAttempts; attempt++ {
-		evidence, err := service.idempotency.Prepare(ctx, input)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-		response, mutationErr := service.bulkUpsertOnce(ctx, input, idempotencyKey, evidence)
-		clear(evidence.durable.Ciphertext)
-		if mutationErr == nil {
-			return response, nil
-		}
-		kind, ok := errs.KindOf(mutationErr)
-		if !ok || kind != errs.KindStateConflict || attempt == maximumEntryEditAttempts-1 {
-			return idempotencyrecord.IdempotencyResponse{}, mutationErr
-		}
-	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(
-		errs.KindInternal,
-		"Entry bulk upsert retry bound was not enforced",
-	)
-}
-
-func (service *entryBulkUpsertService) bulkUpsertOnce(
-	ctx context.Context,
-	input entryBulkUpsertInput,
-	idempotencyKey string,
-	evidence entryBulkUpsertEvidence,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	locator := idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
-		ScopeID:   input.environmentID,
-		Method:    http.MethodPost,
-		Route:     entryBulkUpsertRoute,
-		Key:       idempotencyKey,
-	}
-	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	input.exposure, err = normalizeEntryExposure(exposure)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	if existing {
-		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Entry bulk upsert replay resolution is invalid",
-			)
-		}
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	}
+	locator := request.Locator
 	environment, err := service.desired.repository.GetEnvironment(ctx, input.environmentID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	project, err := service.desired.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
+	}
+	if project.Record.ID != accepted.Task.Scope.ProjectID || project.Record.TenantID != accepted.Task.Scope.TenantID {
+		return taskdependencies.Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"Entry Environment ownership changed after acceptance",
+		)
 	}
 	if _, err := service.desired.repository.GetTenant(ctx, project.Record.TenantID); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	if project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		return taskdependencies.Prepared{}, errs.New(
 			errs.KindResourceInUse,
 			"Environment is not ready for Entry mutation",
 		)
 	}
 	if err := service.desired.validateExposure(ctx, input.environmentID, input.exposure); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	if err := service.desired.repository.InitializeEnvironmentDesiredState(ctx, input.environmentID, locator, evidence.durable, service.desired.now().UTC()); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	if err := service.desired.repository.InitializeEnvironmentDesiredState(ctx, input.environmentID, locator, request.Intent, at); err != nil {
+		return taskdependencies.Prepared{}, err
 	}
 	head, hasHead, err := service.desired.repository.GetEnvironmentBlueprintHead(ctx, input.environmentID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	source, err := service.desired.repository.ReadEntryMutationSource(ctx, input.environmentID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	if source.Desired.Revision != head.Revision || source.Desired.Record.RevisionID != head.Record.RevisionID {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Entry desired source changed")
+		return taskdependencies.Prepared{}, errs.New(errs.KindStateConflict, "Entry desired source changed")
 	}
 	if source.Runtime == nil {
-		return service.bulkUnrenderedEntries(ctx, input, locator, evidence, source, project, environment)
+		return service.bulkUnrenderedEntries(
+			ctx,
+			input,
+			locator,
+			request.Intent,
+			source,
+			project,
+			environment,
+			accepted,
+			at,
+		)
 	}
 	current, hasCurrent := *source.Runtime, true
 	headRevision, generation, err := controllerrevision.NextGeneration(
@@ -145,20 +132,19 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		hasCurrent,
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	if !hasCurrent || generation > math.MaxInt32 {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		return taskdependencies.Prepared{}, errs.New(
 			errs.KindStateConflict,
 			"Entry mutation requires initialized Environment desired state",
 		)
 	}
 	runtime, err := service.desired.runtime.CaptureEntryMutationRuntime(ctx, current)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	now := service.desired.now().UTC()
-	candidateTaskID := ids.New(ids.KindTask)
+	candidateTaskID := accepted.Task.ID
 	candidateRecords, err := buildEntryBulkCandidate(
 		current.Record.EnvironmentID,
 		current.Record.Entries,
@@ -166,7 +152,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		candidateTaskID,
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	candidate, _, err := composerender.ProjectEnvironmentEntryMutation(
 		runtime.Projection,
@@ -179,7 +165,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		},
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	candidate = controllerrevision.CloneProjection(candidate)
 	claim, _, err := controllerrevision.PreflightAndClaim(
@@ -190,19 +176,29 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 			EnvironmentID:   input.environmentID,
 			CandidateTaskID: candidateTaskID,
 			Locator:         locator,
-			Intent:          evidence.durable,
+			Intent:          request.Intent,
 			MatchExistingIntent: func(ctx context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
-				return service.idempotency.MatchesStaged(ctx, evidence, existing)
+				return blueprints.SameBlueprintProtectedIntent(existing, request.Intent), nil
 			},
 			BaselineHeadRevision: headRevision,
 			SourceKind:           blueprints.EnvironmentBlueprintSourceMutation,
 			RenderGeneration:     generation,
-			CreatedAt:            now,
+			CreatedAt:            accepted.Task.CreatedAt,
+			AcceptedTaskRevision: accepted.Revision,
+			TaskLocator:          &request.Locator,
 		},
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
+	keepStage := false
+	defer func() {
+		if !keepStage {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			_ = service.desired.repository.AbandonEnvironmentBlueprintStage(cleanupCtx, claim)
+		}
+	}()
 	candidateRecords, err = buildEntryBulkCandidate(
 		current.Record.EnvironmentID,
 		current.Record.Entries,
@@ -210,13 +206,13 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		claim.TaskID,
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	for _, change := range candidateRecords.changes {
 		if err := service.desired.prepareEntryGeneration(
-			ctx, project.Record.ID, input.environmentID, change.desired, change.record, claim.CreatedAt,
+			ctx, project.Record.ID, input.environmentID, change.desired, change.record, at,
 		); err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
+			return taskdependencies.Prepared{}, err
 		}
 	}
 	candidate, materializations, err := composerender.ProjectEnvironmentEntryMutation(
@@ -230,33 +226,33 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		},
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	candidate = controllerrevision.CloneProjection(candidate)
 	serviceIdentities, err := entryDesiredServiceIdentities(candidate)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	removals, err := PlanEntryRemovals(
 		input.environmentID, candidateRecords.previous, candidateRecords.entries, serviceIdentities,
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	materializations = append(materializations, removals...)
 	allocator, err := controllerrevision.NewBlueprintIdentityAllocator(claim)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	materializationRecords, err := service.desired.entryMaterializations(
 		ctx, input.environmentID, allocator, materializations,
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	response, err := entryBulkUpsertResponse(candidateRecords.changes, claim.TaskID)
+	response, err := entryTaskResponse(claim.TaskID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	defer clear(response.Body)
 	marker := idempotencyrecord.IdempotencyMarker{
@@ -271,7 +267,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	}
 	projectionEvidence, err := controllerrevision.PreflightProjection(candidate)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	desiredInput, err := controllerrevision.DeriveCurrentMutationDesiredInput(
 		ctx, service.desired.repository, input.environmentID, current.Record.RevisionID,
@@ -286,7 +282,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		},
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	audits := make([]blueprints.EnvironmentEntryMutationAudit, len(candidateRecords.changes))
 	for index, change := range candidateRecords.changes {
@@ -311,33 +307,30 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		DesiredInput:     desiredInput,
 		DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	result, publicationErr := service.desired.publishConfiguration(ctx, entryConfigurationPublication{
-		Project: project, Environment: environment, Claim: claim, Runtime: runtime,
+	prepared, err := service.desired.prepareConfiguration(ctx, entryConfigurationPublication{
+		Project: project, Environment: environment, Claim: claim, Runtime: runtime, Accepted: accepted, At: at,
 		Candidate: candidate, ReadRevision: current.ReadRevision, Files: materializationRecords,
-		Marker: marker, Action: workexecution.ActionUpdate, TargetID: input.environmentID,
-		TargetName: "Entries",
+		Marker: marker, Action: workexecution.ActionUpdate, TargetID: input.environmentID, TargetName: "Entries",
 	})
-	if publicationErr != nil {
-		if !isUnknownEntryCreationOutcome(publicationErr) {
-			return idempotencyrecord.IdempotencyResponse{}, publicationErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, publicationErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	if resolution.Kind == requestidempotency.ResolutionReplay {
-		return requestidempotency.CloneResponse(resolution.Response), nil
+	priorFinalize := prepared.Finalize
+	prepared.Finalize = func(finalCtx context.Context, committed bool) error {
+		var finishErr error
+		if priorFinalize != nil {
+			finishErr = priorFinalize(finalCtx, committed)
+		}
+		if !committed {
+			cleanupErr := service.desired.repository.AbandonEnvironmentBlueprintStage(finalCtx, claim)
+			if kind, _ := errs.KindOf(cleanupErr); cleanupErr != nil && kind != errs.KindStateConflict {
+				return errs.WrapJoined(errs.KindInternal, finishErr, cleanupErr)
+			}
+		}
+		return finishErr
 	}
-	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Entry bulk upsert resolution is invalid",
-		)
-	}
-	return requestidempotency.CloneResponse(response), nil
+	keepStage = true
+	return prepared, nil
 }

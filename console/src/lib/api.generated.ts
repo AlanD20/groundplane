@@ -2108,6 +2108,7 @@ export interface components {
              * @example /api/v1/AgentUpdate.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             image: string;
         };
         Attach: {
@@ -2169,6 +2170,7 @@ export interface components {
              * @example /api/v1/AttachRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             backing_service_id: string;
             credential: components["schemas"]["AttachCredential"];
             grant_attach_ids?: string[];
@@ -2231,10 +2233,11 @@ export interface components {
              * @example /api/v1/BackingCheckRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             attach_id: string;
             grant_id?: string;
             /** Format: int64 */
-            revision: number;
+            revision?: number;
         };
         BackingCheckResult: {
             /**
@@ -2318,6 +2321,7 @@ export interface components {
             adapter: string;
             /** @description Required supported server version for a managed database adapter; omitted for Custom. */
             adapter_version?: string;
+            after?: string[] | null;
             /**
              * @description Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
              * @enum {string}
@@ -2359,16 +2363,6 @@ export interface components {
             adapter: "custom";
             image: string;
         });
-        BackingServiceCreated: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/v1/BackingServiceCreated.json
-             */
-            readonly $schema?: string;
-            backing_service: components["schemas"]["BackingService"];
-            task_id: string;
-        };
         BackingServiceZoneCreate: {
             internal: boolean;
             name: string;
@@ -2512,6 +2506,7 @@ export interface components {
              * @example /api/v1/ComponentConfigMutationRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             config: {
                 alias?: string;
                 caddyfile_template?: string;
@@ -2590,6 +2585,7 @@ export interface components {
              * @example /api/v1/ComponentEnableRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             config?: {
                 alias?: string;
                 caddyfile_template?: string;
@@ -2653,6 +2649,7 @@ export interface components {
              * @example /api/v1/ConnectorCheckRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             changes?: components["schemas"]["ConnectorEditRequest"];
             connector_id?: string;
             draft?: components["schemas"]["ConnectorCreateRequest"];
@@ -2815,6 +2812,7 @@ export interface components {
              * @example /api/v1/ControllerUpdateRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             release: string;
         };
         ControllerUpdateState: {
@@ -2887,9 +2885,10 @@ export interface components {
              * @example /api/v1/DNSCheckRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             queries?: components["schemas"]["DNSCheckQuery"][] | null;
             /** Format: int64 */
-            revision: number;
+            revision?: number;
         };
         DNSCheckResult: {
             /**
@@ -2920,6 +2919,8 @@ export interface components {
              * @example /api/v1/DeployRequest.json
              */
             readonly $schema?: string;
+            /** @description Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs */
+            after?: string[] | null;
             /** @description Host-local registry reference for this Release only; mutually exclusive with tag */
             image?: string;
             on_failure?: string;
@@ -2972,11 +2973,12 @@ export interface components {
              * @example /api/v1/EdgeCheckRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             connector_id: string;
             /** @description Concrete request path matching this Route; required for wildcard paths. */
             path?: string;
             /** Format: int64 */
-            revision: number;
+            revision?: number;
             route_id: string;
         };
         EdgeCheckResult: {
@@ -3051,20 +3053,11 @@ export interface components {
              * @example /api/v1/EntryBulkUpsertRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             entries: components["schemas"]["EntryBulkItem"][] | null;
             environment_id: string;
             exposure: string[] | null;
             secret: boolean;
-        };
-        EntryBulkUpsertResult: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/v1/EntryBulkUpsertResult.json
-             */
-            readonly $schema?: string;
-            entries: components["schemas"]["Entry"][] | null;
-            task_id: string;
         };
         EntryCreateRequest: {
             /**
@@ -3073,6 +3066,7 @@ export interface components {
              * @example /api/v1/EntryCreateRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             environment_id: string;
             exposure: string[] | null;
             /** Format: int64 */
@@ -3092,6 +3086,7 @@ export interface components {
              * @example /api/v1/EntryEditRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             exposure: string[] | null;
             source: components["schemas"]["EntrySource"];
         };
@@ -3167,6 +3162,7 @@ export interface components {
              * @example /api/v1/EnvironmentCreate.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             name: string;
             network_pool: string;
             project_id: string;
@@ -3283,7 +3279,8 @@ export interface components {
              * @example /api/v1/EtcdConfigApplyRequest.json
              */
             readonly $schema?: string;
-            expected_revision: string;
+            after?: string[] | null;
+            expected_revision?: string;
         };
         EtcdConfigDocument: {
             /**
@@ -3450,19 +3447,6 @@ export interface components {
             service_name: string;
             tenant_slug: string;
         };
-        ImageFetchAccepted: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/v1/ImageFetchAccepted.json
-             */
-            readonly $schema?: string;
-            /** @description Pinned OCI configuration digest, verified before Task completion */
-            config_digest: string;
-            /** @description Immutable registry reference selected for this operation */
-            image: string;
-            task_id: string;
-        };
         ImageFetchRecord: {
             /** @description Immutable manifest reference selected for this Fetch */
             image: string;
@@ -3479,6 +3463,7 @@ export interface components {
              * @example /api/v1/ImageFetchRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             /** @description Explicit tag or SHA-256 digest in a public registry or GP's managed private registry */
             image: string;
         };
@@ -3893,6 +3878,8 @@ export interface components {
              * @example /api/v1/ReleaseGroupDeployRequest.json
              */
             readonly $schema?: string;
+            /** @description Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs */
+            after?: string[] | null;
             tag?: string;
         };
         ReleaseGroupEditRequest: {
@@ -3907,20 +3894,6 @@ export interface components {
             order?: string[];
             service_ids?: string[];
             tag?: components["schemas"]["OptionalNullableString"];
-        };
-        ReleaseGroupMemberRelease: {
-            release_id: string;
-            service_id: string;
-        };
-        ReleaseGroupMutationAccepted: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/v1/ReleaseGroupMutationAccepted.json
-             */
-            readonly $schema?: string;
-            release_group_id: string;
-            task_id: string;
         };
         ReleaseGroupRollbackPreview: {
             /**
@@ -3940,6 +3913,8 @@ export interface components {
              * @example /api/v1/ReleaseGroupRollbackRequest.json
              */
             readonly $schema?: string;
+            /** @description Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs */
+            after?: string[] | null;
             preview_revision?: string;
             tag?: string;
         };
@@ -3947,17 +3922,6 @@ export interface components {
             release_id: string;
             service_id: string;
             tag: string;
-        };
-        ReleaseGroupTaskAccepted: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/v1/ReleaseGroupTaskAccepted.json
-             */
-            readonly $schema?: string;
-            release_group_operation_id: string;
-            releases: components["schemas"]["ReleaseGroupMemberRelease"][] | null;
-            task_id: string;
         };
         ReleaseRollbackMaterial: {
             expired_at?: string;
@@ -3986,17 +3950,6 @@ export interface components {
             state: string;
             strategy: string;
             tag: string;
-        };
-        ReleaseTaskAccepted: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/v1/ReleaseTaskAccepted.json
-             */
-            readonly $schema?: string;
-            operation_id: string;
-            release_id: string;
-            task_id: string;
         };
         RestoreDatabaseReview: {
             artifact_format: string;
@@ -4029,6 +3982,7 @@ export interface components {
              */
             readonly $schema?: string;
             acknowledge_version_difference?: boolean;
+            after?: string[] | null;
             age_identity?: string;
             recovery_point_id?: string;
             source_id: string;
@@ -4041,6 +3995,8 @@ export interface components {
              * @example /api/v1/RollbackRequest.json
              */
             readonly $schema?: string;
+            /** @description Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs */
+            after?: string[] | null;
             tag?: string;
         };
         Route: {
@@ -4074,6 +4030,7 @@ export interface components {
              * @example /api/v1/RouteCreate.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             environment_id: string;
             /** @enum {string} */
             exposure: "public" | "internal";
@@ -4090,18 +4047,9 @@ export interface components {
              * @example /api/v1/RouteEdit.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             /** @enum {string} */
             exposure: "public" | "internal";
-        };
-        RouteTaskAccepted: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/v1/RouteTaskAccepted.json
-             */
-            readonly $schema?: string;
-            route: components["schemas"]["Route"];
-            task_id: string;
         };
         Router: {
             /**
@@ -4165,8 +4113,9 @@ export interface components {
              * @example /api/v1/RunnerCheckRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             /** Format: int64 */
-            revision: number;
+            revision?: number;
         };
         RunnerCheckResult: {
             /**
@@ -4209,6 +4158,7 @@ export interface components {
              * @example /api/v1/RunnerCreateRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             auto_update: boolean;
             /** Format: int64 */
             cpu_millis: number;
@@ -4250,8 +4200,9 @@ export interface components {
              * @example /api/v1/RunnerUpdateRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             /** Format: int64 */
-            revision: number;
+            revision?: number;
             version: string;
         };
         RunnerUpdateResult: {
@@ -4728,6 +4679,7 @@ export interface components {
              * @example /api/v1/SoftwarePreparationRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             ref: string;
             /** @enum {string} */
             selection: "controller" | "agent" | "both";
@@ -4965,6 +4917,17 @@ export interface components {
             /** Format: int32 */
             waiting: number;
         };
+        TaskDependencyDecision: {
+            failed?: components["schemas"]["TaskDependencyFailure"];
+            ready: boolean;
+            waiting?: string[] | null;
+        };
+        TaskDependencyFailure: {
+            /** Format: date-time */
+            observed_at: string;
+            outcome: string;
+            task_id: string;
+        };
         TaskDetails: {
             /**
              * Format: uri
@@ -5022,7 +4985,7 @@ export interface components {
             /** @enum {string} */
             outcome: "failed" | "cancelled" | "superseded";
             /** @enum {string} */
-            reason: "planning_deadline_exceeded" | "planning_stopped" | "planning_invalid_input" | "planning_dependency_conflict";
+            reason: "planning_deadline_exceeded" | "planning_stopped" | "planning_invalid_input" | "planning_dependency_conflict" | "dependency.failed";
             summary: string;
         };
         TaskRetryRequest: {
@@ -5040,6 +5003,16 @@ export interface components {
              */
             queued_failure_at?: string;
             work_item_id: string;
+        };
+        TaskRunAfterRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/TaskRunAfterRequest.json
+             */
+            readonly $schema?: string;
+            /** @description Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs */
+            after?: string[] | null;
         };
         TaskStages: {
             /**
@@ -5065,16 +5038,21 @@ export interface components {
             action: string;
             /** @enum {string} */
             actor: "operator" | "system";
+            after?: string[] | null;
             cancel: components["schemas"]["TaskActionAvailability"];
             counts: components["schemas"]["TaskCounts"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             deadline: string;
+            dependencies?: components["schemas"]["TaskDependencyDecision"];
             /** Format: date-time */
             finished_at?: string;
             history_expired: boolean;
             id: string;
+            /** @description Accepted pure intent has not been compiled into executable work */
+            pending_preparation: boolean;
+            preparation_wait?: components["schemas"]["Wait"];
             resource_kind: string;
             scope: components["schemas"]["Scope"];
             /** @enum {string} */
@@ -5202,6 +5180,7 @@ export interface components {
              * @example /api/v1/TunnelCheckRequest.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             /** @description Concrete public hostname configured by the operator at the Tunnel provider; GP does not read or change provider ingress. */
             hostname: string;
             /**
@@ -5216,7 +5195,7 @@ export interface components {
              * Format: int64
              * @description Current Tunnel Component revision.
              */
-            revision: number;
+            revision?: number;
         };
         Volume: {
             /**
@@ -5242,6 +5221,7 @@ export interface components {
              * @example /api/v1/VolumeCreate.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             environment_id: string;
             key?: string;
             slug: string;
@@ -5290,6 +5270,7 @@ export interface components {
              * @example /api/v1/VolumeEdit.json
              */
             readonly $schema?: string;
+            after?: string[] | null;
             slug: string;
         };
         Wait: {
@@ -5453,7 +5434,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -5518,7 +5503,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -5801,7 +5790,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -5973,14 +5966,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Created */
-            201: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     "Content-Type"?: string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BackingServiceCreated"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -6036,7 +6029,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -6069,7 +6066,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -6103,7 +6104,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -6137,7 +6142,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -6284,13 +6293,13 @@ export interface operations {
                     "application/json": components["schemas"]["ComponentConfigMutationResult"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
         };
@@ -6306,7 +6315,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -6523,7 +6536,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -6733,7 +6750,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -6945,14 +6966,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Created */
-            201: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     "Content-Type"?: string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Entry"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -6989,7 +7010,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EntryBulkUpsertResult"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -7045,7 +7066,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -7085,14 +7110,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     "Content-Type"?: string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Entry"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -7249,7 +7274,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -7389,7 +7418,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -7784,7 +7817,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -7930,7 +7967,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -8201,7 +8242,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImageFetchAccepted"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -8226,7 +8267,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -8362,7 +8407,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -8573,7 +8622,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -8582,7 +8635,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReleaseGroupMutationAccepted"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -8658,7 +8711,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReleaseGroupTaskAccepted"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -8696,7 +8749,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReleaseGroupTaskAccepted"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -8863,7 +8916,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RouteTaskAccepted"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -8990,7 +9043,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -9037,7 +9094,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RouteTaskAccepted"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -9164,7 +9221,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -9548,7 +9609,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -9620,7 +9685,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -9756,7 +9825,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -9960,7 +10033,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -10045,7 +10122,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReleaseTaskAccepted"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -10070,7 +10147,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -10155,7 +10236,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReleaseTaskAccepted"];
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */
@@ -10180,7 +10261,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -10214,7 +10299,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -10416,7 +10505,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -11012,7 +11105,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -11160,8 +11257,8 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Created */
-            201: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     "Content-Type"?: string;
                     [name: string]: unknown;
@@ -11169,7 +11266,6 @@ export interface operations {
                 content: {
                     "application/json": {
                         task_id: string;
-                        volume: components["schemas"]["Volume"];
                     };
                 };
             };
@@ -11229,7 +11325,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -11271,8 +11371,8 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     "Content-Type"?: string;
                     [name: string]: unknown;
@@ -11280,7 +11380,6 @@ export interface operations {
                 content: {
                     "application/json": {
                         task_id: string;
-                        volume: components["schemas"]["Volume"];
                     };
                 };
             };
@@ -11443,7 +11542,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskRunAfterRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {

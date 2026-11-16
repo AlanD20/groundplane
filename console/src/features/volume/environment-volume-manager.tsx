@@ -1,3 +1,4 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
 import { InlineEditorRegion } from "@/components/common/inline-editor-region";
@@ -36,6 +37,10 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [slug, setSlug] = useState("");
   const [key, setKey] = useState("");
+  const [createAfter, setCreateAfter] = useState<string[]>([]);
+  const [editAfter, setEditAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Environment["volumes"][number] | null>(
     null,
@@ -195,26 +200,36 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
 
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
       </div>
+      <TaskRunAfterSelector
+        value={createAfter}
+        onChange={setCreateAfter}
+        onBusyChange={setAfterLoading}
+      />
       <DialogFooter>
         <Button variant="outline" onClick={() => setOpen(false)}>
           Cancel
         </Button>
         <Button
-          disabled={!slug.trim()}
+          disabled={saving || afterLoading || !slug.trim()}
           onClick={async () => {
             setSaveError(null);
+            setSaving(true);
             try {
               await store.addVolume(env.id, {
                 slug: slug.trim(),
+                after: createAfter,
                 key: key.trim() || undefined,
               });
               setOpen(false);
+              setCreateAfter([]);
               setSlug("");
               setKey("");
             } catch (cause: unknown) {
               setSaveError(
                 cause instanceof Error ? cause.message : "Unable to add volume",
               );
+            } finally {
+              setSaving(false);
             }
           }}
         >
@@ -297,18 +312,25 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
         </p>
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
       </div>
+      <TaskRunAfterSelector
+        value={editAfter}
+        onChange={setEditAfter}
+        onBusyChange={setAfterLoading}
+      />
       <DialogFooter>
         <Button variant="outline" onClick={() => setEditing(null)}>
           Cancel
         </Button>
         <Button
-          disabled={!editSlug.trim()}
+          disabled={saving || afterLoading || !editSlug.trim()}
           onClick={async () => {
             if (!editing) return;
             setSaveError(null);
+            setSaving(true);
             try {
               await store.updateVolume(env.id, editing.id, {
                 slug: editSlug.trim(),
+                after: editAfter,
               });
               setEditing(null);
             } catch (cause: unknown) {
@@ -317,6 +339,8 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
                   ? cause.message
                   : "Unable to edit volume",
               );
+            } finally {
+              setSaving(false);
             }
           }}
         >
@@ -413,6 +437,7 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
                       detailRequest.current++;
                       setViewing(null);
                       setSaveError(null);
+                      setEditAfter([]);
                       setEditSlug(v.slug);
                       setEditing(v);
                     }}
@@ -469,6 +494,7 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
           impactLoading || Boolean(impactError) || !finalImpact?.impact_token
         }
         startLabel="Remove volume"
+        runAfter
         review={
           <div className="flex flex-col gap-2">
             {impactLoading && (
@@ -533,7 +559,7 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
             )}
           </div>
         }
-        onDispatch={() => {
+        onDispatch={(after) => {
           if (!removing || !finalImpact?.impact_token)
             return Promise.reject(new Error("Deletion impact is not ready"));
           return store.removeVolume(
@@ -541,6 +567,7 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
             removing.id,
             finalImpact.impact_token,
             removing.key,
+            after,
           );
         }}
       />

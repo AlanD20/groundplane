@@ -20,10 +20,10 @@ export function AgentImageUpdate({ agent }: { agent: PlatformAgent }) {
         <Button
           size="sm"
           variant="outline"
-          disabled={agentsLoading || agent.inFlight > 0}
+          disabled={agentsLoading}
           title={
             agent.inFlight > 0
-              ? "Agent update requires zero in-flight tasks"
+              ? "Choose prerequisite Tasks to wait for before updating a busy Agent"
               : undefined
           }
           onClick={() => setUpdating(true)}
@@ -81,13 +81,18 @@ export function AgentImageUpdate({ agent }: { agent: PlatformAgent }) {
               />
             </div>
           }
-          startDisabled={!image.trim() || agentsLoading || agent.inFlight > 0}
+          startDisabled={(after) =>
+            !image.trim() ||
+            agentsLoading ||
+            (after.length === 0 && agent.inFlight > 0)
+          }
           type="update"
           target={agent.id}
           workspace="platform"
           startLabel="Update Agent"
-          onDispatch={async () =>
-            (await updateAgent(agent.id, image.trim())).task_id
+          runAfter
+          onDispatch={async (after) =>
+            (await updateAgent(agent.id, image.trim(), after)).task_id
           }
         />
       )}

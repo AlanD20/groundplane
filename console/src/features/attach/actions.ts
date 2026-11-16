@@ -18,6 +18,7 @@ type AttachCreateInput = {
   name?: string;
   credential: { mode: "new" } | { mode: "existing"; attachId: string };
   grantAttachIds?: string[];
+  after?: string[];
 };
 
 export type AttachActions = {
@@ -27,7 +28,11 @@ export type AttachActions = {
     attachId: string,
     name: string,
   ) => Promise<void>;
-  removeAttach: (envId: string, attachId: string) => Promise<string>;
+  removeAttach: (
+    envId: string,
+    attachId: string,
+    after?: string[],
+  ) => Promise<string>;
   revealAttachFact: (
     attachId: string,
     key: string,
@@ -45,6 +50,7 @@ export function createAttachActions(
         service_id: input.serviceId,
         backing_service_id: input.backingServiceId,
         name: input.name,
+        after: input.after ?? [],
         credential:
           input.credential.mode === "new"
             ? { mode: "new" }
@@ -74,13 +80,14 @@ export function createAttachActions(
         if (attach) attach.name = response.name;
       });
     },
-    removeAttach: async (_envId, attachId) => {
+    removeAttach: async (_envId, attachId, after = []) => {
       assertEnvironmentMutable(_envId, "Attach mutation");
       const response = await controllerRequest<AttachTaskAccepted>(
         `/attaches/${encodeURIComponent(attachId)}`,
         202,
         {
           method: "DELETE",
+          body: { after },
         },
       );
       return requireTaskId(response, "Attach removal");

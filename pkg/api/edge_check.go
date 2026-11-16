@@ -3,18 +3,20 @@ package api
 import "github.com/AlanD20/groundplane/internal/common/edgeconnectioncheck"
 
 type EdgeCheckRequest struct {
-	RouteID     string `json:"route_id" required:"true" pattern:"^rte_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Revision    int64  `json:"revision" required:"true" minimum:"1"`
-	ConnectorID string `json:"connector_id" required:"true" pattern:"^cmp_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Path        string `json:"path,omitempty" maxLength:"2048" doc:"Concrete request path matching this Route; required for wildcard paths."`
+	After       []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	RouteID     string   `json:"route_id" required:"true" pattern:"^rte_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Revision    int64    `json:"revision,omitempty" minimum:"0"`
+	ConnectorID string   `json:"connector_id" required:"true" pattern:"^cmp_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Path        string   `json:"path,omitempty" maxLength:"2048" doc:"Concrete request path matching this Route; required for wildcard paths."`
 }
 
 type TunnelCheckRequest struct {
-	Revision        int64  `json:"revision" required:"true" minimum:"1" doc:"Current Tunnel Component revision."`
-	OriginServiceID string `json:"origin_service_id" required:"true" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
-	OriginPort      uint16 `json:"origin_port" required:"true" minimum:"1" maximum:"65535" doc:"An HTTP port exposed as TCP by the serving Service."`
-	Hostname        string `json:"hostname" required:"true" minLength:"1" maxLength:"253" doc:"Concrete public hostname configured by the operator at the Tunnel provider; GP does not read or change provider ingress."`
-	Path            string `json:"path" required:"true" minLength:"1" maxLength:"2048" doc:"Concrete HTTP request path without query or fragment."`
+	After           []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	Revision        int64    `json:"revision,omitempty" minimum:"0" doc:"Current Tunnel Component revision."`
+	OriginServiceID string   `json:"origin_service_id" required:"true" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
+	OriginPort      uint16   `json:"origin_port" required:"true" minimum:"1" maximum:"65535" doc:"An HTTP port exposed as TCP by the serving Service."`
+	Hostname        string   `json:"hostname" required:"true" minLength:"1" maxLength:"253" doc:"Concrete public hostname configured by the operator at the Tunnel provider; GP does not read or change provider ingress."`
+	Path            string   `json:"path" required:"true" minLength:"1" maxLength:"2048" doc:"Concrete HTTP request path without query or fragment."`
 }
 
 type EdgeCheckConfiguration struct {

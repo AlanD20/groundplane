@@ -126,7 +126,7 @@ func (c *Client) EditScript(ctx context.Context, id string, input apiTypes.Scrip
 	return decodeScriptResponse(http.MethodPatch, path, response.Body)
 }
 
-func (c *Client) RemoveScript(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RemoveScript(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -134,6 +134,7 @@ func (c *Client) RemoveScript(ctx context.Context, id string) (apiTypes.TaskAcce
 	path := "/api/v1/scripts/" + id
 	response, err := client.ScriptRemoveWithResponse(
 		ctx, id, &generated.ScriptRemoveParams{IdempotencyKey: ids.NewULID()},
+		generated.ScriptRemoveJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)

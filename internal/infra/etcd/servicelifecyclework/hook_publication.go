@@ -34,12 +34,14 @@ func (repository *Repository) PrepareInput(
 	ctx context.Context,
 	input Input,
 	envelope *taskconfiguration.BackingHookEncryptedInputs,
+	accepted workqueue.TaskSnapshot,
 ) (_ Publication, resultErr error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return Publication{}, err
 	}
 	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindWorkItem, input.WorkItemID) != nil ||
-		ids.Validate(ids.KindProject, input.Scope.ProjectID) != nil || (input.HookInputs == nil) != (envelope == nil) {
+		ids.Validate(ids.KindProject, input.Scope.ProjectID) != nil || (input.HookInputs == nil) != (envelope == nil) ||
+		accepted.Revision <= 0 || accepted.Task.ID != input.TaskID || !accepted.Task.PendingPreparation() {
 		return Publication{}, conflict("Service lifecycle publication requires its captured owner and hook envelope")
 	}
 	publication := Publication{Input: input, store: repository.store}
@@ -72,7 +74,7 @@ func (repository *Repository) PrepareInput(
 				input.TaskID,
 				input.WorkItemID,
 				hook.SecretSources,
-				[]tasksecretpins.Condition{{Key: workqueue.TaskKey(input.TaskID)},
+				[]tasksecretpins.Condition{{Key: workqueue.TaskKey(input.TaskID), ModRevision: accepted.Revision},
 					{Key: workqueue.ItemKey(input.WorkItemID)}, {Key: InputKey(input.WorkItemID)}},
 			)
 			if err != nil {

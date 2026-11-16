@@ -2,6 +2,7 @@ package taskinspection
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -22,6 +23,44 @@ func (service *Service) preparation(
 	task workqueue.TaskSnapshot,
 	revision int64,
 ) (*Preparation, error) {
+	if task.Task.AcceptedIntent != nil && task.Task.Intent == (workexecution.Input{}) {
+		if task.Task.FinishedAt == nil {
+			return nil, nil
+		}
+		result := &Preparation{Outcome: task.Task.Outcome, FinishedAt: *task.Task.FinishedAt,
+			Reason: "preparation.stopped", Summary: "This Task stopped before execution inputs were prepared. No workload operation started.",
+			NextAction: "Submit a new action if it is still needed."}
+		failure, err := service.queue.ReadAcceptedPreparationFailure(ctx, task.Task.ID, revision)
+		if err != nil {
+			return nil, err
+		}
+		if failure != nil {
+			result.Reason, result.Summary = failure.Code, failure.Detail
+			result.NextAction = "Correct the reported input or prerequisite, then submit a new action."
+		}
+		if len(task.Task.After) != 0 {
+			dependencies, _, err := service.queue.ReadTaskDependencies(ctx, task.Task.ID, revision)
+			if err != nil {
+				return nil, err
+			}
+			if dependencies.Revision > 0 {
+				decision, err := dependencies.Record.Decision()
+				if err != nil {
+					return nil, err
+				}
+				if decision.Failed != nil {
+					result.Reason = "dependency.failed"
+					result.Summary = fmt.Sprintf(
+						"Run after Task %s reported %s. This Task did not start.",
+						decision.Failed.TaskID,
+						decision.Failed.Outcome,
+					)
+					result.NextAction = "Inspect the predecessor Task, resolve its failure, then submit a new action."
+				}
+			}
+		}
+		return result, nil
+	}
 	rejection, err := service.hierarchy.ReadPlanningRejection(ctx, task, revision)
 	if err != nil || rejection == nil {
 		return nil, err

@@ -49,7 +49,12 @@ type SecretMutator interface {
 }
 
 type SecretDeleter interface {
-	DeleteSecret(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	DeleteSecret(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type secretCreateInput struct {
@@ -69,6 +74,7 @@ type secretShowInput struct {
 }
 
 type secretRemoveInput struct {
+	Body           *apiTypes.TaskRunAfterRequest
 	ID             string `path:"id" pattern:"^sec_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
@@ -122,28 +128,12 @@ func (s *Server) registerSecrets() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "secret.remove", Method: http.MethodDelete, Path: "/secrets/{id}",
 		Summary: "Remove a reusable secret", Tags: []string{"Secret"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectSecretDeleteBody, s.rejectSecretQuery},
+		Middlewares: huma.Middlewares{s.rejectSecretQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.removeSecret)
 	s.registerSecretEdit(secretSchema)
 	s.setRoutePolicy("POST /api/v1/secrets", routePolicy{body: jsonBody})
-}
-
-func (s *Server) rejectSecretDeleteBody(ctx huma.Context, next func(huma.Context)) {
-	var probe [1]byte
-	count, err := ctx.BodyReader().Read(probe[:])
-	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		if writeErr := huma.WriteErr(
-			s.API,
-			ctx,
-			http.StatusBadRequest,
-			"Secret deletion body is not allowed",
-		); writeErr != nil && s.Logger != nil {
-			s.Logger.Error("controller: write Secret request problem", slog.Any("error", writeErr))
-		}
-		return
-	}
-	next(ctx)
+	s.setRoutePolicy("DELETE /api/v1/secrets/{id}", routePolicy{body: jsonBody})
 }
 
 func (s *Server) removeSecret(
@@ -153,7 +143,11 @@ func (s *Server) removeSecret(
 	if s.secretDeletions == nil {
 		return nil, errs.New(errs.KindInternal, "Secret deleter is not configured")
 	}
-	response, err := s.secretDeletions.DeleteSecret(ctx, request.ID, request.IdempotencyKey)
+	input := apiTypes.TaskRunAfterRequest{}
+	if request.Body != nil {
+		input.After = append([]string(nil), request.Body.After...)
+	}
+	response, err := s.secretDeletions.DeleteSecret(ctx, request.ID, input, request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}

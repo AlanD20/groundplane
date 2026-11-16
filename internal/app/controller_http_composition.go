@@ -20,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/controller/serviceterminal"
 	"github.com/AlanD20/groundplane/internal/controller/taskalerts"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -36,6 +37,7 @@ import (
 )
 
 type controllerHTTPDependencies struct {
+	acceptedPreparations    []taskdependencies.Registration
 	bootstrap               controllerBootstrapComposition
 	store                   etcd.EnvironmentBlueprintStore
 	authority               controllerAuthorityComposition
@@ -77,65 +79,61 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 	)
 	if err != nil {
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Task alerts: %w", err)
 	}
 	environmentDNS, err := environmentdns.NewService(dependencies.authority.environmentBlueprintRecords,
 		dependencies.authority.idempotency, dependencies.authority.intentCoordinator)
 	if err != nil {
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment DNS: %w", err)
 	}
 	edgeChecks, err := newControllerEdgeCheckService(dependencies)
 	if err != nil {
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Tunnel connection checks: %w", err)
 	}
 	dnsChecks, err := newControllerDNSCheckService(dependencies)
 	if err != nil {
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize DNS connection checks: %w", err)
 	}
 	backingChecks, err := newControllerBackingCheckService(dependencies)
 	if err != nil {
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Backing access checks: %w", err)
 	}
 	terminalInactivity, err := dependencies.bootstrap.config.ParsedHostTerminalInputInactivity()
 	if err != nil {
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize host terminal policy: %w", err)
 	}
 	hostTerminals, err := hostterminal.New(commonrunner.New(dependencies.bootstrap.logger), terminalInactivity)
 	if err != nil {
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize host terminal service: %w", err)
 	}
+	acceptedPreparations := append(dependencies.acceptedPreparations, edgeChecks.AcceptedPreparations()...)
+	acceptedPreparations = append(acceptedPreparations, dnsChecks.AcceptedPreparations()...)
+	acceptedPreparations = append(acceptedPreparations, backingChecks.AcceptedPreparations()...)
 	workRuntime, err := dependencies.platform.NewWorkExecution(hostplatform.ExecutionDependencies{
-		BackupSecrets:   dependencies.execution.backupSecrets,
-		Hierarchy:       dependencies.hierarchyDeletions,
-		AttachFacts:     dependencies.execution.attachFactValues,
-		BackupRemoval:   dependencies.backup.cleanup,
-		Keys:            dependencies.backup.keys,
-		ScriptArtifacts: dependencies.execution.scriptArtifacts,
-		Releases:        dependencies.blueprintReleases,
-		CapturedFiles:   dependencies.execution.materializationResolver,
-		Blueprints:      dependencies.environmentBlueprints,
-		Entries:         dependencies.environmentBlueprints,
-		Definitions:     dependencies.environmentBlueprints,
-		Images:          dependencies.images, RunnerChecks: dependencies.runner.checkExecutor, RunnerSoftware: dependencies.runner.softwareExecutor,
+		AcceptedPreparations: acceptedPreparations,
+		BackupSecrets:        dependencies.execution.backupSecrets,
+		Hierarchy:            dependencies.hierarchyDeletions,
+		AttachFacts:          dependencies.execution.attachFactValues,
+		BackupRemoval:        dependencies.backup.cleanup,
+		Keys:                 dependencies.backup.keys,
+		ScriptArtifacts:      dependencies.execution.scriptArtifacts,
+		Releases:             dependencies.blueprintReleases,
+		CapturedFiles:        dependencies.execution.materializationResolver,
+		Blueprints:           dependencies.environmentBlueprints,
+		Entries:              dependencies.environmentBlueprints,
+		Definitions:          dependencies.environmentBlueprints,
+		Images:               dependencies.images, RunnerChecks: dependencies.runner.checkExecutor, RunnerSoftware: dependencies.runner.softwareExecutor,
 		RunnerLifecycle: dependencies.runner.lifecycle,
 	})
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize execution storage: %w", err)
 	}
 	executionQueue := workRuntime.Queue
@@ -144,84 +142,72 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize execution Retry: %w", err)
 	}
 	taskAborts, err := taskoperations.NewAbortService(executionQueue)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Task abort service: %w", err)
 	}
 	imageRecords, err := imageoperations.NewRepository(dependencies.store)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize image execution inspection: %w", err)
 	}
 	executionDiagnostics, err := executiondiagnostics.New(dependencies.store, executionQueue)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize execution diagnostics: %w", err)
 	}
 	hierarchyInspection, err := etcd.NewHierarchyDeletionRepository(dependencies.store)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize removal inspection: %w", err)
 	}
 	componentInspection, err := componentwork.NewInputRepository(dependencies.store)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Component inspection: %w", err)
 	}
 	runnerInspection, err := runnerwork.NewRepository(dependencies.store)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Runner inspection: %w", err)
 	}
 	etcdInspection, err := etcdconfiguration.New(dependencies.store)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize etcd activation inspection: %w", err)
 	}
 	preparationInspection, err := preparationrecord.NewRepository(dependencies.store)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize software preparation inspection: %w", err)
 	}
 	controllerInspection, err := controllersoftware.New(dependencies.store)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller activation inspection: %w", err)
 	}
 	agentInspection, err := agentoperations.New(dependencies.store)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Agent lifecycle inspection: %w", err)
 	}
 	activationInspection, err := activationrecord.NewRepository(dependencies.store)
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize software staging inspection: %w", err)
 	}
 
@@ -229,7 +215,6 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment provisioning inspection: %w", err)
 	}
 	taskInspection, err := taskinspection.New(
@@ -250,7 +235,6 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close()
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Task inspection: %w", err)
 	}
 	serviceReads, err := newServiceReadResources(
@@ -264,7 +248,6 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close() // Preserve the initialization error; cleanup is best-effort.
-		_ = dependencies.store.Close()
 		return nil, fmt.Errorf("controller: initialize Service reads: %w", err)
 	}
 	server := handlers.New(dependencies.store, dependencies.bootstrap.logger, handlers.Options{

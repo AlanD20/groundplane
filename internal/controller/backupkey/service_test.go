@@ -3,7 +3,8 @@ package backupkey
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,15 +44,23 @@ func (repository *recordingRotationRepository) PrepareBackupKeyRotation(
 	return etcd.PreparedBackupKeyRotation{}, nil
 }
 
-func (repository *recordingRotationRepository) PublishBackupKeyRotation(
+func (repository *recordingRotationRepository) PrepareBackupKeyRotationAuthority(
 	_ context.Context,
 	_ etcd.PreparedBackupKeyRotation,
-	marker testidempotency.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	repository.marker = marker
-	repository.marker.Intent.Ciphertext = append([]byte(nil), marker.Intent.Ciphertext...)
-	repository.marker.Response.Body = append([]byte(nil), marker.Response.Body...)
-	return etcd.IdempotencyTransactionResult{}, nil
+	task workexecution.Task,
+	at time.Time,
+) (etcd.BackupKeyRotationCapture, error) {
+	ref := workexecution.Input{ID: repository.input.PlanID, SHA256: strings.Repeat("a", 64)}
+	task.Intent, task.ExpectedItems, task.UpdatedAt = ref, 1, at
+	item := workexecution.Item{ID: repository.input.WorkItemID, TaskID: task.ID, Input: &ref}
+	return etcd.BackupKeyRotationCapture{Task: task, Item: item}, nil
+}
+
+func (*recordingRotationRepository) ReadBackupTaskAcceptance(
+	context.Context,
+	string,
+) (etcd.BackupTaskAcceptance, error) {
+	panic("late compiler must not read acceptance metadata")
 }
 
 func (*recordingRotationRepository) GetBackupKey(
@@ -102,7 +111,11 @@ func (factory *fixedRotationKeyFactory) Create(
 
 type appliedRotationIdempotency struct{}
 
-func (*appliedRotationIdempotency) Prepare(context.Context, string) (idempotentintent.ProtectedEvidence, error) {
+func (*appliedRotationIdempotency) Prepare(
+	context.Context,
+	string,
+	[]string,
+) (idempotentintent.ProtectedEvidence, error) {
 	return idempotentintent.ProtectedEvidence{}, nil
 }
 
@@ -112,33 +125,6 @@ func (*appliedRotationIdempotency) ResolveExisting(
 	idempotentintent.ProtectedEvidence,
 ) (idempotentintent.Resolution, bool, error) {
 	return idempotentintent.Resolution{}, false, nil
-}
-
-func (*appliedRotationIdempotency) NewMarker(
-	_ idempotentintent.ProtectedEvidence,
-	locator testidempotency.IdempotencyLocator,
-	response testidempotency.IdempotencyResponse,
-	taskID string,
-	now time.Time,
-) (testidempotency.IdempotencyMarker, error) {
-	return newPendingRotationMarker(testidempotency.ProtectedIntentRecord{}, locator, response, taskID, now), nil
-}
-
-func (*appliedRotationIdempotency) ResolveKnown(
-	context.Context,
-	idempotentintent.ProtectedEvidence,
-	etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
-	return idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied}, nil
-}
-
-func (*appliedRotationIdempotency) ResolveUnknown(
-	context.Context, testidempotency.IdempotencyLocator,
-
-	idempotentintent.ProtectedEvidence,
-	error,
-) (idempotentintent.Resolution, error) {
-	return idempotentintent.Resolution{}, nil
 }
 
 type copyCrypt struct{}
@@ -151,10 +137,9 @@ func (*copyCrypt) Open(_ context.Context, value []byte) ([]byte, error) {
 	return append([]byte(nil), value...), nil
 }
 
-// Rationale: the production key use case must publish the pending marker tied
-// to its exact Task and return immutable TaskAccepted bytes after all transient
-// response and key-material buffers have been cleared.
-func TestServiceRotationPublishesPendingTaskMarkerAndReturnsOwnedBody(t *testing.T) {
+// Key material is generated only during deferred compilation, and cleared
+// after the exact accepted Task's native rotation authority has been prepared.
+func TestServiceRotationDefersKeyMaterialUntilCompilation(t *testing.T) {
 	repository := &recordingRotationRepository{}
 	keys := &fixedRotationKeyFactory{}
 	crypt := &copyCrypt{}
@@ -166,40 +151,29 @@ func TestServiceRotationPublishesPendingTaskMarkerAndReturnsOwnedBody(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.now = func() time.Time {
-		return time.Date(2026, time.August, 27, 12, 0, 0, 0, time.UTC)
+	at := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	task := workexecution.Task{
+		ID:        ids.New(ids.KindTask),
+		Scope:     workexecution.Scope{EnvironmentID: testEnvironmentID},
+		CreatedAt: at,
+		UpdatedAt: at,
+		Deadline:  at.Add(time.Hour),
 	}
-
-	response, err := service.RotateBackupKey(
-		context.Background(),
-		testEnvironmentID,
-		"rotate-key-test-0001",
+	if keys.ciphertext != nil {
+		t.Fatal("key generated before compilation")
+	}
+	captured, err := service.prepareAcceptedRotation(
+		t.Context(),
+		workqueue.TaskSnapshot{Task: task, Revision: 1},
+		1,
+		at,
+		apiTypes.TaskRunAfterRequest{},
 	)
-	if err != nil {
-		t.Fatalf("RotateBackupKey() error = %v", err)
-	}
-	if response.Status != 202 || response.ContentKind != "application/json" ||
-		bytes.Contains(response.Body, []byte{0}) {
-		t.Fatalf("response = %#v, body %q", response, response.Body)
-	}
-	var accepted apiTypes.TaskAccepted
-	if err := json.Unmarshal(response.Body, &accepted); err != nil {
-		t.Fatalf("TaskAccepted body = %q: %v", response.Body, err)
-	}
-	if accepted.TaskID == "" || accepted.TaskID != repository.input.TaskID {
-		t.Fatalf("TaskAccepted task id = %q, captured %q", accepted.TaskID, repository.input.TaskID)
-	}
-	if repository.marker.Kind != testidempotency.IdempotencyMarkerTask ||
-		repository.marker.State != testidempotency.IdempotencyMarkerPending ||
-		repository.marker.TaskID != repository.input.TaskID ||
-		!bytes.Equal(repository.marker.Response.Body, response.Body) {
-		t.Fatalf("published marker = %#v", repository.marker)
+	if err != nil || captured.Task.ID != task.ID || repository.input.TaskID != task.ID || len(captured.Graph) != 1 {
+		t.Fatalf("rotation capture: %#v / %v", captured, err)
 	}
 	if !bytes.Equal(keys.ciphertext, make([]byte, len(keys.ciphertext))) {
 		t.Fatalf("key factory ciphertext retained %q", keys.ciphertext)
 	}
-	clear(response.Body)
 	clear(repository.material.Ciphertext)
-	clear(repository.marker.Intent.Ciphertext)
-	clear(repository.marker.Response.Body)
 }

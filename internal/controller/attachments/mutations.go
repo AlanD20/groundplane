@@ -3,13 +3,10 @@ package attachments
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -55,6 +52,7 @@ type attachMutationFacts interface {
 }
 
 type MutationService struct {
+	accepted    *acceptedaction.Submitter
 	repository  attachMutationRepository
 	facts       attachMutationFacts
 	idempotency attachMutationIdempotency
@@ -66,53 +64,13 @@ func NewMutationService(
 	repository attachMutationRepository,
 	facts attachMutationFacts,
 	idempotency attachMutationIdempotency,
+	accepted *acceptedaction.Submitter,
 ) (*MutationService, error) {
-	if repository == nil || facts == nil || idempotency == nil {
+	if repository == nil || facts == nil || idempotency == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Attach mutation service is not configured")
 	}
 	return &MutationService{
-		repository: repository, facts: facts, idempotency: idempotency,
+		repository: repository, facts: facts, idempotency: idempotency, accepted: accepted,
 		random: rand.Reader, now: time.Now,
 	}, nil
-}
-
-func (service *MutationService) resolveMutationResult(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence attachMutationEvidence,
-	result etcd.IdempotencyTransactionResult,
-	mutationErr error,
-	response idempotencyrecord.IdempotencyResponse,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	var resolution requestidempotency.Resolution
-	var err error
-	if mutationErr != nil {
-		if !isUnknownAttachMutationOutcome(mutationErr) {
-			return idempotencyrecord.IdempotencyResponse{}, mutationErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if resolution.Kind == requestidempotency.ResolutionReplay {
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	}
-	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Attach mutation resolution is invalid",
-		)
-	}
-	return requestidempotency.CloneResponse(response), nil
-}
-
-func isUnknownAttachMutationOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
 }

@@ -1,6 +1,7 @@
 package desiredauthoring
 
 import (
+	"bytes"
 	"context"
 	"strings"
 
@@ -35,10 +36,13 @@ func stage(ctx context.Context, store Store, publication Publication) (Publicati
 	if err != nil {
 		return Publication{}, err
 	}
-	if !result.Succeeded {
-		return Publication{}, errs.New(errs.KindStateConflict, "desired staging identity changed")
-	}
 	descriptorRevision := result.Revision
+	if !result.Succeeded {
+		descriptorRevision, err = readIdenticalStagedValue(ctx, store, descriptorMutation.Key, sealed)
+		if err != nil {
+			return Publication{}, err
+		}
+	}
 	final := Publication{Conditions: append([]keyvalue.Condition(nil), publication.Conditions[:3]...)}
 	final.Conditions = append(
 		final.Conditions,
@@ -53,13 +57,17 @@ func stage(ctx context.Context, store Store, publication Publication) (Publicati
 		if err != nil {
 			return Publication{}, err
 		}
+		contentRevision := result.Revision
 		if !result.Succeeded {
-			return Publication{}, errs.New(errs.KindStateConflict, "desired staged content changed")
+			contentRevision, err = readIdenticalStagedValue(ctx, store, mutation.Key, mutation.Value)
+			if err != nil {
+				return Publication{}, err
+			}
 		}
 		if !strings.Contains(mutation.Key, "/chunks/") {
 			final.Conditions = append(
 				final.Conditions,
-				keyvalue.Condition{Key: mutation.Key, ModRevision: result.Revision},
+				keyvalue.Condition{Key: mutation.Key, ModRevision: contentRevision},
 			)
 		}
 	}
@@ -78,4 +86,21 @@ func stage(ctx context.Context, store Store, publication Publication) (Publicati
 		head,
 	}
 	return final, nil
+}
+
+// Existing immutable content is reusable only byte for byte. The final
+// descriptor comparison also fences concurrent abandonment or publication.
+func readIdenticalStagedValue(ctx context.Context, store Store, key string, expected []byte) (int64, error) {
+	read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}})
+	if err != nil {
+		return 0, err
+	}
+	if read == nil || len(read.Values) != 1 {
+		return 0, errs.New(errs.KindInternal, "desired staged content read is unavailable")
+	}
+	defer keyvalue.ClearValues(read.Values)
+	if read.Values[0] == nil || !bytes.Equal(read.Values[0].Value, expected) {
+		return 0, errs.New(errs.KindStateConflict, "desired staged content changed")
+	}
+	return read.Values[0].ModRevision, nil
 }

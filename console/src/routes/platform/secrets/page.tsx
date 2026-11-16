@@ -229,7 +229,7 @@ export default function PlatformSecretsPage() {
           emptyTitle="No platform configuration yet"
           scopeLabel="platform scope"
           editable
-          onRemove={(secret) => store.removeReusableSecret(secret.id)}
+          onRemove={(secret, after) => store.removeReusableSecret(secret.id, after)}
           onRefresh={() => store.refreshReusableSecrets()}
           onReveal={(secret) => store.revealReusableSecret(secret.id)}
         />

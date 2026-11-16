@@ -1,6 +1,7 @@
 export type PendingConnectorRemoval = {
   connectorId: string;
   environmentId: string;
+  after: string[];
 };
 const pendingConnectorRemovalStorageKey =
   "groundplane-pending-connector-removals";
@@ -18,7 +19,14 @@ export function loadPendingConnectorRemovals(): Map<
         ([taskId, pending]) =>
           typeof taskId === "string" &&
           typeof pending?.connectorId === "string" &&
-          typeof pending?.environmentId === "string",
+          typeof pending?.environmentId === "string" &&
+          Array.isArray(pending.after) &&
+          pending.after.length <= 16 &&
+          pending.after.every(
+            (id) =>
+              typeof id === "string" &&
+              /^task_[0-9A-HJKMNP-TV-Z]{26}$/.test(id),
+          ),
       ),
     );
   } catch {

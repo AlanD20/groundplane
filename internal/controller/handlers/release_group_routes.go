@@ -2,9 +2,7 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -35,7 +33,12 @@ type ReleaseGroupMutator interface {
 		apiTypes.ReleaseGroupEditRequest,
 		string,
 	) (idempotencyrecord.IdempotencyResponse, error)
-	RemoveReleaseGroup(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveReleaseGroup(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type ReleaseOperator interface {
@@ -92,8 +95,9 @@ type releaseGroupEditInput struct {
 }
 
 type releaseGroupRemoveInput struct {
-	ID             string `path:"id" pattern:"^rg_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID             string                        `path:"id" pattern:"^rg_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type releaseGroupDeployInput struct {
@@ -128,9 +132,10 @@ type releaseGroupMutationOutput struct {
 
 func (s *Server) registerReleaseGroups() {
 	registry := s.API.OpenAPI().Components.Schemas
-	mutationSchema := openAPISchema[apiTypes.ReleaseGroupMutationAccepted](registry, "ReleaseGroupMutationAccepted")
+	mutationSchema := openAPISchema[apiTypes.TaskAccepted](registry, "TaskAccepted")
 	groupSchema := openAPISchema[apiTypes.ReleaseGroup](registry, "ReleaseGroup")
-	taskSchema := openAPISchema[apiTypes.ReleaseGroupTaskAccepted](registry, "ReleaseGroupTaskAccepted")
+	taskSchema := openAPISchema[apiTypes.TaskAccepted](registry, "TaskAccepted")
+	s.setRoutePolicy("DELETE /api/v1/release-groups/{id}", routePolicy{body: jsonBody})
 	huma.Register(s.API, huma.Operation{
 		OperationID: "release-group.rollback-preview", Method: http.MethodGet, Path: "/release-groups/{id}/rollback-preview",
 		Summary: "Preview a release group rollback", Tags: []string{"Release Group"}, Middlewares: huma.Middlewares{s.rejectInvalidRollbackPreviewTag},
@@ -164,7 +169,7 @@ func (s *Server) registerReleaseGroups() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "release-group.remove", Method: http.MethodDelete, Path: "/release-groups/{id}",
 		Summary: "Remove a release group", Tags: []string{"Release Group"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectReleaseGroupRemoveBody, s.rejectReleaseGroupRemoveQuery},
+		Middlewares: huma.Middlewares{s.rejectReleaseGroupRemoveQuery},
 		Responses: map[string]*huma.Response{"202": {
 			Description: http.StatusText(http.StatusAccepted),
 			Content:     map[string]*huma.MediaType{"application/json": {Schema: mutationSchema}},
@@ -204,7 +209,7 @@ func (s *Server) deployReleaseGroup(
 	response, err := s.releaseOperations.DeployReleaseGroup(
 		ctx,
 		input.ID,
-		domain.GroupDeployInput{Tag: input.Body.Tag},
+		domain.GroupDeployInput{Tag: input.Body.Tag, After: append([]string(nil), input.Body.After...)},
 		input.IdempotencyKey,
 	)
 	if err != nil {
@@ -237,6 +242,7 @@ func (s *Server) rollbackReleaseGroup(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
+	operation.After = append([]string(nil), request.After...)
 	response, err := s.releaseOperations.RollbackReleaseGroup(ctx, input.ID, operation, input.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
@@ -361,21 +367,16 @@ func (s *Server) removeReleaseGroup(
 	if s.releaseGroupMutations == nil {
 		return nil, errs.New(errs.KindInternal, "release group mutator is not configured")
 	}
-	response, err := s.releaseGroupMutations.RemoveReleaseGroup(ctx, input.ID, input.IdempotencyKey)
+	response, err := s.releaseGroupMutations.RemoveReleaseGroup(
+		ctx,
+		input.ID,
+		taskRunAfter(input.Body),
+		input.IdempotencyKey,
+	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
 	return s.releaseGroupMutationResponse(response), nil
-}
-
-func (s *Server) rejectReleaseGroupRemoveBody(ctx huma.Context, next func(huma.Context)) {
-	var probe [1]byte
-	count, err := ctx.BodyReader().Read(probe[:])
-	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		s.writeReleaseGroupProblem(ctx, "release group removal body is not allowed")
-		return
-	}
-	next(ctx)
 }
 
 func (s *Server) rejectReleaseGroupRemoveQuery(ctx huma.Context, next func(huma.Context)) {

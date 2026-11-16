@@ -2,7 +2,9 @@ package workqueue
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/acceptedactions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskcredentialrefs"
 )
 
 // PrepareWorkCollection retires one settled item after its attempts and owned
@@ -42,13 +44,20 @@ func PrepareTaskCollection(task TaskSnapshot) (Change, error) {
 	change := Change{
 		Conditions: []keyvalue.Condition{
 			{Key: TaskKey(task.Task.ID), ModRevision: task.Revision},
+			{Key: taskcredentialrefs.Key(task.Task.ID)},
 			{Key: TaskItemsPrefix(task.Task.ID), Prefix: true},
 			{Key: taskPublishingKey(task.Task.ID)},
 			{Key: taskFinishKey(task.Task.ID)},
 			{Key: taskReservationIndexKey(task.Task.ID)},
+			{Key: acceptedPreparationCleanupKey(task.Task.ID)},
 		},
 		Mutations: []keyvalue.Mutation{
 			{Type: keyvalue.MutationDelete, Key: TaskKey(task.Task.ID)},
+			{Type: keyvalue.MutationDelete, Key: TaskDependenciesKey(task.Task.ID)},
+			{Type: keyvalue.MutationDelete, Key: acceptedactions.Prefix(task.Task.ID), Prefix: true},
+			{Type: keyvalue.MutationDelete, Key: acceptedactions.KindKey(task.Task.ID)},
+			{Type: keyvalue.MutationDelete, Key: acceptedPreparationFailureKey(task.Task.ID)},
+			{Type: keyvalue.MutationDelete, Key: acceptedPreparationWaitKey(task.Task.ID)},
 			{Type: keyvalue.MutationDelete, Key: replayBindingKey(task.Task.ID)},
 			{Type: keyvalue.MutationDelete, Key: retentionKey(task.Task.ID, *task.Task.RetainUntil)},
 			{Type: keyvalue.MutationDelete, Key: stopKey(task.Task.ID)},
@@ -56,6 +65,10 @@ func PrepareTaskCollection(task TaskSnapshot) (Change, error) {
 	}
 	for _, key := range taskListKeys(task.Task) {
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})
+	}
+	for _, parentID := range task.Task.After {
+		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete,
+			Key: taskDependentKey(parentID, task.Task.ID)})
 	}
 	return change, nil
 }

@@ -147,32 +147,51 @@ func newReleaseGroupCmd() *cobra.Command {
 	edit.MarkFlagsMutuallyExclusive("tag", "clear-tag")
 	cmd.AddCommand(edit)
 
-	cmd.AddCommand(&cobra.Command{
+	var removeAfter []string
+	remove := &cobra.Command{
 		Use:     "remove <name>",
 		Aliases: []string{"delete"},
 		Short:   "Remove a release group (dispatches a task; member services are untouched)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(removeAfter)
+			if err != nil {
+				return err
+			}
 			groupID, err := resolveReleaseGroupTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			return runDestroy(cmd, "/api/v1/release-groups/"+groupID)
+			accepted, err := fromContext(cmd).Client.RemoveReleaseGroup(cmd.Context(), groupID, after)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &removeAfter)
+	cmd.AddCommand(remove)
 
 	var deployTag string
+	var deployAfter []string
 	deploy := &cobra.Command{
 		Use:   "deploy <name>",
 		Short: "Deploy member services in their declared order under one Task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(deployAfter)
+			if err != nil {
+				return err
+			}
 			groupID, err := resolveReleaseGroupTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
 			path := "/api/v1/release-groups/" + groupID + "/deploy"
-			body := map[string]string{}
+			body := map[string]any{}
+			if len(after) > 0 {
+				body["after"] = after
+			}
 			if strings.TrimSpace(deployTag) != "" {
 				body["tag"] = deployTag
 			}
@@ -180,29 +199,43 @@ func newReleaseGroupCmd() *cobra.Command {
 		},
 	}
 	deploy.Flags().StringVar(&deployTag, "tag", "", "image tag to resolve and pin for each member deployment")
+	addTaskAfterFlag(deploy, &deployAfter)
 	cmd.AddCommand(deploy)
 
 	var rollbackTag string
+	var rollbackAfter []string
 	rollback := &cobra.Command{
 		Use:   "rollback <name>",
 		Short: "Deploy previous images for every member using their current configuration and strategy",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(rollbackAfter)
+			if err != nil {
+				return err
+			}
 			groupID, err := resolveReleaseGroupTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
 			path := "/api/v1/release-groups/" + groupID + "/rollback"
 			if !cmd.Flags().Changed("tag") {
-				return runAction(cmd, path, nil)
+				if len(after) == 0 {
+					return runAction(cmd, path, nil)
+				}
+				return runAction(cmd, path, map[string]any{"after": after})
 			}
 			if rollbackTag == "" || strings.TrimSpace(rollbackTag) != rollbackTag {
 				return errs.New(errs.KindValidationFailed, "rollback tag is invalid")
 			}
-			return runAction(cmd, path, map[string]string{"tag": rollbackTag})
+			body := map[string]any{"tag": rollbackTag}
+			if len(after) > 0 {
+				body["after"] = after
+			}
+			return runAction(cmd, path, body)
 		},
 	}
 	rollback.Flags().StringVar(&rollbackTag, "tag", "", "explicit tag applied to every member")
+	addTaskAfterFlag(rollback, &rollbackAfter)
 	cmd.AddCommand(rollback)
 
 	var previewTag string

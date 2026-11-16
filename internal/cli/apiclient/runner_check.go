@@ -16,11 +16,12 @@ func (client *Client) CheckRunner(
 	runnerID string,
 	revision int64,
 	key string,
+	after []string,
 ) (apiTypes.TaskAccepted, error) {
-	if revision <= 0 {
+	if revision < 0 {
 		return apiTypes.TaskAccepted{}, errs.New(
-			errs.KindStateConflict,
-			"Runner read has no current revision; refresh before testing",
+			errs.KindValidationFailed,
+			"Runner revision must not be negative",
 		)
 	}
 	if key == "" {
@@ -35,7 +36,10 @@ func (client *Client) CheckRunner(
 		ctx,
 		runnerID,
 		&generated.RunnerCheckParams{IdempotencyKey: key},
-		generated.RunnerCheckJSONRequestBody{Revision: revision},
+		generated.RunnerCheckJSONRequestBody{
+			Revision: optionalTaskRevision(revision),
+			After:    optionalServiceStrings(after),
+		},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)

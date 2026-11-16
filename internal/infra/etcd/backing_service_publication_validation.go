@@ -77,7 +77,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if creation.Environment.ProjectID != creation.Project.ID || creation.Environment.Name != "main" ||
 		creation.Environment.ProvisioningState != hierarchyrecord.EnvironmentProvisioningProvisioning ||
 		creation.Environment.CreateTaskID != creation.Task.ID ||
-		!creation.Environment.CreatedAt.Equal(creation.Task.CreatedAt) {
+		creation.Task.CreatedAt.After(creation.Environment.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Backing-service Environment lifecycle is invalid")
 	}
 	if err := hierarchyrecord.ValidateEnvironmentVolumeDir(creation.VolumeRoot, creation.Project, creation.Environment); err != nil {
@@ -191,9 +191,9 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.Task.Actor != workexecution.OperatorActor ||
 		creation.Task.TargetID != task.TargetID ||
 		creation.Task.TargetName != task.TargetName ||
-		!creation.Task.CreatedAt.Equal(task.CreatedAt) ||
+		creation.Task.CreatedAt.After(task.CreatedAt) ||
 		!creation.Task.UpdatedAt.Equal(task.CreatedAt) ||
-		!creation.Task.Deadline.Equal(task.Deadline) ||
+		creation.Task.Deadline.Before(task.Deadline) ||
 		creation.Task.ExpectedItems != 1 ||
 		creation.Task.PublicationComplete ||
 		creation.Task.Stop != nil ||

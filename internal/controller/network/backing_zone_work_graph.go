@@ -120,8 +120,8 @@ func BuildBackingZoneWorkGraph(task workexecution.Task, bridge workexecution.Ite
 			Placement: plan.Placement,
 			Phase:     workexecution.Ready,
 			Cleanup:   workexecution.CleanupNone,
-			CreatedAt: task.CreatedAt,
-			UpdatedAt: task.CreatedAt,
+			CreatedAt: task.UpdatedAt,
+			UpdatedAt: task.UpdatedAt,
 			Deadline:  task.Deadline,
 			Claims:    attachremoval.RemovalClaims(attach, plan.Placement.HostID),
 		}

@@ -58,6 +58,7 @@ func (mutator *fakeAttachMutator) CreateAttach(
 func (mutator *fakeAttachMutator) DetachAttach(
 	_ context.Context,
 	attachID string,
+	_ apiTypes.TaskRunAfterRequest,
 	key string,
 ) (testidempotency.IdempotencyResponse, error) {
 	mutator.detachHit = true

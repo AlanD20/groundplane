@@ -3,6 +3,7 @@ package attachprovision
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -39,6 +40,15 @@ func (publication *InputPublication) Finish(ctx context.Context) error {
 	}
 	if present == 0 {
 		return publication.Abandon(ctx)
+	}
+	if read.Values[0] != nil && read.Values[1] == nil && read.Values[2] == nil {
+		task, err := workqueue.DecodeTask(read.Values[0].Value)
+		if err != nil {
+			return err
+		}
+		if task.AcceptedIntent != nil && task.Intent == (workexecution.Input{}) && task.ExpectedItems == 0 {
+			return publication.Abandon(ctx)
+		}
 	}
 	if present != len(keys) {
 		return checkpointConflict("Attach publication is partially visible; captured pins remain retained")

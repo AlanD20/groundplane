@@ -31,6 +31,7 @@ const (
 var blueprintCLIInterpolationKey = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type blueprintCLIManifest struct {
+	After          []string                   `json:"after,omitempty"`
 	Service        string                     `json:"service,omitempty"`
 	Root           string                     `json:"root"`
 	ComposeSources []string                   `json:"compose_sources"`
@@ -56,8 +57,13 @@ func buildBlueprintMultipart(
 	additionalComposeSources []string,
 	variables []string,
 	selectedService string,
+	after []string,
 ) ([]byte, string, error) {
-	rootPath, err := normalizeBlueprintCLIPath(rootPath)
+	validatedAfter, err := validatedTaskAfter(after)
+	if err != nil {
+		return nil, "", err
+	}
+	rootPath, err = normalizeBlueprintCLIPath(rootPath)
 	if err != nil {
 		return nil, "", err
 	}
@@ -97,7 +103,7 @@ func buildBlueprintMultipart(
 		return nil, "", err
 	}
 
-	manifest := blueprintCLIManifest{
+	manifest := blueprintCLIManifest{After: validatedAfter,
 		Root: rootPath, ComposeSources: composeSources, Interpolation: interpolation,
 		Files: make([]blueprintCLIManifestFile, len(files)),
 	}
@@ -273,7 +279,7 @@ func runBlueprintApply(
 		if uncertain {
 			return errs.Newf(
 				errs.KindRequestUnavailable,
-				"Blueprint Apply outcome is unknown for Environment %s; keep the bundle unchanged and replay against this Environment ID with --retry-revision %s --retry-key %s",
+				"Blueprint Apply outcome is unknown for Environment %s; keep the bundle and --after unchanged and replay against this Environment ID with --retry-revision %s --retry-key %s",
 				environmentID,
 				expectedRevision,
 				idempotencyKey,

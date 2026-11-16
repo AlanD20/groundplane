@@ -3,7 +3,8 @@ package keyvalue
 func CloneMutations(values []Mutation) []Mutation {
 	result := make([]Mutation, len(values))
 	for index, value := range values {
-		result[index] = Mutation{Type: value.Type, Key: value.Key, Value: append([]byte(nil), value.Value...)}
+		result[index] = value
+		result[index].Value = append([]byte(nil), value.Value...)
 	}
 	return result
 }

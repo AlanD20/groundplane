@@ -9,11 +9,15 @@ import (
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/acceptedactions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -23,7 +27,7 @@ import (
 func TestNativeUpdateServicePublishesAndReplaysPinnedTask(t *testing.T) {
 	h := newServiceHarness(t)
 	ctx := context.Background()
-	response, err := h.service.UpdateController(ctx, string(h.input.Release), "native-update-key-0001")
+	response, err := h.service.UpdateController(ctx, string(h.input.Release), nil, "native-update-key-0001")
 	if err != nil || response.Status != http.StatusAccepted {
 		t.Fatalf("update = %s, %v", response, err)
 	}
@@ -31,6 +35,7 @@ func TestNativeUpdateServicePublishesAndReplaysPinnedTask(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatal(err)
 	}
+	h.prepare(t, response.Body)
 	current, found, err := h.service.records.Current(ctx, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -46,12 +51,18 @@ func TestNativeUpdateServicePublishesAndReplaysPinnedTask(t *testing.T) {
 		journal.Agent == nil || *journal.Agent != *h.input.Agent {
 		t.Fatalf("frozen Task = %#v, %v", journal, err)
 	}
+	writes := h.storage.transactions
 	h.catalog.failure = errs.New(errs.KindResourceInUse, "host now upgrading")
-	replay, err := h.service.UpdateController(ctx, string(h.input.Release), "native-update-key-0001")
-	if err != nil || string(replay.Body) != string(response.Body) || h.storage.transactions != 1 {
+	replay, err := h.service.UpdateController(ctx, string(h.input.Release), nil, "native-update-key-0001")
+	if err != nil || string(replay.Body) != string(response.Body) || h.storage.transactions != writes {
 		t.Fatalf("active replay = %s, %v; %d writes", replay, err, h.storage.transactions)
 	}
-	_, err = h.service.UpdateController(ctx, string(upgrade.Hash([]byte("other release"))), "native-update-key-0001")
+	_, err = h.service.UpdateController(
+		ctx,
+		string(upgrade.Hash([]byte("other release"))),
+		nil,
+		"native-update-key-0001",
+	)
 	if !errors.Is(err, errs.New(errs.KindIdempotencyMismatch, "")) {
 		t.Fatalf("changed release replay = %v", err)
 	}
@@ -62,8 +73,13 @@ func TestNativeUpdateServicePublishesAndReplaysPinnedTask(t *testing.T) {
 func TestNativeUpdateServiceResolvesLostPublicationResponse(t *testing.T) {
 	h := newServiceHarness(t)
 	h.storage.loseResponse = true
-	response, err := h.service.UpdateController(context.Background(), string(h.input.Release), "native-update-key-0002")
-	if err != nil || response.Status != http.StatusAccepted || h.storage.transactions != 1 {
+	response, err := h.service.UpdateController(
+		context.Background(),
+		string(h.input.Release),
+		nil,
+		"native-update-key-0002",
+	)
+	if err != nil || response.Status != http.StatusAccepted {
 		t.Fatalf("unknown publication = %s, %v; %d writes", response, err, h.storage.transactions)
 	}
 }
@@ -92,12 +108,15 @@ func TestNativeReleaseImageSelection(t *testing.T) {
 	if err != nil || image != h.input.Agent.Image {
 		t.Fatalf("development image = %q, %v", image, err)
 	}
-	if _, err := h.service.UpdateController(ctx, string(h.input.Release), "native-update-key-0003"); !errors.Is(
-		err,
-		errs.New(errs.KindStateConflict, ""),
-	) {
-		t.Fatalf("unbootstrapped update = %v", err)
+	response, err := h.service.UpdateController(ctx, string(h.input.Release), nil, "native-update-key-0003")
+	if err != nil {
+		t.Fatal(err)
 	}
+	h.prepare(t, response.Body)
+	if _, found, err := h.service.records.Current(ctx, 0); err != nil || found {
+		t.Fatalf("unbootstrapped update captured: %v", err)
+	}
+
 }
 
 // Rationale: installed/running mismatch and an unready Agent must be rejected
@@ -114,10 +133,20 @@ func TestNativeUpdateServiceRejectsInvalidPredecessor(t *testing.T) {
 			case "active":
 				h.catalog.journal, h.catalog.found = h.expected, true
 			}
-			if _, err := h.service.UpdateController(context.Background(), string(h.input.Release), "native-update-key-0004"); err == nil ||
-				h.storage.transactions != 0 {
-				t.Fatalf("invalid predecessor accepted: %v, %d writes", err, h.storage.transactions)
+			response, err := h.service.UpdateController(
+				context.Background(),
+				string(h.input.Release),
+				nil,
+				"native-update-key-0004",
+			)
+			if err != nil {
+				t.Fatal(err)
 			}
+			h.prepare(t, response.Body)
+			if _, found, err := h.service.records.Current(t.Context(), 0); err != nil || found {
+				t.Fatalf("invalid predecessor captured: %v", err)
+			}
+
 		})
 	}
 }
@@ -150,14 +179,32 @@ func newServiceHarness(t *testing.T) *serviceHarness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	payloadRepository, err := acceptedactions.NewRepository(storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloads, err := acceptedaction.NewPayloads(payloadRepository, protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queue, err := workqueue.NewRepository(storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	submitter, err := acceptedaction.NewSubmitter(payloads, queue, evidence, intents)
+	if err != nil {
+		t.Fatal(err)
+	}
 	catalog := &serviceCatalog{coordinatorStore: h.store}
 	records, err := controllersoftware.New(storage)
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := NewService(ServiceDependencies{Catalog: catalog, Unit: h.unit, Agents: h.agents,
-		Tasks: tasks, Records: records, Evidence: evidence, Intents: intents, ProcessDigest: h.input.PreviousController,
-		BootstrapAgentImage: h.input.Agent.Image, AgentImages: catalog})
+	service, err := NewService(
+		ServiceDependencies{Submitter: submitter, Catalog: catalog, Unit: h.unit, Agents: h.agents,
+			Tasks: tasks, Records: records, Evidence: evidence, Intents: intents, ProcessDigest: h.input.PreviousController,
+			BootstrapAgentImage: h.input.Agent.Image, AgentImages: catalog},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,4 +241,33 @@ func (publicationCipher) Seal(_ context.Context, raw []byte) ([]byte, error) {
 }
 func (publicationCipher) Open(_ context.Context, raw []byte) ([]byte, error) {
 	return append([]byte(nil), raw[len("test-sealed:"):]...), nil
+}
+
+func (h *serviceHarness) prepare(t *testing.T, body []byte) {
+	t.Helper()
+	var accepted apiTypes.TaskAccepted
+	if err := json.Unmarshal(body, &accepted); err != nil {
+		t.Fatal(err)
+	}
+	queue, err := workqueue.NewRepository(h.storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preparations, err := taskdependencies.NewPreparations(queue, h.service.AcceptedPreparations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 4 {
+		snapshot, _, err := queue.ReadTask(t.Context(), accepted.TaskID, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !snapshot.Task.PendingPreparation() {
+			return
+		}
+		if _, err := preparations.Advance(t.Context(), accepted.TaskID, h.now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Fatal("accepted update did not finish preparation")
 }

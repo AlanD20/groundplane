@@ -23,7 +23,8 @@ export function useUnsavedChanges(
     ({ currentLocation, nextLocation }) =>
       isDirty() &&
       (currentLocation.pathname !== nextLocation.pathname ||
-        currentLocation.search !== nextLocation.search),
+        draftSearch(currentLocation.search) !==
+          draftSearch(nextLocation.search)),
   );
   useBeforeUnload(
     useCallback((event) => {
@@ -73,4 +74,12 @@ export function useUnsavedChanges(
       </Dialog>
     ),
   };
+}
+
+// Task inspection opens a side panel without changing the edited workspace.
+function draftSearch(search: string): string {
+  const parameters = new URLSearchParams(search);
+  parameters.delete("task");
+  parameters.sort();
+  return parameters.toString();
 }

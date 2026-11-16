@@ -57,20 +57,24 @@ func newRunnerCmd() *cobra.Command {
 	var tokenFile, githubURL, runnerGroup, githubName string
 	var cpus, memoryGiB float64
 	var autoUpdate, editAutoUpdate bool
-	var labels []string
+	var labels, addAfter []string
 	add := &cobra.Command{
 		Use:   "add <slug>",
 		Short: "Register a Runner in the selected Tenant, Project or Environment",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
+			after, err := validatedTaskAfter(addAfter)
+			if err != nil {
+				return err
+			}
 			request := apiTypes.RunnerCreateRequest{
+				After:      after,
 				AutoUpdate: autoUpdate, Slug: args[0],
 				GitHubURL:   githubURL,
 				RunnerGroup: runnerGroup, GitHubName: githubName, CPUMillis: int64(math.Round(cpus * 1000)), MemoryBytes: int64(math.Round(memoryGiB * (1 << 30))),
 				Labels: labels,
 			}
-			var err error
 			if app.Scope.Environment != "" {
 				request.EnvironmentID, err = resolveEnvironmentTarget(cmd, app.Scope.Environment)
 			} else if app.Scope.Project != "" {
@@ -106,6 +110,7 @@ func newRunnerCmd() *cobra.Command {
 	add.Flags().StringSliceVar(&labels, "label", nil, "additional GitHub Runner label (repeatable)")
 	_ = add.MarkFlagRequired("registration-token-file")
 	_ = add.MarkFlagRequired("github-url")
+	addTaskAfterFlag(add, &addAfter)
 	cmd.AddCommand(add)
 
 	cmd.AddCommand(&cobra.Command{
@@ -191,25 +196,32 @@ func newRunnerCmd() *cobra.Command {
 	_ = retry.MarkFlagRequired("registration-token-file")
 	cmd.AddCommand(retry)
 
-	cmd.AddCommand(&cobra.Command{
+	var removeAfter []string
+	remove := &cobra.Command{
 		Use:     "remove <slug>",
 		Aliases: []string{"delete"},
 		Short:   "Remove the managed runner container and record (GitHub deregistration remains manual)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(removeAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			runnerID, err := resolveRunnerTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			accepted, err := app.Client.RemoveRunner(cmd.Context(), runnerID)
+			accepted, err := app.Client.RemoveRunner(cmd.Context(), runnerID, after)
 			if err != nil {
 				return err
 			}
 			headers, rows := tabulateVia(app, []map[string]any{{"task_id": accepted.TaskID}})
 			return app.Out.Render(headers, rows, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &removeAfter)
+	cmd.AddCommand(remove)
 
 	return cmd
 }

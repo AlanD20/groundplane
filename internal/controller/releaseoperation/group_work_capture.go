@@ -23,7 +23,7 @@ import (
 
 func (service *Service) captureGroupWork(ctx context.Context, scope releasequeries.ReleasePlanningScope,
 	group releasegroup.Versioned, projection environmentprojection.EnvironmentComposeProjection,
-	candidates []releaseCandidateInput, addresses networkreservations.ProxyAddresses, requestSHA string,
+	candidates []releaseCandidateInput, addresses networkreservations.ProxyAddresses, accepted workexecution.Task,
 ) (capture etcd.GroupReleaseCapture, resultErr error) {
 	if group.Group.EnvironmentID != scope.Environment.Record.ID || group.Revision <= 0 ||
 		group.ReadRevision != scope.ReadRevision ||
@@ -51,16 +51,13 @@ func (service *Service) captureGroupWork(ctx context.Context, scope releasequeri
 	if err := validateReleaseDependencyOrder(candidates, dependencyPlan); err != nil {
 		return capture, err
 	}
-	at := service.now().UTC()
-	task := workexecution.Task{ID: ids.New(ids.KindTask), Actor: workexecution.OperatorActor,
-		Scope: workexecution.Scope{
-			TenantID:      scope.Project.Record.TenantID,
-			ProjectID:     scope.Project.Record.ID,
-			EnvironmentID: scope.Environment.Record.ID,
-		},
-		Action: action, TargetID: group.Group.ID, TargetName: group.Group.Name,
-		Intent:    workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: requestSHA},
-		CreatedAt: at, UpdatedAt: at, Deadline: at.Add(service.timeout), ExpectedItems: uint32(2 * len(candidates))}
+	at := accepted.CreatedAt
+	task := accepted
+	task.Intent = workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, at, task.ID, "group-release-plan"),
+		SHA256: accepted.AcceptedIntent.SHA256,
+	}
+	task.ExpectedItems = uint32(2 * len(candidates))
 	if err := task.Validate(); err != nil {
 		return capture, err
 	}

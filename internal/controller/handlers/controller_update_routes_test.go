@@ -59,7 +59,9 @@ type controllerUpdateRoutePublisher struct {
 
 func (publisher *controllerUpdateRoutePublisher) UpdateController(
 	_ context.Context,
-	release, key string,
+	release string,
+	_ []string,
+	key string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	publisher.calls++
 	publisher.release, publisher.key = release, key

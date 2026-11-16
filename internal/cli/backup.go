@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -13,11 +12,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
 )
-
-type backupPolicySourceReference struct {
-	Kind   apiTypes.BackupSourceKind
-	Target string
-}
 
 // backup: policy show | policy set [...] | run | points | remove-point
 // <point> | restore <source> | rotate-key | export-key. Per-environment,
@@ -130,22 +124,28 @@ func newBackupCmd() *cobra.Command {
 	policy.AddCommand(set)
 	cmd.AddCommand(policy)
 
+	var runAfter []string
 	run := &cobra.Command{
 		Use:   "run",
 		Short: "Run all configured backup sources now",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			environmentID, err := backupPolicyEnvironmentID(cmd)
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.RunBackup(cmd.Context(), environmentID)
+			accepted, err := fromContext(cmd).Client.RunBackup(cmd.Context(), environmentID, after)
 			if err != nil {
 				return err
 			}
 			return renderTaskAccepted(cmd, accepted)
 		},
 	}
+	addTaskAfterFlag(run, &runAfter)
 	cmd.AddCommand(run)
 
 	var pointCursor string
@@ -171,17 +171,22 @@ func newBackupCmd() *cobra.Command {
 	cmd.AddCommand(points)
 
 	var removePointKey string
+	var removePointAfter []string
 	removePoint := &cobra.Command{
 		Use:   "remove-point <point>",
 		Short: "Delete one recovery point and its stored object",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(removePointAfter)
+			if err != nil {
+				return err
+			}
 			environmentID, err := backupPolicyEnvironmentID(cmd)
 			if err != nil {
 				return err
 			}
 			accepted, err := fromContext(cmd).Client.RemoveRecoveryPoint(
-				cmd.Context(), environmentID, args[0], removePointKey,
+				cmd.Context(), environmentID, args[0], removePointKey, after,
 			)
 			if err != nil {
 				return err
@@ -195,16 +200,22 @@ func newBackupCmd() *cobra.Command {
 		"",
 		"reuse for an uncertain request with exactly the same inputs",
 	)
+	addTaskAfterFlag(removePoint, &removePointAfter)
 	cmd.AddCommand(removePoint)
 
 	var point, ageIdentityPath, restoreKey string
 	var versionReview string
 	var acknowledgeVersionDifference bool
+	var restoreAfter []string
 	restore := &cobra.Command{
 		Use:   "restore <source>",
 		Short: "Restore a source from a recovery point (defaults to the latest)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(restoreAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			environmentID, err := backupPolicyEnvironmentID(cmd)
 			if err != nil {
@@ -218,9 +229,19 @@ func newBackupCmd() *cobra.Command {
 					return err
 				}
 			}
-			accepted, err := app.Client.RestoreBackup(cmd.Context(), environmentID, restoreKey,
-				apiTypes.RestoreRequest{SourceID: args[0], RecoveryPointID: point, AgeIdentity: ageIdentity,
-					VersionReviewSHA256: versionReview, AcknowledgeVersionDifference: acknowledgeVersionDifference})
+			accepted, err := app.Client.RestoreBackup(
+				cmd.Context(),
+				environmentID,
+				restoreKey,
+				apiTypes.RestoreRequest{
+					After:                        after,
+					SourceID:                     args[0],
+					RecoveryPointID:              point,
+					AgeIdentity:                  ageIdentity,
+					VersionReviewSHA256:          versionReview,
+					AcknowledgeVersionDifference: acknowledgeVersionDifference,
+				},
+			)
 			if err != nil {
 				return err
 			}
@@ -240,25 +261,33 @@ func newBackupCmd() *cobra.Command {
 		"",
 		"exported age identity file (needed if the recovery point's key era was rotated away)",
 	)
+	addTaskAfterFlag(restore, &restoreAfter)
 	cmd.AddCommand(restore)
 	cmd.AddCommand(newBackupRestorePreviewCmd())
 
-	cmd.AddCommand(&cobra.Command{
+	var rotateAfter []string
+	rotate := &cobra.Command{
 		Use:   "rotate-key",
 		Short: "Rotate the environment's backup encryption age key (bumps key_era; affects new recovery points only)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			after, err := validatedTaskAfter(rotateAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			accepted, err := app.Client.RotateBackupKey(
 				cmd.Context(),
-				target(app, app.Scope.Environment),
+				target(app, app.Scope.Environment), after,
 			)
 			if err != nil {
 				return err
 			}
 			return renderDispatchedTask(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(rotate, &rotateAfter)
+	cmd.AddCommand(rotate)
 
 	var exportPath string
 	export := &cobra.Command{
@@ -333,47 +362,6 @@ func readAgeIdentity(path string) (string, error) {
 	return identity, nil
 }
 
-func parseBackupPolicySources(arguments []string) ([]backupPolicySourceReference, error) {
-	if len(arguments) > apiTypes.MaximumBackupPolicySources {
-		return nil, errs.Newf(
-			errs.KindValidationFailed,
-			"backup policy supports at most %d sources",
-			apiTypes.MaximumBackupPolicySources,
-		)
-	}
-	sources := make([]backupPolicySourceReference, 0, len(arguments))
-	seen := make(map[backupPolicySourceReference]struct{}, len(arguments))
-	for _, argument := range arguments {
-		var source backupPolicySourceReference
-		switch {
-		case argument == "config":
-			source = backupPolicySourceReference{Kind: apiTypes.BackupSourceConfig}
-		case strings.HasPrefix(argument, "attach:"):
-			source = backupPolicySourceReference{
-				Kind: apiTypes.BackupSourceAttach, Target: strings.TrimPrefix(argument, "attach:"),
-			}
-			if source.Target == "" {
-				return nil, errs.New(errs.KindValidationFailed, "backup policy attach source requires a label")
-			}
-		case strings.HasPrefix(argument, "volume:"):
-			source = backupPolicySourceReference{
-				Kind: apiTypes.BackupSourceVolume, Target: strings.TrimPrefix(argument, "volume:"),
-			}
-			if source.Target == "" {
-				return nil, errs.New(errs.KindValidationFailed, "backup policy volume source requires a label")
-			}
-		default:
-			return nil, errs.Newf(errs.KindValidationFailed, "backup policy source %q is invalid", argument)
-		}
-		if _, duplicate := seen[source]; duplicate {
-			return nil, errs.Newf(errs.KindValidationFailed, "backup policy source %q is duplicated", argument)
-		}
-		seen[source] = struct{}{}
-		sources = append(sources, source)
-	}
-	return sources, nil
-}
-
 func backupPolicyEnvironmentID(cmd *cobra.Command) (string, error) {
 	argument := fromContext(cmd).Scope.Environment
 	if argument == "" {
@@ -402,167 +390,6 @@ func backupPolicyReplacement(policy apiTypes.BackupPolicy) apiTypes.BackupPolicy
 	return apiTypes.BackupPolicyReplacementRequest{
 		Enabled: policy.Enabled, Frequency: policy.Frequency, Keep: policy.Keep,
 		Encryption: policy.Encryption, ConnectorID: policy.ConnectorID, Sources: sources,
-	}
-}
-
-func resolveBackupPolicyConnector(
-	ctx context.Context,
-	app *App,
-	environmentID string,
-	argument string,
-) (string, error) {
-	if argument == "" {
-		return "", nil
-	}
-	if app.Scope.AsID {
-		return target(app, argument), nil
-	}
-	cursor := ""
-	for {
-		page, err := app.Client.ListConnectors(ctx, environmentID, 200, cursor)
-		if err != nil {
-			return "", err
-		}
-		for _, connector := range page.Items {
-			if connector.Name == argument {
-				return target(app, connector.ID), nil
-			}
-		}
-		if page.NextCursor == "" {
-			return "", errs.Newf(errs.KindConnectorNotFound, "connector %q was not found", argument)
-		}
-		cursor = page.NextCursor
-	}
-}
-
-func resolveBackupPolicySources(
-	ctx context.Context,
-	app *App,
-	environmentID string,
-	references []backupPolicySourceReference,
-) ([]apiTypes.BackupSourceInput, error) {
-	attachIDs := map[string]string{}
-	volumeIDs := map[string]string{}
-	if !app.Scope.AsID {
-		attachNames := backupPolicySourceTargets(references, apiTypes.BackupSourceAttach)
-		volumeNames := backupPolicySourceTargets(references, apiTypes.BackupSourceVolume)
-		var err error
-		attachIDs, err = resolveBackupPolicyAttachNames(ctx, app, environmentID, attachNames)
-		if err != nil {
-			return nil, err
-		}
-		volumeIDs, err = resolveBackupPolicyVolumeNames(ctx, app, environmentID, volumeNames)
-		if err != nil {
-			return nil, err
-		}
-	}
-	resolved := make([]apiTypes.BackupSourceInput, 0, len(references))
-	seen := make(map[apiTypes.BackupSourceInput]struct{}, len(references))
-	for _, reference := range references {
-		source := apiTypes.BackupSourceInput{Kind: reference.Kind}
-		switch reference.Kind {
-		case apiTypes.BackupSourceAttach:
-			source.TargetID = attachIDs[reference.Target]
-			if app.Scope.AsID {
-				source.TargetID = target(app, reference.Target)
-			}
-		case apiTypes.BackupSourceVolume:
-			source.TargetID = volumeIDs[reference.Target]
-			if app.Scope.AsID {
-				source.TargetID = target(app, reference.Target)
-			}
-		case apiTypes.BackupSourceConfig:
-			source.TargetID = environmentID
-		}
-		if _, duplicate := seen[source]; duplicate {
-			return nil, errs.New(errs.KindValidationFailed, "backup policy sources resolve to a duplicate target")
-		}
-		seen[source] = struct{}{}
-		resolved = append(resolved, source)
-	}
-	return resolved, nil
-}
-
-func backupPolicySourceTargets(
-	references []backupPolicySourceReference,
-	kind apiTypes.BackupSourceKind,
-) map[string]struct{} {
-	targets := map[string]struct{}{}
-	for _, reference := range references {
-		if reference.Kind == kind {
-			targets[reference.Target] = struct{}{}
-		}
-	}
-	return targets
-}
-
-func resolveBackupPolicyAttachNames(
-	ctx context.Context,
-	app *App,
-	environmentID string,
-	names map[string]struct{},
-) (map[string]string, error) {
-	resolved := make(map[string]string, len(names))
-	if len(names) == 0 {
-		return resolved, nil
-	}
-	cursor := ""
-	for {
-		page, err := app.Client.ListAttaches(ctx, environmentID, 200, cursor)
-		if err != nil {
-			return nil, err
-		}
-		for _, attach := range page.Items {
-			if _, wanted := names[attach.Name]; wanted {
-				resolved[attach.Name] = target(app, attach.ID)
-			}
-		}
-		if len(resolved) == len(names) {
-			return resolved, nil
-		}
-		if page.NextCursor == "" {
-			for name := range names {
-				if resolved[name] == "" {
-					return nil, errs.Newf(errs.KindAttachNotFound, "attach name %q was not found", name)
-				}
-			}
-		}
-		cursor = page.NextCursor
-	}
-}
-
-func resolveBackupPolicyVolumeNames(
-	ctx context.Context,
-	app *App,
-	environmentID string,
-	names map[string]struct{},
-) (map[string]string, error) {
-	resolved := make(map[string]string, len(names))
-	if len(names) == 0 {
-		return resolved, nil
-	}
-	cursor := ""
-	for {
-		page, err := app.Client.ListVolumes(ctx, environmentID, 100, cursor)
-		if err != nil {
-			return nil, err
-		}
-		for _, volume := range page.Items {
-			if _, wanted := names[volume.Slug]; wanted {
-				resolved[volume.Slug] = target(app, volume.ID)
-			}
-		}
-		if len(resolved) == len(names) {
-			return resolved, nil
-		}
-		if page.NextCursor == "" {
-			for name := range names {
-				if resolved[name] == "" {
-					return nil, errs.Newf(errs.KindVolumeNotFound, "volume name %q was not found", name)
-				}
-			}
-		}
-		cursor = page.NextCursor
 	}
 }
 

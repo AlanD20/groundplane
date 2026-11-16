@@ -30,14 +30,21 @@ func TestNativeAgentBoundsTasksAndParallelOperations(t *testing.T) {
 		return result.Succeeded
 	}
 	registration, executor, err := workqueue.PrepareRegistration(workqueue.ExecutorSnapshot{}, workqueue.ExecutorRecord{
-		Identity:          workexecution.Identity{Executor: workexecution.Agent, HostID: ids.New(ids.KindHost), AgentID: ids.New(ids.KindAgent)},
+		Identity: workexecution.Identity{
+			Executor: workexecution.Agent,
+			HostID:   ids.New(ids.KindHost),
+			AgentID:  ids.New(ids.KindAgent),
+		},
 		ProcessGeneration: [16]byte{1}, Capacity: 4, MaxConcurrentTasks: 2, MaxParallelOperationsPerTask: 2,
 		Operations: []workexecution.Operation{workexecution.Release},
 	})
 	if err != nil || !commit(registration) {
 		t.Fatalf("register: %v", err)
 	}
-	snapshot, err := queue.ReadExecutor(ctx, workexecution.Placement{Executor: workexecution.Agent, HostID: executor.Identity.HostID})
+	snapshot, err := queue.ReadExecutor(
+		ctx,
+		workexecution.Placement{Executor: workexecution.Agent, HostID: executor.Identity.HostID},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,14 +76,23 @@ func TestNativeAgentBoundsTasksAndParallelOperations(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			owner, err := recordcodec.Encode("execution_owner", workqueue.ClaimOwner{TaskID: task.ID, WorkItemID: item.ID})
+			owner, err := recordcodec.Encode(
+				"execution_owner",
+				workqueue.ClaimOwner{TaskID: task.ID, WorkItemID: item.ID},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			change.Mutations = append(change.Mutations,
+			change.Mutations = append(
+				change.Mutations,
 				keyvalue.Mutation{Type: keyvalue.MutationPut, Key: workqueue.ItemKey(item.ID), Value: encoded},
-				keyvalue.Mutation{Type: keyvalue.MutationPut, Key: workqueue.TaskItemKey(task.ID, item.ID), Value: owner},
-				keyvalue.Mutation{Type: keyvalue.MutationPut, Key: workqueue.QueueKey(item), Value: owner})
+				keyvalue.Mutation{
+					Type:  keyvalue.MutationPut,
+					Key:   workqueue.TaskItemKey(task.ID, item.ID),
+					Value: owner,
+				},
+				keyvalue.Mutation{Type: keyvalue.MutationPut, Key: workqueue.QueueKey(item), Value: owner},
+			)
 			tasks[taskIndex] = append(tasks[taskIndex], item)
 		}
 		if !commit(change) {
@@ -102,7 +118,13 @@ func TestNativeAgentBoundsTasksAndParallelOperations(t *testing.T) {
 			t.Fatalf("unexpected wait: %v", candidate.Wait)
 		}
 		request := candidate.Assignment
-		request.AttemptID, request.At, request.Deadline = ids.New(ids.KindAttempt), at.Add(time.Second), at.Add(time.Minute)
+		request.AttemptID, request.At, request.Deadline = ids.New(
+			ids.KindAttempt,
+		), at.Add(
+			time.Second,
+		), at.Add(
+			time.Minute,
+		)
 		change, _, err := workqueue.PrepareAssignment(request)
 		if err != nil {
 			t.Fatal(err)

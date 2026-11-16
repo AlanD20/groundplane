@@ -2,7 +2,10 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/acceptedactions"
 	"net/http"
 	"net/netip"
 	"testing"
@@ -22,6 +25,7 @@ import (
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // OWN-03/TASK-54: native acceptance and result settlement keep provisioning
@@ -83,7 +87,7 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 		PlanID: ids.New(ids.KindPlan), HostID: host.Binding.HostID, VolumeRoot: environmentpath.DefaultVolumeRoot,
 		Scope:       workexecution.Scope{TenantID: tenant.ID, ProjectID: projectRecord.ID, EnvironmentID: record.ID},
 		Environment: record, CreatedAt: now}
-	task, _, err := input.Work()
+	task, item, err := input.Work()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,12 +114,72 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 		t.Fatalf("Reserve() error = %v", err)
 	}
 	poolRegistry.Record = nextRegistry
-	result, err := repository.CreateEnvironmentWithWork(
-		ctx, environmentpath.DefaultVolumeRoot, project, poolRegistry, record, components, input, marker,
-	)
-	if err != nil || result.kind != idempotencyTransactionApplied {
-		t.Fatalf("CreateEnvironmentWithWork() = %#v, %v", result, err)
+	// Supplied protected intent bytes stand in for the encryption provider here;
+	// the storage acceptance, immutable manifest and promotion are real.
+	payloads, err := acceptedactions.NewRepository(store)
+	if err != nil {
+		t.Fatal(err)
 	}
+	ciphertext := []byte("supplied-encrypted-Environment-request")
+	digest := sha256.Sum256(ciphertext)
+	payload, err := acceptedactions.NewRecord(
+		task.ID,
+		"environment-create",
+		ids.New(ids.KindPlan),
+		1,
+		[]acceptedactions.Part{
+			{Bytes: uint32(len(ciphertext)), PlaintextBytes: 1, SHA256: hex.EncodeToString(digest[:])},
+		},
+		ciphertext,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conditions, mutations, err := payloads.Stage(ctx, payload, ciphertext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testkeyvalue.ClearMutationValues(mutations)
+	acceptedTask := task
+	acceptedTask.AcceptedIntent, acceptedTask.Intent, acceptedTask.ExpectedItems = &payload.Reference, workexecution.Input{}, 0
+	acceptedTask.Deadline = now.Add(24 * time.Hour)
+	acceptance, err := queue.PrepareAcceptedTask(ctx, acceptedTask, marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEnvironmentWork(t, queue, acceptance, workqueue.Change{Conditions: conditions, Mutations: mutations})
+	snapshot, _, err := queue.ReadTask(ctx, task.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority, err := repository.PrepareEnvironmentCreation(
+		ctx,
+		environmentpath.DefaultVolumeRoot,
+		project,
+		poolRegistry,
+		record,
+		components,
+		input,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testkeyvalue.ClearMutationValues(authority.Mutations)
+	prepared := snapshot.Task
+	prepared.Intent, prepared.ExpectedItems = task.Intent, 1
+	promotion, err := queue.PrepareAcceptedTaskPromotion(
+		ctx,
+		snapshot,
+		prepared,
+		[]workexecution.Item{item},
+		nil,
+		false,
+		now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEnvironmentWork(t, queue, promotion, authority)
 	storedRegistry, err := repository.GetEnvironmentPoolRegistry(ctx)
 	if err != nil || storedRegistry.Record.Reservations[record.ID] != record.NetworkPool {
 		t.Fatalf("stored Environment pool registry = %#v, %v", storedRegistry.Record, err)
@@ -180,11 +244,11 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 		t.Fatalf("ready Environment mutation epoch = %#v, %v", readyEpoch, err)
 	}
 	before := store.revision
-	replayed, err := repository.CreateEnvironmentWithWork(ctx, environmentpath.DefaultVolumeRoot, project,
-		poolRegistry, record, components, input, marker)
-	if err != nil || replayed.kind != idempotencyTransactionExisting || store.revision != before {
-		t.Fatalf("creation replay after provisioning rewrote resource state: %v", err)
+	if _, err := repository.PrepareEnvironmentCreation(ctx, environmentpath.DefaultVolumeRoot, project,
+		poolRegistry, record, components, input); !isKind(err, errs.KindNameConflict) || store.revision != before {
+		t.Fatalf("re-preparation changed already-published Environment: %v", err)
 	}
+
 }
 
 func environmentCreationTestComponents(t *testing.T, environmentID string, now time.Time) []testcomponents.Record {
@@ -222,7 +286,9 @@ func completeNativeEnvironmentWork(t *testing.T, store *memoryHierarchyStore, qu
 			HostID:   input.HostID,
 			AgentID:  agentID,
 		},
-		ProcessGeneration: [16]byte{1}, Capacity: 1, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1, Operations: []workexecution.Operation{workexecution.Environment}})
+		ProcessGeneration: [16]byte{
+			1,
+		}, Capacity: 1, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1, Operations: []workexecution.Operation{workexecution.Environment}})
 	if err != nil {
 		t.Fatal(err)
 	}

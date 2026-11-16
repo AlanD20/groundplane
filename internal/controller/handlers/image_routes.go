@@ -13,9 +13,9 @@ import (
 )
 
 type ImageFetcher interface {
-	FetchImage(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	FetchImage(context.Context, string, string, []string) (idempotencyrecord.IdempotencyResponse, error)
 	ListImages(context.Context) (apiTypes.ImageList, error)
-	RemoveImage(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveImage(context.Context, string, string, []string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type imageFetchInput struct {
@@ -42,17 +42,19 @@ func (s *Server) registerImageFetch() {
 		Summary: "List images in the local Agent host Docker daemon", Tags: []string{"Images"},
 		Middlewares: huma.Middlewares{s.rejectImageFetchQuery},
 	}, s.listImages)
-	schema := openAPISchema[apiTypes.ImageFetchAccepted](s.API.OpenAPI().Components.Schemas, "ImageFetchAccepted")
+	schema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "image.fetch", Method: http.MethodPost, Path: imagedelivery.FetchRoute,
 		Summary: "Fetch selected public or GP private-registry content into host Docker without deploying", Tags: []string{"Images"},
 		DefaultStatus: http.StatusAccepted, Responses: attachMutationResponses(schema),
 		Middlewares: huma.Middlewares{s.rejectImageFetchQuery},
 	}, s.fetchImage)
+	s.setRoutePolicy("DELETE /api/v1/images/{id}", routePolicy{body: jsonBody})
 	s.setRoutePolicy("POST /api/v1/images/fetch", routePolicy{body: jsonBody, validateJSON: validateImageFetchJSON})
 }
 
 type imageRemoveInput struct {
+	Body           *apiTypes.TaskRunAfterRequest
 	ID             string `path:"id" pattern:"^sha256:[a-f0-9]{64}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
@@ -61,7 +63,11 @@ func (s *Server) removeImage(ctx context.Context, input *imageRemoveInput) (*ima
 	if s.images == nil {
 		return nil, errs.New(errs.KindInternal, "image service is not configured")
 	}
-	response, err := s.images.RemoveImage(ctx, input.ID, input.IdempotencyKey)
+	var after []string
+	if input.Body != nil {
+		after = append([]string(nil), input.Body.After...)
+	}
+	response, err := s.images.RemoveImage(ctx, input.ID, input.IdempotencyKey, after)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -85,7 +91,12 @@ func (s *Server) fetchImage(ctx context.Context, input *imageFetchInput) (*image
 	if s.images == nil {
 		return nil, errs.New(errs.KindInternal, "image fetch service is not configured")
 	}
-	response, err := s.images.FetchImage(ctx, input.Body.Image, input.IdempotencyKey)
+	response, err := s.images.FetchImage(
+		ctx,
+		input.Body.Image,
+		input.IdempotencyKey,
+		append([]string(nil), input.Body.After...),
+	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}

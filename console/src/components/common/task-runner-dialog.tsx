@@ -1,3 +1,4 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { CompactReference } from "@/components/common/compact-reference";
 ("use client");
 
@@ -43,6 +44,7 @@ export function TaskRunnerDialog({
   onCommit,
   onSettled,
   onDispatch,
+  runAfter = false,
   variant = "dialog",
 }: {
   open: boolean;
@@ -52,20 +54,23 @@ export function TaskRunnerDialog({
   type: TaskType;
   target: string;
   workspace: string;
-  review?: React.ReactNode;
+  review?: React.ReactNode | ((after: string[]) => React.ReactNode);
   startLabel?: string;
-  startDisabled?: boolean;
+  startDisabled?: boolean | ((after: string[]) => boolean);
   confirmText?: string;
   destructive?: boolean;
   abortable?: boolean;
   onCommit?: () => void;
   onSettled?: () => Promise<void>;
-  onDispatch: () => Promise<string | null>;
+  onDispatch: (after: string[]) => Promise<string | null>;
+  runAfter?: boolean;
   // "inline" for operations with inputs (deploy, rollback), "dialog"
   // for plain confirmations (restore, run, start/stop/destroy).
   variant?: "dialog" | "inline" | "embedded";
 }) {
   const { abortTask, getTask, watchTaskEvents } = useStore();
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const [phase, setPhase] = useState<Phase>("review");
   const [detail, setDetail] = useState<TaskResponse | null>(null);
   const [typed, setTyped] = useState("");
@@ -102,6 +107,8 @@ export function TaskRunnerDialog({
   useEffect(() => {
     if (open) {
       setPhase("review");
+      setAfter([]);
+      setAfterLoading(false);
       setDetail(null);
       setTyped("");
       setTaskId("");
@@ -185,7 +192,7 @@ export function TaskRunnerDialog({
     const generation = session.current.generation;
     setPhase("running");
     setFailure("");
-    void onDispatch().then(
+    void onDispatch(runAfter ? [...after] : []).then(
       (id) => {
         if (session.current.generation !== generation) return;
         if (!id) {
@@ -259,7 +266,14 @@ export function TaskRunnerDialog({
 
       {phase === "review" && (
         <div className="flex flex-col gap-3">
-          {review}
+          {typeof review === "function" ? review(after) : review}
+          {runAfter && (
+            <TaskRunAfterSelector
+              value={after}
+              onChange={setAfter}
+              onBusyChange={setAfterLoading}
+            />
+          )}
           {confirmText && (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-2">
@@ -356,7 +370,13 @@ export function TaskRunnerDialog({
             </Button>
             <Button
               variant={destructive ? "destructive" : "default"}
-              disabled={!canStart || startDisabled}
+              disabled={
+                !canStart ||
+                afterLoading ||
+                (typeof startDisabled === "function"
+                  ? startDisabled(after)
+                  : startDisabled)
+              }
               onClick={start}
             >
               {startLabel}

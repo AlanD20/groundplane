@@ -10,36 +10,31 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (c *Client) FetchImage(ctx context.Context, image, key string) (apiTypes.ImageFetchAccepted, error) {
+func (c *Client) FetchImage(ctx context.Context, image, key string, after []string) (apiTypes.TaskAccepted, error) {
 	if key == "" {
 		key = ids.NewULID()
 	}
 	if !idempotencyKeyPattern.MatchString(key) {
-		return apiTypes.ImageFetchAccepted{}, errs.New(errs.KindValidationFailed, "invalid image fetch idempotency key")
+		return apiTypes.TaskAccepted{}, errs.New(errs.KindValidationFailed, "invalid image fetch idempotency key")
 	}
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.ImageFetchAccepted{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	const path = "/api/v1/images/fetch"
 	response, err := client.ImageFetchWithResponse(ctx, &generated.ImageFetchParams{IdempotencyKey: key},
-		generated.ImageFetchJSONRequestBody{Image: image})
+		generated.ImageFetchJSONRequestBody{Image: image, After: optionalServiceStrings(after)})
 	if err != nil {
-		return apiTypes.ImageFetchAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
 	}
 	if err := generatedResponseError(http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted); err != nil {
-		return apiTypes.ImageFetchAccepted{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	parsed := response.JSON202
-	if parsed == nil || ids.Validate(ids.KindTask, parsed.TaskId) != nil || parsed.Image == "" ||
-		parsed.ConfigDigest == "" {
-		return apiTypes.ImageFetchAccepted{}, errs.New(errs.KindInternal, "image fetch response is incomplete")
+	if parsed == nil || ids.Validate(ids.KindTask, parsed.TaskId) != nil {
+		return apiTypes.TaskAccepted{}, errs.New(errs.KindInternal, "image fetch response is incomplete")
 	}
-	return apiTypes.ImageFetchAccepted{
-		TaskID:       parsed.TaskId,
-		Image:        parsed.Image,
-		ConfigDigest: parsed.ConfigDigest,
-	}, nil
+	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, nil
 }
 
 func (c *Client) ListImages(ctx context.Context) (apiTypes.ImageList, error) {
@@ -109,7 +104,7 @@ func (c *Client) ListImages(ctx context.Context) (apiTypes.ImageList, error) {
 	return result, nil
 }
 
-func (c *Client) RemoveImage(ctx context.Context, id, key string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RemoveImage(ctx context.Context, id, key string, after []string) (apiTypes.TaskAccepted, error) {
 	if key == "" {
 		key = ids.NewULID()
 	}
@@ -121,7 +116,12 @@ func (c *Client) RemoveImage(ctx context.Context, id, key string) (apiTypes.Task
 		return apiTypes.TaskAccepted{}, err
 	}
 	const path = "/api/v1/images/{id}"
-	response, err := client.ImageRemoveWithResponse(ctx, id, &generated.ImageRemoveParams{IdempotencyKey: key})
+	response, err := client.ImageRemoveWithResponse(
+		ctx,
+		id,
+		&generated.ImageRemoveParams{IdempotencyKey: key},
+		generated.ImageRemoveJSONRequestBody{After: optionalServiceStrings(after)},
+	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
 	}

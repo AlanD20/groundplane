@@ -4,16 +4,13 @@ package softwarepreparation
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -24,6 +21,7 @@ import (
 const Route = "/software/preparations"
 
 type Request struct {
+	After      []string
 	Selection  preparation.Selection
 	SourceKind preparation.SourceKind
 	Ref        string
@@ -35,15 +33,15 @@ type Accepted struct {
 }
 
 type TaskPublisher interface {
-	CreateSoftwarePreparationWork(
+	PrepareSoftwarePreparationAuthority(
 		context.Context,
 		preparationrecord.Capture,
 		preparationrecord.Record,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	) (workqueue.Change, error)
 }
 
 type ServiceDependencies struct {
+	Submitter   *acceptedaction.Submitter
 	Preparer    *preparation.Preparer
 	Tasks       TaskPublisher
 	Records     *preparationrecord.Repository
@@ -54,6 +52,7 @@ type ServiceDependencies struct {
 }
 
 type Service struct {
+	submitter   *acceptedaction.Submitter
 	preparer    *preparation.Preparer
 	tasks       TaskPublisher
 	records     *preparationrecord.Repository
@@ -65,12 +64,18 @@ type Service struct {
 }
 
 func NewService(dependencies ServiceDependencies) (*Service, error) {
-	if dependencies.Preparer == nil || dependencies.Tasks == nil || dependencies.Records == nil ||
-		dependencies.Evidence == nil || dependencies.Intents == nil || dependencies.Queue == nil || dependencies.Diagnostics == nil {
+	if dependencies.Submitter == nil ||
+		dependencies.Preparer == nil ||
+		dependencies.Tasks == nil ||
+		dependencies.Records == nil ||
+		dependencies.Evidence == nil ||
+		dependencies.Intents == nil ||
+		dependencies.Queue == nil ||
+		dependencies.Diagnostics == nil {
 		return nil, errs.New(errs.KindInternal, "software preparation service dependencies are incomplete")
 	}
 	return &Service{
-		preparer: dependencies.Preparer, tasks: dependencies.Tasks, records: dependencies.Records,
+		submitter: dependencies.Submitter, preparer: dependencies.Preparer, tasks: dependencies.Tasks, records: dependencies.Records,
 		evidence: dependencies.Evidence, intents: dependencies.Intents, queue: dependencies.Queue, diagnostics: dependencies.Diagnostics, now: time.Now,
 	}, nil
 }
@@ -89,63 +94,24 @@ func (service *Service) Start(ctx context.Context, request Request, key string) 
 		return decodeReplay(existing)
 	}
 
-	resolved, err := service.preparer.Resolve(ctx, preparation.ResolveInput{
-		Selection: request.Selection, SourceKind: request.SourceKind,
-		OriginalRef: request.Ref, Platform: request.Platform,
-	})
-	if err != nil {
-		return Accepted{}, err
-	}
-	operationID := ids.New(ids.KindOperation)
-	input := preparation.Input{OperationID: operationID, Source: resolved}
-	if resolved.SourceKind == preparation.SourceRef && resolved.Selection.IncludesController() {
-		catalog, err := postgres16protocol.CompiledManagedRelease()
-		if err != nil {
-			return Accepted{}, err
-		}
-		input.ControllerToolCatalog, err = json.Marshal(catalog)
-		if err != nil {
-			return Accepted{}, errs.Wrap(errs.KindInternal, err)
-		}
-		input.ControllerCatalogSHA256 = sha256Value(input.ControllerToolCatalog)
-	}
-	now := service.now().UTC()
-	capture := preparationrecord.Capture{
-		TaskID:     ids.New(ids.KindTask),
-		WorkItemID: ids.New(ids.KindWorkItem),
-		PlanID:     ids.New(ids.KindPlan),
-		Input:      input,
-		CreatedAt:  now,
-	}
-	reference, err := capture.Reference()
-	if err != nil {
-		return Accepted{}, err
-	}
-	record, err := preparationrecord.NewRecord(capture.TaskID, operationID, reference.SHA256, resolved, now)
-	if err != nil {
-		return Accepted{}, err
-	}
-	accepted := Accepted{TaskID: capture.TaskID}
-	body, err := json.Marshal(accepted)
-	if err != nil {
-		return Accepted{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(body)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json", Body: body,
-	}
+	at := service.now().UTC()
+	task := workexecution.Task{ID: ids.New(ids.KindTask), Actor: workexecution.OperatorActor,
+		Action: workexecution.ActionPrepare, TargetID: preparationrecord.TargetID(), TargetName: "Groundplane software",
+		After: append(
+			[]string(nil),
+			request.After...), CreatedAt: at, UpdatedAt: at, Deadline: at.Add(acceptedaction.QueueTimeout)}
 	intent, err := evidence.DurableRecord()
 	if err != nil {
 		return Accepted{}, err
 	}
 	defer clear(intent.Ciphertext)
-	result, publicationErr := service.tasks.CreateSoftwarePreparationWork(
-		ctx, capture, record, idempotencyrecord.IdempotencyMarker{
-			Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-			Locator: locator, Intent: intent, Response: response, TaskID: capture.TaskID, CreatedAt: now, UpdatedAt: now,
-		},
-	)
-	return service.resolvePublication(ctx, locator, evidence, result, publicationErr, accepted)
+	response, err := acceptedaction.Submit(ctx, service.submitter, acceptedaction.Submission{
+		Task: task, Kind: "software-prepare", Locator: locator, Intent: intent, Evidence: evidence}, request)
+	if err != nil {
+		return Accepted{}, err
+	}
+	return decodeAccepted(response.Body)
+
 }
 
 func (service *Service) Get(

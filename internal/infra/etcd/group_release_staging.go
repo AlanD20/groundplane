@@ -35,12 +35,12 @@ type groupReleaseDraft struct {
 }
 
 // stageGroupRelease seals immutable admission material in bounded writes before
-// accepting the visible Task. The seal compares one completed stamp per member,
+// promoting the already accepted Task. The seal compares one completed stamp per member,
 // not every large leaf, keeping a 32-member Group inside both transaction limits.
 // No record here is executable or an active Script/Secret reference.
 func (ledger *ReleaseLedger) stageGroupRelease(
 	ctx context.Context,
-	capture GroupReleaseCapture,
+	accepted workqueue.TaskSnapshot, capture GroupReleaseCapture,
 ) (keyvalue.Condition, error) {
 	task, err := capture.Validate()
 	if err != nil {
@@ -55,12 +55,19 @@ func (ledger *ReleaseLedger) stageGroupRelease(
 		return keyvalue.Condition{}, err
 	}
 	defer clear(header)
-	headerGuard, err := ledger.stageGroupReleaseValue(ctx, groupReleaseDraftHeaderKey(task.ID), header,
-		[]keyvalue.Condition{{Key: workqueue.TaskKey(task.ID)}, {Key: releasegroups.ExecutionCaptureKey(task.ID)}})
+	headerGuard, err := ledger.stageGroupReleaseValue(
+		ctx,
+		groupReleaseDraftHeaderKey(task.ID),
+		header,
+		[]keyvalue.Condition{
+			{Key: workqueue.TaskKey(task.ID), ModRevision: accepted.Revision},
+			{Key: releasegroups.ExecutionCaptureKey(task.ID)},
+		},
+	)
 	if err != nil {
 		return keyvalue.Condition{}, err
 	}
-	guards := []keyvalue.Condition{headerGuard, {Key: workqueue.TaskKey(task.ID)},
+	guards := []keyvalue.Condition{headerGuard, {Key: workqueue.TaskKey(task.ID), ModRevision: accepted.Revision},
 		{Key: releasegroups.ExecutionCaptureKey(task.ID)}, {Key: groupReleaseDraftSealKey(task.ID)}}
 	completed := append([]keyvalue.Condition(nil), guards...)
 	for index, member := range capture.Members {

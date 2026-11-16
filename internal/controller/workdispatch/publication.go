@@ -30,8 +30,17 @@ type PublicationRegistration struct {
 }
 
 type Publications struct {
-	queue  *workqueue.Repository
-	owners map[workexecution.Action]PublicationOwner
+	queue    *workqueue.Repository
+	owners   map[workexecution.Action]PublicationOwner
+	accepted interface {
+		Advance(context.Context, string, time.Time) (bool, error)
+	}
+}
+
+func (publications *Publications) ConfigureAcceptedPreparations(preparations interface {
+	Advance(context.Context, string, time.Time) (bool, error)
+}) {
+	publications.accepted = preparations
 }
 
 func NewPublications(queue *workqueue.Repository, registrations []PublicationRegistration) (*Publications, error) {
@@ -62,6 +71,12 @@ func (publications *Publications) Advance(ctx context.Context, taskID string, at
 	}
 	if task.Task.PublicationComplete {
 		return false, nil
+	}
+	if task.Task.PendingPreparation() {
+		if publications.accepted == nil {
+			return false, errs.New(errs.KindStateConflict, "accepted Task preparation is not configured")
+		}
+		return publications.accepted.Advance(ctx, taskID, at)
 	}
 	owner := publications.owners[task.Task.Action]
 	if owner == nil {

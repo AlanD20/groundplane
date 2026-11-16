@@ -1797,6 +1797,7 @@ func (e TaskPreparationOutcome) Valid() bool {
 
 // Defines values for TaskPreparationReason.
 const (
+	DependencyFailed           TaskPreparationReason = "dependency.failed"
 	PlanningDeadlineExceeded   TaskPreparationReason = "planning_deadline_exceeded"
 	PlanningDependencyConflict TaskPreparationReason = "planning_dependency_conflict"
 	PlanningInvalidInput       TaskPreparationReason = "planning_invalid_input"
@@ -1806,6 +1807,8 @@ const (
 // Valid indicates whether the value is a known member of the TaskPreparationReason enum.
 func (e TaskPreparationReason) Valid() bool {
 	switch e {
+	case DependencyFailed:
+		return true
 	case PlanningDeadlineExceeded:
 		return true
 	case PlanningDependencyConflict:
@@ -2053,8 +2056,9 @@ type AgentUpdate struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/AgentUpdate.json
-	Schema *string `json:"$schema,omitempty"`
-	Image  string  `json:"image"`
+	Schema *string   `json:"$schema,omitempty"`
+	After  *[]string `json:"after,omitempty"`
+	Image  string    `json:"image"`
 }
 
 // Attach defines model for Attach.
@@ -2122,6 +2126,7 @@ type AttachRequest struct {
 	//
 	// Examples: /api/v1/AttachRequest.json
 	Schema           *string          `json:"$schema,omitempty"`
+	After            *[]string        `json:"after,omitempty"`
 	BackingServiceId string           `json:"backing_service_id"`
 	Credential       AttachCredential `json:"credential"`
 	GrantAttachIds   *[]string        `json:"grant_attach_ids,omitempty"`
@@ -2184,10 +2189,11 @@ type BackingCheckRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/BackingCheckRequest.json
-	Schema   *string `json:"$schema,omitempty"`
-	AttachId string  `json:"attach_id"`
-	GrantId  *string `json:"grant_id,omitempty"`
-	Revision int64   `json:"revision"`
+	Schema   *string   `json:"$schema,omitempty"`
+	After    *[]string `json:"after,omitempty"`
+	AttachId string    `json:"attach_id"`
+	GrantId  *string   `json:"grant_id,omitempty"`
+	Revision *int64    `json:"revision,omitempty"`
 }
 
 // BackingCheckResult defines model for BackingCheckResult.
@@ -2287,7 +2293,8 @@ type BackingServiceCreate struct {
 	Adapter string  `json:"adapter"`
 
 	// AdapterVersion Required supported server version for a managed database adapter; omitted for Custom.
-	AdapterVersion *string `json:"adapter_version,omitempty"`
+	AdapterVersion *string   `json:"adapter_version,omitempty"`
+	After          *[]string `json:"after,omitempty"`
 
 	// Authentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
 	Authentication *BackingServiceCreateAuthentication `json:"authentication,omitempty"`
@@ -2354,16 +2361,6 @@ type BackingServiceCreate2 struct {
 
 // BackingServiceCreate2Adapter defines model for BackingServiceCreate.2.Adapter.
 type BackingServiceCreate2Adapter string
-
-// BackingServiceCreated defines model for BackingServiceCreated.
-type BackingServiceCreated struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/BackingServiceCreated.json
-	Schema         *string        `json:"$schema,omitempty"`
-	BackingService BackingService `json:"backing_service"`
-	TaskId         string         `json:"task_id"`
-}
 
 // BackingServiceZoneCreate defines model for BackingServiceZoneCreate.
 type BackingServiceZoneCreate struct {
@@ -2561,6 +2558,7 @@ type ComponentConfigMutationRequest struct {
 	//
 	// Examples: /api/v1/ComponentConfigMutationRequest.json
 	Schema *string                               `json:"$schema,omitempty"`
+	After  *[]string                             `json:"after,omitempty"`
 	Config ComponentConfigMutationRequest_Config `json:"config"`
 }
 
@@ -2692,6 +2690,7 @@ type ComponentEnableRequest struct {
 	//
 	// Examples: /api/v1/ComponentEnableRequest.json
 	Schema *string                        `json:"$schema,omitempty"`
+	After  *[]string                      `json:"after,omitempty"`
 	Config *ComponentEnableRequest_Config `json:"config,omitempty"`
 }
 
@@ -2793,6 +2792,7 @@ type ConnectorCheckRequest struct {
 	//
 	// Examples: /api/v1/ConnectorCheckRequest.json
 	Schema      *string                 `json:"$schema,omitempty"`
+	After       *[]string               `json:"after,omitempty"`
 	Changes     *ConnectorEditRequest   `json:"changes,omitempty"`
 	ConnectorId *string                 `json:"connector_id,omitempty"`
 	Draft       *ConnectorCreateRequest `json:"draft,omitempty"`
@@ -2968,8 +2968,9 @@ type ControllerUpdateRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ControllerUpdateRequest.json
-	Schema  *string `json:"$schema,omitempty"`
-	Release string  `json:"release"`
+	Schema  *string   `json:"$schema,omitempty"`
+	After   *[]string `json:"after,omitempty"`
+	Release string    `json:"release"`
 }
 
 // ControllerUpdateState defines model for ControllerUpdateState.
@@ -3053,8 +3054,9 @@ type DNSCheckRequest struct {
 	//
 	// Examples: /api/v1/DNSCheckRequest.json
 	Schema   *string          `json:"$schema,omitempty"`
+	After    *[]string        `json:"after,omitempty"`
 	Queries  *[]DNSCheckQuery `json:"queries,omitempty"`
-	Revision int64            `json:"revision"`
+	Revision *int64           `json:"revision,omitempty"`
 }
 
 // DNSCheckResult defines model for DNSCheckResult.
@@ -3089,6 +3091,9 @@ type DeployRequest struct {
 	//
 	// Examples: /api/v1/DeployRequest.json
 	Schema *string `json:"$schema,omitempty"`
+
+	// After Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs
+	After *[]string `json:"after,omitempty"`
 
 	// Image Host-local registry reference for this Release only; mutually exclusive with tag
 	Image     *string `json:"image,omitempty"`
@@ -3131,12 +3136,13 @@ type EdgeCheckRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/EdgeCheckRequest.json
-	Schema      *string `json:"$schema,omitempty"`
-	ConnectorId string  `json:"connector_id"`
+	Schema      *string   `json:"$schema,omitempty"`
+	After       *[]string `json:"after,omitempty"`
+	ConnectorId string    `json:"connector_id"`
 
 	// Path Concrete request path matching this Route; required for wildcard paths.
 	Path     *string `json:"path,omitempty"`
-	Revision int64   `json:"revision"`
+	Revision *int64  `json:"revision,omitempty"`
 	RouteId  string  `json:"route_id"`
 }
 
@@ -3214,20 +3220,11 @@ type EntryBulkUpsertRequest struct {
 	//
 	// Examples: /api/v1/EntryBulkUpsertRequest.json
 	Schema        *string          `json:"$schema,omitempty"`
+	After         *[]string        `json:"after,omitempty"`
 	Entries       *[]EntryBulkItem `json:"entries"`
 	EnvironmentId string           `json:"environment_id"`
 	Exposure      *[]string        `json:"exposure"`
 	Secret        bool             `json:"secret"`
-}
-
-// EntryBulkUpsertResult defines model for EntryBulkUpsertResult.
-type EntryBulkUpsertResult struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/EntryBulkUpsertResult.json
-	Schema  *string  `json:"$schema,omitempty"`
-	Entries *[]Entry `json:"entries"`
-	TaskId  string   `json:"task_id"`
 }
 
 // EntryCreateRequest defines model for EntryCreateRequest.
@@ -3236,6 +3233,7 @@ type EntryCreateRequest struct {
 	//
 	// Examples: /api/v1/EntryCreateRequest.json
 	Schema        *string     `json:"$schema,omitempty"`
+	After         *[]string   `json:"after,omitempty"`
 	EnvironmentId string      `json:"environment_id"`
 	Exposure      *[]string   `json:"exposure"`
 	Gid           *int64      `json:"gid,omitempty"`
@@ -3253,6 +3251,7 @@ type EntryEditRequest struct {
 	//
 	// Examples: /api/v1/EntryEditRequest.json
 	Schema   *string     `json:"$schema,omitempty"`
+	After    *[]string   `json:"after,omitempty"`
 	Exposure *[]string   `json:"exposure"`
 	Source   EntrySource `json:"source"`
 }
@@ -3335,10 +3334,11 @@ type EnvironmentCreate struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/EnvironmentCreate.json
-	Schema      *string `json:"$schema,omitempty"`
-	Name        string  `json:"name"`
-	NetworkPool string  `json:"network_pool"`
-	ProjectId   string  `json:"project_id"`
+	Schema      *string   `json:"$schema,omitempty"`
+	After       *[]string `json:"after,omitempty"`
+	Name        string    `json:"name"`
+	NetworkPool string    `json:"network_pool"`
+	ProjectId   string    `json:"project_id"`
 }
 
 // EnvironmentDNS defines model for EnvironmentDNS.
@@ -3462,8 +3462,9 @@ type EtcdConfigApplyRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/EtcdConfigApplyRequest.json
-	Schema           *string `json:"$schema,omitempty"`
-	ExpectedRevision string  `json:"expected_revision"`
+	Schema           *string   `json:"$schema,omitempty"`
+	After            *[]string `json:"after,omitempty"`
+	ExpectedRevision *string   `json:"expected_revision,omitempty"`
 }
 
 // EtcdConfigDocument defines model for EtcdConfigDocument.
@@ -3647,21 +3648,6 @@ type ImageContainerOwner struct {
 	TenantSlug     string `json:"tenant_slug"`
 }
 
-// ImageFetchAccepted defines model for ImageFetchAccepted.
-type ImageFetchAccepted struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/ImageFetchAccepted.json
-	Schema *string `json:"$schema,omitempty"`
-
-	// ConfigDigest Pinned OCI configuration digest, verified before Task completion
-	ConfigDigest string `json:"config_digest"`
-
-	// Image Immutable registry reference selected for this operation
-	Image  string `json:"image"`
-	TaskId string `json:"task_id"`
-}
-
 // ImageFetchRecord defines model for ImageFetchRecord.
 type ImageFetchRecord struct {
 	// Image Immutable manifest reference selected for this Fetch
@@ -3680,7 +3666,8 @@ type ImageFetchRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ImageFetchRequest.json
-	Schema *string `json:"$schema,omitempty"`
+	Schema *string   `json:"$schema,omitempty"`
+	After  *[]string `json:"after,omitempty"`
 
 	// Image Explicit tag or SHA-256 digest in a public registry or GP's managed private registry
 	Image string `json:"image"`
@@ -4107,7 +4094,10 @@ type ReleaseGroupDeployRequest struct {
 	//
 	// Examples: /api/v1/ReleaseGroupDeployRequest.json
 	Schema *string `json:"$schema,omitempty"`
-	Tag    *string `json:"tag,omitempty"`
+
+	// After Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs
+	After *[]string `json:"after,omitempty"`
+	Tag   *string   `json:"tag,omitempty"`
 }
 
 // ReleaseGroupEditRequest defines model for ReleaseGroupEditRequest.
@@ -4121,22 +4111,6 @@ type ReleaseGroupEditRequest struct {
 	Order      *[]string               `json:"order,omitempty"`
 	ServiceIds *[]string               `json:"service_ids,omitempty"`
 	Tag        *OptionalNullableString `json:"tag,omitempty"`
-}
-
-// ReleaseGroupMemberRelease defines model for ReleaseGroupMemberRelease.
-type ReleaseGroupMemberRelease struct {
-	ReleaseId string `json:"release_id"`
-	ServiceId string `json:"service_id"`
-}
-
-// ReleaseGroupMutationAccepted defines model for ReleaseGroupMutationAccepted.
-type ReleaseGroupMutationAccepted struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/ReleaseGroupMutationAccepted.json
-	Schema         *string `json:"$schema,omitempty"`
-	ReleaseGroupId string  `json:"release_group_id"`
-	TaskId         string  `json:"task_id"`
 }
 
 // ReleaseGroupRollbackPreview defines model for ReleaseGroupRollbackPreview.
@@ -4155,9 +4129,12 @@ type ReleaseGroupRollbackRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ReleaseGroupRollbackRequest.json
-	Schema          *string `json:"$schema,omitempty"`
-	PreviewRevision *string `json:"preview_revision,omitempty"`
-	Tag             *string `json:"tag,omitempty"`
+	Schema *string `json:"$schema,omitempty"`
+
+	// After Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs
+	After           *[]string `json:"after,omitempty"`
+	PreviewRevision *string   `json:"preview_revision,omitempty"`
+	Tag             *string   `json:"tag,omitempty"`
 }
 
 // ReleaseGroupRollbackSource defines model for ReleaseGroupRollbackSource.
@@ -4165,17 +4142,6 @@ type ReleaseGroupRollbackSource struct {
 	ReleaseId string `json:"release_id"`
 	ServiceId string `json:"service_id"`
 	Tag       string `json:"tag"`
-}
-
-// ReleaseGroupTaskAccepted defines model for ReleaseGroupTaskAccepted.
-type ReleaseGroupTaskAccepted struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/ReleaseGroupTaskAccepted.json
-	Schema                  *string                      `json:"$schema,omitempty"`
-	ReleaseGroupOperationId string                       `json:"release_group_operation_id"`
-	Releases                *[]ReleaseGroupMemberRelease `json:"releases"`
-	TaskId                  string                       `json:"task_id"`
 }
 
 // ReleaseRollbackMaterial defines model for ReleaseRollbackMaterial.
@@ -4206,17 +4172,6 @@ type ReleaseSummary struct {
 	State              string  `json:"state"`
 	Strategy           string  `json:"strategy"`
 	Tag                string  `json:"tag"`
-}
-
-// ReleaseTaskAccepted defines model for ReleaseTaskAccepted.
-type ReleaseTaskAccepted struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/ReleaseTaskAccepted.json
-	Schema      *string `json:"$schema,omitempty"`
-	OperationId string  `json:"operation_id"`
-	ReleaseId   string  `json:"release_id"`
-	TaskId      string  `json:"task_id"`
 }
 
 // RestoreDatabaseReview defines model for RestoreDatabaseReview.
@@ -4253,12 +4208,13 @@ type RestoreRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/RestoreRequest.json
-	Schema                       *string `json:"$schema,omitempty"`
-	AcknowledgeVersionDifference *bool   `json:"acknowledge_version_difference,omitempty"`
-	AgeIdentity                  *string `json:"age_identity,omitempty"`
-	RecoveryPointId              *string `json:"recovery_point_id,omitempty"`
-	SourceId                     string  `json:"source_id"`
-	VersionReviewSha256          *string `json:"version_review_sha256,omitempty"`
+	Schema                       *string   `json:"$schema,omitempty"`
+	AcknowledgeVersionDifference *bool     `json:"acknowledge_version_difference,omitempty"`
+	After                        *[]string `json:"after,omitempty"`
+	AgeIdentity                  *string   `json:"age_identity,omitempty"`
+	RecoveryPointId              *string   `json:"recovery_point_id,omitempty"`
+	SourceId                     string    `json:"source_id"`
+	VersionReviewSha256          *string   `json:"version_review_sha256,omitempty"`
 }
 
 // RollbackRequest defines model for RollbackRequest.
@@ -4267,7 +4223,10 @@ type RollbackRequest struct {
 	//
 	// Examples: /api/v1/RollbackRequest.json
 	Schema *string `json:"$schema,omitempty"`
-	Tag    *string `json:"tag,omitempty"`
+
+	// After Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs
+	After *[]string `json:"after,omitempty"`
+	Tag   *string   `json:"tag,omitempty"`
 }
 
 // Route defines model for Route.
@@ -4301,6 +4260,7 @@ type RouteCreate struct {
 	//
 	// Examples: /api/v1/RouteCreate.json
 	Schema          *string             `json:"$schema,omitempty"`
+	After           *[]string           `json:"after,omitempty"`
 	EnvironmentId   string              `json:"environment_id"`
 	Exposure        RouteCreateExposure `json:"exposure"`
 	Host            *string             `json:"host,omitempty"`
@@ -4318,21 +4278,12 @@ type RouteEdit struct {
 	//
 	// Examples: /api/v1/RouteEdit.json
 	Schema   *string           `json:"$schema,omitempty"`
+	After    *[]string         `json:"after,omitempty"`
 	Exposure RouteEditExposure `json:"exposure"`
 }
 
 // RouteEditExposure defines model for RouteEdit.Exposure.
 type RouteEditExposure string
-
-// RouteTaskAccepted defines model for RouteTaskAccepted.
-type RouteTaskAccepted struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/RouteTaskAccepted.json
-	Schema *string `json:"$schema,omitempty"`
-	Route  Route   `json:"route"`
-	TaskId string  `json:"task_id"`
-}
 
 // Router defines model for Router.
 type Router struct {
@@ -4393,8 +4344,9 @@ type RunnerCheckRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/RunnerCheckRequest.json
-	Schema   *string `json:"$schema,omitempty"`
-	Revision int64   `json:"revision"`
+	Schema   *string   `json:"$schema,omitempty"`
+	After    *[]string `json:"after,omitempty"`
+	Revision *int64    `json:"revision,omitempty"`
 }
 
 // RunnerCheckResult defines model for RunnerCheckResult.
@@ -4447,6 +4399,7 @@ type RunnerCreateRequest struct {
 	//
 	// Examples: /api/v1/RunnerCreateRequest.json
 	Schema            *string   `json:"$schema,omitempty"`
+	After             *[]string `json:"after,omitempty"`
 	AutoUpdate        bool      `json:"auto_update"`
 	CpuMillis         int64     `json:"cpu_millis"`
 	EnvironmentId     *string   `json:"environment_id,omitempty"`
@@ -4485,9 +4438,10 @@ type RunnerUpdateRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/RunnerUpdateRequest.json
-	Schema   *string `json:"$schema,omitempty"`
-	Revision int64   `json:"revision"`
-	Version  string  `json:"version"`
+	Schema   *string   `json:"$schema,omitempty"`
+	After    *[]string `json:"after,omitempty"`
+	Revision *int64    `json:"revision,omitempty"`
+	Version  string    `json:"version"`
 }
 
 // RunnerUpdateResult defines model for RunnerUpdateResult.
@@ -4989,6 +4943,7 @@ type SoftwarePreparationRequest struct {
 	//
 	// Examples: /api/v1/SoftwarePreparationRequest.json
 	Schema     *string                              `json:"$schema,omitempty"`
+	After      *[]string                            `json:"after,omitempty"`
 	Ref        string                               `json:"ref"`
 	Selection  SoftwarePreparationRequestSelection  `json:"selection"`
 	SourceKind SoftwarePreparationRequestSourceKind `json:"source_kind"`
@@ -5211,6 +5166,20 @@ type TaskCounts struct {
 	Waiting    int32 `json:"waiting"`
 }
 
+// TaskDependencyDecision defines model for TaskDependencyDecision.
+type TaskDependencyDecision struct {
+	Failed  *TaskDependencyFailure `json:"failed,omitempty"`
+	Ready   bool                   `json:"ready"`
+	Waiting *[]string              `json:"waiting,omitempty"`
+}
+
+// TaskDependencyFailure defines model for TaskDependencyFailure.
+type TaskDependencyFailure struct {
+	ObservedAt time.Time `json:"observed_at"`
+	Outcome    string    `json:"outcome"`
+	TaskId     string    `json:"task_id"`
+}
+
 // TaskDetails defines model for TaskDetails.
 type TaskDetails struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -5287,6 +5256,17 @@ type TaskRetryRequest struct {
 	WorkItemId      string     `json:"work_item_id"`
 }
 
+// TaskRunAfterRequest defines model for TaskRunAfterRequest.
+type TaskRunAfterRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskRunAfterRequest.json
+	Schema *string `json:"$schema,omitempty"`
+
+	// After Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs
+	After *[]string `json:"after,omitempty"`
+}
+
 // TaskStages defines model for TaskStages.
 type TaskStages struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -5308,22 +5288,28 @@ type TaskStages struct {
 
 // TaskSummary defines model for TaskSummary.
 type TaskSummary struct {
-	Action         string                 `json:"action"`
-	Actor          TaskSummaryActor       `json:"actor"`
-	Cancel         TaskActionAvailability `json:"cancel"`
-	Counts         TaskCounts             `json:"counts"`
-	CreatedAt      time.Time              `json:"created_at"`
-	Deadline       time.Time              `json:"deadline"`
-	FinishedAt     *time.Time             `json:"finished_at,omitempty"`
-	HistoryExpired bool                   `json:"history_expired"`
-	Id             string                 `json:"id"`
-	ResourceKind   string                 `json:"resource_kind"`
-	Scope          Scope                  `json:"scope"`
-	Status         TaskSummaryStatus      `json:"status"`
-	StopRequested  bool                   `json:"stop_requested"`
-	TargetId       string                 `json:"target_id"`
-	TargetName     string                 `json:"target_name"`
-	UpdatedAt      time.Time              `json:"updated_at"`
+	Action         string                  `json:"action"`
+	Actor          TaskSummaryActor        `json:"actor"`
+	After          *[]string               `json:"after,omitempty"`
+	Cancel         TaskActionAvailability  `json:"cancel"`
+	Counts         TaskCounts              `json:"counts"`
+	CreatedAt      time.Time               `json:"created_at"`
+	Deadline       time.Time               `json:"deadline"`
+	Dependencies   *TaskDependencyDecision `json:"dependencies,omitempty"`
+	FinishedAt     *time.Time              `json:"finished_at,omitempty"`
+	HistoryExpired bool                    `json:"history_expired"`
+	Id             string                  `json:"id"`
+
+	// PendingPreparation Accepted pure intent has not been compiled into executable work
+	PendingPreparation bool              `json:"pending_preparation"`
+	PreparationWait    *Wait             `json:"preparation_wait,omitempty"`
+	ResourceKind       string            `json:"resource_kind"`
+	Scope              Scope             `json:"scope"`
+	Status             TaskSummaryStatus `json:"status"`
+	StopRequested      bool              `json:"stop_requested"`
+	TargetId           string            `json:"target_id"`
+	TargetName         string            `json:"target_name"`
+	UpdatedAt          time.Time         `json:"updated_at"`
 }
 
 // TaskSummaryActor defines model for TaskSummary.Actor.
@@ -5449,7 +5435,8 @@ type TunnelCheckRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/TunnelCheckRequest.json
-	Schema *string `json:"$schema,omitempty"`
+	Schema *string   `json:"$schema,omitempty"`
+	After  *[]string `json:"after,omitempty"`
 
 	// Hostname Concrete public hostname configured by the operator at the Tunnel provider; GP does not read or change provider ingress.
 	Hostname string `json:"hostname"`
@@ -5462,7 +5449,7 @@ type TunnelCheckRequest struct {
 	Path string `json:"path"`
 
 	// Revision Current Tunnel Component revision.
-	Revision int64 `json:"revision"`
+	Revision *int64 `json:"revision,omitempty"`
 }
 
 // Volume defines model for Volume.
@@ -5487,10 +5474,11 @@ type VolumeCreate struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/VolumeCreate.json
-	Schema        *string `json:"$schema,omitempty"`
-	EnvironmentId string  `json:"environment_id"`
-	Key           *string `json:"key,omitempty"`
-	Slug          string  `json:"slug"`
+	Schema        *string   `json:"$schema,omitempty"`
+	After         *[]string `json:"after,omitempty"`
+	EnvironmentId string    `json:"environment_id"`
+	Key           *string   `json:"key,omitempty"`
+	Slug          string    `json:"slug"`
 }
 
 // VolumeDeletionImpactItem defines model for VolumeDeletionImpactItem.
@@ -5534,8 +5522,9 @@ type VolumeEdit struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/VolumeEdit.json
-	Schema *string `json:"$schema,omitempty"`
-	Slug   string  `json:"slug"`
+	Schema *string   `json:"$schema,omitempty"`
+	After  *[]string `json:"after,omitempty"`
+	Slug   string    `json:"slug"`
 }
 
 // Wait defines model for Wait.
@@ -6422,6 +6411,12 @@ type ZoneRemoveParams struct {
 	IdempotencyKey string  `json:"Idempotency-Key"`
 }
 
+// AgentJoinJSONRequestBody defines body for AgentJoin for application/json ContentType.
+type AgentJoinJSONRequestBody = TaskRunAfterRequest
+
+// AgentRemoveJSONRequestBody defines body for AgentRemove for application/json ContentType.
+type AgentRemoveJSONRequestBody = TaskRunAfterRequest
+
 // AgentConfigSetJSONRequestBody defines body for AgentConfigSet for application/json ContentType.
 type AgentConfigSetJSONRequestBody = AgentConfigReplacement
 
@@ -6434,14 +6429,32 @@ type AttachCreateJSONRequestBody = AttachRequest
 // AttachCheckJSONRequestBody defines body for AttachCheck for application/json ContentType.
 type AttachCheckJSONRequestBody = BackingCheckRequest
 
+// AttachDetachJSONRequestBody defines body for AttachDetach for application/json ContentType.
+type AttachDetachJSONRequestBody = TaskRunAfterRequest
+
 // AttachRenameJSONRequestBody defines body for AttachRename for application/json ContentType.
 type AttachRenameJSONRequestBody = AttachRenameRequest
 
 // BackingServiceCreateJSONRequestBody defines body for BackingServiceCreate for application/json ContentType.
 type BackingServiceCreateJSONRequestBody = BackingServiceCreate
 
+// BackingServiceDeleteJSONRequestBody defines body for BackingServiceDelete for application/json ContentType.
+type BackingServiceDeleteJSONRequestBody = TaskRunAfterRequest
+
+// BackingServiceDestroyJSONRequestBody defines body for BackingServiceDestroy for application/json ContentType.
+type BackingServiceDestroyJSONRequestBody = TaskRunAfterRequest
+
+// BackingServiceStartJSONRequestBody defines body for BackingServiceStart for application/json ContentType.
+type BackingServiceStartJSONRequestBody = TaskRunAfterRequest
+
+// BackingServiceStopJSONRequestBody defines body for BackingServiceStop for application/json ContentType.
+type BackingServiceStopJSONRequestBody = TaskRunAfterRequest
+
 // ComponentConfigSetJSONRequestBody defines body for ComponentConfigSet for application/json ContentType.
 type ComponentConfigSetJSONRequestBody = ComponentConfigMutationRequest
+
+// ComponentDisableJSONRequestBody defines body for ComponentDisable for application/json ContentType.
+type ComponentDisableJSONRequestBody = TaskRunAfterRequest
 
 // ComponentDnsCheckJSONRequestBody defines body for ComponentDnsCheck for application/json ContentType.
 type ComponentDnsCheckJSONRequestBody = DNSCheckRequest
@@ -6452,11 +6465,17 @@ type ComponentEnableJSONRequestBody = ComponentEnableRequest
 // ComponentTunnelCheckJSONRequestBody defines body for ComponentTunnelCheck for application/json ContentType.
 type ComponentTunnelCheckJSONRequestBody = TunnelCheckRequest
 
+// ComponentUpdateJSONRequestBody defines body for ComponentUpdate for application/json ContentType.
+type ComponentUpdateJSONRequestBody = TaskRunAfterRequest
+
 // ConnectorCreateJSONRequestBody defines body for ConnectorCreate for application/json ContentType.
 type ConnectorCreateJSONRequestBody = ConnectorCreateRequest
 
 // ConnectorCheckJSONRequestBody defines body for ConnectorCheck for application/json ContentType.
 type ConnectorCheckJSONRequestBody = ConnectorCheckRequest
+
+// ConnectorRemoveJSONRequestBody defines body for ConnectorRemove for application/json ContentType.
+type ConnectorRemoveJSONRequestBody = TaskRunAfterRequest
 
 // ConnectorEditJSONRequestBody defines body for ConnectorEdit for application/json ContentType.
 type ConnectorEditJSONRequestBody = ConnectorEditRequest
@@ -6473,17 +6492,26 @@ type EntryCreateJSONRequestBody = EntryCreateRequest
 // EntryBulkUpsertJSONRequestBody defines body for EntryBulkUpsert for application/json ContentType.
 type EntryBulkUpsertJSONRequestBody = EntryBulkUpsertRequest
 
+// EntryRemoveJSONRequestBody defines body for EntryRemove for application/json ContentType.
+type EntryRemoveJSONRequestBody = TaskRunAfterRequest
+
 // EntryEditJSONRequestBody defines body for EntryEdit for application/json ContentType.
 type EntryEditJSONRequestBody = EntryEditRequest
 
 // EnvironmentCreateJSONRequestBody defines body for EnvironmentCreate for application/json ContentType.
 type EnvironmentCreateJSONRequestBody = EnvironmentCreate
 
+// EnvironmentDeleteJSONRequestBody defines body for EnvironmentDelete for application/json ContentType.
+type EnvironmentDeleteJSONRequestBody = TaskRunAfterRequest
+
 // EnvironmentEditJSONRequestBody defines body for EnvironmentEdit for application/json ContentType.
 type EnvironmentEditJSONRequestBody = EnvironmentEdit
 
 // BackupPolicySetJSONRequestBody defines body for BackupPolicySet for application/json ContentType.
 type BackupPolicySetJSONRequestBody = BackupPolicyReplacementRequest
+
+// BackupRunJSONRequestBody defines body for BackupRun for application/json ContentType.
+type BackupRunJSONRequestBody = TaskRunAfterRequest
 
 // BlueprintApplyMultipartRequestBody defines body for BlueprintApply for multipart/form-data ContentType.
 type BlueprintApplyMultipartRequestBody = BlueprintApplyMultipartBody
@@ -6497,6 +6525,9 @@ type EnvironmentDnsCreateJSONRequestBody = EnvironmentDNSWrite
 // EnvironmentDnsEditJSONRequestBody defines body for EnvironmentDnsEdit for application/json ContentType.
 type EnvironmentDnsEditJSONRequestBody = EnvironmentDNSWrite
 
+// BackupPointsRemoveJSONRequestBody defines body for BackupPointsRemove for application/json ContentType.
+type BackupPointsRemoveJSONRequestBody = TaskRunAfterRequest
+
 // EnvironmentRenameJSONRequestBody defines body for EnvironmentRename for application/json ContentType.
 type EnvironmentRenameJSONRequestBody = EnvironmentRename
 
@@ -6505,6 +6536,9 @@ type BackupRestoreJSONRequestBody = RestoreRequest
 
 // BackupRestorePreviewJSONRequestBody defines body for BackupRestorePreview for application/json ContentType.
 type BackupRestorePreviewJSONRequestBody = RestoreRequest
+
+// BackupKeyRotateJSONRequestBody defines body for BackupKeyRotate for application/json ContentType.
+type BackupKeyRotateJSONRequestBody = TaskRunAfterRequest
 
 // EtcdConfigSetJSONRequestBody defines body for EtcdConfigSet for application/json ContentType.
 type EtcdConfigSetJSONRequestBody = EtcdConfigReplacement
@@ -6518,8 +6552,14 @@ type HostTerminalJSONRequestBody = HostTerminalOpen
 // ImageFetchJSONRequestBody defines body for ImageFetch for application/json ContentType.
 type ImageFetchJSONRequestBody = ImageFetchRequest
 
+// ImageRemoveJSONRequestBody defines body for ImageRemove for application/json ContentType.
+type ImageRemoveJSONRequestBody = TaskRunAfterRequest
+
 // ProjectCreateJSONRequestBody defines body for ProjectCreate for application/json ContentType.
 type ProjectCreateJSONRequestBody = ProjectCreate
+
+// ProjectDeleteJSONRequestBody defines body for ProjectDelete for application/json ContentType.
+type ProjectDeleteJSONRequestBody = TaskRunAfterRequest
 
 // ProjectEditJSONRequestBody defines body for ProjectEdit for application/json ContentType.
 type ProjectEditJSONRequestBody = ProjectEdit
@@ -6529,6 +6569,9 @@ type ProjectRenameJSONRequestBody = ProjectRename
 
 // ReleaseGroupAddJSONRequestBody defines body for ReleaseGroupAdd for application/json ContentType.
 type ReleaseGroupAddJSONRequestBody = ReleaseGroupAddRequest
+
+// ReleaseGroupRemoveJSONRequestBody defines body for ReleaseGroupRemove for application/json ContentType.
+type ReleaseGroupRemoveJSONRequestBody = TaskRunAfterRequest
 
 // ReleaseGroupEditJSONRequestBody defines body for ReleaseGroupEdit for application/json ContentType.
 type ReleaseGroupEditJSONRequestBody = ReleaseGroupEditRequest
@@ -6545,11 +6588,17 @@ type RouteCreateJSONRequestBody = RouteCreate
 // RouteCheckJSONRequestBody defines body for RouteCheck for application/json ContentType.
 type RouteCheckJSONRequestBody = EdgeCheckRequest
 
+// RouteRemoveJSONRequestBody defines body for RouteRemove for application/json ContentType.
+type RouteRemoveJSONRequestBody = TaskRunAfterRequest
+
 // RouteEditJSONRequestBody defines body for RouteEdit for application/json ContentType.
 type RouteEditJSONRequestBody = RouteEdit
 
 // RunnerCreateJSONRequestBody defines body for RunnerCreate for application/json ContentType.
 type RunnerCreateJSONRequestBody = RunnerCreateRequest
+
+// RunnerRemoveJSONRequestBody defines body for RunnerRemove for application/json ContentType.
+type RunnerRemoveJSONRequestBody = TaskRunAfterRequest
 
 // RunnerEditJSONRequestBody defines body for RunnerEdit for application/json ContentType.
 type RunnerEditJSONRequestBody = RunnerEditRequest
@@ -6566,11 +6615,20 @@ type RunnerUpdateJSONRequestBody = RunnerUpdateRequest
 // ScriptCreateJSONRequestBody defines body for ScriptCreate for application/json ContentType.
 type ScriptCreateJSONRequestBody = ScriptCreate
 
+// ScriptRemoveJSONRequestBody defines body for ScriptRemove for application/json ContentType.
+type ScriptRemoveJSONRequestBody = TaskRunAfterRequest
+
 // ScriptEditJSONRequestBody defines body for ScriptEdit for application/json ContentType.
 type ScriptEditJSONRequestBody = ScriptEdit
 
+// ScriptRunJSONRequestBody defines body for ScriptRun for application/json ContentType.
+type ScriptRunJSONRequestBody = TaskRunAfterRequest
+
 // SecretCreateJSONRequestBody defines body for SecretCreate for application/json ContentType.
 type SecretCreateJSONRequestBody = SecretCreateRequest
+
+// SecretRemoveJSONRequestBody defines body for SecretRemove for application/json ContentType.
+type SecretRemoveJSONRequestBody = TaskRunAfterRequest
 
 // SecretEditJSONRequestBody defines body for SecretEdit for application/json ContentType.
 type SecretEditJSONRequestBody = SecretEditRequest
@@ -6578,20 +6636,35 @@ type SecretEditJSONRequestBody = SecretEditRequest
 // ServiceCreateJSONRequestBody defines body for ServiceCreate for application/json ContentType.
 type ServiceCreateJSONRequestBody = ServiceCreate
 
+// ServiceRemoveJSONRequestBody defines body for ServiceRemove for application/json ContentType.
+type ServiceRemoveJSONRequestBody = TaskRunAfterRequest
+
 // ServiceEditJSONRequestBody defines body for ServiceEdit for application/json ContentType.
 type ServiceEditJSONRequestBody = ServiceEdit
 
 // ServiceDeployJSONRequestBody defines body for ServiceDeploy for application/json ContentType.
 type ServiceDeployJSONRequestBody = DeployRequest
 
+// ServiceDestroyJSONRequestBody defines body for ServiceDestroy for application/json ContentType.
+type ServiceDestroyJSONRequestBody = TaskRunAfterRequest
+
 // ServiceRollbackJSONRequestBody defines body for ServiceRollback for application/json ContentType.
 type ServiceRollbackJSONRequestBody = RollbackRequest
+
+// ServiceStartJSONRequestBody defines body for ServiceStart for application/json ContentType.
+type ServiceStartJSONRequestBody = TaskRunAfterRequest
+
+// ServiceStopJSONRequestBody defines body for ServiceStop for application/json ContentType.
+type ServiceStopJSONRequestBody = TaskRunAfterRequest
 
 // ServiceTerminalJSONRequestBody defines body for ServiceTerminal for application/json ContentType.
 type ServiceTerminalJSONRequestBody = ContainerTerminalOpen
 
 // SoftwarePrepareJSONRequestBody defines body for SoftwarePrepare for application/json ContentType.
 type SoftwarePrepareJSONRequestBody = SoftwarePreparationRequest
+
+// SoftwareApplyJSONRequestBody defines body for SoftwareApply for application/json ContentType.
+type SoftwareApplyJSONRequestBody = TaskRunAfterRequest
 
 // TaskAlertSetJSONRequestBody defines body for TaskAlertSet for application/json ContentType.
 type TaskAlertSetJSONRequestBody = TaskAlertSettingsWrite
@@ -6605,6 +6678,9 @@ type TaskRetryJSONRequestBody = TaskRetryRequest
 // TenantCreateJSONRequestBody defines body for TenantCreate for application/json ContentType.
 type TenantCreateJSONRequestBody = TenantCreate
 
+// TenantDeleteJSONRequestBody defines body for TenantDelete for application/json ContentType.
+type TenantDeleteJSONRequestBody = TaskRunAfterRequest
+
 // TenantEditJSONRequestBody defines body for TenantEdit for application/json ContentType.
 type TenantEditJSONRequestBody = TenantEdit
 
@@ -6614,11 +6690,17 @@ type TenantRenameJSONRequestBody = TenantRename
 // VolumeCreateJSONRequestBody defines body for VolumeCreate for application/json ContentType.
 type VolumeCreateJSONRequestBody = VolumeCreate
 
+// VolumeRemoveJSONRequestBody defines body for VolumeRemove for application/json ContentType.
+type VolumeRemoveJSONRequestBody = TaskRunAfterRequest
+
 // VolumeEditJSONRequestBody defines body for VolumeEdit for application/json ContentType.
 type VolumeEditJSONRequestBody = VolumeEdit
 
 // ZoneCreateJSONRequestBody defines body for ZoneCreate for application/json ContentType.
 type ZoneCreateJSONRequestBody = ZoneCreate
+
+// ZoneRemoveJSONRequestBody defines body for ZoneRemove for application/json ContentType.
+type ZoneRemoveJSONRequestBody = TaskRunAfterRequest
 
 // AsBackingServiceCreate0 returns the union data inside the BackingServiceCreate as a BackingServiceCreate0
 func (t BackingServiceCreate) AsBackingServiceCreate0() (BackingServiceCreate0, error) {
@@ -6730,6 +6812,13 @@ func (t BackingServiceCreate) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if t.After != nil {
+		object["after"], err = json.Marshal(t.After)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'after': %w", err)
+		}
+	}
+
 	if t.Authentication != nil {
 		object["authentication"], err = json.Marshal(t.Authentication)
 		if err != nil {
@@ -6825,6 +6914,13 @@ func (t *BackingServiceCreate) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.AdapterVersion)
 		if err != nil {
 			return fmt.Errorf("error reading 'adapter_version': %w", err)
+		}
+	}
+
+	if raw, found := object["after"]; found {
+		err = json.Unmarshal(raw, &t.After)
+		if err != nil {
+			return fmt.Errorf("error reading 'after': %w", err)
 		}
 	}
 
@@ -7809,15 +7905,33 @@ type ClientInterface interface {
 	// Corresponds with GET /agents (the `AgentList` operationId).
 	AgentList(ctx context.Context, params *AgentListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AgentJoin Create and start the local Agent
+	// AgentJoinWithBody Create and start the local Agent
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /agents (the `AgentJoin` operationId).
-	AgentJoin(ctx context.Context, params *AgentJoinParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	AgentJoinWithBody(ctx context.Context, params *AgentJoinParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AgentJoin Create and start the local Agent
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /agents (the `AgentJoin` operationId).
+	AgentJoin(ctx context.Context, params *AgentJoinParams, body AgentJoinJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AgentRemoveWithBody Remove the local Agent
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with DELETE /agents/{id} (the `AgentRemove` operationId).
+	AgentRemoveWithBody(ctx context.Context, id string, params *AgentRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AgentRemove Remove the local Agent
 	//
+	// Takes a body of the `application/json` content type.
+	//
 	// Corresponds with DELETE /agents/{id} (the `AgentRemove` operationId).
-	AgentRemove(ctx context.Context, id string, params *AgentRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	AgentRemove(ctx context.Context, id string, params *AgentRemoveParams, body AgentRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AgentShow Show an agent
 	//
@@ -7895,10 +8009,19 @@ type ClientInterface interface {
 	// Corresponds with POST /attaches/checks (the `AttachCheck` operationId).
 	AttachCheck(ctx context.Context, params *AttachCheckParams, body AttachCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AttachDetach Detach a backing service
+	// AttachDetachWithBody Detach a backing service
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
-	AttachDetach(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	AttachDetachWithBody(ctx context.Context, id string, params *AttachDetachParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AttachDetach Detach a backing service
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
+	AttachDetach(ctx context.Context, id string, params *AttachDetachParams, body AttachDetachJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AttachFactReveal Reveal one ready Attach fact
 	//
@@ -7943,30 +8066,66 @@ type ClientInterface interface {
 	// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
 	BackingServiceCreate(ctx context.Context, params *BackingServiceCreateParams, body BackingServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// BackingServiceDelete Permanently delete a Backing Service and its data
+	// BackingServiceDeleteWithBody Permanently delete a Backing Service and its data
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
-	BackingServiceDelete(ctx context.Context, projectId string, params *BackingServiceDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	BackingServiceDeleteWithBody(ctx context.Context, projectId string, params *BackingServiceDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceDelete Permanently delete a Backing Service and its data
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
+	BackingServiceDelete(ctx context.Context, projectId string, params *BackingServiceDeleteParams, body BackingServiceDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BackingServiceShow Show a backing service
 	//
 	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
 	BackingServiceShow(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// BackingServiceDestroy backing-service.destroy
+	// BackingServiceDestroyWithBody backing-service.destroy
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
-	BackingServiceDestroy(ctx context.Context, projectId string, params *BackingServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	BackingServiceDestroyWithBody(ctx context.Context, projectId string, params *BackingServiceDestroyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceDestroy backing-service.destroy
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
+	BackingServiceDestroy(ctx context.Context, projectId string, params *BackingServiceDestroyParams, body BackingServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceStartWithBody backing-service.start
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
+	BackingServiceStartWithBody(ctx context.Context, projectId string, params *BackingServiceStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BackingServiceStart backing-service.start
 	//
+	// Takes a body of the `application/json` content type.
+	//
 	// Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
-	BackingServiceStart(ctx context.Context, projectId string, params *BackingServiceStartParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	BackingServiceStart(ctx context.Context, projectId string, params *BackingServiceStartParams, body BackingServiceStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceStopWithBody backing-service.stop
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
+	BackingServiceStopWithBody(ctx context.Context, projectId string, params *BackingServiceStopParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BackingServiceStop backing-service.stop
 	//
+	// Takes a body of the `application/json` content type.
+	//
 	// Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
-	BackingServiceStop(ctx context.Context, projectId string, params *BackingServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	BackingServiceStop(ctx context.Context, projectId string, params *BackingServiceStopParams, body BackingServiceStopJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ComponentList List Components
 	//
@@ -7997,10 +8156,19 @@ type ClientInterface interface {
 	// Corresponds with PUT /components/{id}/config (the `ComponentConfigSet` operationId).
 	ComponentConfigSet(ctx context.Context, id string, params *ComponentConfigSetParams, body ComponentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ComponentDisable component.disable
+	// ComponentDisableWithBody component.disable
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
-	ComponentDisable(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ComponentDisableWithBody(ctx context.Context, id string, params *ComponentDisableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentDisable component.disable
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
+	ComponentDisable(ctx context.Context, id string, params *ComponentDisableParams, body ComponentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ComponentDnsCheckShow Show a DNS check Task or the latest retained result
 	//
@@ -8054,10 +8222,19 @@ type ClientInterface interface {
 	// Corresponds with POST /components/{id}/tunnel-checks (the `ComponentTunnelCheck` operationId).
 	ComponentTunnelCheck(ctx context.Context, id string, params *ComponentTunnelCheckParams, body ComponentTunnelCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ComponentUpdate component.update
+	// ComponentUpdateWithBody component.update
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
-	ComponentUpdate(ctx context.Context, id string, params *ComponentUpdateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ComponentUpdateWithBody(ctx context.Context, id string, params *ComponentUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentUpdate component.update
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
+	ComponentUpdate(ctx context.Context, id string, params *ComponentUpdateParams, body ComponentUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ConnectorList List Environment connectors
 	//
@@ -8097,10 +8274,19 @@ type ClientInterface interface {
 	// Corresponds with POST /connectors/checks (the `ConnectorCheck` operationId).
 	ConnectorCheck(ctx context.Context, params *ConnectorCheckParams, body ConnectorCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ConnectorRemove Remove an Environment connector
+	// ConnectorRemoveWithBody Remove an Environment connector
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
-	ConnectorRemove(ctx context.Context, id string, params *ConnectorRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ConnectorRemoveWithBody(ctx context.Context, id string, params *ConnectorRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ConnectorRemove Remove an Environment connector
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
+	ConnectorRemove(ctx context.Context, id string, params *ConnectorRemoveParams, body ConnectorRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ConnectorShow Show connector metadata
 	//
@@ -8187,10 +8373,19 @@ type ClientInterface interface {
 	// Corresponds with POST /entries/bulk (the `EntryBulkUpsert` operationId).
 	EntryBulkUpsert(ctx context.Context, params *EntryBulkUpsertParams, body EntryBulkUpsertJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// EntryRemove Remove an environment Entry
+	// EntryRemoveWithBody Remove an environment Entry
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
-	EntryRemove(ctx context.Context, id string, params *EntryRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	EntryRemoveWithBody(ctx context.Context, id string, params *EntryRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EntryRemove Remove an environment Entry
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
+	EntryRemove(ctx context.Context, id string, params *EntryRemoveParams, body EntryRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EntryShow Show environment Entry metadata
 	//
@@ -8235,10 +8430,19 @@ type ClientInterface interface {
 	// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
 	EnvironmentCreate(ctx context.Context, params *EnvironmentCreateParams, body EnvironmentCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// EnvironmentDelete Delete a Environment
+	// EnvironmentDeleteWithBody Delete a Environment
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
-	EnvironmentDelete(ctx context.Context, id string, params *EnvironmentDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	EnvironmentDeleteWithBody(ctx context.Context, id string, params *EnvironmentDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentDelete Delete a Environment
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
+	EnvironmentDelete(ctx context.Context, id string, params *EnvironmentDeleteParams, body EnvironmentDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EnvironmentShow Show an environment
 	//
@@ -8278,10 +8482,19 @@ type ClientInterface interface {
 	// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
 	BackupPolicySet(ctx context.Context, id string, params *BackupPolicySetParams, body BackupPolicySetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// BackupRun Run all configured backup sources now
+	// BackupRunWithBody Run all configured backup sources now
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
-	BackupRun(ctx context.Context, id string, params *BackupRunParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	BackupRunWithBody(ctx context.Context, id string, params *BackupRunParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupRun Run all configured backup sources now
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
+	BackupRun(ctx context.Context, id string, params *BackupRunParams, body BackupRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BlueprintShow Show the current environment Blueprint
 	//
@@ -8355,10 +8568,19 @@ type ClientInterface interface {
 	// Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
 	BackupPointsList(ctx context.Context, id string, params *BackupPointsListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// BackupPointsRemove Permanently delete one Recovery Point archive
+	// BackupPointsRemoveWithBody Permanently delete one Recovery Point archive
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
-	BackupPointsRemove(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	BackupPointsRemoveWithBody(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupPointsRemove Permanently delete one Recovery Point archive
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
+	BackupPointsRemove(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, body BackupPointsRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EnvironmentRenameWithBody Rename an environment
 	//
@@ -8402,10 +8624,19 @@ type ClientInterface interface {
 	// Corresponds with POST /environments/{id}/restore/preview (the `BackupRestorePreview` operationId).
 	BackupRestorePreview(ctx context.Context, id string, body BackupRestorePreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// BackupKeyRotate Rotate the Environment backup age key
+	// BackupKeyRotateWithBody Rotate the Environment backup age key
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
-	BackupKeyRotate(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	BackupKeyRotateWithBody(ctx context.Context, id string, params *BackupKeyRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupKeyRotate Rotate the Environment backup age key
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
+	BackupKeyRotate(ctx context.Context, id string, params *BackupKeyRotateParams, body BackupKeyRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RouterShow Show Environment router
 	//
@@ -8483,10 +8714,19 @@ type ClientInterface interface {
 	// Corresponds with POST /images/fetch (the `ImageFetch` operationId).
 	ImageFetch(ctx context.Context, params *ImageFetchParams, body ImageFetchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ImageRemove Remove an unreferenced host image without force or pruning
+	// ImageRemoveWithBody Remove an unreferenced host image without force or pruning
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
-	ImageRemove(ctx context.Context, id string, params *ImageRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ImageRemoveWithBody(ctx context.Context, id string, params *ImageRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImageRemove Remove an unreferenced host image without force or pruning
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
+	ImageRemove(ctx context.Context, id string, params *ImageRemoveParams, body ImageRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ProjectList List projects
 	//
@@ -8507,10 +8747,19 @@ type ClientInterface interface {
 	// Corresponds with POST /projects (the `ProjectCreate` operationId).
 	ProjectCreate(ctx context.Context, params *ProjectCreateParams, body ProjectCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ProjectDelete Delete a Project
+	// ProjectDeleteWithBody Delete a Project
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
-	ProjectDelete(ctx context.Context, id string, params *ProjectDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ProjectDeleteWithBody(ctx context.Context, id string, params *ProjectDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProjectDelete Delete a Project
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
+	ProjectDelete(ctx context.Context, id string, params *ProjectDeleteParams, body ProjectDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ProjectShow Show a project
 	//
@@ -8564,10 +8813,19 @@ type ClientInterface interface {
 	// Corresponds with POST /release-groups (the `ReleaseGroupAdd` operationId).
 	ReleaseGroupAdd(ctx context.Context, params *ReleaseGroupAddParams, body ReleaseGroupAddJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ReleaseGroupRemove Remove a release group
+	// ReleaseGroupRemoveWithBody Remove a release group
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
-	ReleaseGroupRemove(ctx context.Context, id string, params *ReleaseGroupRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ReleaseGroupRemoveWithBody(ctx context.Context, id string, params *ReleaseGroupRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupRemove Remove a release group
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
+	ReleaseGroupRemove(ctx context.Context, id string, params *ReleaseGroupRemoveParams, body ReleaseGroupRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReleaseGroupShow Show a release group
 	//
@@ -8669,10 +8927,19 @@ type ClientInterface interface {
 	// Corresponds with POST /routes/checks (the `RouteCheck` operationId).
 	RouteCheck(ctx context.Context, params *RouteCheckParams, body RouteCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RouteRemove Remove a route
+	// RouteRemoveWithBody Remove a route
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
-	RouteRemove(ctx context.Context, id string, params *RouteRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	RouteRemoveWithBody(ctx context.Context, id string, params *RouteRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouteRemove Remove a route
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
+	RouteRemove(ctx context.Context, id string, params *RouteRemoveParams, body RouteRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RouteShow Show a route
 	//
@@ -8712,10 +8979,19 @@ type ClientInterface interface {
 	// Corresponds with POST /runners (the `RunnerCreate` operationId).
 	RunnerCreate(ctx context.Context, params *RunnerCreateParams, body RunnerCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RunnerRemove Remove a managed Runner
+	// RunnerRemoveWithBody Remove a managed Runner
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
-	RunnerRemove(ctx context.Context, id string, params *RunnerRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	RunnerRemoveWithBody(ctx context.Context, id string, params *RunnerRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerRemove Remove a managed Runner
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
+	RunnerRemove(ctx context.Context, id string, params *RunnerRemoveParams, body RunnerRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RunnerShow Show a managed runner
 	//
@@ -8812,10 +9088,19 @@ type ClientInterface interface {
 	// Corresponds with POST /scripts (the `ScriptCreate` operationId).
 	ScriptCreate(ctx context.Context, params *ScriptCreateParams, body ScriptCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ScriptRemove Remove a script
+	// ScriptRemoveWithBody Remove a script
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
-	ScriptRemove(ctx context.Context, id string, params *ScriptRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ScriptRemoveWithBody(ctx context.Context, id string, params *ScriptRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScriptRemove Remove a script
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
+	ScriptRemove(ctx context.Context, id string, params *ScriptRemoveParams, body ScriptRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ScriptShow Show a script
 	//
@@ -8836,10 +9121,19 @@ type ClientInterface interface {
 	// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
 	ScriptEdit(ctx context.Context, id string, params *ScriptEditParams, body ScriptEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ScriptRun Run a script
+	// ScriptRunWithBody Run a script
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
-	ScriptRun(ctx context.Context, id string, params *ScriptRunParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ScriptRunWithBody(ctx context.Context, id string, params *ScriptRunParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScriptRun Run a script
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
+	ScriptRun(ctx context.Context, id string, params *ScriptRunParams, body ScriptRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SecretList List reusable secrets
 	//
@@ -8860,10 +9154,19 @@ type ClientInterface interface {
 	// Corresponds with POST /secrets (the `SecretCreate` operationId).
 	SecretCreate(ctx context.Context, params *SecretCreateParams, body SecretCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// SecretRemove Remove a reusable secret
+	// SecretRemoveWithBody Remove a reusable secret
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
-	SecretRemove(ctx context.Context, id string, params *SecretRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SecretRemoveWithBody(ctx context.Context, id string, params *SecretRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecretRemove Remove a reusable secret
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
+	SecretRemove(ctx context.Context, id string, params *SecretRemoveParams, body SecretRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SecretShow Show reusable secret metadata
 	//
@@ -8908,10 +9211,19 @@ type ClientInterface interface {
 	// Corresponds with POST /services (the `ServiceCreate` operationId).
 	ServiceCreate(ctx context.Context, params *ServiceCreateParams, body ServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ServiceRemove Remove a service
+	// ServiceRemoveWithBody Remove a service
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
-	ServiceRemove(ctx context.Context, id string, params *ServiceRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ServiceRemoveWithBody(ctx context.Context, id string, params *ServiceRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceRemove Remove a service
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
+	ServiceRemove(ctx context.Context, id string, params *ServiceRemoveParams, body ServiceRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ServiceShow Show a service
 	//
@@ -8946,10 +9258,19 @@ type ClientInterface interface {
 	// Corresponds with POST /services/{id}/deploy (the `ServiceDeploy` operationId).
 	ServiceDeploy(ctx context.Context, id string, params *ServiceDeployParams, body ServiceDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ServiceDestroy Destroy service runtime
+	// ServiceDestroyWithBody Destroy service runtime
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
-	ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ServiceDestroyWithBody(ctx context.Context, id string, params *ServiceDestroyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceDestroy Destroy service runtime
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
+	ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, body ServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ServiceLogs Stream service logs
 	//
@@ -8970,15 +9291,33 @@ type ClientInterface interface {
 	// Corresponds with POST /services/{id}/rollback (the `ServiceRollback` operationId).
 	ServiceRollback(ctx context.Context, id string, params *ServiceRollbackParams, body ServiceRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ServiceStart Start a service
+	// ServiceStartWithBody Start a service
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
-	ServiceStart(ctx context.Context, id string, params *ServiceStartParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ServiceStartWithBody(ctx context.Context, id string, params *ServiceStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceStart Start a service
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
+	ServiceStart(ctx context.Context, id string, params *ServiceStartParams, body ServiceStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceStopWithBody Stop a service
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
+	ServiceStopWithBody(ctx context.Context, id string, params *ServiceStopParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ServiceStop Stop a service
 	//
+	// Takes a body of the `application/json` content type.
+	//
 	// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
-	ServiceStop(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ServiceStop(ctx context.Context, id string, params *ServiceStopParams, body ServiceStopJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ServiceTerminalWithBody Open a shell in an exact running Service container
 	//
@@ -9023,10 +9362,19 @@ type ClientInterface interface {
 	// Corresponds with GET /software/preparations/{task} (the `SoftwarePreparationShow` operationId).
 	SoftwarePreparationShow(ctx context.Context, task string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// SoftwareApply Apply a verified software preparation
+	// SoftwareApplyWithBody Apply a verified software preparation
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
-	SoftwareApply(ctx context.Context, task string, params *SoftwareApplyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	SoftwareApplyWithBody(ctx context.Context, task string, params *SoftwareApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SoftwareApply Apply a verified software preparation
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
+	SoftwareApply(ctx context.Context, task string, params *SoftwareApplyParams, body SoftwareApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SoftwareReleases List recent published component releases
 	//
@@ -9141,10 +9489,19 @@ type ClientInterface interface {
 	// Corresponds with POST /tenants (the `TenantCreate` operationId).
 	TenantCreate(ctx context.Context, params *TenantCreateParams, body TenantCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// TenantDelete Delete a Tenant
+	// TenantDeleteWithBody Delete a Tenant
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
-	TenantDelete(ctx context.Context, id string, params *TenantDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	TenantDeleteWithBody(ctx context.Context, id string, params *TenantDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TenantDelete Delete a Tenant
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
+	TenantDelete(ctx context.Context, id string, params *TenantDeleteParams, body TenantDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TenantShow Show a tenant
 	//
@@ -9198,10 +9555,19 @@ type ClientInterface interface {
 	// Corresponds with POST /volumes (the `VolumeCreate` operationId).
 	VolumeCreate(ctx context.Context, params *VolumeCreateParams, body VolumeCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// VolumeRemove Remove an Environment volume
+	// VolumeRemoveWithBody Remove an Environment volume
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
-	VolumeRemove(ctx context.Context, id string, params *VolumeRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	VolumeRemoveWithBody(ctx context.Context, id string, params *VolumeRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// VolumeRemove Remove an Environment volume
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
+	VolumeRemove(ctx context.Context, id string, params *VolumeRemoveParams, body VolumeRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// VolumeShow Show an Environment volume
 	//
@@ -9246,10 +9612,19 @@ type ClientInterface interface {
 	// Corresponds with POST /zones (the `ZoneCreate` operationId).
 	ZoneCreate(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ZoneRemove Remove a network zone
+	// ZoneRemoveWithBody Remove a network zone
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
-	ZoneRemove(ctx context.Context, id string, params *ZoneRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ZoneRemoveWithBody(ctx context.Context, id string, params *ZoneRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ZoneRemove Remove a network zone
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
+	ZoneRemove(ctx context.Context, id string, params *ZoneRemoveParams, body ZoneRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ZoneShow Show a network zone
 	//
@@ -9292,11 +9667,47 @@ func (c *Client) AgentList(ctx context.Context, params *AgentListParams, reqEdit
 	return c.Client.Do(req)
 }
 
-// AgentJoin Create and start the local Agent
+// AgentJoinWithBody Create and start the local Agent
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /agents (the `AgentJoin` operationId).
-func (c *Client) AgentJoin(ctx context.Context, params *AgentJoinParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAgentJoinRequest(c.Server, params)
+func (c *Client) AgentJoinWithBody(ctx context.Context, params *AgentJoinParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgentJoinRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AgentJoin Create and start the local Agent
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /agents (the `AgentJoin` operationId).
+func (c *Client) AgentJoin(ctx context.Context, params *AgentJoinParams, body AgentJoinJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgentJoinRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AgentRemoveWithBody Remove the local Agent
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with DELETE /agents/{id} (the `AgentRemove` operationId).
+func (c *Client) AgentRemoveWithBody(ctx context.Context, id string, params *AgentRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgentRemoveRequestWithBody(c.Server, id, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9309,9 +9720,11 @@ func (c *Client) AgentJoin(ctx context.Context, params *AgentJoinParams, reqEdit
 
 // AgentRemove Remove the local Agent
 //
+// Takes a body of the `application/json` content type.
+//
 // Corresponds with DELETE /agents/{id} (the `AgentRemove` operationId).
-func (c *Client) AgentRemove(ctx context.Context, id string, params *AgentRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAgentRemoveRequest(c.Server, id, params)
+func (c *Client) AgentRemove(ctx context.Context, id string, params *AgentRemoveParams, body AgentRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgentRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9518,11 +9931,30 @@ func (c *Client) AttachCheck(ctx context.Context, params *AttachCheckParams, bod
 	return c.Client.Do(req)
 }
 
-// AttachDetach Detach a backing service
+// AttachDetachWithBody Detach a backing service
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
-func (c *Client) AttachDetach(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAttachDetachRequest(c.Server, id, params)
+func (c *Client) AttachDetachWithBody(ctx context.Context, id string, params *AttachDetachParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachDetachRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AttachDetach Detach a backing service
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
+func (c *Client) AttachDetach(ctx context.Context, id string, params *AttachDetachParams, body AttachDetachJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachDetachRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9646,11 +10078,30 @@ func (c *Client) BackingServiceCreate(ctx context.Context, params *BackingServic
 	return c.Client.Do(req)
 }
 
-// BackingServiceDelete Permanently delete a Backing Service and its data
+// BackingServiceDeleteWithBody Permanently delete a Backing Service and its data
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
-func (c *Client) BackingServiceDelete(ctx context.Context, projectId string, params *BackingServiceDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewBackingServiceDeleteRequest(c.Server, projectId, params)
+func (c *Client) BackingServiceDeleteWithBody(ctx context.Context, projectId string, params *BackingServiceDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceDeleteRequestWithBody(c.Server, projectId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceDelete Permanently delete a Backing Service and its data
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
+func (c *Client) BackingServiceDelete(ctx context.Context, projectId string, params *BackingServiceDeleteParams, body BackingServiceDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceDeleteRequest(c.Server, projectId, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9676,11 +10127,47 @@ func (c *Client) BackingServiceShow(ctx context.Context, projectId string, reqEd
 	return c.Client.Do(req)
 }
 
-// BackingServiceDestroy backing-service.destroy
+// BackingServiceDestroyWithBody backing-service.destroy
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
-func (c *Client) BackingServiceDestroy(ctx context.Context, projectId string, params *BackingServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewBackingServiceDestroyRequest(c.Server, projectId, params)
+func (c *Client) BackingServiceDestroyWithBody(ctx context.Context, projectId string, params *BackingServiceDestroyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceDestroyRequestWithBody(c.Server, projectId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceDestroy backing-service.destroy
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
+func (c *Client) BackingServiceDestroy(ctx context.Context, projectId string, params *BackingServiceDestroyParams, body BackingServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceDestroyRequest(c.Server, projectId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceStartWithBody backing-service.start
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
+func (c *Client) BackingServiceStartWithBody(ctx context.Context, projectId string, params *BackingServiceStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceStartRequestWithBody(c.Server, projectId, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9693,9 +10180,28 @@ func (c *Client) BackingServiceDestroy(ctx context.Context, projectId string, pa
 
 // BackingServiceStart backing-service.start
 //
+// Takes a body of the `application/json` content type.
+//
 // Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
-func (c *Client) BackingServiceStart(ctx context.Context, projectId string, params *BackingServiceStartParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewBackingServiceStartRequest(c.Server, projectId, params)
+func (c *Client) BackingServiceStart(ctx context.Context, projectId string, params *BackingServiceStartParams, body BackingServiceStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceStartRequest(c.Server, projectId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceStopWithBody backing-service.stop
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
+func (c *Client) BackingServiceStopWithBody(ctx context.Context, projectId string, params *BackingServiceStopParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceStopRequestWithBody(c.Server, projectId, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9708,9 +10214,11 @@ func (c *Client) BackingServiceStart(ctx context.Context, projectId string, para
 
 // BackingServiceStop backing-service.stop
 //
+// Takes a body of the `application/json` content type.
+//
 // Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
-func (c *Client) BackingServiceStop(ctx context.Context, projectId string, params *BackingServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewBackingServiceStopRequest(c.Server, projectId, params)
+func (c *Client) BackingServiceStop(ctx context.Context, projectId string, params *BackingServiceStopParams, body BackingServiceStopJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceStopRequest(c.Server, projectId, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9800,11 +10308,30 @@ func (c *Client) ComponentConfigSet(ctx context.Context, id string, params *Comp
 	return c.Client.Do(req)
 }
 
-// ComponentDisable component.disable
+// ComponentDisableWithBody component.disable
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
-func (c *Client) ComponentDisable(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewComponentDisableRequest(c.Server, id, params)
+func (c *Client) ComponentDisableWithBody(ctx context.Context, id string, params *ComponentDisableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentDisableRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentDisable component.disable
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
+func (c *Client) ComponentDisable(ctx context.Context, id string, params *ComponentDisableParams, body ComponentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentDisableRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9947,11 +10474,30 @@ func (c *Client) ComponentTunnelCheck(ctx context.Context, id string, params *Co
 	return c.Client.Do(req)
 }
 
-// ComponentUpdate component.update
+// ComponentUpdateWithBody component.update
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
-func (c *Client) ComponentUpdate(ctx context.Context, id string, params *ComponentUpdateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewComponentUpdateRequest(c.Server, id, params)
+func (c *Client) ComponentUpdateWithBody(ctx context.Context, id string, params *ComponentUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentUpdateRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentUpdate component.update
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
+func (c *Client) ComponentUpdate(ctx context.Context, id string, params *ComponentUpdateParams, body ComponentUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentUpdateRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -10060,11 +10606,30 @@ func (c *Client) ConnectorCheck(ctx context.Context, params *ConnectorCheckParam
 	return c.Client.Do(req)
 }
 
-// ConnectorRemove Remove an Environment connector
+// ConnectorRemoveWithBody Remove an Environment connector
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
-func (c *Client) ConnectorRemove(ctx context.Context, id string, params *ConnectorRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewConnectorRemoveRequest(c.Server, id, params)
+func (c *Client) ConnectorRemoveWithBody(ctx context.Context, id string, params *ConnectorRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectorRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ConnectorRemove Remove an Environment connector
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
+func (c *Client) ConnectorRemove(ctx context.Context, id string, params *ConnectorRemoveParams, body ConnectorRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectorRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -10290,11 +10855,30 @@ func (c *Client) EntryBulkUpsert(ctx context.Context, params *EntryBulkUpsertPar
 	return c.Client.Do(req)
 }
 
-// EntryRemove Remove an environment Entry
+// EntryRemoveWithBody Remove an environment Entry
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
-func (c *Client) EntryRemove(ctx context.Context, id string, params *EntryRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewEntryRemoveRequest(c.Server, id, params)
+func (c *Client) EntryRemoveWithBody(ctx context.Context, id string, params *EntryRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EntryRemove Remove an environment Entry
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
+func (c *Client) EntryRemove(ctx context.Context, id string, params *EntryRemoveParams, body EntryRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -10418,11 +11002,30 @@ func (c *Client) EnvironmentCreate(ctx context.Context, params *EnvironmentCreat
 	return c.Client.Do(req)
 }
 
-// EnvironmentDelete Delete a Environment
+// EnvironmentDeleteWithBody Delete a Environment
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
-func (c *Client) EnvironmentDelete(ctx context.Context, id string, params *EnvironmentDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewEnvironmentDeleteRequest(c.Server, id, params)
+func (c *Client) EnvironmentDeleteWithBody(ctx context.Context, id string, params *EnvironmentDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentDeleteRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentDelete Delete a Environment
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
+func (c *Client) EnvironmentDelete(ctx context.Context, id string, params *EnvironmentDeleteParams, body EnvironmentDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentDeleteRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -10531,11 +11134,30 @@ func (c *Client) BackupPolicySet(ctx context.Context, id string, params *BackupP
 	return c.Client.Do(req)
 }
 
-// BackupRun Run all configured backup sources now
+// BackupRunWithBody Run all configured backup sources now
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
-func (c *Client) BackupRun(ctx context.Context, id string, params *BackupRunParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewBackupRunRequest(c.Server, id, params)
+func (c *Client) BackupRunWithBody(ctx context.Context, id string, params *BackupRunParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupRunRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupRun Run all configured backup sources now
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
+func (c *Client) BackupRun(ctx context.Context, id string, params *BackupRunParams, body BackupRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupRunRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -10738,11 +11360,30 @@ func (c *Client) BackupPointsList(ctx context.Context, id string, params *Backup
 	return c.Client.Do(req)
 }
 
-// BackupPointsRemove Permanently delete one Recovery Point archive
+// BackupPointsRemoveWithBody Permanently delete one Recovery Point archive
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
-func (c *Client) BackupPointsRemove(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewBackupPointsRemoveRequest(c.Server, id, point, params)
+func (c *Client) BackupPointsRemoveWithBody(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupPointsRemoveRequestWithBody(c.Server, id, point, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupPointsRemove Permanently delete one Recovery Point archive
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
+func (c *Client) BackupPointsRemove(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, body BackupPointsRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupPointsRemoveRequest(c.Server, id, point, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -10855,11 +11496,30 @@ func (c *Client) BackupRestorePreview(ctx context.Context, id string, body Backu
 	return c.Client.Do(req)
 }
 
-// BackupKeyRotate Rotate the Environment backup age key
+// BackupKeyRotateWithBody Rotate the Environment backup age key
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
-func (c *Client) BackupKeyRotate(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewBackupKeyRotateRequest(c.Server, id, params)
+func (c *Client) BackupKeyRotateWithBody(ctx context.Context, id string, params *BackupKeyRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupKeyRotateRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupKeyRotate Rotate the Environment backup age key
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
+func (c *Client) BackupKeyRotate(ctx context.Context, id string, params *BackupKeyRotateParams, body BackupKeyRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupKeyRotateRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -11066,11 +11726,30 @@ func (c *Client) ImageFetch(ctx context.Context, params *ImageFetchParams, body 
 	return c.Client.Do(req)
 }
 
-// ImageRemove Remove an unreferenced host image without force or pruning
+// ImageRemoveWithBody Remove an unreferenced host image without force or pruning
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
-func (c *Client) ImageRemove(ctx context.Context, id string, params *ImageRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewImageRemoveRequest(c.Server, id, params)
+func (c *Client) ImageRemoveWithBody(ctx context.Context, id string, params *ImageRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImageRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImageRemove Remove an unreferenced host image without force or pruning
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
+func (c *Client) ImageRemove(ctx context.Context, id string, params *ImageRemoveParams, body ImageRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImageRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -11130,11 +11809,30 @@ func (c *Client) ProjectCreate(ctx context.Context, params *ProjectCreateParams,
 	return c.Client.Do(req)
 }
 
-// ProjectDelete Delete a Project
+// ProjectDeleteWithBody Delete a Project
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
-func (c *Client) ProjectDelete(ctx context.Context, id string, params *ProjectDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewProjectDeleteRequest(c.Server, id, params)
+func (c *Client) ProjectDeleteWithBody(ctx context.Context, id string, params *ProjectDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectDeleteRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProjectDelete Delete a Project
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
+func (c *Client) ProjectDelete(ctx context.Context, id string, params *ProjectDeleteParams, body ProjectDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectDeleteRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -11277,11 +11975,30 @@ func (c *Client) ReleaseGroupAdd(ctx context.Context, params *ReleaseGroupAddPar
 	return c.Client.Do(req)
 }
 
-// ReleaseGroupRemove Remove a release group
+// ReleaseGroupRemoveWithBody Remove a release group
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
-func (c *Client) ReleaseGroupRemove(ctx context.Context, id string, params *ReleaseGroupRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReleaseGroupRemoveRequest(c.Server, id, params)
+func (c *Client) ReleaseGroupRemoveWithBody(ctx context.Context, id string, params *ReleaseGroupRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupRemove Remove a release group
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
+func (c *Client) ReleaseGroupRemove(ctx context.Context, id string, params *ReleaseGroupRemoveParams, body ReleaseGroupRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -11552,11 +12269,30 @@ func (c *Client) RouteCheck(ctx context.Context, params *RouteCheckParams, body 
 	return c.Client.Do(req)
 }
 
-// RouteRemove Remove a route
+// RouteRemoveWithBody Remove a route
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
-func (c *Client) RouteRemove(ctx context.Context, id string, params *RouteRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRouteRemoveRequest(c.Server, id, params)
+func (c *Client) RouteRemoveWithBody(ctx context.Context, id string, params *RouteRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouteRemove Remove a route
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
+func (c *Client) RouteRemove(ctx context.Context, id string, params *RouteRemoveParams, body RouteRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -11665,11 +12401,30 @@ func (c *Client) RunnerCreate(ctx context.Context, params *RunnerCreateParams, b
 	return c.Client.Do(req)
 }
 
-// RunnerRemove Remove a managed Runner
+// RunnerRemoveWithBody Remove a managed Runner
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
-func (c *Client) RunnerRemove(ctx context.Context, id string, params *RunnerRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRunnerRemoveRequest(c.Server, id, params)
+func (c *Client) RunnerRemoveWithBody(ctx context.Context, id string, params *RunnerRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerRemove Remove a managed Runner
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
+func (c *Client) RunnerRemove(ctx context.Context, id string, params *RunnerRemoveParams, body RunnerRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -11925,11 +12680,30 @@ func (c *Client) ScriptCreate(ctx context.Context, params *ScriptCreateParams, b
 	return c.Client.Do(req)
 }
 
-// ScriptRemove Remove a script
+// ScriptRemoveWithBody Remove a script
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
-func (c *Client) ScriptRemove(ctx context.Context, id string, params *ScriptRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewScriptRemoveRequest(c.Server, id, params)
+func (c *Client) ScriptRemoveWithBody(ctx context.Context, id string, params *ScriptRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScriptRemove Remove a script
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
+func (c *Client) ScriptRemove(ctx context.Context, id string, params *ScriptRemoveParams, body ScriptRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -11989,11 +12763,30 @@ func (c *Client) ScriptEdit(ctx context.Context, id string, params *ScriptEditPa
 	return c.Client.Do(req)
 }
 
-// ScriptRun Run a script
+// ScriptRunWithBody Run a script
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
-func (c *Client) ScriptRun(ctx context.Context, id string, params *ScriptRunParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewScriptRunRequest(c.Server, id, params)
+func (c *Client) ScriptRunWithBody(ctx context.Context, id string, params *ScriptRunParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptRunRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScriptRun Run a script
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
+func (c *Client) ScriptRun(ctx context.Context, id string, params *ScriptRunParams, body ScriptRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptRunRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12053,11 +12846,30 @@ func (c *Client) SecretCreate(ctx context.Context, params *SecretCreateParams, b
 	return c.Client.Do(req)
 }
 
-// SecretRemove Remove a reusable secret
+// SecretRemoveWithBody Remove a reusable secret
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
-func (c *Client) SecretRemove(ctx context.Context, id string, params *SecretRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSecretRemoveRequest(c.Server, id, params)
+func (c *Client) SecretRemoveWithBody(ctx context.Context, id string, params *SecretRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecretRemove Remove a reusable secret
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
+func (c *Client) SecretRemove(ctx context.Context, id string, params *SecretRemoveParams, body SecretRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12181,11 +12993,30 @@ func (c *Client) ServiceCreate(ctx context.Context, params *ServiceCreateParams,
 	return c.Client.Do(req)
 }
 
-// ServiceRemove Remove a service
+// ServiceRemoveWithBody Remove a service
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
-func (c *Client) ServiceRemove(ctx context.Context, id string, params *ServiceRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewServiceRemoveRequest(c.Server, id, params)
+func (c *Client) ServiceRemoveWithBody(ctx context.Context, id string, params *ServiceRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceRemove Remove a service
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
+func (c *Client) ServiceRemove(ctx context.Context, id string, params *ServiceRemoveParams, body ServiceRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12279,11 +13110,30 @@ func (c *Client) ServiceDeploy(ctx context.Context, id string, params *ServiceDe
 	return c.Client.Do(req)
 }
 
-// ServiceDestroy Destroy service runtime
+// ServiceDestroyWithBody Destroy service runtime
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
-func (c *Client) ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewServiceDestroyRequest(c.Server, id, params)
+func (c *Client) ServiceDestroyWithBody(ctx context.Context, id string, params *ServiceDestroyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceDestroyRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceDestroy Destroy service runtime
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
+func (c *Client) ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, body ServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceDestroyRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12343,11 +13193,47 @@ func (c *Client) ServiceRollback(ctx context.Context, id string, params *Service
 	return c.Client.Do(req)
 }
 
-// ServiceStart Start a service
+// ServiceStartWithBody Start a service
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
-func (c *Client) ServiceStart(ctx context.Context, id string, params *ServiceStartParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewServiceStartRequest(c.Server, id, params)
+func (c *Client) ServiceStartWithBody(ctx context.Context, id string, params *ServiceStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceStartRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceStart Start a service
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
+func (c *Client) ServiceStart(ctx context.Context, id string, params *ServiceStartParams, body ServiceStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceStartRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceStopWithBody Stop a service
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
+func (c *Client) ServiceStopWithBody(ctx context.Context, id string, params *ServiceStopParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceStopRequestWithBody(c.Server, id, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12360,9 +13246,11 @@ func (c *Client) ServiceStart(ctx context.Context, id string, params *ServiceSta
 
 // ServiceStop Stop a service
 //
+// Takes a body of the `application/json` content type.
+//
 // Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
-func (c *Client) ServiceStop(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewServiceStopRequest(c.Server, id, params)
+func (c *Client) ServiceStop(ctx context.Context, id string, params *ServiceStopParams, body ServiceStopJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceStopRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12486,11 +13374,30 @@ func (c *Client) SoftwarePreparationShow(ctx context.Context, task string, reqEd
 	return c.Client.Do(req)
 }
 
-// SoftwareApply Apply a verified software preparation
+// SoftwareApplyWithBody Apply a verified software preparation
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
-func (c *Client) SoftwareApply(ctx context.Context, task string, params *SoftwareApplyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSoftwareApplyRequest(c.Server, task, params)
+func (c *Client) SoftwareApplyWithBody(ctx context.Context, task string, params *SoftwareApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSoftwareApplyRequestWithBody(c.Server, task, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SoftwareApply Apply a verified software preparation
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
+func (c *Client) SoftwareApply(ctx context.Context, task string, params *SoftwareApplyParams, body SoftwareApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSoftwareApplyRequest(c.Server, task, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12804,11 +13711,30 @@ func (c *Client) TenantCreate(ctx context.Context, params *TenantCreateParams, b
 	return c.Client.Do(req)
 }
 
-// TenantDelete Delete a Tenant
+// TenantDeleteWithBody Delete a Tenant
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
-func (c *Client) TenantDelete(ctx context.Context, id string, params *TenantDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTenantDeleteRequest(c.Server, id, params)
+func (c *Client) TenantDeleteWithBody(ctx context.Context, id string, params *TenantDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantDeleteRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TenantDelete Delete a Tenant
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
+func (c *Client) TenantDelete(ctx context.Context, id string, params *TenantDeleteParams, body TenantDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantDeleteRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12951,11 +13877,30 @@ func (c *Client) VolumeCreate(ctx context.Context, params *VolumeCreateParams, b
 	return c.Client.Do(req)
 }
 
-// VolumeRemove Remove an Environment volume
+// VolumeRemoveWithBody Remove an Environment volume
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
-func (c *Client) VolumeRemove(ctx context.Context, id string, params *VolumeRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewVolumeRemoveRequest(c.Server, id, params)
+func (c *Client) VolumeRemoveWithBody(ctx context.Context, id string, params *VolumeRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVolumeRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// VolumeRemove Remove an Environment volume
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
+func (c *Client) VolumeRemove(ctx context.Context, id string, params *VolumeRemoveParams, body VolumeRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVolumeRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13079,11 +14024,30 @@ func (c *Client) ZoneCreate(ctx context.Context, params *ZoneCreateParams, body 
 	return c.Client.Do(req)
 }
 
-// ZoneRemove Remove a network zone
+// ZoneRemoveWithBody Remove a network zone
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
-func (c *Client) ZoneRemove(ctx context.Context, id string, params *ZoneRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewZoneRemoveRequest(c.Server, id, params)
+func (c *Client) ZoneRemoveWithBody(ctx context.Context, id string, params *ZoneRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewZoneRemoveRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ZoneRemove Remove a network zone
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
+func (c *Client) ZoneRemove(ctx context.Context, id string, params *ZoneRemoveParams, body ZoneRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewZoneRemoveRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13316,8 +14280,19 @@ func NewAgentListRequest(server string, params *AgentListParams) (*http.Request,
 	return req, nil
 }
 
-// NewAgentJoinRequest constructs an http.Request for the AgentJoin method
-func NewAgentJoinRequest(server string, params *AgentJoinParams) (*http.Request, error) {
+// NewAgentJoinRequest calls the generic AgentJoin builder with application/json body
+func NewAgentJoinRequest(server string, params *AgentJoinParams, body AgentJoinJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAgentJoinRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewAgentJoinRequestWithBody constructs an http.Request for the AgentJoin method, with any body, and a specified content type
+func NewAgentJoinRequestWithBody(server string, params *AgentJoinParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -13335,10 +14310,12 @@ func NewAgentJoinRequest(server string, params *AgentJoinParams) (*http.Request,
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -13356,8 +14333,19 @@ func NewAgentJoinRequest(server string, params *AgentJoinParams) (*http.Request,
 	return req, nil
 }
 
-// NewAgentRemoveRequest constructs an http.Request for the AgentRemove method
-func NewAgentRemoveRequest(server string, id string, params *AgentRemoveParams) (*http.Request, error) {
+// NewAgentRemoveRequest calls the generic AgentRemove builder with application/json body
+func NewAgentRemoveRequest(server string, id string, params *AgentRemoveParams, body AgentRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAgentRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewAgentRemoveRequestWithBody constructs an http.Request for the AgentRemove method, with any body, and a specified content type
+func NewAgentRemoveRequestWithBody(server string, id string, params *AgentRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -13382,10 +14370,12 @@ func NewAgentRemoveRequest(server string, id string, params *AgentRemoveParams) 
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -13880,8 +14870,19 @@ func NewAttachCheckRequestWithBody(server string, params *AttachCheckParams, con
 	return req, nil
 }
 
-// NewAttachDetachRequest constructs an http.Request for the AttachDetach method
-func NewAttachDetachRequest(server string, id string, params *AttachDetachParams) (*http.Request, error) {
+// NewAttachDetachRequest calls the generic AttachDetach builder with application/json body
+func NewAttachDetachRequest(server string, id string, params *AttachDetachParams, body AttachDetachJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAttachDetachRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewAttachDetachRequestWithBody constructs an http.Request for the AttachDetach method, with any body, and a specified content type
+func NewAttachDetachRequestWithBody(server string, id string, params *AttachDetachParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -13906,10 +14907,12 @@ func NewAttachDetachRequest(server string, id string, params *AttachDetachParams
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -14201,8 +15204,19 @@ func NewBackingServiceCreateRequestWithBody(server string, params *BackingServic
 	return req, nil
 }
 
-// NewBackingServiceDeleteRequest constructs an http.Request for the BackingServiceDelete method
-func NewBackingServiceDeleteRequest(server string, projectId string, params *BackingServiceDeleteParams) (*http.Request, error) {
+// NewBackingServiceDeleteRequest calls the generic BackingServiceDelete builder with application/json body
+func NewBackingServiceDeleteRequest(server string, projectId string, params *BackingServiceDeleteParams, body BackingServiceDeleteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackingServiceDeleteRequestWithBody(server, projectId, params, "application/json", bodyReader)
+}
+
+// NewBackingServiceDeleteRequestWithBody constructs an http.Request for the BackingServiceDelete method, with any body, and a specified content type
+func NewBackingServiceDeleteRequestWithBody(server string, projectId string, params *BackingServiceDeleteParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -14227,10 +15241,12 @@ func NewBackingServiceDeleteRequest(server string, projectId string, params *Bac
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -14282,8 +15298,19 @@ func NewBackingServiceShowRequest(server string, projectId string) (*http.Reques
 	return req, nil
 }
 
-// NewBackingServiceDestroyRequest constructs an http.Request for the BackingServiceDestroy method
-func NewBackingServiceDestroyRequest(server string, projectId string, params *BackingServiceDestroyParams) (*http.Request, error) {
+// NewBackingServiceDestroyRequest calls the generic BackingServiceDestroy builder with application/json body
+func NewBackingServiceDestroyRequest(server string, projectId string, params *BackingServiceDestroyParams, body BackingServiceDestroyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackingServiceDestroyRequestWithBody(server, projectId, params, "application/json", bodyReader)
+}
+
+// NewBackingServiceDestroyRequestWithBody constructs an http.Request for the BackingServiceDestroy method, with any body, and a specified content type
+func NewBackingServiceDestroyRequestWithBody(server string, projectId string, params *BackingServiceDestroyParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -14308,10 +15335,12 @@ func NewBackingServiceDestroyRequest(server string, projectId string, params *Ba
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -14329,8 +15358,19 @@ func NewBackingServiceDestroyRequest(server string, projectId string, params *Ba
 	return req, nil
 }
 
-// NewBackingServiceStartRequest constructs an http.Request for the BackingServiceStart method
-func NewBackingServiceStartRequest(server string, projectId string, params *BackingServiceStartParams) (*http.Request, error) {
+// NewBackingServiceStartRequest calls the generic BackingServiceStart builder with application/json body
+func NewBackingServiceStartRequest(server string, projectId string, params *BackingServiceStartParams, body BackingServiceStartJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackingServiceStartRequestWithBody(server, projectId, params, "application/json", bodyReader)
+}
+
+// NewBackingServiceStartRequestWithBody constructs an http.Request for the BackingServiceStart method, with any body, and a specified content type
+func NewBackingServiceStartRequestWithBody(server string, projectId string, params *BackingServiceStartParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -14355,10 +15395,12 @@ func NewBackingServiceStartRequest(server string, projectId string, params *Back
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -14376,8 +15418,19 @@ func NewBackingServiceStartRequest(server string, projectId string, params *Back
 	return req, nil
 }
 
-// NewBackingServiceStopRequest constructs an http.Request for the BackingServiceStop method
-func NewBackingServiceStopRequest(server string, projectId string, params *BackingServiceStopParams) (*http.Request, error) {
+// NewBackingServiceStopRequest calls the generic BackingServiceStop builder with application/json body
+func NewBackingServiceStopRequest(server string, projectId string, params *BackingServiceStopParams, body BackingServiceStopJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackingServiceStopRequestWithBody(server, projectId, params, "application/json", bodyReader)
+}
+
+// NewBackingServiceStopRequestWithBody constructs an http.Request for the BackingServiceStop method, with any body, and a specified content type
+func NewBackingServiceStopRequestWithBody(server string, projectId string, params *BackingServiceStopParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -14402,10 +15455,12 @@ func NewBackingServiceStopRequest(server string, projectId string, params *Backi
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -14653,8 +15708,19 @@ func NewComponentConfigSetRequestWithBody(server string, id string, params *Comp
 	return req, nil
 }
 
-// NewComponentDisableRequest constructs an http.Request for the ComponentDisable method
-func NewComponentDisableRequest(server string, id string, params *ComponentDisableParams) (*http.Request, error) {
+// NewComponentDisableRequest calls the generic ComponentDisable builder with application/json body
+func NewComponentDisableRequest(server string, id string, params *ComponentDisableParams, body ComponentDisableJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewComponentDisableRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewComponentDisableRequestWithBody constructs an http.Request for the ComponentDisable method, with any body, and a specified content type
+func NewComponentDisableRequestWithBody(server string, id string, params *ComponentDisableParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -14679,10 +15745,12 @@ func NewComponentDisableRequest(server string, id string, params *ComponentDisab
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -15033,8 +16101,19 @@ func NewComponentTunnelCheckRequestWithBody(server string, id string, params *Co
 	return req, nil
 }
 
-// NewComponentUpdateRequest constructs an http.Request for the ComponentUpdate method
-func NewComponentUpdateRequest(server string, id string, params *ComponentUpdateParams) (*http.Request, error) {
+// NewComponentUpdateRequest calls the generic ComponentUpdate builder with application/json body
+func NewComponentUpdateRequest(server string, id string, params *ComponentUpdateParams, body ComponentUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewComponentUpdateRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewComponentUpdateRequestWithBody constructs an http.Request for the ComponentUpdate method, with any body, and a specified content type
+func NewComponentUpdateRequestWithBody(server string, id string, params *ComponentUpdateParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -15059,10 +16138,12 @@ func NewComponentUpdateRequest(server string, id string, params *ComponentUpdate
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -15380,8 +16461,19 @@ func NewConnectorCheckRequestWithBody(server string, params *ConnectorCheckParam
 	return req, nil
 }
 
-// NewConnectorRemoveRequest constructs an http.Request for the ConnectorRemove method
-func NewConnectorRemoveRequest(server string, id string, params *ConnectorRemoveParams) (*http.Request, error) {
+// NewConnectorRemoveRequest calls the generic ConnectorRemove builder with application/json body
+func NewConnectorRemoveRequest(server string, id string, params *ConnectorRemoveParams, body ConnectorRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewConnectorRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewConnectorRemoveRequestWithBody constructs an http.Request for the ConnectorRemove method, with any body, and a specified content type
+func NewConnectorRemoveRequestWithBody(server string, id string, params *ConnectorRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -15406,10 +16498,12 @@ func NewConnectorRemoveRequest(server string, id string, params *ConnectorRemove
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -15843,8 +16937,19 @@ func NewEntryBulkUpsertRequestWithBody(server string, params *EntryBulkUpsertPar
 	return req, nil
 }
 
-// NewEntryRemoveRequest constructs an http.Request for the EntryRemove method
-func NewEntryRemoveRequest(server string, id string, params *EntryRemoveParams) (*http.Request, error) {
+// NewEntryRemoveRequest calls the generic EntryRemove builder with application/json body
+func NewEntryRemoveRequest(server string, id string, params *EntryRemoveParams, body EntryRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEntryRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewEntryRemoveRequestWithBody constructs an http.Request for the EntryRemove method, with any body, and a specified content type
+func NewEntryRemoveRequestWithBody(server string, id string, params *EntryRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -15869,10 +16974,12 @@ func NewEntryRemoveRequest(server string, id string, params *EntryRemoveParams) 
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -16145,8 +17252,19 @@ func NewEnvironmentCreateRequestWithBody(server string, params *EnvironmentCreat
 	return req, nil
 }
 
-// NewEnvironmentDeleteRequest constructs an http.Request for the EnvironmentDelete method
-func NewEnvironmentDeleteRequest(server string, id string, params *EnvironmentDeleteParams) (*http.Request, error) {
+// NewEnvironmentDeleteRequest calls the generic EnvironmentDelete builder with application/json body
+func NewEnvironmentDeleteRequest(server string, id string, params *EnvironmentDeleteParams, body EnvironmentDeleteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEnvironmentDeleteRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewEnvironmentDeleteRequestWithBody constructs an http.Request for the EnvironmentDelete method, with any body, and a specified content type
+func NewEnvironmentDeleteRequestWithBody(server string, id string, params *EnvironmentDeleteParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -16171,10 +17289,12 @@ func NewEnvironmentDeleteRequest(server string, id string, params *EnvironmentDe
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -16380,8 +17500,19 @@ func NewBackupPolicySetRequestWithBody(server string, id string, params *BackupP
 	return req, nil
 }
 
-// NewBackupRunRequest constructs an http.Request for the BackupRun method
-func NewBackupRunRequest(server string, id string, params *BackupRunParams) (*http.Request, error) {
+// NewBackupRunRequest calls the generic BackupRun builder with application/json body
+func NewBackupRunRequest(server string, id string, params *BackupRunParams, body BackupRunJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackupRunRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewBackupRunRequestWithBody constructs an http.Request for the BackupRun method, with any body, and a specified content type
+func NewBackupRunRequestWithBody(server string, id string, params *BackupRunParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -16406,10 +17537,12 @@ func NewBackupRunRequest(server string, id string, params *BackupRunParams) (*ht
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -16978,8 +18111,19 @@ func NewBackupPointsListRequest(server string, id string, params *BackupPointsLi
 	return req, nil
 }
 
-// NewBackupPointsRemoveRequest constructs an http.Request for the BackupPointsRemove method
-func NewBackupPointsRemoveRequest(server string, id string, point string, params *BackupPointsRemoveParams) (*http.Request, error) {
+// NewBackupPointsRemoveRequest calls the generic BackupPointsRemove builder with application/json body
+func NewBackupPointsRemoveRequest(server string, id string, point string, params *BackupPointsRemoveParams, body BackupPointsRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackupPointsRemoveRequestWithBody(server, id, point, params, "application/json", bodyReader)
+}
+
+// NewBackupPointsRemoveRequestWithBody constructs an http.Request for the BackupPointsRemove method, with any body, and a specified content type
+func NewBackupPointsRemoveRequestWithBody(server string, id string, point string, params *BackupPointsRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -17011,10 +18155,12 @@ func NewBackupPointsRemoveRequest(server string, id string, point string, params
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -17199,8 +18345,19 @@ func NewBackupRestorePreviewRequestWithBody(server string, id string, contentTyp
 	return req, nil
 }
 
-// NewBackupKeyRotateRequest constructs an http.Request for the BackupKeyRotate method
-func NewBackupKeyRotateRequest(server string, id string, params *BackupKeyRotateParams) (*http.Request, error) {
+// NewBackupKeyRotateRequest calls the generic BackupKeyRotate builder with application/json body
+func NewBackupKeyRotateRequest(server string, id string, params *BackupKeyRotateParams, body BackupKeyRotateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackupKeyRotateRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewBackupKeyRotateRequestWithBody constructs an http.Request for the BackupKeyRotate method, with any body, and a specified content type
+func NewBackupKeyRotateRequestWithBody(server string, id string, params *BackupKeyRotateParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -17225,10 +18382,12 @@ func NewBackupKeyRotateRequest(server string, id string, params *BackupKeyRotate
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -17573,8 +18732,19 @@ func NewImageFetchRequestWithBody(server string, params *ImageFetchParams, conte
 	return req, nil
 }
 
-// NewImageRemoveRequest constructs an http.Request for the ImageRemove method
-func NewImageRemoveRequest(server string, id string, params *ImageRemoveParams) (*http.Request, error) {
+// NewImageRemoveRequest calls the generic ImageRemove builder with application/json body
+func NewImageRemoveRequest(server string, id string, params *ImageRemoveParams, body ImageRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewImageRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewImageRemoveRequestWithBody constructs an http.Request for the ImageRemove method, with any body, and a specified content type
+func NewImageRemoveRequestWithBody(server string, id string, params *ImageRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -17599,10 +18769,12 @@ func NewImageRemoveRequest(server string, id string, params *ImageRemoveParams) 
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -17763,8 +18935,19 @@ func NewProjectCreateRequestWithBody(server string, params *ProjectCreateParams,
 	return req, nil
 }
 
-// NewProjectDeleteRequest constructs an http.Request for the ProjectDelete method
-func NewProjectDeleteRequest(server string, id string, params *ProjectDeleteParams) (*http.Request, error) {
+// NewProjectDeleteRequest calls the generic ProjectDelete builder with application/json body
+func NewProjectDeleteRequest(server string, id string, params *ProjectDeleteParams, body ProjectDeleteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewProjectDeleteRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewProjectDeleteRequestWithBody constructs an http.Request for the ProjectDelete method, with any body, and a specified content type
+func NewProjectDeleteRequestWithBody(server string, id string, params *ProjectDeleteParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -17789,10 +18972,12 @@ func NewProjectDeleteRequest(server string, id string, params *ProjectDeletePara
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -18091,8 +19276,19 @@ func NewReleaseGroupAddRequestWithBody(server string, params *ReleaseGroupAddPar
 	return req, nil
 }
 
-// NewReleaseGroupRemoveRequest constructs an http.Request for the ReleaseGroupRemove method
-func NewReleaseGroupRemoveRequest(server string, id string, params *ReleaseGroupRemoveParams) (*http.Request, error) {
+// NewReleaseGroupRemoveRequest calls the generic ReleaseGroupRemove builder with application/json body
+func NewReleaseGroupRemoveRequest(server string, id string, params *ReleaseGroupRemoveParams, body ReleaseGroupRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReleaseGroupRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewReleaseGroupRemoveRequestWithBody constructs an http.Request for the ReleaseGroupRemove method, with any body, and a specified content type
+func NewReleaseGroupRemoveRequestWithBody(server string, id string, params *ReleaseGroupRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -18117,10 +19313,12 @@ func NewReleaseGroupRemoveRequest(server string, id string, params *ReleaseGroup
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -18810,8 +20008,19 @@ func NewRouteCheckRequestWithBody(server string, params *RouteCheckParams, conte
 	return req, nil
 }
 
-// NewRouteRemoveRequest constructs an http.Request for the RouteRemove method
-func NewRouteRemoveRequest(server string, id string, params *RouteRemoveParams) (*http.Request, error) {
+// NewRouteRemoveRequest calls the generic RouteRemove builder with application/json body
+func NewRouteRemoveRequest(server string, id string, params *RouteRemoveParams, body RouteRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRouteRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRouteRemoveRequestWithBody constructs an http.Request for the RouteRemove method, with any body, and a specified content type
+func NewRouteRemoveRequestWithBody(server string, id string, params *RouteRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -18836,10 +20045,12 @@ func NewRouteRemoveRequest(server string, id string, params *RouteRemoveParams) 
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -19106,8 +20317,19 @@ func NewRunnerCreateRequestWithBody(server string, params *RunnerCreateParams, c
 	return req, nil
 }
 
-// NewRunnerRemoveRequest constructs an http.Request for the RunnerRemove method
-func NewRunnerRemoveRequest(server string, id string, params *RunnerRemoveParams) (*http.Request, error) {
+// NewRunnerRemoveRequest calls the generic RunnerRemove builder with application/json body
+func NewRunnerRemoveRequest(server string, id string, params *RunnerRemoveParams, body RunnerRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRunnerRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRunnerRemoveRequestWithBody constructs an http.Request for the RunnerRemove method, with any body, and a specified content type
+func NewRunnerRemoveRequestWithBody(server string, id string, params *RunnerRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -19132,10 +20354,12 @@ func NewRunnerRemoveRequest(server string, id string, params *RunnerRemoveParams
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -19710,8 +20934,19 @@ func NewScriptCreateRequestWithBody(server string, params *ScriptCreateParams, c
 	return req, nil
 }
 
-// NewScriptRemoveRequest constructs an http.Request for the ScriptRemove method
-func NewScriptRemoveRequest(server string, id string, params *ScriptRemoveParams) (*http.Request, error) {
+// NewScriptRemoveRequest calls the generic ScriptRemove builder with application/json body
+func NewScriptRemoveRequest(server string, id string, params *ScriptRemoveParams, body ScriptRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewScriptRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewScriptRemoveRequestWithBody constructs an http.Request for the ScriptRemove method, with any body, and a specified content type
+func NewScriptRemoveRequestWithBody(server string, id string, params *ScriptRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -19736,10 +20971,12 @@ func NewScriptRemoveRequest(server string, id string, params *ScriptRemoveParams
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -19851,8 +21088,19 @@ func NewScriptEditRequestWithBody(server string, id string, params *ScriptEditPa
 	return req, nil
 }
 
-// NewScriptRunRequest constructs an http.Request for the ScriptRun method
-func NewScriptRunRequest(server string, id string, params *ScriptRunParams) (*http.Request, error) {
+// NewScriptRunRequest calls the generic ScriptRun builder with application/json body
+func NewScriptRunRequest(server string, id string, params *ScriptRunParams, body ScriptRunJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewScriptRunRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewScriptRunRequestWithBody constructs an http.Request for the ScriptRun method, with any body, and a specified content type
+func NewScriptRunRequestWithBody(server string, id string, params *ScriptRunParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -19877,10 +21125,12 @@ func NewScriptRunRequest(server string, id string, params *ScriptRunParams) (*ht
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -20041,8 +21291,19 @@ func NewSecretCreateRequestWithBody(server string, params *SecretCreateParams, c
 	return req, nil
 }
 
-// NewSecretRemoveRequest constructs an http.Request for the SecretRemove method
-func NewSecretRemoveRequest(server string, id string, params *SecretRemoveParams) (*http.Request, error) {
+// NewSecretRemoveRequest calls the generic SecretRemove builder with application/json body
+func NewSecretRemoveRequest(server string, id string, params *SecretRemoveParams, body SecretRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSecretRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewSecretRemoveRequestWithBody constructs an http.Request for the SecretRemove method, with any body, and a specified content type
+func NewSecretRemoveRequestWithBody(server string, id string, params *SecretRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -20067,10 +21328,12 @@ func NewSecretRemoveRequest(server string, id string, params *SecretRemoveParams
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -20343,8 +21606,19 @@ func NewServiceCreateRequestWithBody(server string, params *ServiceCreateParams,
 	return req, nil
 }
 
-// NewServiceRemoveRequest constructs an http.Request for the ServiceRemove method
-func NewServiceRemoveRequest(server string, id string, params *ServiceRemoveParams) (*http.Request, error) {
+// NewServiceRemoveRequest calls the generic ServiceRemove builder with application/json body
+func NewServiceRemoveRequest(server string, id string, params *ServiceRemoveParams, body ServiceRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewServiceRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewServiceRemoveRequestWithBody constructs an http.Request for the ServiceRemove method, with any body, and a specified content type
+func NewServiceRemoveRequestWithBody(server string, id string, params *ServiceRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -20369,10 +21643,12 @@ func NewServiceRemoveRequest(server string, id string, params *ServiceRemovePara
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -20544,8 +21820,19 @@ func NewServiceDeployRequestWithBody(server string, id string, params *ServiceDe
 	return req, nil
 }
 
-// NewServiceDestroyRequest constructs an http.Request for the ServiceDestroy method
-func NewServiceDestroyRequest(server string, id string, params *ServiceDestroyParams) (*http.Request, error) {
+// NewServiceDestroyRequest calls the generic ServiceDestroy builder with application/json body
+func NewServiceDestroyRequest(server string, id string, params *ServiceDestroyParams, body ServiceDestroyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewServiceDestroyRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewServiceDestroyRequestWithBody constructs an http.Request for the ServiceDestroy method, with any body, and a specified content type
+func NewServiceDestroyRequestWithBody(server string, id string, params *ServiceDestroyParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -20570,10 +21857,12 @@ func NewServiceDestroyRequest(server string, id string, params *ServiceDestroyPa
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -20724,8 +22013,19 @@ func NewServiceRollbackRequestWithBody(server string, id string, params *Service
 	return req, nil
 }
 
-// NewServiceStartRequest constructs an http.Request for the ServiceStart method
-func NewServiceStartRequest(server string, id string, params *ServiceStartParams) (*http.Request, error) {
+// NewServiceStartRequest calls the generic ServiceStart builder with application/json body
+func NewServiceStartRequest(server string, id string, params *ServiceStartParams, body ServiceStartJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewServiceStartRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewServiceStartRequestWithBody constructs an http.Request for the ServiceStart method, with any body, and a specified content type
+func NewServiceStartRequestWithBody(server string, id string, params *ServiceStartParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -20750,10 +22050,12 @@ func NewServiceStartRequest(server string, id string, params *ServiceStartParams
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -20771,8 +22073,19 @@ func NewServiceStartRequest(server string, id string, params *ServiceStartParams
 	return req, nil
 }
 
-// NewServiceStopRequest constructs an http.Request for the ServiceStop method
-func NewServiceStopRequest(server string, id string, params *ServiceStopParams) (*http.Request, error) {
+// NewServiceStopRequest calls the generic ServiceStop builder with application/json body
+func NewServiceStopRequest(server string, id string, params *ServiceStopParams, body ServiceStopJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewServiceStopRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewServiceStopRequestWithBody constructs an http.Request for the ServiceStop method, with any body, and a specified content type
+func NewServiceStopRequestWithBody(server string, id string, params *ServiceStopParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -20797,10 +22110,12 @@ func NewServiceStopRequest(server string, id string, params *ServiceStopParams) 
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -21065,8 +22380,19 @@ func NewSoftwarePreparationShowRequest(server string, task string) (*http.Reques
 	return req, nil
 }
 
-// NewSoftwareApplyRequest constructs an http.Request for the SoftwareApply method
-func NewSoftwareApplyRequest(server string, task string, params *SoftwareApplyParams) (*http.Request, error) {
+// NewSoftwareApplyRequest calls the generic SoftwareApply builder with application/json body
+func NewSoftwareApplyRequest(server string, task string, params *SoftwareApplyParams, body SoftwareApplyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSoftwareApplyRequestWithBody(server, task, params, "application/json", bodyReader)
+}
+
+// NewSoftwareApplyRequestWithBody constructs an http.Request for the SoftwareApply method, with any body, and a specified content type
+func NewSoftwareApplyRequestWithBody(server string, task string, params *SoftwareApplyParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -21091,10 +22417,12 @@ func NewSoftwareApplyRequest(server string, task string, params *SoftwareApplyPa
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -22220,8 +23548,19 @@ func NewTenantCreateRequestWithBody(server string, params *TenantCreateParams, c
 	return req, nil
 }
 
-// NewTenantDeleteRequest constructs an http.Request for the TenantDelete method
-func NewTenantDeleteRequest(server string, id string, params *TenantDeleteParams) (*http.Request, error) {
+// NewTenantDeleteRequest calls the generic TenantDelete builder with application/json body
+func NewTenantDeleteRequest(server string, id string, params *TenantDeleteParams, body TenantDeleteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTenantDeleteRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewTenantDeleteRequestWithBody constructs an http.Request for the TenantDelete method, with any body, and a specified content type
+func NewTenantDeleteRequestWithBody(server string, id string, params *TenantDeleteParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -22246,10 +23585,12 @@ func NewTenantDeleteRequest(server string, id string, params *TenantDeleteParams
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -22548,8 +23889,19 @@ func NewVolumeCreateRequestWithBody(server string, params *VolumeCreateParams, c
 	return req, nil
 }
 
-// NewVolumeRemoveRequest constructs an http.Request for the VolumeRemove method
-func NewVolumeRemoveRequest(server string, id string, params *VolumeRemoveParams) (*http.Request, error) {
+// NewVolumeRemoveRequest calls the generic VolumeRemove builder with application/json body
+func NewVolumeRemoveRequest(server string, id string, params *VolumeRemoveParams, body VolumeRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewVolumeRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewVolumeRemoveRequestWithBody constructs an http.Request for the VolumeRemove method, with any body, and a specified content type
+func NewVolumeRemoveRequestWithBody(server string, id string, params *VolumeRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -22605,10 +23957,12 @@ func NewVolumeRemoveRequest(server string, id string, params *VolumeRemoveParams
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -22920,8 +24274,19 @@ func NewZoneCreateRequestWithBody(server string, params *ZoneCreateParams, conte
 	return req, nil
 }
 
-// NewZoneRemoveRequest constructs an http.Request for the ZoneRemove method
-func NewZoneRemoveRequest(server string, id string, params *ZoneRemoveParams) (*http.Request, error) {
+// NewZoneRemoveRequest calls the generic ZoneRemove builder with application/json body
+func NewZoneRemoveRequest(server string, id string, params *ZoneRemoveParams, body ZoneRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewZoneRemoveRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewZoneRemoveRequestWithBody constructs an http.Request for the ZoneRemove method, with any body, and a specified content type
+func NewZoneRemoveRequestWithBody(server string, id string, params *ZoneRemoveParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -22973,10 +24338,12 @@ func NewZoneRemoveRequest(server string, id string, params *ZoneRemoveParams) (*
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -23120,19 +24487,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /agents (the `AgentList` operationId).
 	AgentListWithResponse(ctx context.Context, params *AgentListParams, reqEditors ...RequestEditorFn) (*AgentListResponse, error)
 
-	// AgentJoinWithResponse Create and start the local Agent
+	// AgentJoinWithBodyWithResponse Create and start the local Agent
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /agents (the `AgentJoin` operationId).
-	AgentJoinWithResponse(ctx context.Context, params *AgentJoinParams, reqEditors ...RequestEditorFn) (*AgentJoinResponse, error)
+	AgentJoinWithBodyWithResponse(ctx context.Context, params *AgentJoinParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgentJoinResponse, error)
+
+	// AgentJoinWithResponse Create and start the local Agent
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /agents (the `AgentJoin` operationId).
+	AgentJoinWithResponse(ctx context.Context, params *AgentJoinParams, body AgentJoinJSONRequestBody, reqEditors ...RequestEditorFn) (*AgentJoinResponse, error)
+
+	// AgentRemoveWithBodyWithResponse Remove the local Agent
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /agents/{id} (the `AgentRemove` operationId).
+	AgentRemoveWithBodyWithResponse(ctx context.Context, id string, params *AgentRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgentRemoveResponse, error)
 
 	// AgentRemoveWithResponse Remove the local Agent
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /agents/{id} (the `AgentRemove` operationId).
-	AgentRemoveWithResponse(ctx context.Context, id string, params *AgentRemoveParams, reqEditors ...RequestEditorFn) (*AgentRemoveResponse, error)
+	AgentRemoveWithResponse(ctx context.Context, id string, params *AgentRemoveParams, body AgentRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*AgentRemoveResponse, error)
 
 	// AgentShowWithResponse Show an agent
 	//
@@ -23218,12 +24599,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /attaches/checks (the `AttachCheck` operationId).
 	AttachCheckWithResponse(ctx context.Context, params *AttachCheckParams, body AttachCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachCheckResponse, error)
 
-	// AttachDetachWithResponse Detach a backing service
+	// AttachDetachWithBodyWithResponse Detach a backing service
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
-	AttachDetachWithResponse(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*AttachDetachResponse, error)
+	AttachDetachWithBodyWithResponse(ctx context.Context, id string, params *AttachDetachParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AttachDetachResponse, error)
+
+	// AttachDetachWithResponse Detach a backing service
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
+	AttachDetachWithResponse(ctx context.Context, id string, params *AttachDetachParams, body AttachDetachJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachDetachResponse, error)
 
 	// AttachFactRevealWithResponse Reveal one ready Attach fact
 	//
@@ -23274,12 +24662,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
 	BackingServiceCreateWithResponse(ctx context.Context, params *BackingServiceCreateParams, body BackingServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceCreateResponse, error)
 
-	// BackingServiceDeleteWithResponse Permanently delete a Backing Service and its data
+	// BackingServiceDeleteWithBodyWithResponse Permanently delete a Backing Service and its data
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
-	BackingServiceDeleteWithResponse(ctx context.Context, projectId string, params *BackingServiceDeleteParams, reqEditors ...RequestEditorFn) (*BackingServiceDeleteResponse, error)
+	BackingServiceDeleteWithBodyWithResponse(ctx context.Context, projectId string, params *BackingServiceDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackingServiceDeleteResponse, error)
+
+	// BackingServiceDeleteWithResponse Permanently delete a Backing Service and its data
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
+	BackingServiceDeleteWithResponse(ctx context.Context, projectId string, params *BackingServiceDeleteParams, body BackingServiceDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceDeleteResponse, error)
 
 	// BackingServiceShowWithResponse Show a backing service
 	//
@@ -23288,26 +24683,47 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
 	BackingServiceShowWithResponse(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*BackingServiceShowResponse, error)
 
-	// BackingServiceDestroyWithResponse backing-service.destroy
+	// BackingServiceDestroyWithBodyWithResponse backing-service.destroy
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
-	BackingServiceDestroyWithResponse(ctx context.Context, projectId string, params *BackingServiceDestroyParams, reqEditors ...RequestEditorFn) (*BackingServiceDestroyResponse, error)
+	BackingServiceDestroyWithBodyWithResponse(ctx context.Context, projectId string, params *BackingServiceDestroyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackingServiceDestroyResponse, error)
+
+	// BackingServiceDestroyWithResponse backing-service.destroy
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
+	BackingServiceDestroyWithResponse(ctx context.Context, projectId string, params *BackingServiceDestroyParams, body BackingServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceDestroyResponse, error)
+
+	// BackingServiceStartWithBodyWithResponse backing-service.start
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
+	BackingServiceStartWithBodyWithResponse(ctx context.Context, projectId string, params *BackingServiceStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackingServiceStartResponse, error)
 
 	// BackingServiceStartWithResponse backing-service.start
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
-	BackingServiceStartWithResponse(ctx context.Context, projectId string, params *BackingServiceStartParams, reqEditors ...RequestEditorFn) (*BackingServiceStartResponse, error)
+	BackingServiceStartWithResponse(ctx context.Context, projectId string, params *BackingServiceStartParams, body BackingServiceStartJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceStartResponse, error)
+
+	// BackingServiceStopWithBodyWithResponse backing-service.stop
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
+	BackingServiceStopWithBodyWithResponse(ctx context.Context, projectId string, params *BackingServiceStopParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackingServiceStopResponse, error)
 
 	// BackingServiceStopWithResponse backing-service.stop
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
-	BackingServiceStopWithResponse(ctx context.Context, projectId string, params *BackingServiceStopParams, reqEditors ...RequestEditorFn) (*BackingServiceStopResponse, error)
+	BackingServiceStopWithResponse(ctx context.Context, projectId string, params *BackingServiceStopParams, body BackingServiceStopJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceStopResponse, error)
 
 	// ComponentListWithResponse List Components
 	//
@@ -23344,12 +24760,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /components/{id}/config (the `ComponentConfigSet` operationId).
 	ComponentConfigSetWithResponse(ctx context.Context, id string, params *ComponentConfigSetParams, body ComponentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentConfigSetResponse, error)
 
-	// ComponentDisableWithResponse component.disable
+	// ComponentDisableWithBodyWithResponse component.disable
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
-	ComponentDisableWithResponse(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*ComponentDisableResponse, error)
+	ComponentDisableWithBodyWithResponse(ctx context.Context, id string, params *ComponentDisableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentDisableResponse, error)
+
+	// ComponentDisableWithResponse component.disable
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
+	ComponentDisableWithResponse(ctx context.Context, id string, params *ComponentDisableParams, body ComponentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentDisableResponse, error)
 
 	// ComponentDnsCheckShowWithResponse Show a DNS check Task or the latest retained result
 	//
@@ -23407,12 +24830,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /components/{id}/tunnel-checks (the `ComponentTunnelCheck` operationId).
 	ComponentTunnelCheckWithResponse(ctx context.Context, id string, params *ComponentTunnelCheckParams, body ComponentTunnelCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentTunnelCheckResponse, error)
 
-	// ComponentUpdateWithResponse component.update
+	// ComponentUpdateWithBodyWithResponse component.update
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
-	ComponentUpdateWithResponse(ctx context.Context, id string, params *ComponentUpdateParams, reqEditors ...RequestEditorFn) (*ComponentUpdateResponse, error)
+	ComponentUpdateWithBodyWithResponse(ctx context.Context, id string, params *ComponentUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentUpdateResponse, error)
+
+	// ComponentUpdateWithResponse component.update
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
+	ComponentUpdateWithResponse(ctx context.Context, id string, params *ComponentUpdateParams, body ComponentUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentUpdateResponse, error)
 
 	// ConnectorListWithResponse List Environment connectors
 	//
@@ -23456,12 +24886,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /connectors/checks (the `ConnectorCheck` operationId).
 	ConnectorCheckWithResponse(ctx context.Context, params *ConnectorCheckParams, body ConnectorCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectorCheckResponse, error)
 
-	// ConnectorRemoveWithResponse Remove an Environment connector
+	// ConnectorRemoveWithBodyWithResponse Remove an Environment connector
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
-	ConnectorRemoveWithResponse(ctx context.Context, id string, params *ConnectorRemoveParams, reqEditors ...RequestEditorFn) (*ConnectorRemoveResponse, error)
+	ConnectorRemoveWithBodyWithResponse(ctx context.Context, id string, params *ConnectorRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConnectorRemoveResponse, error)
+
+	// ConnectorRemoveWithResponse Remove an Environment connector
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
+	ConnectorRemoveWithResponse(ctx context.Context, id string, params *ConnectorRemoveParams, body ConnectorRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectorRemoveResponse, error)
 
 	// ConnectorShowWithResponse Show connector metadata
 	//
@@ -23554,12 +24991,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /entries/bulk (the `EntryBulkUpsert` operationId).
 	EntryBulkUpsertWithResponse(ctx context.Context, params *EntryBulkUpsertParams, body EntryBulkUpsertJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryBulkUpsertResponse, error)
 
-	// EntryRemoveWithResponse Remove an environment Entry
+	// EntryRemoveWithBodyWithResponse Remove an environment Entry
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
-	EntryRemoveWithResponse(ctx context.Context, id string, params *EntryRemoveParams, reqEditors ...RequestEditorFn) (*EntryRemoveResponse, error)
+	EntryRemoveWithBodyWithResponse(ctx context.Context, id string, params *EntryRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EntryRemoveResponse, error)
+
+	// EntryRemoveWithResponse Remove an environment Entry
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
+	EntryRemoveWithResponse(ctx context.Context, id string, params *EntryRemoveParams, body EntryRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryRemoveResponse, error)
 
 	// EntryShowWithResponse Show environment Entry metadata
 	//
@@ -23610,12 +25054,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
 	EnvironmentCreateWithResponse(ctx context.Context, params *EnvironmentCreateParams, body EnvironmentCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentCreateResponse, error)
 
-	// EnvironmentDeleteWithResponse Delete a Environment
+	// EnvironmentDeleteWithBodyWithResponse Delete a Environment
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
-	EnvironmentDeleteWithResponse(ctx context.Context, id string, params *EnvironmentDeleteParams, reqEditors ...RequestEditorFn) (*EnvironmentDeleteResponse, error)
+	EnvironmentDeleteWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentDeleteResponse, error)
+
+	// EnvironmentDeleteWithResponse Delete a Environment
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
+	EnvironmentDeleteWithResponse(ctx context.Context, id string, params *EnvironmentDeleteParams, body EnvironmentDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentDeleteResponse, error)
 
 	// EnvironmentShowWithResponse Show an environment
 	//
@@ -23659,12 +25110,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
 	BackupPolicySetWithResponse(ctx context.Context, id string, params *BackupPolicySetParams, body BackupPolicySetJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupPolicySetResponse, error)
 
-	// BackupRunWithResponse Run all configured backup sources now
+	// BackupRunWithBodyWithResponse Run all configured backup sources now
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
-	BackupRunWithResponse(ctx context.Context, id string, params *BackupRunParams, reqEditors ...RequestEditorFn) (*BackupRunResponse, error)
+	BackupRunWithBodyWithResponse(ctx context.Context, id string, params *BackupRunParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupRunResponse, error)
+
+	// BackupRunWithResponse Run all configured backup sources now
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
+	BackupRunWithResponse(ctx context.Context, id string, params *BackupRunParams, body BackupRunJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupRunResponse, error)
 
 	// BlueprintShowWithResponse Show the current environment Blueprint
 	//
@@ -23750,12 +25208,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
 	BackupPointsListWithResponse(ctx context.Context, id string, params *BackupPointsListParams, reqEditors ...RequestEditorFn) (*BackupPointsListResponse, error)
 
-	// BackupPointsRemoveWithResponse Permanently delete one Recovery Point archive
+	// BackupPointsRemoveWithBodyWithResponse Permanently delete one Recovery Point archive
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
-	BackupPointsRemoveWithResponse(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, reqEditors ...RequestEditorFn) (*BackupPointsRemoveResponse, error)
+	BackupPointsRemoveWithBodyWithResponse(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupPointsRemoveResponse, error)
+
+	// BackupPointsRemoveWithResponse Permanently delete one Recovery Point archive
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
+	BackupPointsRemoveWithResponse(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, body BackupPointsRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupPointsRemoveResponse, error)
 
 	// EnvironmentRenameWithBodyWithResponse Rename an environment
 	//
@@ -23799,12 +25264,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /environments/{id}/restore/preview (the `BackupRestorePreview` operationId).
 	BackupRestorePreviewWithResponse(ctx context.Context, id string, body BackupRestorePreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupRestorePreviewResponse, error)
 
-	// BackupKeyRotateWithResponse Rotate the Environment backup age key
+	// BackupKeyRotateWithBodyWithResponse Rotate the Environment backup age key
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
-	BackupKeyRotateWithResponse(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*BackupKeyRotateResponse, error)
+	BackupKeyRotateWithBodyWithResponse(ctx context.Context, id string, params *BackupKeyRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupKeyRotateResponse, error)
+
+	// BackupKeyRotateWithResponse Rotate the Environment backup age key
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
+	BackupKeyRotateWithResponse(ctx context.Context, id string, params *BackupKeyRotateParams, body BackupKeyRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupKeyRotateResponse, error)
 
 	// RouterShowWithResponse Show Environment router
 	//
@@ -23890,12 +25362,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /images/fetch (the `ImageFetch` operationId).
 	ImageFetchWithResponse(ctx context.Context, params *ImageFetchParams, body ImageFetchJSONRequestBody, reqEditors ...RequestEditorFn) (*ImageFetchResponse, error)
 
-	// ImageRemoveWithResponse Remove an unreferenced host image without force or pruning
+	// ImageRemoveWithBodyWithResponse Remove an unreferenced host image without force or pruning
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
-	ImageRemoveWithResponse(ctx context.Context, id string, params *ImageRemoveParams, reqEditors ...RequestEditorFn) (*ImageRemoveResponse, error)
+	ImageRemoveWithBodyWithResponse(ctx context.Context, id string, params *ImageRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImageRemoveResponse, error)
+
+	// ImageRemoveWithResponse Remove an unreferenced host image without force or pruning
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
+	ImageRemoveWithResponse(ctx context.Context, id string, params *ImageRemoveParams, body ImageRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ImageRemoveResponse, error)
 
 	// ProjectListWithResponse List projects
 	//
@@ -23918,12 +25397,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /projects (the `ProjectCreate` operationId).
 	ProjectCreateWithResponse(ctx context.Context, params *ProjectCreateParams, body ProjectCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectCreateResponse, error)
 
-	// ProjectDeleteWithResponse Delete a Project
+	// ProjectDeleteWithBodyWithResponse Delete a Project
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
-	ProjectDeleteWithResponse(ctx context.Context, id string, params *ProjectDeleteParams, reqEditors ...RequestEditorFn) (*ProjectDeleteResponse, error)
+	ProjectDeleteWithBodyWithResponse(ctx context.Context, id string, params *ProjectDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ProjectDeleteResponse, error)
+
+	// ProjectDeleteWithResponse Delete a Project
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
+	ProjectDeleteWithResponse(ctx context.Context, id string, params *ProjectDeleteParams, body ProjectDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectDeleteResponse, error)
 
 	// ProjectShowWithResponse Show a project
 	//
@@ -23981,12 +25467,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /release-groups (the `ReleaseGroupAdd` operationId).
 	ReleaseGroupAddWithResponse(ctx context.Context, params *ReleaseGroupAddParams, body ReleaseGroupAddJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupAddResponse, error)
 
-	// ReleaseGroupRemoveWithResponse Remove a release group
+	// ReleaseGroupRemoveWithBodyWithResponse Remove a release group
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
-	ReleaseGroupRemoveWithResponse(ctx context.Context, id string, params *ReleaseGroupRemoveParams, reqEditors ...RequestEditorFn) (*ReleaseGroupRemoveResponse, error)
+	ReleaseGroupRemoveWithBodyWithResponse(ctx context.Context, id string, params *ReleaseGroupRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReleaseGroupRemoveResponse, error)
+
+	// ReleaseGroupRemoveWithResponse Remove a release group
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
+	ReleaseGroupRemoveWithResponse(ctx context.Context, id string, params *ReleaseGroupRemoveParams, body ReleaseGroupRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupRemoveResponse, error)
 
 	// ReleaseGroupShowWithResponse Show a release group
 	//
@@ -24100,12 +25593,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /routes/checks (the `RouteCheck` operationId).
 	RouteCheckWithResponse(ctx context.Context, params *RouteCheckParams, body RouteCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteCheckResponse, error)
 
-	// RouteRemoveWithResponse Remove a route
+	// RouteRemoveWithBodyWithResponse Remove a route
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
-	RouteRemoveWithResponse(ctx context.Context, id string, params *RouteRemoveParams, reqEditors ...RequestEditorFn) (*RouteRemoveResponse, error)
+	RouteRemoveWithBodyWithResponse(ctx context.Context, id string, params *RouteRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RouteRemoveResponse, error)
+
+	// RouteRemoveWithResponse Remove a route
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
+	RouteRemoveWithResponse(ctx context.Context, id string, params *RouteRemoveParams, body RouteRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteRemoveResponse, error)
 
 	// RouteShowWithResponse Show a route
 	//
@@ -24149,12 +25649,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /runners (the `RunnerCreate` operationId).
 	RunnerCreateWithResponse(ctx context.Context, params *RunnerCreateParams, body RunnerCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerCreateResponse, error)
 
-	// RunnerRemoveWithResponse Remove a managed Runner
+	// RunnerRemoveWithBodyWithResponse Remove a managed Runner
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
-	RunnerRemoveWithResponse(ctx context.Context, id string, params *RunnerRemoveParams, reqEditors ...RequestEditorFn) (*RunnerRemoveResponse, error)
+	RunnerRemoveWithBodyWithResponse(ctx context.Context, id string, params *RunnerRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerRemoveResponse, error)
+
+	// RunnerRemoveWithResponse Remove a managed Runner
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
+	RunnerRemoveWithResponse(ctx context.Context, id string, params *RunnerRemoveParams, body RunnerRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerRemoveResponse, error)
 
 	// RunnerShowWithResponse Show a managed runner
 	//
@@ -24261,12 +25768,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /scripts (the `ScriptCreate` operationId).
 	ScriptCreateWithResponse(ctx context.Context, params *ScriptCreateParams, body ScriptCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptCreateResponse, error)
 
-	// ScriptRemoveWithResponse Remove a script
+	// ScriptRemoveWithBodyWithResponse Remove a script
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
-	ScriptRemoveWithResponse(ctx context.Context, id string, params *ScriptRemoveParams, reqEditors ...RequestEditorFn) (*ScriptRemoveResponse, error)
+	ScriptRemoveWithBodyWithResponse(ctx context.Context, id string, params *ScriptRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ScriptRemoveResponse, error)
+
+	// ScriptRemoveWithResponse Remove a script
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
+	ScriptRemoveWithResponse(ctx context.Context, id string, params *ScriptRemoveParams, body ScriptRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptRemoveResponse, error)
 
 	// ScriptShowWithResponse Show a script
 	//
@@ -24289,12 +25803,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
 	ScriptEditWithResponse(ctx context.Context, id string, params *ScriptEditParams, body ScriptEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptEditResponse, error)
 
-	// ScriptRunWithResponse Run a script
+	// ScriptRunWithBodyWithResponse Run a script
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
-	ScriptRunWithResponse(ctx context.Context, id string, params *ScriptRunParams, reqEditors ...RequestEditorFn) (*ScriptRunResponse, error)
+	ScriptRunWithBodyWithResponse(ctx context.Context, id string, params *ScriptRunParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ScriptRunResponse, error)
+
+	// ScriptRunWithResponse Run a script
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
+	ScriptRunWithResponse(ctx context.Context, id string, params *ScriptRunParams, body ScriptRunJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptRunResponse, error)
 
 	// SecretListWithResponse List reusable secrets
 	//
@@ -24317,12 +25838,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /secrets (the `SecretCreate` operationId).
 	SecretCreateWithResponse(ctx context.Context, params *SecretCreateParams, body SecretCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*SecretCreateResponse, error)
 
-	// SecretRemoveWithResponse Remove a reusable secret
+	// SecretRemoveWithBodyWithResponse Remove a reusable secret
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
-	SecretRemoveWithResponse(ctx context.Context, id string, params *SecretRemoveParams, reqEditors ...RequestEditorFn) (*SecretRemoveResponse, error)
+	SecretRemoveWithBodyWithResponse(ctx context.Context, id string, params *SecretRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SecretRemoveResponse, error)
+
+	// SecretRemoveWithResponse Remove a reusable secret
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
+	SecretRemoveWithResponse(ctx context.Context, id string, params *SecretRemoveParams, body SecretRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*SecretRemoveResponse, error)
 
 	// SecretShowWithResponse Show reusable secret metadata
 	//
@@ -24373,12 +25901,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /services (the `ServiceCreate` operationId).
 	ServiceCreateWithResponse(ctx context.Context, params *ServiceCreateParams, body ServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceCreateResponse, error)
 
-	// ServiceRemoveWithResponse Remove a service
+	// ServiceRemoveWithBodyWithResponse Remove a service
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
-	ServiceRemoveWithResponse(ctx context.Context, id string, params *ServiceRemoveParams, reqEditors ...RequestEditorFn) (*ServiceRemoveResponse, error)
+	ServiceRemoveWithBodyWithResponse(ctx context.Context, id string, params *ServiceRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceRemoveResponse, error)
+
+	// ServiceRemoveWithResponse Remove a service
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
+	ServiceRemoveWithResponse(ctx context.Context, id string, params *ServiceRemoveParams, body ServiceRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceRemoveResponse, error)
 
 	// ServiceShowWithResponse Show a service
 	//
@@ -24415,12 +25950,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /services/{id}/deploy (the `ServiceDeploy` operationId).
 	ServiceDeployWithResponse(ctx context.Context, id string, params *ServiceDeployParams, body ServiceDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceDeployResponse, error)
 
-	// ServiceDestroyWithResponse Destroy service runtime
+	// ServiceDestroyWithBodyWithResponse Destroy service runtime
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
-	ServiceDestroyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error)
+	ServiceDestroyWithBodyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error)
+
+	// ServiceDestroyWithResponse Destroy service runtime
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
+	ServiceDestroyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, body ServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error)
 
 	// ServiceLogsWithResponse Stream service logs
 	//
@@ -24443,19 +25985,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /services/{id}/rollback (the `ServiceRollback` operationId).
 	ServiceRollbackWithResponse(ctx context.Context, id string, params *ServiceRollbackParams, body ServiceRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceRollbackResponse, error)
 
-	// ServiceStartWithResponse Start a service
+	// ServiceStartWithBodyWithResponse Start a service
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
-	ServiceStartWithResponse(ctx context.Context, id string, params *ServiceStartParams, reqEditors ...RequestEditorFn) (*ServiceStartResponse, error)
+	ServiceStartWithBodyWithResponse(ctx context.Context, id string, params *ServiceStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceStartResponse, error)
+
+	// ServiceStartWithResponse Start a service
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
+	ServiceStartWithResponse(ctx context.Context, id string, params *ServiceStartParams, body ServiceStartJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceStartResponse, error)
+
+	// ServiceStopWithBodyWithResponse Stop a service
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
+	ServiceStopWithBodyWithResponse(ctx context.Context, id string, params *ServiceStopParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceStopResponse, error)
 
 	// ServiceStopWithResponse Stop a service
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
-	ServiceStopWithResponse(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*ServiceStopResponse, error)
+	ServiceStopWithResponse(ctx context.Context, id string, params *ServiceStopParams, body ServiceStopJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceStopResponse, error)
 
 	// ServiceTerminalWithBodyWithResponse Open a shell in an exact running Service container
 	//
@@ -24506,12 +26062,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /software/preparations/{task} (the `SoftwarePreparationShow` operationId).
 	SoftwarePreparationShowWithResponse(ctx context.Context, task string, reqEditors ...RequestEditorFn) (*SoftwarePreparationShowResponse, error)
 
-	// SoftwareApplyWithResponse Apply a verified software preparation
+	// SoftwareApplyWithBodyWithResponse Apply a verified software preparation
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
-	SoftwareApplyWithResponse(ctx context.Context, task string, params *SoftwareApplyParams, reqEditors ...RequestEditorFn) (*SoftwareApplyResponse, error)
+	SoftwareApplyWithBodyWithResponse(ctx context.Context, task string, params *SoftwareApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SoftwareApplyResponse, error)
+
+	// SoftwareApplyWithResponse Apply a verified software preparation
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
+	SoftwareApplyWithResponse(ctx context.Context, task string, params *SoftwareApplyParams, body SoftwareApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*SoftwareApplyResponse, error)
 
 	// SoftwareReleasesWithResponse List recent published component releases
 	//
@@ -24648,12 +26211,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /tenants (the `TenantCreate` operationId).
 	TenantCreateWithResponse(ctx context.Context, params *TenantCreateParams, body TenantCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantCreateResponse, error)
 
-	// TenantDeleteWithResponse Delete a Tenant
+	// TenantDeleteWithBodyWithResponse Delete a Tenant
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
-	TenantDeleteWithResponse(ctx context.Context, id string, params *TenantDeleteParams, reqEditors ...RequestEditorFn) (*TenantDeleteResponse, error)
+	TenantDeleteWithBodyWithResponse(ctx context.Context, id string, params *TenantDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TenantDeleteResponse, error)
+
+	// TenantDeleteWithResponse Delete a Tenant
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
+	TenantDeleteWithResponse(ctx context.Context, id string, params *TenantDeleteParams, body TenantDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantDeleteResponse, error)
 
 	// TenantShowWithResponse Show a tenant
 	//
@@ -24711,12 +26281,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /volumes (the `VolumeCreate` operationId).
 	VolumeCreateWithResponse(ctx context.Context, params *VolumeCreateParams, body VolumeCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*VolumeCreateResponse, error)
 
-	// VolumeRemoveWithResponse Remove an Environment volume
+	// VolumeRemoveWithBodyWithResponse Remove an Environment volume
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
-	VolumeRemoveWithResponse(ctx context.Context, id string, params *VolumeRemoveParams, reqEditors ...RequestEditorFn) (*VolumeRemoveResponse, error)
+	VolumeRemoveWithBodyWithResponse(ctx context.Context, id string, params *VolumeRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VolumeRemoveResponse, error)
+
+	// VolumeRemoveWithResponse Remove an Environment volume
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
+	VolumeRemoveWithResponse(ctx context.Context, id string, params *VolumeRemoveParams, body VolumeRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*VolumeRemoveResponse, error)
 
 	// VolumeShowWithResponse Show an Environment volume
 	//
@@ -24767,12 +26344,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /zones (the `ZoneCreate` operationId).
 	ZoneCreateWithResponse(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ZoneCreateResponse, error)
 
-	// ZoneRemoveWithResponse Remove a network zone
+	// ZoneRemoveWithBodyWithResponse Remove a network zone
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
-	ZoneRemoveWithResponse(ctx context.Context, id string, params *ZoneRemoveParams, reqEditors ...RequestEditorFn) (*ZoneRemoveResponse, error)
+	ZoneRemoveWithBodyWithResponse(ctx context.Context, id string, params *ZoneRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZoneRemoveResponse, error)
+
+	// ZoneRemoveWithResponse Remove a network zone
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
+	ZoneRemoveWithResponse(ctx context.Context, id string, params *ZoneRemoveParams, body ZoneRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ZoneRemoveResponse, error)
 
 	// ZoneShowWithResponse Show a network zone
 	//
@@ -25661,25 +27245,25 @@ func (r BackingServiceListResponse) ContentType() string {
 	return ""
 }
 
-// BackingServiceCreateResponse201Headers the declared response headers of an HTTP 201 response for BackingServiceCreate
-type BackingServiceCreateResponse201Headers struct {
+// BackingServiceCreateResponse202Headers the declared response headers of an HTTP 202 response for BackingServiceCreate
+type BackingServiceCreateResponse202Headers struct {
 	ContentType *string
 }
 
 type BackingServiceCreateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *BackingServiceCreated
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
-	// Headers201 the parsed response headers for an HTTP 201 response
-	Headers201 *BackingServiceCreateResponse201Headers
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *BackingServiceCreateResponse202Headers
 }
 
-// GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r BackingServiceCreateResponse) GetJSON201() *BackingServiceCreated {
-	return r.JSON201
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r BackingServiceCreateResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -26131,8 +27715,8 @@ type ComponentConfigSetResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *ComponentConfigMutationResult
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Error
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
 	// Headers200 the parsed response headers for an HTTP 200 response
 	Headers200 *ComponentConfigSetResponse200Headers
 }
@@ -26142,9 +27726,9 @@ func (r ComponentConfigSetResponse) GetJSON200() *ComponentConfigMutationResult 
 	return r.JSON200
 }
 
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r ComponentConfigSetResponse) GetApplicationproblemJSONDefault() *Error {
-	return r.ApplicationproblemJSONDefault
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ComponentConfigSetResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -27117,25 +28701,25 @@ func (r EntryListResponse) ContentType() string {
 	return ""
 }
 
-// EntryCreateResponse201Headers the declared response headers of an HTTP 201 response for EntryCreate
-type EntryCreateResponse201Headers struct {
+// EntryCreateResponse202Headers the declared response headers of an HTTP 202 response for EntryCreate
+type EntryCreateResponse202Headers struct {
 	ContentType *string
 }
 
 type EntryCreateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *Entry
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
-	// Headers201 the parsed response headers for an HTTP 201 response
-	Headers201 *EntryCreateResponse201Headers
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *EntryCreateResponse202Headers
 }
 
-// GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r EntryCreateResponse) GetJSON201() *Entry {
-	return r.JSON201
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r EntryCreateResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -27181,7 +28765,7 @@ type EntryBulkUpsertResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *EntryBulkUpsertResult
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -27189,7 +28773,7 @@ type EntryBulkUpsertResponse struct {
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r EntryBulkUpsertResponse) GetJSON202() *EntryBulkUpsertResult {
+func (r EntryBulkUpsertResponse) GetJSON202() *TaskAccepted {
 	return r.JSON202
 }
 
@@ -27323,25 +28907,25 @@ func (r EntryShowResponse) ContentType() string {
 	return ""
 }
 
-// EntryEditResponse200Headers the declared response headers of an HTTP 200 response for EntryEdit
-type EntryEditResponse200Headers struct {
+// EntryEditResponse202Headers the declared response headers of an HTTP 202 response for EntryEdit
+type EntryEditResponse202Headers struct {
 	ContentType *string
 }
 
 type EntryEditResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Entry
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
-	// Headers200 the parsed response headers for an HTTP 200 response
-	Headers200 *EntryEditResponse200Headers
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *EntryEditResponse202Headers
 }
 
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r EntryEditResponse) GetJSON200() *Entry {
-	return r.JSON200
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r EntryEditResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -28990,7 +30574,7 @@ type ImageFetchResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *ImageFetchAccepted
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -28998,7 +30582,7 @@ type ImageFetchResponse struct {
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r ImageFetchResponse) GetJSON202() *ImageFetchAccepted {
+func (r ImageFetchResponse) GetJSON202() *TaskAccepted {
 	return r.JSON202
 }
 
@@ -29512,7 +31096,7 @@ type ReleaseGroupRemoveResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *ReleaseGroupMutationAccepted
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -29520,7 +31104,7 @@ type ReleaseGroupRemoveResponse struct {
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r ReleaseGroupRemoveResponse) GetJSON202() *ReleaseGroupMutationAccepted {
+func (r ReleaseGroupRemoveResponse) GetJSON202() *TaskAccepted {
 	return r.JSON202
 }
 
@@ -29670,7 +31254,7 @@ type ReleaseGroupDeployResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *ReleaseGroupTaskAccepted
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -29678,7 +31262,7 @@ type ReleaseGroupDeployResponse struct {
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r ReleaseGroupDeployResponse) GetJSON202() *ReleaseGroupTaskAccepted {
+func (r ReleaseGroupDeployResponse) GetJSON202() *TaskAccepted {
 	return r.JSON202
 }
 
@@ -29725,7 +31309,7 @@ type ReleaseGroupRollbackResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *ReleaseGroupTaskAccepted
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -29733,7 +31317,7 @@ type ReleaseGroupRollbackResponse struct {
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r ReleaseGroupRollbackResponse) GetJSON202() *ReleaseGroupTaskAccepted {
+func (r ReleaseGroupRollbackResponse) GetJSON202() *TaskAccepted {
 	return r.JSON202
 }
 
@@ -29972,7 +31556,7 @@ type RouteCreateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *RouteTaskAccepted
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -29980,7 +31564,7 @@ type RouteCreateResponse struct {
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r RouteCreateResponse) GetJSON202() *RouteTaskAccepted {
+func (r RouteCreateResponse) GetJSON202() *TaskAccepted {
 	return r.JSON202
 }
 
@@ -30233,7 +31817,7 @@ type RouteEditResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *RouteTaskAccepted
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -30241,7 +31825,7 @@ type RouteEditResponse struct {
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r RouteEditResponse) GetJSON202() *RouteTaskAccepted {
+func (r RouteEditResponse) GetJSON202() *TaskAccepted {
 	return r.JSON202
 }
 
@@ -31744,7 +33328,7 @@ type ServiceDeployResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *ReleaseTaskAccepted
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -31752,7 +33336,7 @@ type ServiceDeployResponse struct {
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r ServiceDeployResponse) GetJSON202() *ReleaseTaskAccepted {
+func (r ServiceDeployResponse) GetJSON202() *TaskAccepted {
 	return r.JSON202
 }
 
@@ -31895,7 +33479,7 @@ type ServiceRollbackResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *ReleaseTaskAccepted
+	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 	// Headers202 the parsed response headers for an HTTP 202 response
@@ -31903,7 +33487,7 @@ type ServiceRollbackResponse struct {
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r ServiceRollbackResponse) GetJSON202() *ReleaseTaskAccepted {
+func (r ServiceRollbackResponse) GetJSON202() *TaskAccepted {
 	return r.JSON202
 }
 
@@ -33349,31 +34933,29 @@ func (r VolumeListResponse) ContentType() string {
 	return ""
 }
 
-// VolumeCreateResponse201Headers the declared response headers of an HTTP 201 response for VolumeCreate
-type VolumeCreateResponse201Headers struct {
+// VolumeCreateResponse202Headers the declared response headers of an HTTP 202 response for VolumeCreate
+type VolumeCreateResponse202Headers struct {
 	ContentType *string
 }
 
 type VolumeCreateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *struct {
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *struct {
 		TaskId string `json:"task_id"`
-		Volume Volume `json:"volume"`
 	}
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
-	// Headers201 the parsed response headers for an HTTP 201 response
-	Headers201 *VolumeCreateResponse201Headers
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *VolumeCreateResponse202Headers
 }
 
-// GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r VolumeCreateResponse) GetJSON201() *struct {
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r VolumeCreateResponse) GetJSON202() *struct {
 	TaskId string `json:"task_id"`
-	Volume Volume `json:"volume"`
 } {
-	return r.JSON201
+	return r.JSON202
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -33517,31 +35099,29 @@ func (r VolumeShowResponse) ContentType() string {
 	return ""
 }
 
-// VolumeEditResponse200Headers the declared response headers of an HTTP 200 response for VolumeEdit
-type VolumeEditResponse200Headers struct {
+// VolumeEditResponse202Headers the declared response headers of an HTTP 202 response for VolumeEdit
+type VolumeEditResponse202Headers struct {
 	ContentType *string
 }
 
 type VolumeEditResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *struct {
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *struct {
 		TaskId string `json:"task_id"`
-		Volume Volume `json:"volume"`
 	}
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
-	// Headers200 the parsed response headers for an HTTP 200 response
-	Headers200 *VolumeEditResponse200Headers
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *VolumeEditResponse202Headers
 }
 
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r VolumeEditResponse) GetJSON200() *struct {
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r VolumeEditResponse) GetJSON202() *struct {
 	TaskId string `json:"task_id"`
-	Volume Volume `json:"volume"`
 } {
-	return r.JSON200
+	return r.JSON202
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -33906,26 +35486,52 @@ func (c *ClientWithResponses) AgentListWithResponse(ctx context.Context, params 
 	return ParseAgentListResponse(rsp)
 }
 
-// AgentJoinWithResponse Create and start the local Agent
+// AgentJoinWithBodyWithResponse Create and start the local Agent
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /agents (the `AgentJoin` operationId).
-func (c *ClientWithResponses) AgentJoinWithResponse(ctx context.Context, params *AgentJoinParams, reqEditors ...RequestEditorFn) (*AgentJoinResponse, error) {
-	rsp, err := c.AgentJoin(ctx, params, reqEditors...)
+func (c *ClientWithResponses) AgentJoinWithBodyWithResponse(ctx context.Context, params *AgentJoinParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgentJoinResponse, error) {
+	rsp, err := c.AgentJoinWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseAgentJoinResponse(rsp)
 }
 
-// AgentRemoveWithResponse Remove the local Agent
+// AgentJoinWithResponse Create and start the local Agent
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /agents (the `AgentJoin` operationId).
+func (c *ClientWithResponses) AgentJoinWithResponse(ctx context.Context, params *AgentJoinParams, body AgentJoinJSONRequestBody, reqEditors ...RequestEditorFn) (*AgentJoinResponse, error) {
+	rsp, err := c.AgentJoin(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAgentJoinResponse(rsp)
+}
+
+// AgentRemoveWithBodyWithResponse Remove the local Agent
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /agents/{id} (the `AgentRemove` operationId).
-func (c *ClientWithResponses) AgentRemoveWithResponse(ctx context.Context, id string, params *AgentRemoveParams, reqEditors ...RequestEditorFn) (*AgentRemoveResponse, error) {
-	rsp, err := c.AgentRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) AgentRemoveWithBodyWithResponse(ctx context.Context, id string, params *AgentRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgentRemoveResponse, error) {
+	rsp, err := c.AgentRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAgentRemoveResponse(rsp)
+}
+
+// AgentRemoveWithResponse Remove the local Agent
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /agents/{id} (the `AgentRemove` operationId).
+func (c *ClientWithResponses) AgentRemoveWithResponse(ctx context.Context, id string, params *AgentRemoveParams, body AgentRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*AgentRemoveResponse, error) {
+	rsp, err := c.AgentRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -34088,13 +35694,26 @@ func (c *ClientWithResponses) AttachCheckWithResponse(ctx context.Context, param
 	return ParseAttachCheckResponse(rsp)
 }
 
-// AttachDetachWithResponse Detach a backing service
+// AttachDetachWithBodyWithResponse Detach a backing service
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
-func (c *ClientWithResponses) AttachDetachWithResponse(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*AttachDetachResponse, error) {
-	rsp, err := c.AttachDetach(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) AttachDetachWithBodyWithResponse(ctx context.Context, id string, params *AttachDetachParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AttachDetachResponse, error) {
+	rsp, err := c.AttachDetachWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachDetachResponse(rsp)
+}
+
+// AttachDetachWithResponse Detach a backing service
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
+func (c *ClientWithResponses) AttachDetachWithResponse(ctx context.Context, id string, params *AttachDetachParams, body AttachDetachJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachDetachResponse, error) {
+	rsp, err := c.AttachDetach(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -34192,13 +35811,26 @@ func (c *ClientWithResponses) BackingServiceCreateWithResponse(ctx context.Conte
 	return ParseBackingServiceCreateResponse(rsp)
 }
 
-// BackingServiceDeleteWithResponse Permanently delete a Backing Service and its data
+// BackingServiceDeleteWithBodyWithResponse Permanently delete a Backing Service and its data
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
-func (c *ClientWithResponses) BackingServiceDeleteWithResponse(ctx context.Context, projectId string, params *BackingServiceDeleteParams, reqEditors ...RequestEditorFn) (*BackingServiceDeleteResponse, error) {
-	rsp, err := c.BackingServiceDelete(ctx, projectId, params, reqEditors...)
+func (c *ClientWithResponses) BackingServiceDeleteWithBodyWithResponse(ctx context.Context, projectId string, params *BackingServiceDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackingServiceDeleteResponse, error) {
+	rsp, err := c.BackingServiceDeleteWithBody(ctx, projectId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceDeleteResponse(rsp)
+}
+
+// BackingServiceDeleteWithResponse Permanently delete a Backing Service and its data
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /backing-services/{project_id} (the `BackingServiceDelete` operationId).
+func (c *ClientWithResponses) BackingServiceDeleteWithResponse(ctx context.Context, projectId string, params *BackingServiceDeleteParams, body BackingServiceDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceDeleteResponse, error) {
+	rsp, err := c.BackingServiceDelete(ctx, projectId, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -34218,39 +35850,78 @@ func (c *ClientWithResponses) BackingServiceShowWithResponse(ctx context.Context
 	return ParseBackingServiceShowResponse(rsp)
 }
 
-// BackingServiceDestroyWithResponse backing-service.destroy
+// BackingServiceDestroyWithBodyWithResponse backing-service.destroy
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
-func (c *ClientWithResponses) BackingServiceDestroyWithResponse(ctx context.Context, projectId string, params *BackingServiceDestroyParams, reqEditors ...RequestEditorFn) (*BackingServiceDestroyResponse, error) {
-	rsp, err := c.BackingServiceDestroy(ctx, projectId, params, reqEditors...)
+func (c *ClientWithResponses) BackingServiceDestroyWithBodyWithResponse(ctx context.Context, projectId string, params *BackingServiceDestroyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackingServiceDestroyResponse, error) {
+	rsp, err := c.BackingServiceDestroyWithBody(ctx, projectId, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseBackingServiceDestroyResponse(rsp)
 }
 
-// BackingServiceStartWithResponse backing-service.start
+// BackingServiceDestroyWithResponse backing-service.destroy
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
+func (c *ClientWithResponses) BackingServiceDestroyWithResponse(ctx context.Context, projectId string, params *BackingServiceDestroyParams, body BackingServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceDestroyResponse, error) {
+	rsp, err := c.BackingServiceDestroy(ctx, projectId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceDestroyResponse(rsp)
+}
+
+// BackingServiceStartWithBodyWithResponse backing-service.start
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
-func (c *ClientWithResponses) BackingServiceStartWithResponse(ctx context.Context, projectId string, params *BackingServiceStartParams, reqEditors ...RequestEditorFn) (*BackingServiceStartResponse, error) {
-	rsp, err := c.BackingServiceStart(ctx, projectId, params, reqEditors...)
+func (c *ClientWithResponses) BackingServiceStartWithBodyWithResponse(ctx context.Context, projectId string, params *BackingServiceStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackingServiceStartResponse, error) {
+	rsp, err := c.BackingServiceStartWithBody(ctx, projectId, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseBackingServiceStartResponse(rsp)
 }
 
-// BackingServiceStopWithResponse backing-service.stop
+// BackingServiceStartWithResponse backing-service.start
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
+func (c *ClientWithResponses) BackingServiceStartWithResponse(ctx context.Context, projectId string, params *BackingServiceStartParams, body BackingServiceStartJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceStartResponse, error) {
+	rsp, err := c.BackingServiceStart(ctx, projectId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceStartResponse(rsp)
+}
+
+// BackingServiceStopWithBodyWithResponse backing-service.stop
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
-func (c *ClientWithResponses) BackingServiceStopWithResponse(ctx context.Context, projectId string, params *BackingServiceStopParams, reqEditors ...RequestEditorFn) (*BackingServiceStopResponse, error) {
-	rsp, err := c.BackingServiceStop(ctx, projectId, params, reqEditors...)
+func (c *ClientWithResponses) BackingServiceStopWithBodyWithResponse(ctx context.Context, projectId string, params *BackingServiceStopParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackingServiceStopResponse, error) {
+	rsp, err := c.BackingServiceStopWithBody(ctx, projectId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceStopResponse(rsp)
+}
+
+// BackingServiceStopWithResponse backing-service.stop
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
+func (c *ClientWithResponses) BackingServiceStopWithResponse(ctx context.Context, projectId string, params *BackingServiceStopParams, body BackingServiceStopJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceStopResponse, error) {
+	rsp, err := c.BackingServiceStop(ctx, projectId, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -34322,13 +35993,26 @@ func (c *ClientWithResponses) ComponentConfigSetWithResponse(ctx context.Context
 	return ParseComponentConfigSetResponse(rsp)
 }
 
-// ComponentDisableWithResponse component.disable
+// ComponentDisableWithBodyWithResponse component.disable
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
-func (c *ClientWithResponses) ComponentDisableWithResponse(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*ComponentDisableResponse, error) {
-	rsp, err := c.ComponentDisable(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ComponentDisableWithBodyWithResponse(ctx context.Context, id string, params *ComponentDisableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentDisableResponse, error) {
+	rsp, err := c.ComponentDisableWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentDisableResponse(rsp)
+}
+
+// ComponentDisableWithResponse component.disable
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
+func (c *ClientWithResponses) ComponentDisableWithResponse(ctx context.Context, id string, params *ComponentDisableParams, body ComponentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentDisableResponse, error) {
+	rsp, err := c.ComponentDisable(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -34439,13 +36123,26 @@ func (c *ClientWithResponses) ComponentTunnelCheckWithResponse(ctx context.Conte
 	return ParseComponentTunnelCheckResponse(rsp)
 }
 
-// ComponentUpdateWithResponse component.update
+// ComponentUpdateWithBodyWithResponse component.update
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
-func (c *ClientWithResponses) ComponentUpdateWithResponse(ctx context.Context, id string, params *ComponentUpdateParams, reqEditors ...RequestEditorFn) (*ComponentUpdateResponse, error) {
-	rsp, err := c.ComponentUpdate(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ComponentUpdateWithBodyWithResponse(ctx context.Context, id string, params *ComponentUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentUpdateResponse, error) {
+	rsp, err := c.ComponentUpdateWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentUpdateResponse(rsp)
+}
+
+// ComponentUpdateWithResponse component.update
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
+func (c *ClientWithResponses) ComponentUpdateWithResponse(ctx context.Context, id string, params *ComponentUpdateParams, body ComponentUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentUpdateResponse, error) {
+	rsp, err := c.ComponentUpdate(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -34530,13 +36227,26 @@ func (c *ClientWithResponses) ConnectorCheckWithResponse(ctx context.Context, pa
 	return ParseConnectorCheckResponse(rsp)
 }
 
-// ConnectorRemoveWithResponse Remove an Environment connector
+// ConnectorRemoveWithBodyWithResponse Remove an Environment connector
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
-func (c *ClientWithResponses) ConnectorRemoveWithResponse(ctx context.Context, id string, params *ConnectorRemoveParams, reqEditors ...RequestEditorFn) (*ConnectorRemoveResponse, error) {
-	rsp, err := c.ConnectorRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ConnectorRemoveWithBodyWithResponse(ctx context.Context, id string, params *ConnectorRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConnectorRemoveResponse, error) {
+	rsp, err := c.ConnectorRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectorRemoveResponse(rsp)
+}
+
+// ConnectorRemoveWithResponse Remove an Environment connector
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
+func (c *ClientWithResponses) ConnectorRemoveWithResponse(ctx context.Context, id string, params *ConnectorRemoveParams, body ConnectorRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectorRemoveResponse, error) {
+	rsp, err := c.ConnectorRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -34712,13 +36422,26 @@ func (c *ClientWithResponses) EntryBulkUpsertWithResponse(ctx context.Context, p
 	return ParseEntryBulkUpsertResponse(rsp)
 }
 
-// EntryRemoveWithResponse Remove an environment Entry
+// EntryRemoveWithBodyWithResponse Remove an environment Entry
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
-func (c *ClientWithResponses) EntryRemoveWithResponse(ctx context.Context, id string, params *EntryRemoveParams, reqEditors ...RequestEditorFn) (*EntryRemoveResponse, error) {
-	rsp, err := c.EntryRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) EntryRemoveWithBodyWithResponse(ctx context.Context, id string, params *EntryRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EntryRemoveResponse, error) {
+	rsp, err := c.EntryRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryRemoveResponse(rsp)
+}
+
+// EntryRemoveWithResponse Remove an environment Entry
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
+func (c *ClientWithResponses) EntryRemoveWithResponse(ctx context.Context, id string, params *EntryRemoveParams, body EntryRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryRemoveResponse, error) {
+	rsp, err := c.EntryRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -34816,13 +36539,26 @@ func (c *ClientWithResponses) EnvironmentCreateWithResponse(ctx context.Context,
 	return ParseEnvironmentCreateResponse(rsp)
 }
 
-// EnvironmentDeleteWithResponse Delete a Environment
+// EnvironmentDeleteWithBodyWithResponse Delete a Environment
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
-func (c *ClientWithResponses) EnvironmentDeleteWithResponse(ctx context.Context, id string, params *EnvironmentDeleteParams, reqEditors ...RequestEditorFn) (*EnvironmentDeleteResponse, error) {
-	rsp, err := c.EnvironmentDelete(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) EnvironmentDeleteWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentDeleteResponse, error) {
+	rsp, err := c.EnvironmentDeleteWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentDeleteResponse(rsp)
+}
+
+// EnvironmentDeleteWithResponse Delete a Environment
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
+func (c *ClientWithResponses) EnvironmentDeleteWithResponse(ctx context.Context, id string, params *EnvironmentDeleteParams, body EnvironmentDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentDeleteResponse, error) {
+	rsp, err := c.EnvironmentDelete(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -34907,13 +36643,26 @@ func (c *ClientWithResponses) BackupPolicySetWithResponse(ctx context.Context, i
 	return ParseBackupPolicySetResponse(rsp)
 }
 
-// BackupRunWithResponse Run all configured backup sources now
+// BackupRunWithBodyWithResponse Run all configured backup sources now
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
-func (c *ClientWithResponses) BackupRunWithResponse(ctx context.Context, id string, params *BackupRunParams, reqEditors ...RequestEditorFn) (*BackupRunResponse, error) {
-	rsp, err := c.BackupRun(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) BackupRunWithBodyWithResponse(ctx context.Context, id string, params *BackupRunParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupRunResponse, error) {
+	rsp, err := c.BackupRunWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupRunResponse(rsp)
+}
+
+// BackupRunWithResponse Run all configured backup sources now
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
+func (c *ClientWithResponses) BackupRunWithResponse(ctx context.Context, id string, params *BackupRunParams, body BackupRunJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupRunResponse, error) {
+	rsp, err := c.BackupRun(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -35076,13 +36825,26 @@ func (c *ClientWithResponses) BackupPointsListWithResponse(ctx context.Context, 
 	return ParseBackupPointsListResponse(rsp)
 }
 
-// BackupPointsRemoveWithResponse Permanently delete one Recovery Point archive
+// BackupPointsRemoveWithBodyWithResponse Permanently delete one Recovery Point archive
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
-func (c *ClientWithResponses) BackupPointsRemoveWithResponse(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, reqEditors ...RequestEditorFn) (*BackupPointsRemoveResponse, error) {
-	rsp, err := c.BackupPointsRemove(ctx, id, point, params, reqEditors...)
+func (c *ClientWithResponses) BackupPointsRemoveWithBodyWithResponse(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupPointsRemoveResponse, error) {
+	rsp, err := c.BackupPointsRemoveWithBody(ctx, id, point, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupPointsRemoveResponse(rsp)
+}
+
+// BackupPointsRemoveWithResponse Permanently delete one Recovery Point archive
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /environments/{id}/recovery-points/{point} (the `BackupPointsRemove` operationId).
+func (c *ClientWithResponses) BackupPointsRemoveWithResponse(ctx context.Context, id string, point string, params *BackupPointsRemoveParams, body BackupPointsRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupPointsRemoveResponse, error) {
+	rsp, err := c.BackupPointsRemove(ctx, id, point, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -35167,13 +36929,26 @@ func (c *ClientWithResponses) BackupRestorePreviewWithResponse(ctx context.Conte
 	return ParseBackupRestorePreviewResponse(rsp)
 }
 
-// BackupKeyRotateWithResponse Rotate the Environment backup age key
+// BackupKeyRotateWithBodyWithResponse Rotate the Environment backup age key
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
-func (c *ClientWithResponses) BackupKeyRotateWithResponse(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*BackupKeyRotateResponse, error) {
-	rsp, err := c.BackupKeyRotate(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) BackupKeyRotateWithBodyWithResponse(ctx context.Context, id string, params *BackupKeyRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupKeyRotateResponse, error) {
+	rsp, err := c.BackupKeyRotateWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupKeyRotateResponse(rsp)
+}
+
+// BackupKeyRotateWithResponse Rotate the Environment backup age key
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
+func (c *ClientWithResponses) BackupKeyRotateWithResponse(ctx context.Context, id string, params *BackupKeyRotateParams, body BackupKeyRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupKeyRotateResponse, error) {
+	rsp, err := c.BackupKeyRotate(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -35336,13 +37111,26 @@ func (c *ClientWithResponses) ImageFetchWithResponse(ctx context.Context, params
 	return ParseImageFetchResponse(rsp)
 }
 
-// ImageRemoveWithResponse Remove an unreferenced host image without force or pruning
+// ImageRemoveWithBodyWithResponse Remove an unreferenced host image without force or pruning
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
-func (c *ClientWithResponses) ImageRemoveWithResponse(ctx context.Context, id string, params *ImageRemoveParams, reqEditors ...RequestEditorFn) (*ImageRemoveResponse, error) {
-	rsp, err := c.ImageRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ImageRemoveWithBodyWithResponse(ctx context.Context, id string, params *ImageRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImageRemoveResponse, error) {
+	rsp, err := c.ImageRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImageRemoveResponse(rsp)
+}
+
+// ImageRemoveWithResponse Remove an unreferenced host image without force or pruning
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
+func (c *ClientWithResponses) ImageRemoveWithResponse(ctx context.Context, id string, params *ImageRemoveParams, body ImageRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ImageRemoveResponse, error) {
+	rsp, err := c.ImageRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -35388,13 +37176,26 @@ func (c *ClientWithResponses) ProjectCreateWithResponse(ctx context.Context, par
 	return ParseProjectCreateResponse(rsp)
 }
 
-// ProjectDeleteWithResponse Delete a Project
+// ProjectDeleteWithBodyWithResponse Delete a Project
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
-func (c *ClientWithResponses) ProjectDeleteWithResponse(ctx context.Context, id string, params *ProjectDeleteParams, reqEditors ...RequestEditorFn) (*ProjectDeleteResponse, error) {
-	rsp, err := c.ProjectDelete(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ProjectDeleteWithBodyWithResponse(ctx context.Context, id string, params *ProjectDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ProjectDeleteResponse, error) {
+	rsp, err := c.ProjectDeleteWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProjectDeleteResponse(rsp)
+}
+
+// ProjectDeleteWithResponse Delete a Project
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
+func (c *ClientWithResponses) ProjectDeleteWithResponse(ctx context.Context, id string, params *ProjectDeleteParams, body ProjectDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectDeleteResponse, error) {
+	rsp, err := c.ProjectDelete(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -35505,13 +37306,26 @@ func (c *ClientWithResponses) ReleaseGroupAddWithResponse(ctx context.Context, p
 	return ParseReleaseGroupAddResponse(rsp)
 }
 
-// ReleaseGroupRemoveWithResponse Remove a release group
+// ReleaseGroupRemoveWithBodyWithResponse Remove a release group
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
-func (c *ClientWithResponses) ReleaseGroupRemoveWithResponse(ctx context.Context, id string, params *ReleaseGroupRemoveParams, reqEditors ...RequestEditorFn) (*ReleaseGroupRemoveResponse, error) {
-	rsp, err := c.ReleaseGroupRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ReleaseGroupRemoveWithBodyWithResponse(ctx context.Context, id string, params *ReleaseGroupRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReleaseGroupRemoveResponse, error) {
+	rsp, err := c.ReleaseGroupRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupRemoveResponse(rsp)
+}
+
+// ReleaseGroupRemoveWithResponse Remove a release group
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
+func (c *ClientWithResponses) ReleaseGroupRemoveWithResponse(ctx context.Context, id string, params *ReleaseGroupRemoveParams, body ReleaseGroupRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupRemoveResponse, error) {
+	rsp, err := c.ReleaseGroupRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -35726,13 +37540,26 @@ func (c *ClientWithResponses) RouteCheckWithResponse(ctx context.Context, params
 	return ParseRouteCheckResponse(rsp)
 }
 
-// RouteRemoveWithResponse Remove a route
+// RouteRemoveWithBodyWithResponse Remove a route
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
-func (c *ClientWithResponses) RouteRemoveWithResponse(ctx context.Context, id string, params *RouteRemoveParams, reqEditors ...RequestEditorFn) (*RouteRemoveResponse, error) {
-	rsp, err := c.RouteRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) RouteRemoveWithBodyWithResponse(ctx context.Context, id string, params *RouteRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RouteRemoveResponse, error) {
+	rsp, err := c.RouteRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteRemoveResponse(rsp)
+}
+
+// RouteRemoveWithResponse Remove a route
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
+func (c *ClientWithResponses) RouteRemoveWithResponse(ctx context.Context, id string, params *RouteRemoveParams, body RouteRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteRemoveResponse, error) {
+	rsp, err := c.RouteRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -35817,13 +37644,26 @@ func (c *ClientWithResponses) RunnerCreateWithResponse(ctx context.Context, para
 	return ParseRunnerCreateResponse(rsp)
 }
 
-// RunnerRemoveWithResponse Remove a managed Runner
+// RunnerRemoveWithBodyWithResponse Remove a managed Runner
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
-func (c *ClientWithResponses) RunnerRemoveWithResponse(ctx context.Context, id string, params *RunnerRemoveParams, reqEditors ...RequestEditorFn) (*RunnerRemoveResponse, error) {
-	rsp, err := c.RunnerRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) RunnerRemoveWithBodyWithResponse(ctx context.Context, id string, params *RunnerRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerRemoveResponse, error) {
+	rsp, err := c.RunnerRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerRemoveResponse(rsp)
+}
+
+// RunnerRemoveWithResponse Remove a managed Runner
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
+func (c *ClientWithResponses) RunnerRemoveWithResponse(ctx context.Context, id string, params *RunnerRemoveParams, body RunnerRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerRemoveResponse, error) {
+	rsp, err := c.RunnerRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -36025,13 +37865,26 @@ func (c *ClientWithResponses) ScriptCreateWithResponse(ctx context.Context, para
 	return ParseScriptCreateResponse(rsp)
 }
 
-// ScriptRemoveWithResponse Remove a script
+// ScriptRemoveWithBodyWithResponse Remove a script
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
-func (c *ClientWithResponses) ScriptRemoveWithResponse(ctx context.Context, id string, params *ScriptRemoveParams, reqEditors ...RequestEditorFn) (*ScriptRemoveResponse, error) {
-	rsp, err := c.ScriptRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ScriptRemoveWithBodyWithResponse(ctx context.Context, id string, params *ScriptRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ScriptRemoveResponse, error) {
+	rsp, err := c.ScriptRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScriptRemoveResponse(rsp)
+}
+
+// ScriptRemoveWithResponse Remove a script
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
+func (c *ClientWithResponses) ScriptRemoveWithResponse(ctx context.Context, id string, params *ScriptRemoveParams, body ScriptRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptRemoveResponse, error) {
+	rsp, err := c.ScriptRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -36077,13 +37930,26 @@ func (c *ClientWithResponses) ScriptEditWithResponse(ctx context.Context, id str
 	return ParseScriptEditResponse(rsp)
 }
 
-// ScriptRunWithResponse Run a script
+// ScriptRunWithBodyWithResponse Run a script
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
-func (c *ClientWithResponses) ScriptRunWithResponse(ctx context.Context, id string, params *ScriptRunParams, reqEditors ...RequestEditorFn) (*ScriptRunResponse, error) {
-	rsp, err := c.ScriptRun(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ScriptRunWithBodyWithResponse(ctx context.Context, id string, params *ScriptRunParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ScriptRunResponse, error) {
+	rsp, err := c.ScriptRunWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScriptRunResponse(rsp)
+}
+
+// ScriptRunWithResponse Run a script
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
+func (c *ClientWithResponses) ScriptRunWithResponse(ctx context.Context, id string, params *ScriptRunParams, body ScriptRunJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptRunResponse, error) {
+	rsp, err := c.ScriptRun(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -36129,13 +37995,26 @@ func (c *ClientWithResponses) SecretCreateWithResponse(ctx context.Context, para
 	return ParseSecretCreateResponse(rsp)
 }
 
-// SecretRemoveWithResponse Remove a reusable secret
+// SecretRemoveWithBodyWithResponse Remove a reusable secret
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
-func (c *ClientWithResponses) SecretRemoveWithResponse(ctx context.Context, id string, params *SecretRemoveParams, reqEditors ...RequestEditorFn) (*SecretRemoveResponse, error) {
-	rsp, err := c.SecretRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) SecretRemoveWithBodyWithResponse(ctx context.Context, id string, params *SecretRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SecretRemoveResponse, error) {
+	rsp, err := c.SecretRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecretRemoveResponse(rsp)
+}
+
+// SecretRemoveWithResponse Remove a reusable secret
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
+func (c *ClientWithResponses) SecretRemoveWithResponse(ctx context.Context, id string, params *SecretRemoveParams, body SecretRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*SecretRemoveResponse, error) {
+	rsp, err := c.SecretRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -36233,13 +38112,26 @@ func (c *ClientWithResponses) ServiceCreateWithResponse(ctx context.Context, par
 	return ParseServiceCreateResponse(rsp)
 }
 
-// ServiceRemoveWithResponse Remove a service
+// ServiceRemoveWithBodyWithResponse Remove a service
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
-func (c *ClientWithResponses) ServiceRemoveWithResponse(ctx context.Context, id string, params *ServiceRemoveParams, reqEditors ...RequestEditorFn) (*ServiceRemoveResponse, error) {
-	rsp, err := c.ServiceRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ServiceRemoveWithBodyWithResponse(ctx context.Context, id string, params *ServiceRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceRemoveResponse, error) {
+	rsp, err := c.ServiceRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceRemoveResponse(rsp)
+}
+
+// ServiceRemoveWithResponse Remove a service
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
+func (c *ClientWithResponses) ServiceRemoveWithResponse(ctx context.Context, id string, params *ServiceRemoveParams, body ServiceRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceRemoveResponse, error) {
+	rsp, err := c.ServiceRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -36311,13 +38203,26 @@ func (c *ClientWithResponses) ServiceDeployWithResponse(ctx context.Context, id 
 	return ParseServiceDeployResponse(rsp)
 }
 
-// ServiceDestroyWithResponse Destroy service runtime
+// ServiceDestroyWithBodyWithResponse Destroy service runtime
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
-func (c *ClientWithResponses) ServiceDestroyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error) {
-	rsp, err := c.ServiceDestroy(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ServiceDestroyWithBodyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error) {
+	rsp, err := c.ServiceDestroyWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceDestroyResponse(rsp)
+}
+
+// ServiceDestroyWithResponse Destroy service runtime
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
+func (c *ClientWithResponses) ServiceDestroyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, body ServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error) {
+	rsp, err := c.ServiceDestroy(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -36363,26 +38268,52 @@ func (c *ClientWithResponses) ServiceRollbackWithResponse(ctx context.Context, i
 	return ParseServiceRollbackResponse(rsp)
 }
 
-// ServiceStartWithResponse Start a service
+// ServiceStartWithBodyWithResponse Start a service
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
-func (c *ClientWithResponses) ServiceStartWithResponse(ctx context.Context, id string, params *ServiceStartParams, reqEditors ...RequestEditorFn) (*ServiceStartResponse, error) {
-	rsp, err := c.ServiceStart(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ServiceStartWithBodyWithResponse(ctx context.Context, id string, params *ServiceStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceStartResponse, error) {
+	rsp, err := c.ServiceStartWithBody(ctx, id, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseServiceStartResponse(rsp)
 }
 
-// ServiceStopWithResponse Stop a service
+// ServiceStartWithResponse Start a service
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
+func (c *ClientWithResponses) ServiceStartWithResponse(ctx context.Context, id string, params *ServiceStartParams, body ServiceStartJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceStartResponse, error) {
+	rsp, err := c.ServiceStart(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceStartResponse(rsp)
+}
+
+// ServiceStopWithBodyWithResponse Stop a service
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
-func (c *ClientWithResponses) ServiceStopWithResponse(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*ServiceStopResponse, error) {
-	rsp, err := c.ServiceStop(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ServiceStopWithBodyWithResponse(ctx context.Context, id string, params *ServiceStopParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceStopResponse, error) {
+	rsp, err := c.ServiceStopWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceStopResponse(rsp)
+}
+
+// ServiceStopWithResponse Stop a service
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
+func (c *ClientWithResponses) ServiceStopWithResponse(ctx context.Context, id string, params *ServiceStopParams, body ServiceStopJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceStopResponse, error) {
+	rsp, err := c.ServiceStop(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -36480,13 +38411,26 @@ func (c *ClientWithResponses) SoftwarePreparationShowWithResponse(ctx context.Co
 	return ParseSoftwarePreparationShowResponse(rsp)
 }
 
-// SoftwareApplyWithResponse Apply a verified software preparation
+// SoftwareApplyWithBodyWithResponse Apply a verified software preparation
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
-func (c *ClientWithResponses) SoftwareApplyWithResponse(ctx context.Context, task string, params *SoftwareApplyParams, reqEditors ...RequestEditorFn) (*SoftwareApplyResponse, error) {
-	rsp, err := c.SoftwareApply(ctx, task, params, reqEditors...)
+func (c *ClientWithResponses) SoftwareApplyWithBodyWithResponse(ctx context.Context, task string, params *SoftwareApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SoftwareApplyResponse, error) {
+	rsp, err := c.SoftwareApplyWithBody(ctx, task, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSoftwareApplyResponse(rsp)
+}
+
+// SoftwareApplyWithResponse Apply a verified software preparation
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /software/preparations/{task}/apply (the `SoftwareApply` operationId).
+func (c *ClientWithResponses) SoftwareApplyWithResponse(ctx context.Context, task string, params *SoftwareApplyParams, body SoftwareApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*SoftwareApplyResponse, error) {
+	rsp, err := c.SoftwareApply(ctx, task, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -36742,13 +38686,26 @@ func (c *ClientWithResponses) TenantCreateWithResponse(ctx context.Context, para
 	return ParseTenantCreateResponse(rsp)
 }
 
-// TenantDeleteWithResponse Delete a Tenant
+// TenantDeleteWithBodyWithResponse Delete a Tenant
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
-func (c *ClientWithResponses) TenantDeleteWithResponse(ctx context.Context, id string, params *TenantDeleteParams, reqEditors ...RequestEditorFn) (*TenantDeleteResponse, error) {
-	rsp, err := c.TenantDelete(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) TenantDeleteWithBodyWithResponse(ctx context.Context, id string, params *TenantDeleteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TenantDeleteResponse, error) {
+	rsp, err := c.TenantDeleteWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTenantDeleteResponse(rsp)
+}
+
+// TenantDeleteWithResponse Delete a Tenant
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
+func (c *ClientWithResponses) TenantDeleteWithResponse(ctx context.Context, id string, params *TenantDeleteParams, body TenantDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantDeleteResponse, error) {
+	rsp, err := c.TenantDelete(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -36859,13 +38816,26 @@ func (c *ClientWithResponses) VolumeCreateWithResponse(ctx context.Context, para
 	return ParseVolumeCreateResponse(rsp)
 }
 
-// VolumeRemoveWithResponse Remove an Environment volume
+// VolumeRemoveWithBodyWithResponse Remove an Environment volume
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
-func (c *ClientWithResponses) VolumeRemoveWithResponse(ctx context.Context, id string, params *VolumeRemoveParams, reqEditors ...RequestEditorFn) (*VolumeRemoveResponse, error) {
-	rsp, err := c.VolumeRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) VolumeRemoveWithBodyWithResponse(ctx context.Context, id string, params *VolumeRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VolumeRemoveResponse, error) {
+	rsp, err := c.VolumeRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVolumeRemoveResponse(rsp)
+}
+
+// VolumeRemoveWithResponse Remove an Environment volume
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
+func (c *ClientWithResponses) VolumeRemoveWithResponse(ctx context.Context, id string, params *VolumeRemoveParams, body VolumeRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*VolumeRemoveResponse, error) {
+	rsp, err := c.VolumeRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -36963,13 +38933,26 @@ func (c *ClientWithResponses) ZoneCreateWithResponse(ctx context.Context, params
 	return ParseZoneCreateResponse(rsp)
 }
 
-// ZoneRemoveWithResponse Remove a network zone
+// ZoneRemoveWithBodyWithResponse Remove a network zone
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
-func (c *ClientWithResponses) ZoneRemoveWithResponse(ctx context.Context, id string, params *ZoneRemoveParams, reqEditors ...RequestEditorFn) (*ZoneRemoveResponse, error) {
-	rsp, err := c.ZoneRemove(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ZoneRemoveWithBodyWithResponse(ctx context.Context, id string, params *ZoneRemoveParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZoneRemoveResponse, error) {
+	rsp, err := c.ZoneRemoveWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseZoneRemoveResponse(rsp)
+}
+
+// ZoneRemoveWithResponse Remove a network zone
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
+func (c *ClientWithResponses) ZoneRemoveWithResponse(ctx context.Context, id string, params *ZoneRemoveParams, body ZoneRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ZoneRemoveResponse, error) {
+	rsp, err := c.ZoneRemove(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -37681,12 +39664,12 @@ func ParseBackingServiceCreateResponse(rsp *http.Response) (*BackingServiceCreat
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest BackingServiceCreated
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON201 = &dest
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
@@ -37698,8 +39681,8 @@ func ParseBackingServiceCreateResponse(rsp *http.Response) (*BackingServiceCreat
 	}
 
 	switch {
-	case rsp.StatusCode == 201:
-		var headers BackingServiceCreateResponse201Headers
+	case rsp.StatusCode == 202:
+		var headers BackingServiceCreateResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -37707,7 +39690,7 @@ func ParseBackingServiceCreateResponse(rsp *http.Response) (*BackingServiceCreat
 			}
 			headers.ContentType = &value
 		}
-		response.Headers201 = &headers
+		response.Headers202 = &headers
 	}
 
 	return response, nil
@@ -38037,12 +40020,12 @@ func ParseComponentConfigSetResponse(rsp *http.Response) (*ComponentConfigSetRes
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Error
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.ApplicationproblemJSONDefault = &dest
+		response.JSON202 = &dest
 
 	}
 
@@ -38813,12 +40796,12 @@ func ParseEntryCreateResponse(rsp *http.Response) (*EntryCreateResponse, error) 
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Entry
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON201 = &dest
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
@@ -38830,8 +40813,8 @@ func ParseEntryCreateResponse(rsp *http.Response) (*EntryCreateResponse, error) 
 	}
 
 	switch {
-	case rsp.StatusCode == 201:
-		var headers EntryCreateResponse201Headers
+	case rsp.StatusCode == 202:
+		var headers EntryCreateResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -38839,7 +40822,7 @@ func ParseEntryCreateResponse(rsp *http.Response) (*EntryCreateResponse, error) 
 			}
 			headers.ContentType = &value
 		}
-		response.Headers201 = &headers
+		response.Headers202 = &headers
 	}
 
 	return response, nil
@@ -38860,7 +40843,7 @@ func ParseEntryBulkUpsertResponse(rsp *http.Response) (*EntryBulkUpsertResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest EntryBulkUpsertResult
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -38971,12 +40954,12 @@ func ParseEntryEditResponse(rsp *http.Response) (*EntryEditResponse, error) {
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Entry
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON200 = &dest
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
@@ -38988,8 +40971,8 @@ func ParseEntryEditResponse(rsp *http.Response) (*EntryEditResponse, error) {
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		var headers EntryEditResponse200Headers
+	case rsp.StatusCode == 202:
+		var headers EntryEditResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -38997,7 +40980,7 @@ func ParseEntryEditResponse(rsp *http.Response) (*EntryEditResponse, error) {
 			}
 			headers.ContentType = &value
 		}
-		response.Headers200 = &headers
+		response.Headers202 = &headers
 	}
 
 	return response, nil
@@ -40285,7 +42268,7 @@ func ParseImageFetchResponse(rsp *http.Response) (*ImageFetchResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest ImageFetchAccepted
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -40693,7 +42676,7 @@ func ParseReleaseGroupRemoveResponse(rsp *http.Response) (*ReleaseGroupRemoveRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest ReleaseGroupMutationAccepted
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -40818,7 +42801,7 @@ func ParseReleaseGroupDeployResponse(rsp *http.Response) (*ReleaseGroupDeployRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest ReleaseGroupTaskAccepted
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -40864,7 +42847,7 @@ func ParseReleaseGroupRollbackResponse(rsp *http.Response) (*ReleaseGroupRollbac
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest ReleaseGroupTaskAccepted
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -41042,7 +43025,7 @@ func ParseRouteCreateResponse(rsp *http.Response) (*RouteCreateResponse, error) 
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest RouteTaskAccepted
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -41246,7 +43229,7 @@ func ParseRouteEditResponse(rsp *http.Response) (*RouteEditResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest RouteTaskAccepted
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -42424,7 +44407,7 @@ func ParseServiceDeployResponse(rsp *http.Response) (*ServiceDeployResponse, err
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest ReleaseTaskAccepted
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -42542,7 +44525,7 @@ func ParseServiceRollbackResponse(rsp *http.Response) (*ServiceRollbackResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest ReleaseTaskAccepted
+		var dest TaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -43641,15 +45624,14 @@ func ParseVolumeCreateResponse(rsp *http.Response) (*VolumeCreateResponse, error
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
 		var dest struct {
 			TaskId string `json:"task_id"`
-			Volume Volume `json:"volume"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON201 = &dest
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
@@ -43661,8 +45643,8 @@ func ParseVolumeCreateResponse(rsp *http.Response) (*VolumeCreateResponse, error
 	}
 
 	switch {
-	case rsp.StatusCode == 201:
-		var headers VolumeCreateResponse201Headers
+	case rsp.StatusCode == 202:
+		var headers VolumeCreateResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -43670,7 +45652,7 @@ func ParseVolumeCreateResponse(rsp *http.Response) (*VolumeCreateResponse, error
 			}
 			headers.ContentType = &value
 		}
-		response.Headers201 = &headers
+		response.Headers202 = &headers
 	}
 
 	return response, nil
@@ -43771,15 +45753,14 @@ func ParseVolumeEditResponse(rsp *http.Response) (*VolumeEditResponse, error) {
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
 		var dest struct {
 			TaskId string `json:"task_id"`
-			Volume Volume `json:"volume"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON200 = &dest
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
@@ -43791,8 +45772,8 @@ func ParseVolumeEditResponse(rsp *http.Response) (*VolumeEditResponse, error) {
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		var headers VolumeEditResponse200Headers
+	case rsp.StatusCode == 202:
+		var headers VolumeEditResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -43800,7 +45781,7 @@ func ParseVolumeEditResponse(rsp *http.Response) (*VolumeEditResponse, error) {
 			}
 			headers.ContentType = &value
 		}
-		response.Headers200 = &headers
+		response.Headers202 = &headers
 	}
 
 	return response, nil

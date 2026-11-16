@@ -1,14 +1,11 @@
 package operations
 
 import (
-	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"net/http"
 	"sort"
 )
 
@@ -22,6 +19,7 @@ type entryBulkUpsertInput struct {
 	entries       []entryBulkPair
 	exposure      []string
 	secret        bool
+	after         []string
 }
 
 func prepareEntryBulkUpsert(request apiTypes.EntryBulkUpsertRequest) (entryBulkUpsertInput, error) {
@@ -83,21 +81,6 @@ func prepareEntryBulkUpsert(request apiTypes.EntryBulkUpsertRequest) (entryBulkU
 		entries:       entries,
 		exposure:      exposure,
 		secret:        request.Secret,
-	}, nil
-}
-
-func entryBulkUpsertResponse(changes []entryBulkChange, taskID string) (idempotencyrecord.IdempotencyResponse, error) {
-	entries := make([]apiTypes.Entry, len(changes))
-	for index, change := range changes {
-		entries[index] = entryCreationResponse(change.record.Entry)
-	}
-	body, err := json.Marshal(apiTypes.EntryBulkUpsertResult{TaskID: taskID, Entries: entries})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	return idempotencyrecord.IdempotencyResponse{
-		Status:      http.StatusAccepted,
-		ContentKind: "application/json",
-		Body:        body,
+		after:         append([]string(nil), request.After...),
 	}, nil
 }

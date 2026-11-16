@@ -11,8 +11,9 @@ import {
 import { useStore } from "@/lib/store";
 import { coreDNSConfigInput } from "./core-dns-config";
 
-// DNS changes have their own Task and must finish before presenting the
-// resource's existing removal confirmation. Cancelling keeps both resources.
+// DNS changes have their own Task. Operators may finish them here or choose
+// an existing prerequisite in the resource removal review; execution still
+// requires the native DNS-reference guard to pass.
 export function DNSProtectedRemoval({
   open,
   onOpenChange,
@@ -113,6 +114,17 @@ export function DNSProtectedRemoval({
               {error}
             </p>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setReleased(true)}
+          >
+            Choose removal prerequisites
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Continue without changing DNS to queue removal after another Task.
+            Removal still requires these records to be removed before execution.
+          </p>
         </div>
       }
       onDispatch={async () => {

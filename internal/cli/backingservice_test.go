@@ -47,8 +47,8 @@ func TestBackingServiceCreateSendsValkeyAuthentication(t *testing.T) {
 		http.MethodPost,
 		"/api/v1/backing-services",
 		`{"adapter":"valkey","adapter_version":"9","authentication":"password","name":"Shared Valkey","network_pool":"10.20.0.0/16","slug":"shared-valkey","zone":{"internal":true,"name":"data","subnet":"10.20.1.0/24"}}`,
-		http.StatusCreated,
-		`{"backing_service":{"authentication":"password","backing_network_id":"net_1","environment_id":"env_1","project_id":"prj_1","service_id":"svc_1"},"task_id":"task_1"}`,
+		http.StatusAccepted,
+		`{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`,
 	)
 	defer server.Close()
 
@@ -67,7 +67,7 @@ func TestBackingServiceCreateSendsValkeyAuthentication(t *testing.T) {
 		"--zone-subnet", "10.20.1.0/24",
 		"--zone-internal",
 	)
-	if want := "\"authentication\": \"password\""; !strings.Contains(output, want) {
+	if want := "\"task_id\": \"task_01ARZ3NDEKTSV4RRFFQ69G5FAV\""; !strings.Contains(output, want) {
 		t.Fatalf("output = %q, want %q", output, want)
 	}
 }

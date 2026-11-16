@@ -1,3 +1,4 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { BackingCreationRuntimeFields } from "@/features/backing-service/creation-runtime-fields";
 import { CreationButton } from "@/components/common/creation-button";
 import { BackingServicesTable } from "@/features/backing-service/backing-services-table";
@@ -89,6 +90,8 @@ export default function PlatformBackingServicesPage() {
   const [zoneSubnet, setZoneSubnet] = useState("10.200.20.0/24");
   const [zoneInternal, setZoneInternal] = useState(true);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [memory, setMemory] = useState("");
   const [cpus, setCpus] = useState("");
@@ -139,7 +142,10 @@ export default function PlatformBackingServicesPage() {
     try {
       if (!createFields.image) throw new Error("Select a container image.");
       const selectedImage =
-        adapter !== "custom" && imagePattern && createFields.image
+        after.length === 0 &&
+        adapter !== "custom" &&
+        imagePattern &&
+        createFields.image
           ? managedUpdateReference(
               createFields.image,
               (await listImages()).images,
@@ -147,6 +153,7 @@ export default function PlatformBackingServicesPage() {
             )
           : createFields.image;
       await store.addBackingProject({
+        after,
         slug: slug.trim(),
         name: name.trim(),
         description: description.trim() || undefined,
@@ -171,6 +178,7 @@ export default function PlatformBackingServicesPage() {
         },
       });
       setCreateOpen(false);
+      setAfter([]);
       resetBackingIdentity();
       setDescription("");
       setImage("");
@@ -461,6 +469,11 @@ export default function PlatformBackingServicesPage() {
             </p>
           )}
         </div>
+        <TaskRunAfterSelector
+          value={after}
+          onChange={setAfter}
+          onBusyChange={setAfterLoading}
+        />
         <DialogFooter>
           <Button variant="outline" onClick={() => setCreateOpen(false)}>
             Cancel
@@ -468,6 +481,7 @@ export default function PlatformBackingServicesPage() {
           <Button
             disabled={
               creating ||
+              afterLoading ||
               !catalogAdapter ||
               (adapter === "custom" && !!hookError) ||
               !createFields ||

@@ -4,8 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"time"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -14,6 +21,7 @@ import (
 )
 
 type EtcdRepository struct {
+	accepted    *acceptedaction.Submitter
 	journal     *etcdinfra.HierarchyDeletionRepository
 	idempotency *etcdinfra.IdempotencyRepository
 	coordinator *requestidempotency.Coordinator
@@ -25,12 +33,13 @@ func NewEtcdRepository(
 	idempotency *etcdinfra.IdempotencyRepository,
 	coordinator *requestidempotency.Coordinator,
 	clock Clock,
+	accepted *acceptedaction.Submitter,
 ) (*EtcdRepository, error) {
-	if journal == nil || idempotency == nil || coordinator == nil || clock == nil {
+	if journal == nil || idempotency == nil || coordinator == nil || clock == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "hierarchy deletion etcd adapter dependencies are required")
 	}
 	return &EtcdRepository{
-		journal: journal, idempotency: idempotency, coordinator: coordinator, clock: clock,
+		journal: journal, idempotency: idempotency, coordinator: coordinator, clock: clock, accepted: accepted,
 	}, nil
 }
 
@@ -50,7 +59,9 @@ func (repository *EtcdRepository) ResolveDeletionTarget(
 		return DeletionTargetResolution{}, err
 	}
 	return DeletionTargetResolution{
-		TargetKind: TargetKind(resolved.TargetKind), ScopeKind: scopeKind, ScopeID: resolved.ScopeID,
+		TargetKind: TargetKind(
+			resolved.TargetKind,
+		), ScopeKind: scopeKind, ScopeID: resolved.ScopeID, TaskScope: resolved.TaskScope, TargetName: resolved.TargetName,
 	}, nil
 }
 
@@ -66,10 +77,7 @@ func (repository *EtcdRepository) ResolveTargetKind(
 	return resolved.TargetKind, nil
 }
 
-func (repository *EtcdRepository) BeginDeletion(
-	ctx context.Context,
-	begin BeginDeletion,
-) (BeginResult, error) {
+func (repository *EtcdRepository) BeginDeletion(ctx context.Context, begin BeginDeletion) (BeginResult, error) {
 	protected, marker, err := repository.protectBegin(ctx, begin)
 	if err != nil {
 		return BeginResult{}, err
@@ -77,63 +85,103 @@ func (repository *EtcdRepository) BeginDeletion(
 	defer protected.Destroy()
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	request, err := replayRequestFromBegin(begin)
+	task := workexecution.Task{
+		ID:         begin.TaskIDCandidate,
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionRemove,
+		Scope:      begin.TaskScope,
+		TargetID:   begin.TargetID,
+		TargetName: begin.TargetName,
+		After:      append([]string(nil), begin.After...),
+		CreatedAt:  begin.CreatedAt,
+		UpdatedAt:  begin.CreatedAt,
+		Deadline:   begin.DeadlineAt,
+	}
+	input := acceptedDeletion{OperationID: begin.OperationID, TargetKind: begin.TargetKind, TargetID: begin.TargetID,
+		IdempotencyHash: idempotencyKeyHash(begin.IdempotencyKey), Locator: marker.Locator}
+	response, err := acceptedaction.Submit(
+		ctx,
+		repository.accepted,
+		acceptedaction.Submission{Task: task, Kind: "hierarchy-remove",
+			Locator: marker.Locator, ReplayTarget: marker.ReplayTarget, Intent: marker.Intent, Evidence: protected},
+		input,
+	)
 	if err != nil {
 		return BeginResult{}, err
 	}
-	if replayed, found, resolveErr := repository.resolveReplay(ctx, request, protected, &marker.Locator, false); resolveErr != nil {
-		return BeginResult{}, resolveErr
-	} else if found {
-		return replayed, nil
+	var accepted struct {
+		TaskID string `json:"task_id"`
 	}
-	if replayed, found, resolveErr := repository.resolveReplayAfterMiss(
-		ctx, request, protected, marker.Locator,
-	); resolveErr != nil {
-		return BeginResult{}, resolveErr
-	} else if found {
-		return replayed, nil
+	if json.Unmarshal(response.Body, &accepted) != nil || accepted.TaskID == "" {
+		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy removal acceptance response is invalid")
 	}
-	created, err := repository.journal.Begin(ctx, etcdinfra.HierarchyDeletionBegin{
-		OperationID:   begin.OperationID,
-		OperationKind: hierarchydeletion.HierarchyDeletionOperationKind(begin.OperationKind),
-		TargetKind:    hierarchydeletion.HierarchyDeletionTargetKind(begin.TargetKind), TargetID: begin.TargetID,
-		TaskID: begin.TaskIDCandidate, IdempotencyHash: idempotencyKeyHash(begin.IdempotencyKey),
-		Marker: marker, CreatedAt: begin.CreatedAt, DeadlineAt: begin.DeadlineAt,
-	})
+	return BeginResult{
+		Operation: Operation{ID: begin.OperationID, TaskID: accepted.TaskID},
+		Existing:  accepted.TaskID != begin.TaskIDCandidate,
+	}, nil
+}
+
+type acceptedDeletion struct {
+	OperationID     string
+	TargetKind      TargetKind
+	TargetID        string
+	IdempotencyHash string
+	Locator         idempotencyrecord.IdempotencyLocator
+}
+
+func (repository *EtcdRepository) AcceptedPreparations() []taskdependencies.Registration {
+	result := make([]taskdependencies.Registration, 0, 3)
+	for _, kind := range []ids.Kind{ids.KindTenant, ids.KindProject, ids.KindEnvironment} {
+		result = append(
+			result,
+			acceptedaction.Registration(
+				repository.accepted,
+				"hierarchy-remove",
+				workexecution.ActionRemove,
+				kind,
+				repository.prepareAcceptedRemoval,
+			),
+		)
+	}
+	return result
+}
+
+func (repository *EtcdRepository) prepareAcceptedRemoval(
+	ctx context.Context,
+	snapshot workqueue.TaskSnapshot,
+	_ int64,
+	at time.Time,
+	input acceptedDeletion,
+) (taskdependencies.Prepared, error) {
+	task := snapshot.Task
+	if input.TargetID != task.TargetID {
+		return taskdependencies.Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy removal target differs from its accepted request",
+		)
+	}
+	capture, err := repository.journal.PrepareCapture(ctx, etcdinfra.HierarchyDeletionCapture{
+		OperationID: input.OperationID, OperationKind: hierarchydeletion.HierarchyDeletionOperationKind(operationForTarget(input.TargetKind)),
+		TargetKind: hierarchydeletion.HierarchyDeletionTargetKind(
+			input.TargetKind,
+		), TargetID: input.TargetID, TaskID: task.ID,
+		TaskCreatedAt: task.CreatedAt, IdempotencyHash: input.IdempotencyHash, Locator: input.Locator, CreatedAt: at, DeadlineAt: task.Deadline})
 	if err != nil {
-		if !isUnknownBeginError(err) {
-			return BeginResult{}, err
-		}
-		if replayed, found, resolveErr := repository.resolveReplay(ctx, request, protected, &marker.Locator, false); resolveErr != nil {
-			return BeginResult{}, resolveErr
-		} else if found {
-			return replayed, nil
-		}
-		if replayed, found, resolveErr := repository.resolveReplayAfterMiss(
-			ctx, request, protected, marker.Locator,
-		); resolveErr != nil {
-			return BeginResult{}, resolveErr
-		} else if found {
-			return replayed, nil
-		}
-		return BeginResult{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	if !created.Existing {
-		return BeginResult{Operation: operationFromEtcd(created.Operation), Existing: false}, nil
+	if capture.Scope != task.Scope {
+		return taskdependencies.Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy ownership changed after removal was accepted",
+		)
 	}
-	if replayed, found, resolveErr := repository.resolveReplay(ctx, request, protected, &marker.Locator, false); resolveErr != nil {
-		return BeginResult{}, resolveErr
-	} else if found {
-		return replayed, nil
-	}
-	if replayed, found, resolveErr := repository.resolveReplayAfterMiss(
-		ctx, request, protected, marker.Locator,
-	); resolveErr != nil {
-		return BeginResult{}, resolveErr
-	} else if found {
-		return replayed, nil
-	}
-	return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion publication has no replay index")
+	task.Intent = capture.Intent
+	task.UpdatedAt = at
+	return taskdependencies.Prepared{Task: task, Staged: true, Authority: capture.Authority}, nil
+}
+
+func (service *Service) AcceptedPreparations() []taskdependencies.Registration {
+	return append([]taskdependencies.Registration(nil), service.preparations...)
 }
 
 func (repository *EtcdRepository) OperationByTask(

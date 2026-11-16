@@ -1,6 +1,7 @@
 package entry
 
 type RemoveRequest struct {
+	After          []string
 	EntryID        string
 	IdempotencyKey string
 }

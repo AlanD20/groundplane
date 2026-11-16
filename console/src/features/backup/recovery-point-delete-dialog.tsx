@@ -38,6 +38,7 @@ export function RecoveryPointDeleteDialog({
       abortable={false}
       confirmText={point.id}
       startLabel="Permanently delete archive"
+      runAfter
       review={
         <dl className="grid gap-3 rounded-lg border border-border bg-surface p-4 text-sm">
           <div>
@@ -63,8 +64,13 @@ export function RecoveryPointDeleteDialog({
           </div>
         </dl>
       }
-      onDispatch={() =>
-        store.deleteRecoveryPoint(env.id, point.id, idempotencyKey.current)
+      onDispatch={(after) =>
+        store.deleteRecoveryPoint(
+          env.id,
+          point.id,
+          idempotencyKey.current,
+          after,
+        )
       }
       onSettled={() => store.loadRecoveryPoints(env.id)}
     />

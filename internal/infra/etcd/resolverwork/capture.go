@@ -155,7 +155,10 @@ func matchesWork(
 		*item.Input != reference ||
 		task.Intent != reference ||
 		task.Scope != (workexecution.Scope{}) ||
-		!task.CreatedAt.Equal(input.CreatedAt) ||
+		input.CreatedAt.Before(task.CreatedAt) ||
+		input.CreatedAt.After(task.UpdatedAt) ||
+		!item.Deadline.Equal(input.Deadline) ||
+		item.Deadline.After(task.Deadline) ||
 		!item.CreatedAt.Equal(input.CreatedAt) ||
 		task.ExpectedItems != 1 ||
 		!task.PublicationComplete ||

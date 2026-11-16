@@ -24,14 +24,32 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+type AcceptedPreparationCollector interface {
+	CollectAcceptedPreparation(context.Context, string, time.Time) (bool, error)
+}
+
+type BackingCreationStageCollector interface {
+	CleanupBackingServiceCreationStages(context.Context, time.Time, int) (int, error)
+}
+
+func (collector *Collector) ConfigureBackingCreationStages(stages BackingCreationStageCollector) {
+	collector.backingDrafts = stages
+}
+
+func (collector *Collector) ConfigureAcceptedPreparations(preparations AcceptedPreparationCollector) {
+	collector.preparations = preparations
+}
+
 type Collector struct {
-	queue      *workqueue.Repository
-	connectors *connectorchecks.Repository
-	backings   *backingchecks.Repository
-	dns        *dnschecks.Repository
-	edge       *edgechecks.Repository
-	runners    *runnerchecks.Repository
-	updates    interface {
+	backingDrafts BackingCreationStageCollector
+	preparations  AcceptedPreparationCollector
+	queue         *workqueue.Repository
+	connectors    *connectorchecks.Repository
+	backings      *backingchecks.Repository
+	dns           *dnschecks.Repository
+	edge          *edgechecks.Repository
+	runners       *runnerchecks.Repository
+	updates       interface {
 		PruneInput(context.Context, string, time.Time) (bool, error)
 	}
 	images      *imageoperations.Repository
@@ -105,6 +123,25 @@ func (collector *Collector) Collect(ctx context.Context, taskID string, at time.
 	task, revision, err := collector.queue.ReadTask(ctx, taskID, 0)
 	if err != nil {
 		return false, err
+	}
+	if task.Task.AcceptedIntent != nil && task.Task.Intent == (workexecution.Input{}) && task.Task.ExpectedItems == 0 {
+		if task.Task.CollectionStartedAt == nil {
+			change, err := workqueue.PrepareCollection(task, at)
+			if err != nil {
+				return false, err
+			}
+			result, err := collector.queue.Commit(ctx, change)
+			return result.Succeeded, err
+		}
+		change, err := workqueue.PrepareTaskCollection(task)
+		if err != nil {
+			return false, err
+		}
+		change.Mutations = append(change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskEventsKey(taskID)},
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: executiondiagnostics.TaskExpiryKey(taskID)})
+		result, err := collector.queue.Commit(ctx, change)
+		return result.Succeeded, err
 	}
 	if task.Task.Action == workexecution.ActionApply && task.Task.Scope.EnvironmentID != "" &&
 		task.Task.TargetID == task.Task.Scope.EnvironmentID {

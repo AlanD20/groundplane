@@ -42,6 +42,7 @@ func (c *Client) PrepareSoftware(
 			Selection:  generated.SoftwarePreparationRequestSelection(input.Selection),
 			SourceKind: generated.SoftwarePreparationRequestSourceKind(input.SourceKind),
 			Ref:        input.Ref,
+			After:      optionalServiceStrings(input.After),
 		},
 	)
 	if err != nil {
@@ -53,7 +54,7 @@ func (c *Client) PrepareSoftware(
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
-func (c *Client) ApplySoftware(ctx context.Context, taskID, key string) (apiTypes.TaskAccepted, error) {
+func (c *Client) ApplySoftware(ctx context.Context, taskID, key string, after []string) (apiTypes.TaskAccepted, error) {
 	if err := ids.Validate(ids.KindTask, taskID); err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
@@ -66,7 +67,12 @@ func (c *Client) ApplySoftware(ctx context.Context, taskID, key string) (apiType
 		return apiTypes.TaskAccepted{}, err
 	}
 	path := "/api/v1/software/preparations/" + taskID + "/apply"
-	response, err := client.SoftwareApplyWithResponse(ctx, taskID, &generated.SoftwareApplyParams{IdempotencyKey: key})
+	response, err := client.SoftwareApplyWithResponse(
+		ctx,
+		taskID,
+		&generated.SoftwareApplyParams{IdempotencyKey: key},
+		generated.SoftwareApplyJSONRequestBody{After: optionalServiceStrings(after)},
+	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
 	}

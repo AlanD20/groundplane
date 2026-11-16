@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -76,7 +76,6 @@ type PublishAuthoredInput struct {
 	AttachInputGenerations   []etcd.BlueprintAttachInputGenerationPublication
 	DetachInputs             []attachremoval.BlueprintInput
 	RetainedAttachConditions []keyvalue.Condition
-	Evidence                 Evidence
 	Locator                  idempotency.IdempotencyLocator
 	Parent                   workexecution.Task
 	Graph                    blueprintunits.CapturedGraph
@@ -84,102 +83,77 @@ type PublishAuthoredInput struct {
 	ScriptPublication        etcd.BlueprintScriptPublication
 }
 
-type AuthoredPublicationIdempotency interface {
-	ResolveExisting(
-		context.Context,
-		idempotency.IdempotencyLocator,
-		Evidence,
-	) (requestidempotency.Resolution, bool, error)
-	ResolveUnknown(
-		context.Context,
-		idempotency.IdempotencyLocator,
-		Evidence,
-		error,
-	) (requestidempotency.Resolution, error)
-}
-
-func PublishAuthored(
+// PrepareAuthored compiles the desired-head transaction without publishing a
+// second Task or replay marker. Whole-Task preparation promotes the original
+// accepted identity together with this exact authority.
+func PrepareAuthored(
 	ctx context.Context,
 	repository PublicationRepository,
-	idempotencyCoordinator AuthoredPublicationIdempotency,
 	input PublishAuthoredInput,
-) (idempotency.IdempotencyResponse, error) {
-	if ctx == nil || repository == nil || idempotencyCoordinator == nil {
-		return idempotency.IdempotencyResponse{}, errs.New(
-			errs.KindInternal, "Blueprint authored publication is not configured",
+) (taskdependencies.Prepared, error) {
+	if ctx == nil || repository == nil {
+		return taskdependencies.Prepared{}, errs.New(
+			errs.KindInternal,
+			"Blueprint authored preparation is not configured",
 		)
 	}
-	claim, desired, err := input.Staged.consumeAuthored(
-		input.Environment.Record.ID, input.Parent.ID, input.Locator,
-	)
+	claim, desired, err := input.Staged.consumeAuthored(input.Environment.Record.ID, input.Parent.ID, input.Locator)
 	if err != nil {
 		if claim.DescriptorID != "" {
-			return idempotency.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, err)
+			err = abandonKnownFailure(ctx, repository, claim, err)
 		}
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: input.Parent.ID})
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, abandonKnownFailure(
-			ctx, repository, claim, errs.Wrap(errs.KindInternal, err),
+		return taskdependencies.Prepared{}, abandonKnownFailure(
+			ctx,
+			repository,
+			claim,
+			errs.Wrap(errs.KindInternal, err),
 		)
 	}
 	defer clear(responseBody)
-	response := idempotency.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: append([]byte(nil), responseBody...),
-	}
 	marker := idempotency.IdempotencyMarker{
 		Kind:    idempotency.IdempotencyMarkerTask,
 		State:   idempotency.IdempotencyMarkerPending,
-		Locator: input.Locator, Intent: claim.Intent, Response: response,
-		TaskID: input.Parent.ID, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
-	}
-	result, publicationErr := repository.PublishEnvironmentBlueprintAuthoredRevision(
-		ctx, etcd.BlueprintAuthoredPublication{
-			Project: input.Project, Environment: input.Environment,
-			ExpectedHeadRevision: input.ExpectedHeadRevision,
-			Claim:                claim, DesiredInput: desired, OwnedIdentities: input.OwnedIdentities,
-			ZoneReservations:         input.ZoneReservations,
-			PrerequisiteAuthority:    input.PrerequisiteAuthority,
-			AttachInputGenerations:   input.AttachInputGenerations,
-			DetachInputs:             input.DetachInputs,
-			RetainedAttachConditions: input.RetainedAttachConditions,
-			Parent:                   input.Parent, Graph: input.Graph, Baseline: input.Baseline, Marker: marker,
-			ScriptPublication: input.ScriptPublication,
+		Locator: input.Locator,
+		Intent:  claim.Intent,
+		Response: idempotency.IdempotencyResponse{
+			Status:      http.StatusAccepted,
+			ContentKind: "application/json",
+			Body:        responseBody,
 		},
-	)
-	defer keyvalue.ClearValues(result.FailureReads)
-	var resolution requestidempotency.Resolution
-	if publicationErr != nil {
-		if !unknownOutcome(publicationErr) {
-			return idempotency.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, publicationErr)
-		}
-		resolution, err = idempotencyCoordinator.ResolveUnknown(ctx, input.Locator, input.Evidence, publicationErr)
-	} else if result.Succeeded {
-		return cloneResponse(response), nil
-	} else {
-		// A failed comparison is known not to have committed. Read the request
-		// marker to distinguish a concurrent replay from changed resource state;
-		// do not misclassify it as an unknown transport outcome.
-		var found bool
-		resolution, found, err = idempotencyCoordinator.ResolveExisting(ctx, input.Locator, input.Evidence)
-		if err == nil && !found {
-			return idempotency.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim,
-				errs.New(errs.KindStateConflict, "Blueprint sources changed before Apply was accepted; submit the updated Blueprint"))
-		}
+		TaskID:    input.Parent.ID,
+		CreatedAt: claim.CreatedAt,
+		UpdatedAt: claim.CreatedAt,
 	}
+	capture, err := repository.PrepareEnvironmentBlueprintAuthoredRevision(ctx, etcd.BlueprintAuthoredPublication{
+		Project: input.Project, Environment: input.Environment, ExpectedHeadRevision: input.ExpectedHeadRevision,
+		Claim: claim, DesiredInput: desired, OwnedIdentities: input.OwnedIdentities, ZoneReservations: input.ZoneReservations,
+		PrerequisiteAuthority: input.PrerequisiteAuthority, AttachInputGenerations: input.AttachInputGenerations,
+		DetachInputs: input.DetachInputs, RetainedAttachConditions: input.RetainedAttachConditions, Parent: input.Parent,
+		Graph: input.Graph, Baseline: input.Baseline, Marker: marker, ScriptPublication: input.ScriptPublication})
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, abandonKnownFailure(ctx, repository, claim, err)
 	}
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return cloneResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		return cloneResponse(resolution.Response), nil
-	default:
-		return idempotency.IdempotencyResponse{}, errs.New(
-			errs.KindInternal, "Blueprint authored publication resolution is invalid",
-		)
-	}
+	return taskdependencies.Prepared{
+		Task:      input.Parent,
+		Graph:     input.Graph.Items,
+		Staged:    true,
+		Authority: capture.Authority,
+		Finalize: func(finalCtx context.Context, committed bool) error {
+			var cleanupErr error
+			if capture.Finalize != nil {
+				cleanupErr = capture.Finalize(finalCtx, committed)
+			}
+			if !committed {
+				err := repository.AbandonEnvironmentBlueprintStage(finalCtx, claim)
+				if kind, _ := errs.KindOf(err); err != nil && kind != errs.KindStateConflict {
+					cleanupErr = errs.WrapJoined(errs.KindInternal, cleanupErr, err)
+				}
+			}
+			return cleanupErr
+		},
+	}, nil
 }

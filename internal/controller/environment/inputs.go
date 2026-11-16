@@ -8,6 +8,7 @@ import (
 )
 
 type CreateEnvironmentInput struct {
+	After       []string
 	ProjectID   string
 	Name        string
 	NetworkPool string

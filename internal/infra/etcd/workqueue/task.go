@@ -1,9 +1,11 @@
 package workqueue
 
 import (
+	"slices"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/acceptedactions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -39,6 +41,9 @@ func DecodeTask(value []byte) (workexecution.Task, error) {
 // PrepareTask accepts only the small public action. Its intent, owner and request
 // replay are published in the same transaction by the initiating operation.
 func PrepareTask(task workexecution.Task, marker idempotency.IdempotencyMarker) (Change, error) {
+	if len(task.After) != 0 && !task.PendingPreparation() {
+		return Change{}, invalid("Run after must be accepted before execution inputs are captured")
+	}
 	if task.PublicationComplete || task.Progress.Total() != 0 || task.Outcome != "" ||
 		task.FirstFailure != nil || task.FinishedAt != nil || task.Stop != nil || task.Activation != nil || !task.UpdatedAt.Equal(task.CreatedAt) {
 		return Change{}, invalid("new task must contain an unpublished captured intent")
@@ -116,6 +121,15 @@ func taskChange(snapshot TaskSnapshot, next workexecution.Task) (Change, error) 
 	if snapshot.Revision <= 0 || snapshot.Task.ID != next.ID {
 		return Change{}, invalid("task update requires matching revisioned identity")
 	}
+	if !slices.Equal(snapshot.Task.After, next.After) ||
+		(snapshot.Task.AcceptedIntent == nil) != (next.AcceptedIntent == nil) ||
+		snapshot.Task.AcceptedIntent != nil && *snapshot.Task.AcceptedIntent != *next.AcceptedIntent {
+		return Change{}, invalid("accepted Task intent and Run after dependencies are immutable")
+	}
+	if snapshot.Task.Intent != next.Intent && (!snapshot.Task.PendingPreparation() ||
+		snapshot.Task.Progress.Total() != 0 || snapshot.Task.PublicationComplete || next.Intent.Validate() != nil) {
+		return Change{}, invalid("Task execution capture can only be published once after preparation")
+	}
 	value, err := EncodeTask(next)
 	if err != nil {
 		return Change{}, err
@@ -146,6 +160,30 @@ func taskChange(snapshot TaskSnapshot, next workexecution.Task) (Change, error) 
 		return Change{}, err
 	}
 	change.Mutations = append(change.Mutations, alerts...)
+	receipt, err := prepareTaskCompletionReceipt(snapshot.Task, next)
+	if err != nil {
+		keyvalue.ClearMutationValues(change.Mutations)
+		return Change{}, err
+	}
+	change.Mutations = append(change.Mutations, receipt.Mutations...)
+	if snapshot.Task.PendingPreparation() && !next.PendingPreparation() {
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{
+				Type:  keyvalue.MutationPut,
+				Key:   acceptedPreparationCleanupKey(next.ID),
+				Value: []byte(next.ID),
+			},
+		)
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: acceptedPreparationWaitKey(next.ID)},
+		)
+		change.Mutations = append(
+			change.Mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: acceptedactions.Prefix(next.ID), Prefix: true},
+		)
+	}
 	return change, nil
 }
 

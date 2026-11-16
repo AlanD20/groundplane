@@ -1,3 +1,6 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
+import { TaskExecution } from "@/features/task/task-execution";
+import { useState } from "react";
 import {
   Check,
   Circle,
@@ -31,6 +34,8 @@ export function ConnectorCheckPanel({
   connectorId?: string;
   getRequest?: () => Promise<ConnectorCheckRequest>;
 }) {
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterBusy, setAfterBusy] = useState(false);
   const check = useConnectorCheck(
     environmentId,
     identity,
@@ -45,25 +50,40 @@ export function ConnectorCheckPanel({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Connection check</h3>
-        {getRequest && (
+        {getRequest && !taskId && (
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={
-              disabled || check.sending || check.active || check.loadingLatest
+              disabled ||
+              afterBusy ||
+              check.sending ||
+              check.active ||
+              check.loadingLatest
             }
-            onClick={() => void check.run(getRequest)}
+            onClick={() => void check.run(getRequest, after)}
           >
             <PlugZap className="size-3.5" />
             {check.sending
               ? "Submitting…"
               : check.active
                 ? "Checking…"
-                : "Test connection"}
+                : check.uncertain
+                  ? "Resolve submission"
+                  : "Test connection"}
           </Button>
         )}
       </div>
+      {getRequest && !taskId && (
+        <fieldset disabled={check.sending || check.active || check.uncertain}>
+          <TaskRunAfterSelector
+            value={after}
+            onChange={setAfter}
+            onBusyChange={setAfterBusy}
+          />
+        </fieldset>
+      )}
       {check.loadingLatest ? (
         <p className="text-xs text-muted-foreground" role="status">
           Loading last saved check…
@@ -77,6 +97,10 @@ export function ConnectorCheckPanel({
         )
       )}
       {check.taskId && <TaskLink taskId={check.taskId} />}
+      {!check.result && check.taskDetail && (
+        <TaskExecution detail={check.taskDetail} />
+      )}
+
       {check.active && !check.error && (
         <p
           className="flex items-center gap-2 text-xs text-muted-foreground"

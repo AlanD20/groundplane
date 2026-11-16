@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -61,13 +60,13 @@ func nativeCustomBackingCreationJourney(t *testing.T, race bool) {
 	if race {
 		f.store.beforeCommit = func(mutations []keyvalue.Mutation) {
 			for _, mutation := range mutations {
-				if !strings.HasPrefix(mutation.Key, "/v1/staging/backing-services/") {
+				if !strings.HasPrefix(mutation.Key, "/v1/execution/tasks/") {
 					continue
 				}
 				f.store.beforeCommit = nil
 				var err error
 				winner, err = service.CreateBackingService(t.Context(), request, "native-custom-create-network-only")
-				if err != nil || winner.Status != 201 {
+				if err != nil || winner.Status != 202 {
 					t.Fatal("competing acceptance did not commit", err)
 				}
 				return
@@ -77,17 +76,14 @@ func nativeCustomBackingCreationJourney(t *testing.T, race bool) {
 	response, err := service.CreateBackingService(t.Context(), request, "native-custom-create-network-only")
 	if race {
 		if !errors.Is(err, errs.New(errs.KindIdempotencyInProgress, "")) || f.store.beforeCommit != nil ||
-			winner.Status != 201 {
+			winner.Status != 202 {
 			t.Fatal("losing stage admission did not resolve the winning acceptance", err)
 		}
 		response = winner
-	} else if err != nil || response.Status != 201 {
+	} else if err != nil || response.Status != 202 {
 		t.Fatal("Custom creation was not accepted", err)
 	}
-	var created api.BackingServiceCreated
-	if err := json.Unmarshal(response.Body, &created); err != nil {
-		t.Fatal(err)
-	}
+	created := nativeBackingCreationResult(t, f, response)
 	backing := created.BackingService
 	project, err := f.blueprint.GetProject(t.Context(), backing.ProjectID)
 	if err != nil || project.Record.Kind != hierarchy.ProjectKindBacking || project.Record.TenantID != "" {
@@ -125,7 +121,7 @@ func nativeCustomBackingCreationJourney(t *testing.T, race bool) {
 	if err := capture.Matches(extended, view.Item.Item); err != nil {
 		t.Fatal("Retry deadline invalidated the unchanged captured input", err)
 	}
-	extended.Deadline = view.Task.Task.Deadline.Add(-time.Second)
+	extended.Deadline = view.Item.Item.Deadline.Add(-time.Second)
 	if capture.Matches(extended, view.Item.Item) == nil {
 		t.Fatal("capture accepted a Task deadline preceding its initial bound")
 	}

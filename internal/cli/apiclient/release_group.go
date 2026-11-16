@@ -124,7 +124,7 @@ func (c *Client) EditReleaseGroup(
 	return decodeReleaseGroupResponse(http.MethodPatch, path, response.Body)
 }
 
-func (c *Client) RemoveReleaseGroup(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RemoveReleaseGroup(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -134,6 +134,7 @@ func (c *Client) RemoveReleaseGroup(ctx context.Context, id string) (apiTypes.Ta
 		ctx,
 		id,
 		&generated.ReleaseGroupRemoveParams{IdempotencyKey: ids.NewULID()},
+		generated.ReleaseGroupRemoveJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)

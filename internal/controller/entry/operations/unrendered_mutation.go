@@ -5,22 +5,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
 func entryMetadataClaim(source etcd.EntryMutationSource, locator idempotency.IdempotencyLocator,
-	intent idempotency.ProtectedIntentRecord, at time.Time,
+	intent idempotency.ProtectedIntentRecord, at time.Time, accepted workqueue.TaskSnapshot,
 ) blueprints.EnvironmentBlueprintStageClaim {
-	taskID := ids.New(ids.KindTask)
+	taskID := accepted.Task.ID
 	return blueprints.EnvironmentBlueprintStageClaim{
 		DescriptorID: strings.TrimPrefix(taskID, "task_"), TaskID: taskID, RevisionID: taskID,
 		EnvironmentID: source.Desired.Record.EnvironmentID, Locator: locator, Intent: intent,
@@ -30,27 +29,39 @@ func entryMetadataClaim(source etcd.EntryMutationSource, locator idempotency.Ide
 	}
 }
 
-func metadataEntryWork(project hierarchy.ProjectRecord, environment hierarchy.EnvironmentRecord,
-	claim blueprints.EnvironmentBlueprintStageClaim, action workexecution.Action, targetID, targetName string,
+func metadataEntryWork(
+	project hierarchy.ProjectRecord,
+	environment hierarchy.EnvironmentRecord,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	action workexecution.Action,
+	targetID, targetName string,
+	accepted workqueue.TaskSnapshot,
+	at time.Time,
 ) (workexecution.Task, workexecution.Item, error) {
 	return taskplanning.NewEntryConfigurationWork(workexecution.Scope{
 		TenantID: project.TenantID, ProjectID: project.ID, EnvironmentID: environment.ID,
-	}, workexecution.Placement{Executor: workexecution.Controller}, claim, action, targetID, targetName)
+	}, workexecution.Placement{Executor: workexecution.Controller}, claim, action, targetID, targetName, accepted, at)
 }
 
-func (service *entryDesiredMutationService) mutateUnrenderedEntry(ctx context.Context,
+func (service *entryDesiredMutationService) prepareUnrenderedEntry(ctx context.Context,
 	request entryDesiredMutationRequest, source etcd.EntryMutationSource,
 	project keyvalue.Versioned[hierarchy.ProjectRecord], environment keyvalue.Versioned[hierarchy.EnvironmentRecord],
-) (idempotency.IdempotencyResponse, error) {
-	claim := entryMetadataClaim(source, request.locator, request.evidence.durable, service.now().UTC())
+) (taskdependencies.Prepared, error) {
+	claim := entryMetadataClaim(
+		source,
+		request.locator,
+		request.evidence.durable,
+		request.accepted.Task.CreatedAt,
+		request.accepted,
+	)
 	next, previous, err := entryDesiredCandidateRecord(environment.Record.ID, source.Entries, request, claim.TaskID)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	if next != nil {
 		if err := service.prepareEntryGeneration(ctx, project.Record.ID, environment.Record.ID,
-			request.desired, *next, claim.CreatedAt); err != nil {
-			return idempotency.IdempotencyResponse{}, err
+			request.desired, *next, request.at); err != nil {
+			return taskdependencies.Prepared{}, err
 		}
 	}
 	targetID, targetName, action := request.entryID, "", workexecution.ActionUpdate
@@ -70,13 +81,22 @@ func (service *entryDesiredMutationService) mutateUnrenderedEntry(ctx context.Co
 			targetName = previous.Entry.Path
 		}
 	}
-	task, item, err := metadataEntryWork(project.Record, environment.Record, claim, action, targetID, targetName)
+	task, item, err := metadataEntryWork(
+		project.Record,
+		environment.Record,
+		claim,
+		action,
+		targetID,
+		targetName,
+		request.accepted,
+		request.at,
+	)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	response, err := entryDesiredResponse(next, task.ID, request.status)
+	response, err := entryTaskResponse(task.ID)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	defer clear(response.Body)
 	replayTarget := idempotency.IdempotencyReplayTarget{Kind: idempotency.IdempotencyReplayTargetEntry, ID: targetID}
@@ -85,36 +105,12 @@ func (service *entryDesiredMutationService) mutateUnrenderedEntry(ctx context.Co
 		Locator: request.locator, Intent: claim.Intent, Response: response, ReplayTarget: &replayTarget,
 		TaskID: task.ID, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
-	result, publicationErr := service.repository.PublishUnrenderedEntryWork(ctx, etcd.EntryMetadataPublication{
+	capture, publicationErr := service.repository.PrepareUnrenderedEntryWork(ctx, etcd.EntryMetadataPublication{
 		Source: source, Records: replaceProjectedEntry(source.Entries, previous, next), Changed: []string{targetID},
-		Task: task, Item: item, Marker: marker, At: claim.CreatedAt,
+		Task: task, Item: item, Marker: marker, At: request.at, Accepted: request.accepted,
 	})
 	if publicationErr != nil {
-		if !isUnknownEntryCreationOutcome(publicationErr) {
-			return idempotency.IdempotencyResponse{}, publicationErr
-		}
-		resolution, err := request.evidence.resolveUnknown(ctx, request.locator, publicationErr)
-		if err != nil {
-			return idempotency.IdempotencyResponse{}, err
-		}
-		return resolvedEntryMetadataResponse(resolution, response)
+		return taskdependencies.Prepared{}, publicationErr
 	}
-	resolution, err := request.evidence.resolveKnown(ctx, result)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	return resolvedEntryMetadataResponse(resolution, response)
-}
-
-func resolvedEntryMetadataResponse(resolution requestidempotency.Resolution,
-	accepted idempotency.IdempotencyResponse,
-) (idempotency.IdempotencyResponse, error) {
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return requestidempotency.CloneResponse(accepted), nil
-	case requestidempotency.ResolutionReplay:
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	default:
-		return idempotency.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry metadata acceptance is unresolved")
-	}
+	return entryCapturePrepared(capture), nil
 }

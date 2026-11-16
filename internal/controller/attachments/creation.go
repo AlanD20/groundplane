@@ -2,141 +2,94 @@ package attachments
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"net/http"
-	"time"
 )
 
-func (service *MutationService) CreateAttach(
-	ctx context.Context,
-	request apiTypes.AttachRequest,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Attach creation context is required",
-		)
-	}
-	normalized, err := normalizeAttachRequest(request)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	for attempt := 0; attempt < maximumAttachMutationTries; attempt++ {
-		response, createErr := service.createAttachOnce(ctx, normalized, idempotencyKey)
-		if createErr == nil {
-			return response, nil
-		}
-		kind, known := errs.KindOf(createErr)
-		retry := known && kind == errs.KindStateConflict
-		retry = retry || normalized.Name == "" && known && kind == errs.KindNameConflict
-		if !retry || attempt == maximumAttachMutationTries-1 {
-			return idempotencyrecord.IdempotencyResponse{}, createErr
-		}
-	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(
-		errs.KindInternal,
-		"Attach creation retry bound was not enforced",
-	)
+type acceptedAttachCreate struct {
+	Request apiTypes.AttachRequest            `json:"request"`
+	Locator idempotency.IdempotencyLocator    `json:"locator"`
+	Intent  idempotency.ProtectedIntentRecord `json:"intent"`
 }
 
-func (service *MutationService) createAttachOnce(
-	ctx context.Context,
-	request apiTypes.AttachRequest,
+func (service *MutationService) CreateAttach(ctx context.Context, request apiTypes.AttachRequest,
 	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
+) (idempotency.IdempotencyResponse, error) {
+	if ctx == nil {
+		return idempotency.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach creation context is required")
+	}
+	request, err := normalizeAttachRequest(request)
+	if err != nil {
+		return idempotency.IdempotencyResponse{}, err
+	}
 	consumer, err := service.repository.GetService(ctx, request.ServiceID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return idempotency.IdempotencyResponse{}, err
 	}
-	environmentID := consumer.Record.EnvironmentID
-	evidence, err := service.idempotency.PrepareCreate(ctx, environmentID, request)
+	environment, err := service.repository.GetEnvironment(ctx, consumer.Record.EnvironmentID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return idempotency.IdempotencyResponse{}, err
+	}
+	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
+	if err != nil {
+		return idempotency.IdempotencyResponse{}, err
+	}
+	evidence, err := service.idempotency.PrepareCreate(ctx, environment.Record.ID, request)
+	if err != nil {
+		return idempotency.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
-	locator := idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
-		Method: http.MethodPost, Route: attachCreationRoute, Key: idempotencyKey,
+	locator := idempotency.IdempotencyLocator{
+		ScopeKind: idempotency.IdempotencyScopeEnvironment,
+		ScopeID:   environment.Record.ID,
+		Method:    http.MethodPost,
+		Route:     attachCreationRoute,
+		Key:       idempotencyKey,
 	}
-	if replay, exists, resolveErr := service.idempotency.ResolveExisting(ctx, locator, evidence); resolveErr != nil {
-		return idempotencyrecord.IdempotencyResponse{}, resolveErr
-	} else if exists {
-		if replay.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	if err != nil {
+		return idempotency.IdempotencyResponse{}, err
+	}
+	if existing {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
+			return idempotency.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Attach creation replay resolution is invalid",
 			)
 		}
-		return requestidempotency.CloneResponse(replay.Response), nil
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
-
-	scope, currentAttaches, adapter, err := service.resolveAttachScope(
-		ctx, consumer, request.BackingServiceID, request.Credential.AttachID, request.GrantAttachIDs,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
+	at := service.now().UTC()
 	name := request.Name
 	if name == "" {
-		existingNames := make(map[string]struct{}, len(currentAttaches))
-		for _, current := range currentAttaches {
-			existingNames[current.Record.Name] = struct{}{}
-		}
-		name, err = suggestAttachName(attachNameLabels{
-			tenant: scope.Tenant.Record.Slug, project: scope.Project.Record.Slug,
-			environment: scope.Environment.Record.Name, service: consumer.Record.Desired.Name,
-		}, existingNames)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
+		name = "New connection"
 	}
-
-	now := service.now().UTC()
-	attachID := ids.New(ids.KindAttach)
-	taskID := ids.New(ids.KindTask)
-	draft, err := service.captureCreateInput(
-		ctx,
-		scope,
-		adapter,
-		attachID,
-		name,
-		taskID,
-		ids.New(ids.KindOperation),
-		now,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer blueprintattachinputs.Clear(&draft)
-	timeout := attachMutationTimeout
-	if draft.Hook.Attach != nil {
-		timeout = max(timeout, int64(draft.Hook.Attach.TimeoutSeconds)+15)
-	}
-	task := workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor,
+	task := workexecution.Task{
+		ID:         ids.New(ids.KindTask),
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionAttach,
+		TargetID:   ids.New(ids.KindAttach),
+		TargetName: name,
 		Scope: workexecution.Scope{
-			TenantID:      scope.Tenant.Record.ID,
-			ProjectID:     scope.Project.Record.ID,
-			EnvironmentID: environmentID,
+			TenantID:      project.Record.TenantID,
+			ProjectID:     project.Record.ID,
+			EnvironmentID: environment.Record.ID,
 		},
-		Action: workexecution.ActionAttach, TargetID: attachID, TargetName: name,
-		Intent: workexecution.Input{
-			ID:     ids.DeriveAt(ids.KindPlan, now, taskID, "request-intent"),
-			SHA256: evidence.durable.CiphertextDigest,
-		},
-		ExpectedItems: 1, CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(timeout) * time.Second)}
-	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task.ID, task.CreatedAt, nil)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		After: append(
+			[]string(nil),
+			request.After...),
+		CreatedAt: at,
+		UpdatedAt: at,
+		Deadline:  at.Add(acceptedaction.QueueTimeout),
 	}
-	result, createErr := service.repository.PublishAttachWork(ctx, etcd.AttachWorkPublication{
-		Task: task, WorkID: ids.DeriveAt(ids.KindWorkItem, now, taskID, "attach"), Scope: scope, Generation: draft, Marker: marker})
-	return service.resolveMutationResult(ctx, locator, evidence, result, createErr, response)
+	return acceptedaction.Submit(ctx, service.accepted, acceptedaction.Submission{Task: task, Kind: "attach-create",
+		Locator: locator, Intent: evidence.durable, Evidence: evidence.candidate},
+		acceptedAttachCreate{Request: request, Locator: locator, Intent: evidence.durable})
 }

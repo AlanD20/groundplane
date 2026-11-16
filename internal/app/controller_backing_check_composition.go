@@ -15,5 +15,5 @@ func newControllerBackingCheckService(dependencies controllerHTTPDependencies) (
 		records, dependencies.authority.idempotency, dependencies.authority.intentCoordinator,
 		dependencies.authority.intentProtector,
 		imagedelivery.SelectionResolver{Images: dependencies.agentRuntime.Registry, Store: dependencies.store},
-		dependencies.agentRuntime.Registry)
+		dependencies.agentRuntime.Registry, dependencies.authority.acceptedActions)
 }

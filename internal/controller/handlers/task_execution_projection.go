@@ -1,17 +1,34 @@
 package handlers
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/taskinspection"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 func executionSummary(value taskinspection.Summary) apiTypes.TaskSummary {
-	return apiTypes.TaskSummary{ID: value.ID, Action: value.Action, TargetID: value.TargetID,
-		TargetName: value.TargetName, ResourceKind: value.ResourceKind, Scope: value.Scope, Actor: value.Actor, Status: value.Status,
-		Counts: apiTypes.TaskCounts(value.Counts), CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
-		Deadline: value.Deadline, FinishedAt: value.FinishedAt, HistoryExpired: value.HistoryExpired,
-		StopRequested: value.StopRequested,
-		Cancel:        apiTypes.TaskActionAvailability{Allowed: value.Cancel.Allowed, Reason: value.Cancel.Reason}}
+	return apiTypes.TaskSummary{
+		PreparationWait:    value.PreparationWait,
+		After:              append([]string(nil), value.After...),
+		PendingPreparation: value.PendingPreparation,
+		Dependencies:       dependencyDecision(value.Dependencies),
+		ID:                 value.ID,
+		Action:             value.Action,
+		TargetID:           value.TargetID,
+		TargetName:         value.TargetName,
+		ResourceKind:       value.ResourceKind,
+		Scope:              value.Scope,
+		Actor:              value.Actor,
+		Status:             value.Status,
+		Counts:             apiTypes.TaskCounts(value.Counts),
+		CreatedAt:          value.CreatedAt,
+		UpdatedAt:          value.UpdatedAt,
+		Deadline:           value.Deadline,
+		FinishedAt:         value.FinishedAt,
+		HistoryExpired:     value.HistoryExpired,
+		StopRequested:      value.StopRequested,
+		Cancel:             apiTypes.TaskActionAvailability{Allowed: value.Cancel.Allowed, Reason: value.Cancel.Reason},
+	}
 }
 
 func executionWork(value taskinspection.Work) apiTypes.TaskWork {
@@ -48,4 +65,16 @@ func executionAttempt(value taskinspection.Attempt) apiTypes.TaskAttempt {
 		HostID: value.HostID, AgentID: value.AgentID, Generation: value.Generation,
 		Direction: value.Direction, Outcome: value.Outcome, AssignedAt: value.AssignedAt,
 		Deadline: value.Deadline, StartedAt: value.StartedAt, FinishedAt: value.FinishedAt}
+}
+
+func dependencyDecision(value *workexecution.TaskDependencyDecision) *apiTypes.TaskDependencyDecision {
+	if value == nil {
+		return nil
+	}
+	result := &apiTypes.TaskDependencyDecision{Ready: value.Ready, Waiting: append([]string(nil), value.Waiting...)}
+	if value.Failed != nil {
+		fact := *value.Failed
+		result.Failed = &fact
+	}
+	return result
 }

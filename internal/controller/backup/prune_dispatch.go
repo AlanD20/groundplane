@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -24,6 +25,8 @@ const backupPruneRoute = "/system/backup-retention/{id}/prune"
 // scheduler. A failed or timed-out Task returns only surviving tombstones to
 // pending under the original operation id, so a later tick retries them.
 type BackupPruneService struct {
+	accepted              *acceptedaction.Submitter
+	coordinator           *requestidempotency.Coordinator
 	runtime               *etcd.BackupRuntimeRepository
 	idempotency           backupPruneIdempotency
 	now                   func() time.Time
@@ -37,11 +40,18 @@ type backupPruneIdempotency interface {
 
 func NewBackupPruneService(runtime *etcd.BackupRuntimeRepository,
 	idempotency backupPruneIdempotency,
+	accepted *acceptedaction.Submitter, coordinator *requestidempotency.Coordinator,
 ) (*BackupPruneService, error) {
 	if runtime == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "backup prune service dependencies are required")
 	}
-	return &BackupPruneService{runtime: runtime, idempotency: idempotency, now: time.Now}, nil
+	return &BackupPruneService{
+		runtime:     runtime,
+		idempotency: idempotency,
+		now:         time.Now,
+		accepted:    accepted,
+		coordinator: coordinator,
+	}, nil
 }
 
 // Tick accepts the prior continuation (empty for the first page). Its returned

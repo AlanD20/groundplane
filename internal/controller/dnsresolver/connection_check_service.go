@@ -2,8 +2,6 @@ package dnsresolver
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -11,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/dnsconnectioncheck"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/dnschecks"
@@ -28,15 +27,18 @@ type ConnectionCheckService struct {
 	records     *dnschecks.Repository
 	idempotency *etcd.IdempotencyRepository
 	coordinator *requestidempotency.Coordinator
+	submitter   *acceptedaction.Submitter
 }
 
 func NewConnectionCheckService(planner *ConnectionCheckPlanner, tasks *etcd.TaskRepository,
 	records *dnschecks.Repository, evidence *etcd.IdempotencyRepository, coordinator *requestidempotency.Coordinator,
+	submitter *acceptedaction.Submitter,
 ) (*ConnectionCheckService, error) {
-	if planner == nil || tasks == nil || records == nil || evidence == nil || coordinator == nil {
+	if planner == nil || tasks == nil || records == nil || evidence == nil || coordinator == nil || submitter == nil {
 		return nil, errs.New(errs.KindInternal, "DNS check admission dependencies are required")
 	}
 	return &ConnectionCheckService{
+		submitter:   submitter,
 		planner:     planner,
 		tasks:       tasks,
 		records:     records,
@@ -48,13 +50,13 @@ func NewConnectionCheckService(planner *ConnectionCheckPlanner, tasks *etcd.Task
 func (service *ConnectionCheckService) CheckConnections(ctx context.Context, componentID string,
 	input apiTypes.DNSCheckRequest, key string,
 ) (idempotency.IdempotencyResponse, error) {
-	if ids.Validate(ids.KindComponent, componentID) != nil || input.Revision <= 0 || len(input.Queries) > 10 {
+	if ids.Validate(ids.KindComponent, componentID) != nil || input.Revision < 0 || len(input.Queries) > 10 {
 		return idempotency.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
-			"DNS check requires CoreDNS's current revision and at most ten query names",
+			"DNS check requires CoreDNS and at most ten query names; an exact revision is optional",
 		)
 	}
-	queries, canonicalQueries, err := dnsCheckQueries(input.Queries)
+	_, canonicalQueries, err := dnsCheckQueries(input.Queries)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
@@ -63,7 +65,8 @@ func (service *ConnectionCheckService) CheckConnections(ctx context.Context, com
 		Path: []requestidempotency.PathBinding{{Name: "id", Value: componentID}}, Query: requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
 			requestidempotency.Field{Name: "revision", Value: requestidempotency.Integer(input.Revision)},
-			requestidempotency.Field{Name: "queries", Value: requestidempotency.List(canonicalQueries...)}))})
+			requestidempotency.Field{Name: "queries", Value: requestidempotency.List(canonicalQueries...)},
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)}))})
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
@@ -82,29 +85,29 @@ func (service *ConnectionCheckService) CheckConnections(ctx context.Context, com
 	if err != nil || found {
 		return existing.Response, err
 	}
-	source, request, err := service.planner.Capture(ctx, componentID, input.Revision, queries)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
 	now := time.Now().UTC()
-	owner := dnschecks.Owner{
-		TaskID:      ids.New(ids.KindTask),
-		WorkItemID:  ids.New(ids.KindWorkItem),
-		PlanID:      ids.New(ids.KindPlan),
-		OperationID: ids.New(ids.KindOperation),
+	task := workexecution.Task{
+		ID:         ids.New(ids.KindTask),
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionCheck,
+		TargetID:   componentID,
+		TargetName: "CoreDNS",
+		After:      append([]string(nil), input.After...),
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		Deadline:   now.Add(acceptedaction.QueueTimeout),
 	}
-	record, err := dnschecks.NewRecord(owner, source.Configuration(), request, now)
+	durable, err := evidence.DurableRecord()
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
-	hash, err := dnschecks.PlanHash(record)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	task := workexecution.Task{ID: owner.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionCheck,
-		TargetID: componentID, TargetName: "CoreDNS", Intent: workexecution.Input{ID: owner.PlanID, SHA256: hash},
-		ExpectedItems: 1, CreatedAt: now, UpdatedAt: now, Deadline: now.Add(90 * time.Second)}
-	return service.publish(ctx, source, record, task, locator, evidence)
+	defer clear(durable.Ciphertext)
+	return acceptedaction.Submit(
+		ctx,
+		service.submitter,
+		acceptedaction.Submission{Task: task, Kind: "dns-check", Locator: locator, Intent: durable, Evidence: evidence},
+		input,
+	)
 }
 
 func dnsCheckQueries(
@@ -145,50 +148,4 @@ func dnsCheckName(value string) string {
 		value += "."
 	}
 	return value
-}
-
-func (service *ConnectionCheckService) publish(ctx context.Context, source etcd.DNSCheckSource, record dnschecks.Record,
-	task workexecution.Task, locator idempotency.IdempotencyLocator, evidence requestidempotency.ProtectedEvidence,
-) (idempotency.IdempotencyResponse, error) {
-	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	response := idempotency.IdempotencyResponse{
-		Status:      http.StatusAccepted,
-		ContentKind: "application/json",
-		Body:        body,
-	}
-	durable, err := evidence.DurableRecord()
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	defer clear(durable.Ciphertext)
-	marker := idempotency.IdempotencyMarker{
-		Kind:      idempotency.IdempotencyMarkerTask,
-		State:     idempotency.IdempotencyMarkerPending,
-		Locator:   locator,
-		Intent:    durable,
-		Response:  response,
-		TaskID:    task.ID,
-		CreatedAt: task.CreatedAt,
-		UpdatedAt: task.CreatedAt,
-	}
-	result, err := service.tasks.CreateDNSCheck(ctx, source, record, task, marker)
-	if err != nil {
-		kind, _ := errs.KindOf(err)
-		if !errors.Is(err, context.DeadlineExceeded) && kind != errs.KindStorageUnavailable {
-			return idempotency.IdempotencyResponse{}, err
-		}
-		resolution, resolveErr := service.coordinator.ResolveUnknown(ctx, service.idempotency, locator, evidence, err)
-		return resolution.Response, resolveErr
-	}
-	resolution, err := service.coordinator.ResolveKnown(ctx, evidence, result)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	if resolution.Kind == requestidempotency.ResolutionApplied {
-		return requestidempotency.CloneResponse(response), nil
-	}
-	return resolution.Response, nil
 }

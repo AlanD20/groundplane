@@ -75,6 +75,7 @@ type fakeConnectorDeleter struct {
 func (fake *fakeConnectorDeleter) DeleteConnector(
 	_ context.Context,
 	id string,
+	_ apiTypes.TaskRunAfterRequest,
 	key string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	fake.calls++
@@ -278,11 +279,11 @@ func TestConnectorRemoveRouteDispatchesProtectedFinalizerTask(t *testing.T) {
 
 // Rationale: ignored body or query data would create an ambiguous canonical
 // DELETE intent, so both transports must fail before application dispatch.
-func TestConnectorRemoveRouteRejectsBodyAndQuery(t *testing.T) {
+func TestConnectorRemoveRouteRejectsMalformedBodyAndQuery(t *testing.T) {
 	t.Parallel()
 	connectorID := ids.NewAt(ids.KindConnector, time.Date(2026, 8, 24, 12, 30, 0, 0, time.UTC), 1)
 	for _, request := range []*http.Request{
-		httptest.NewRequest(http.MethodDelete, "/api/v1/connectors/"+connectorID, strings.NewReader(`{}`)),
+		httptest.NewRequest(http.MethodDelete, "/api/v1/connectors/"+connectorID, strings.NewReader(`{`)),
 		httptest.NewRequest(http.MethodDelete, "/api/v1/connectors/"+connectorID+"?force=true", nil),
 	} {
 		deleter := &fakeConnectorDeleter{}

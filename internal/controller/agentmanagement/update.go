@@ -2,288 +2,141 @@ package agentmanagement
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const (
-	agentUpdateRoute = "/agents/{id}/update"
-)
+const agentUpdateRoute = "/agents/{id}/update"
 
 type agentUpdateTargets interface {
 	Health(context.Context, string) (localagent.Health, error)
 }
-
-type agentUpdateEvidence struct {
-	candidate requestidempotency.ProtectedEvidence
-	durable   idempotencyrecord.ProtectedIntentRecord
+type agentImageVerifier interface {
+	Verify(context.Context, string, int) error
 }
-
-type agentUpdateIdempotency interface {
-	Prepare(context.Context, string, string) (agentUpdateEvidence, error)
-	ResolveExisting(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		agentUpdateEvidence,
-	) (requestidempotency.Resolution, bool, error)
-	ResolveKnown(
-		context.Context,
-		agentUpdateEvidence,
-		etcd.IdempotencyTransactionResult,
-	) (requestidempotency.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		agentUpdateEvidence,
-		error,
-	) (requestidempotency.Resolution, error)
-}
-
-type durableAgentUpdateIdempotency struct {
-	coordinator *requestidempotency.Coordinator
-	repository  *etcd.IdempotencyRepository
-}
-
-func NewUpdateIdempotency(
-	coordinator *requestidempotency.Coordinator,
-	repository *etcd.IdempotencyRepository,
-) (*durableAgentUpdateIdempotency, error) {
-	if coordinator == nil || repository == nil {
-		return nil, errs.New(errs.KindInternal, "Agent update idempotency is not configured")
-	}
-	return &durableAgentUpdateIdempotency{coordinator: coordinator, repository: repository}, nil
-}
-
-func (service *durableAgentUpdateIdempotency) Prepare(
-	ctx context.Context,
-	agentID string,
-	image string,
-) (agentUpdateEvidence, error) {
-	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
-		Method: http.MethodPost,
-		Route:  agentUpdateRoute,
-		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
-		Path:   []requestidempotency.PathBinding{{Name: "id", Value: agentID}},
-		Query:  requestidempotency.Object(),
-		Body: requestidempotency.JSONBody(requestidempotency.Object(
-			requestidempotency.Field{Name: "image", Value: requestidempotency.String(image)},
-		)),
-	})
-	if err != nil {
-		return agentUpdateEvidence{}, err
-	}
-	defer digest.Destroy()
-	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)
-	if err != nil {
-		return agentUpdateEvidence{}, err
-	}
-	durable, err := candidate.DurableRecord()
-	if err != nil {
-		return agentUpdateEvidence{}, err
-	}
-	return agentUpdateEvidence{candidate: candidate, durable: durable}, nil
-}
-
-func (service *durableAgentUpdateIdempotency) ResolveExisting(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence agentUpdateEvidence,
-) (requestidempotency.Resolution, bool, error) {
-	return service.coordinator.ResolveOperationRootExisting(ctx, service.repository, locator, evidence.candidate)
-}
-
-func (service *durableAgentUpdateIdempotency) ResolveKnown(
-	ctx context.Context,
-	evidence agentUpdateEvidence,
-	result etcd.IdempotencyTransactionResult,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
-}
-
-func (service *durableAgentUpdateIdempotency) ResolveUnknown(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence agentUpdateEvidence,
-	original error,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
-}
-
 type agentUpdateService struct {
-	targets     agentUpdateTargets
-	tasks       agentEnrollmentTaskRepository
-	idempotency agentUpdateIdempotency
-	images      interface {
-		Verify(context.Context, string, int) error
-	}
-	now func() time.Time
+	targets  agentUpdateTargets
+	tasks    agentCaptureRepository
+	images   agentImageVerifier
+	accepted *acceptedaction.Submitter
+	now      func() time.Time
 }
 
 func NewUpdateService(
 	targets agentUpdateTargets,
-	tasks agentEnrollmentTaskRepository,
-	idempotency agentUpdateIdempotency,
-	images interface {
-		Verify(context.Context, string, int) error
-	},
+	tasks agentCaptureRepository,
+	images agentImageVerifier,
+	accepted *acceptedaction.Submitter,
 ) (*agentUpdateService, error) {
-	if targets == nil || tasks == nil || idempotency == nil || images == nil {
+	if targets == nil || tasks == nil || images == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Agent update service dependencies are invalid")
 	}
-	return &agentUpdateService{
-		targets: targets, tasks: tasks, idempotency: idempotency, images: images, now: time.Now,
-	}, nil
+	return &agentUpdateService{targets: targets, tasks: tasks, images: images, accepted: accepted, now: time.Now}, nil
 }
 
-func (service *agentUpdateService) UpdateAgent(ctx context.Context, agentID, image, idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update context is required")
+func (service *agentUpdateService) UpdateAgent(
+	ctx context.Context,
+	agentID string,
+	input api.AgentUpdate,
+	key string,
+) (idempotency.IdempotencyResponse, error) {
+	if ids.Validate(ids.KindAgent, agentID) != nil {
+		return idempotency.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Agent id is invalid")
 	}
-	if err := ids.Validate(ids.KindAgent, agentID); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Agent id is invalid")
-	}
-	if !imageref.IsDigestPinned(image) {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+	if !imageref.IsDigestPinned(input.Image) {
+		return idempotency.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Agent update requires a digest-pinned image",
 		)
 	}
-	evidence, err := service.idempotency.Prepare(ctx, agentID, image)
+	body := requestidempotency.Object(
+		requestidempotency.Field{Name: "image", Value: requestidempotency.String(input.Image)},
+		requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
+	)
+	intent, err := beginAgentAction(ctx, service.accepted, http.MethodPost, agentUpdateRoute, agentID, body, key)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return idempotency.IdempotencyResponse{}, err
 	}
-	defer clear(evidence.durable.Ciphertext)
-	locator := idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
-		Method: http.MethodPost, Route: agentUpdateRoute, Key: idempotencyKey,
+	defer intent.Destroy()
+	if response, found := intent.Replay(); found {
+		return response, nil
 	}
-	existing, found, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	task := newAcceptedAgentTask(service.now().UTC(), agentID, workexecution.ActionUpdate, input.After)
+	return acceptedaction.Submit(ctx, service.accepted, intent.Submission(task, "agent-update"), input)
+}
+func (service *agentUpdateService) AcceptedPreparations() []taskdependencies.Registration {
+	return []taskdependencies.Registration{
+		acceptedaction.Registration(
+			service.accepted,
+			"agent-update",
+			workexecution.ActionUpdate,
+			ids.KindAgent,
+			service.prepareAcceptedUpdate,
+		),
+	}
+}
+
+func (service *agentUpdateService) prepareAcceptedUpdate(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	_ int64,
+	at time.Time,
+	input api.AgentUpdate,
+) (taskdependencies.Prepared, error) {
+	health, err := service.targets.Health(ctx, task.Task.TargetID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	if found {
-		if existing.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Agent update replay resolution is invalid",
-			)
-		}
-		return requestidempotency.CloneResponse(existing.Response), nil
-	}
-	health, err := service.targets.Health(ctx, agentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if health.Agent.ID != agentID {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+	if health.Agent.ID != task.Task.TargetID {
+		return taskdependencies.Prepared{}, errs.New(
 			errs.KindInternal,
 			"Agent update target lookup returned another Agent",
 		)
 	}
 	if health.Agent.Phase != localagent.PhaseReady {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindResourceInUse,
-			"Agent is not ready for update",
-		)
+		return taskdependencies.Prepared{}, errs.New(errs.KindResourceInUse, "Agent is not ready for update")
 	}
-	if health.Agent.Image == image {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+	if health.Agent.Image == input.Image {
+		return taskdependencies.Prepared{}, errs.New(errs.KindStateConflict, "Agent already runs the selected image")
+	}
+	if err := service.images.Verify(ctx, input.Image, agentprotocol.SchemaVersion); err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	if health.Agent.Generation == 0 || health.Agent.Generation > ^uint64(0)-2 {
+		return taskdependencies.Prepared{}, errs.New(
 			errs.KindStateConflict,
-			"Agent already runs the selected image",
+			"Agent generation has no replacement and recovery capacity",
 		)
 	}
-
-	if err := service.images.Verify(ctx, image, agentprotocol.SchemaVersion); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	capture := agentoperations.Capture{
+		TaskID:     task.Task.ID,
+		WorkItemID: ids.DeriveAt(ids.KindWorkItem, task.Task.CreatedAt, task.Task.ID, "agent-work"),
+		PlanID: ids.DeriveAt(
+			ids.KindPlan,
+			task.Task.CreatedAt,
+			task.Task.ID,
+			"agent-input",
+		),
+		AgentID:            task.Task.TargetID,
+		Action:             workexecution.ActionUpdate,
+		Image:              input.Image,
+		PreviousImage:      health.Agent.Image,
+		StartingGeneration: health.Agent.Generation,
+		CreatedAt:          at,
 	}
-	now := service.now().UTC()
-	task, err := newAgentUpdateCapture(
-		now,
-		agentID,
-		health.Agent.Image,
-		image,
-		health.Agent.Generation,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.TaskID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: append([]byte(nil), responseBody...),
-	}
-	result, createErr := service.tasks.CreateAgentWork(ctx, task, idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, Intent: evidence.durable,
-		Response: response, TaskID: task.TaskID, CreatedAt: now, UpdatedAt: now,
-	})
-	var resolution requestidempotency.Resolution
-	if createErr != nil {
-		if !isUnknownAgentUpdateOutcome(createErr) {
-			return idempotencyrecord.IdempotencyResponse{}, createErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if resolution.Kind == requestidempotency.ResolutionReplay {
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	}
-	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Agent update resolution is invalid",
-		)
-	}
-	return requestidempotency.CloneResponse(response), nil
-}
-
-func newAgentUpdateCapture(
-	createdAt time.Time,
-	agentID string,
-	previousImage string,
-	desiredImage string,
-	startingGeneration uint64,
-) (agentoperations.Capture, error) {
-	if startingGeneration == 0 || startingGeneration > ^uint64(0)-2 {
-		return agentoperations.Capture{}, errs.New(
-			errs.KindStateConflict,
-			"agent generation has no replacement and recovery capacity",
-		)
-	}
-	capture := agentoperations.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
-		PlanID: ids.New(ids.KindPlan), AgentID: agentID, Action: workexecution.ActionUpdate, CreatedAt: createdAt,
-		Image: desiredImage, PreviousImage: previousImage, StartingGeneration: startingGeneration}
-	_, err := capture.Reference()
-	return capture, err
-}
-
-func isUnknownAgentUpdateOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
+	return prepareAgentCapture(ctx, service.tasks, task, capture, at)
 }

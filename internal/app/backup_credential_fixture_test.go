@@ -84,7 +84,14 @@ func newNativeBackupCredentialFixture(t *testing.T, secretScope core.SecretScope
 	if _, err := f.agents.MarkReady(ctx, record.ID, 1, registered.Revision, at.Add(-time.Minute), buildversion.BuildIdentity{Version: "test"}); err != nil {
 		t.Fatal(err)
 	}
-	identity, err := f.agents.RegisterWorkProcess(ctx, record.ID, 1, [16]byte{1}, workexecution.AgentConcurrency{Tasks: 1, OperationsPerTask: 1}, f.operations)
+	identity, err := f.agents.RegisterWorkProcess(
+		ctx,
+		record.ID,
+		1,
+		[16]byte{1},
+		workexecution.AgentConcurrency{Tasks: 1, OperationsPerTask: 1},
+		f.operations,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

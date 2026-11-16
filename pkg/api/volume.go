@@ -16,20 +16,17 @@ type Volume struct {
 // optional at the public boundary; the Controller defaults it to Slug only
 // when the slug satisfies the immutable Compose-key grammar.
 type VolumeCreate struct {
-	EnvironmentID string `json:"environment_id"`
-	Slug          string `json:"slug"`
-	Key           string `json:"key,omitempty"`
+	After         []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	EnvironmentID string   `json:"environment_id"`
+	Slug          string   `json:"slug"`
+	Key           string   `json:"key,omitempty"`
 }
 
 // VolumeEdit contains the only mutable Volume field. The immutable key and
 // derived path never enter an edit request.
 type VolumeEdit struct {
-	Slug string `json:"slug"`
-}
-
-type VolumeMutationResponse struct {
-	Volume Volume `json:"volume"`
-	TaskID string `json:"task_id"`
+	After []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	Slug  string   `json:"slug"`
 }
 
 type VolumeDeletionImpactItemKind string

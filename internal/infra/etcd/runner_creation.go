@@ -8,7 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
@@ -124,15 +123,15 @@ func (repository *RunnerRepository) PrepareRunnerCreation(
 	return source, nil
 }
 
-func (repository *RunnerRepository) PublishRunnerCreation(
+func (repository *RunnerRepository) PrepareRunnerCreationCapture(
 	ctx context.Context, source RunnerCreationSource, input runnerwork.Input,
-	task workexecution.Task, marker idempotency.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+	task workexecution.Task, item workexecution.Item,
+) (workqueue.Change, error) {
 	record := source.record
 	desired := record.Desired
 	ref, err := input.Reference()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	if len(source.conditions) == 0 || len(source.mutations) == 0 ||
 		task.Validate() != nil || task.Actor != workexecution.OperatorActor || task.Action != workexecution.ActionCreate ||
@@ -141,45 +140,36 @@ func (repository *RunnerRepository) PublishRunnerCreation(
 		task.ID != record.CreateTaskID || task.ID != input.TaskID || task.Intent != ref ||
 		input.Operation != runnerallocation.RuntimeOperationCreate || input.Plan.Allocation != record.Allocation ||
 		input.Plan.AllocationConfig != source.config || input.Plan.RuntimeEpoch != record.RuntimeEpoch+1 ||
-		!input.CreatedAt.Equal(record.CreatedAt) || !task.CreatedAt.Equal(record.CreatedAt) ||
+		!input.CreatedAt.Equal(
+			record.CreatedAt,
+		) || record.CreatedAt.Before(task.CreatedAt) || record.CreatedAt.After(task.UpdatedAt) ||
 		!runnerCreationDesiredEqual(input.Desired, desired) {
-		return IdempotencyTransactionResult{}, errs.New(
+		return workqueue.Change{}, errs.New(
 			errs.KindValidationFailed,
 			"Runner creation differs from its captured allocation or input",
 		)
 	}
-	if idempotency.ValidateIdempotencyMarker(marker) != nil || validateRunnerMarkerScope(desired, marker) != nil ||
-		marker.Kind != idempotency.IdempotencyMarkerTask || marker.State != idempotency.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.Method != "POST" || marker.Locator.Route != "/runners" ||
-		!idempotency.ValidTaskResponse(marker.Response, task.ID) ||
-		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(task.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
+	if task.AcceptedIntent == nil || item.Validate() != nil || item.TaskID != task.ID ||
+		item.ID != input.WorkItemID || item.Operation != workexecution.Runner || item.TargetID != desired.ID ||
+		item.Placement != (workexecution.Placement{Executor: workexecution.Controller}) ||
+		item.Input == nil || *item.Input != task.Intent || !item.CreatedAt.Equal(input.CreatedAt) || item.Deadline.After(task.Deadline) {
+		return workqueue.Change{}, errs.New(
 			errs.KindValidationFailed,
-			"Runner creation replay marker is invalid",
+			"Runner creation work differs from its accepted Task",
 		)
 	}
-	item := workexecution.Item{ID: input.WorkItemID, TaskID: task.ID, Operation: workexecution.Runner,
-		TargetID: desired.ID, Placement: workexecution.Placement{Executor: workexecution.Controller},
-		Claims: []workexecution.Claim{{ScopeID: desired.ID}}, Input: &task.Intent,
-		Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
-		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
-	work, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer keyvalue.ClearMutationValues(work.Mutations)
 	inputConditions, inputMutations, err := runnerwork.PreparePublication(input)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer keyvalue.ClearMutationValues(inputMutations)
-	conditions := append(work.Conditions, source.conditions...)
+	conditions := append([]keyvalue.Condition(nil), source.conditions...)
 	conditions = append(conditions, inputConditions...)
-	mutations := append(work.Mutations, source.mutations...)
+	mutations := append([]keyvalue.Mutation(nil), source.mutations...)
 	mutations = append(mutations, inputMutations...)
 	allocationPlan, err := runnerwork.EncodeAllocationPlan(input.Plan)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	conditions = append(conditions, keyvalue.Condition{Key: runnerwork.AllocationPlanKey(desired.ID)})
 	mutations = append(
@@ -190,40 +180,12 @@ func (repository *RunnerRepository) PublishRunnerCreation(
 			Value: allocationPlan,
 		},
 	)
-	publicationConditions := conditions
-	classify := func(_ int64, values []*keyvalue.KeyValue) error {
-		if len(values) != len(publicationConditions) {
-			return errs.New(errs.KindInternal, "Runner creation publication evidence is incomplete")
-		}
-		for index, condition := range publicationConditions {
-			if condition.Key == runners.RunnerTenantSlugKey(desired.TenantID, desired.Slug) && values[index] != nil {
-				return errs.New(errs.KindRunnerSlugConflict, "runner slug is already in use")
-			}
-		}
-		return errs.New(errs.KindStateConflict, "Runner hierarchy or allocation changed before creation; submit again")
-	}
 	initiation, err := newRunnerTaskInitiation(desired, source.parents, taskjournal.TaskActorOperator)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	publication, err := newIdempotencyMutationPlanForMarker(
-		idempotency.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		classify,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	evidence, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return evidence.Apply(ctx, marker, publication)
+	conditions = append(conditions, initiation.fences...)
+	return ownedRunnerCapture(workqueue.Change{Conditions: conditions, Mutations: mutations}), nil
 }
 
 func runnerCreationDesiredEqual(left, right runners.RunnerDesiredRecord) bool {

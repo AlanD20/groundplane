@@ -38,21 +38,17 @@ func newControllerExecutionComposition(
 ) (controllerExecutionComposition, error) {
 	attachRecords, err := etcd.NewAttachRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Attach repository: %w", err)
 	}
 	attachFactValues, err := attachments.NewFactService(attachRecords, authority.intentProtector)
 	if err != nil {
-		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Attach fact service: %w", err)
 	}
 	if err := attachFactValues.EnableBackingHookInputs(dataServices.secretRecords); err != nil {
-		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize backing hook inputs: %w", err)
 	}
 	attachFactReads, err := attachments.NewFactReadService(attachRecords, attachFactValues)
 	if err != nil {
-		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Attach fact reads: %w", err)
 	}
 	planResolver, err := taskplanning.NewTaskPlanResolverWithBlueprints(
@@ -61,11 +57,9 @@ func newControllerExecutionComposition(
 		componentCatalog,
 	)
 	if err != nil {
-		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize execution plan resolver: %w", err)
 	}
 	if err := componentregistration.ConfigureServiceProxyImages(planResolver); err != nil {
-		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize release plan resolver: %w", err)
 	}
 	materializationResolver, err := initializeTaskMaterializationResolver(
@@ -77,17 +71,14 @@ func newControllerExecutionComposition(
 		authority.intentProtector,
 	)
 	if err != nil {
-		_ = store.Close()
 		return controllerExecutionComposition{}, err
 	}
 	scriptArtifacts, err := taskplanning.NewScriptArtifactService(dataServices.scriptRecords, materializationResolver)
 	if err != nil {
-		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Script artifact service: %w", err)
 	}
 	scriptSourceReferences, err := initializeExecutionSourceReferences(ctx, store)
 	if err != nil {
-		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf(
 			"controller: initialize Script source-reference authority: %w",
 			err,
@@ -97,14 +88,12 @@ func newControllerExecutionComposition(
 	if err != nil {
 		// Rationale: initialization is already failing; store shutdown is
 		// best-effort and must not replace the primary typed error.
-		_ = store.Close()
 		return controllerExecutionComposition{}, errs.Wrap(errs.KindInternal, err)
 	}
 	backupSecrets, err := backupcapability.NewBackupSecretResolver(ctx, backupSecretEvidence, authority.intentProtector)
 	if err != nil {
 		// Rationale: initialization is already failing; store shutdown is
 		// best-effort and must not replace the primary typed error.
-		_ = store.Close()
 		return controllerExecutionComposition{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return controllerExecutionComposition{

@@ -153,7 +153,8 @@ export function HostAgentsTable() {
         target={host?.hostname ?? "unavailable"}
         workspace="platform"
         startLabel="Join Agent"
-        onDispatch={async () => (await joinAgent()).task_id}
+        runAfter
+        onDispatch={async (after) => (await joinAgent(after)).task_id}
       />
     </>
   );

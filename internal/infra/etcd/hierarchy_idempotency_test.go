@@ -10,9 +10,13 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/acceptedactions"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -61,7 +65,7 @@ func TestHierarchyCreationPublishesDeletionCoordination(t *testing.T) {
 		testhierarchydeletion.HierarchyDeletionOperationEnvironment,
 		"e",
 	)
-	result, err := journal.Begin(ctx, begin)
+	result, err := captureHierarchyDeletionFixture(ctx, journal, begin)
 	if err != nil {
 		t.Fatalf("Begin(Environment deletion) error = %v", err)
 	}
@@ -76,7 +80,7 @@ func hierarchyDeletionCreationTestBegin(
 	targetID string,
 	operationKind testhierarchydeletion.HierarchyDeletionOperationKind,
 	digestDigit string,
-) HierarchyDeletionBegin {
+) HierarchyDeletionCapture {
 	taskID := ids.NewAt(ids.KindTask, now, 195)
 	key := "hierarchy-creation-deletion-key"
 	ciphertext := []byte("protected-" + key)
@@ -100,10 +104,10 @@ func hierarchyDeletionCreationTestBegin(
 		TaskID: taskID, CreatedAt: now, UpdatedAt: now,
 	}
 	idempotencyDigest := sha256.Sum256([]byte(key))
-	return HierarchyDeletionBegin{
+	return HierarchyDeletionCapture{
 		OperationID:   "del_" + strings.Repeat(digestDigit, 32),
 		OperationKind: operationKind, TargetKind: targetKind, TargetID: targetID,
-		TaskID: taskID, IdempotencyHash: hex.EncodeToString(idempotencyDigest[:]), Marker: marker,
+		TaskID: taskID, IdempotencyHash: hex.EncodeToString(idempotencyDigest[:]), Locator: marker.Locator, TaskCreatedAt: now,
 		CreatedAt: now, DeadlineAt: now.Add(testhierarchydeletion.AttemptTimeout),
 	}
 }
@@ -228,4 +232,95 @@ func TestHierarchyMutateTenantIdempotentCommitsEditsAndSlugMoves(t *testing.T) {
 	if err != nil || replayed.kind != idempotencyTransactionExisting {
 		t.Fatalf("MutateTenantIdempotent(replay) = %#v, %v", replayed, err)
 	}
+}
+
+// These storage-owner tests supply protected request authority and exercise the
+// actual guarded native capture fragment. Public encrypted acceptance is covered
+// by the app hierarchy journeys; this helper does not fabricate ready work.
+type hierarchyCapturedFixture struct {
+	Operation testhierarchydeletion.HierarchyDeletionOperation
+}
+
+func captureHierarchyDeletionFixture(
+	ctx context.Context,
+	repository *HierarchyDeletionRepository,
+	input HierarchyDeletionCapture,
+) (hierarchyCapturedFixture, error) {
+	queue, err := workqueue.NewRepository(repository.store)
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	resolved, err := repository.ResolveDeletionTarget(ctx, input.TargetKind, input.TargetID)
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	marker := testDirectMarker()
+	marker.Kind, marker.State, marker.TaskID, marker.Locator = testidempotency.IdempotencyMarkerTask, testidempotency.IdempotencyMarkerPending, input.TaskID, input.Locator
+	marker.CreatedAt, marker.UpdatedAt, marker.TerminalAt, marker.RetainUntil = input.TaskCreatedAt, input.TaskCreatedAt, time.Time{}, time.Time{}
+	marker.Response = testidempotency.IdempotencyResponse{
+		Status:      202,
+		ContentKind: "application/json",
+		Body:        []byte(`{"task_id":"` + input.TaskID + `"}`),
+	}
+	payloads, err := acceptedactions.NewRepository(repository.store)
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	ciphertext := []byte("supplied-encrypted-hierarchy-request")
+	digest := sha256.Sum256(ciphertext)
+	payload, err := acceptedactions.NewRecord(
+		input.TaskID,
+		"hierarchy-remove",
+		ids.New(ids.KindPlan),
+		1,
+		[]acceptedactions.Part{
+			{Bytes: uint32(len(ciphertext)), PlaintextBytes: 1, SHA256: hex.EncodeToString(digest[:])},
+		},
+		ciphertext,
+	)
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	conditions, mutations, err := payloads.Stage(ctx, payload, ciphertext)
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	defer testkeyvalue.ClearMutationValues(mutations)
+	task := workexecution.Task{ID: input.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionRemove,
+		TargetID: input.TargetID, TargetName: resolved.TargetName, Scope: resolved.TaskScope, AcceptedIntent: &payload.Reference,
+		CreatedAt: input.TaskCreatedAt, UpdatedAt: input.TaskCreatedAt, Deadline: input.DeadlineAt}
+	acceptance, err := queue.PrepareAcceptedTask(ctx, task, marker)
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	result, err := queue.Commit(ctx, acceptance, workqueue.Change{Conditions: conditions, Mutations: mutations})
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	if !result.Succeeded {
+		return hierarchyCapturedFixture{}, errs.New(errs.KindStateConflict, "hierarchy fixture acceptance changed")
+	}
+	snapshot, _, err := queue.ReadTask(ctx, task.ID, 0)
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	captured, err := repository.PrepareCapture(ctx, input)
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	defer testkeyvalue.ClearMutationValues(captured.Authority.Mutations)
+	task.Intent, task.UpdatedAt = captured.Intent, input.CreatedAt
+	promotion, err := queue.PrepareAcceptedTaskPromotion(ctx, snapshot, task, nil, nil, true, input.CreatedAt)
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	committed, err := queue.Commit(ctx, promotion, captured.Authority)
+	if err != nil {
+		return hierarchyCapturedFixture{}, err
+	}
+	if !committed.Succeeded {
+		return hierarchyCapturedFixture{}, errs.New(errs.KindStateConflict, "native hierarchy capture changed")
+	}
+	operation, err := repository.OperationByTask(ctx, input.TaskID)
+	return hierarchyCapturedFixture{Operation: operation}, err
 }

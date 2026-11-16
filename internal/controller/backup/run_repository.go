@@ -10,6 +10,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"time"
@@ -46,6 +47,12 @@ type BackupRunPrepared struct {
 }
 
 type backupRunPublication interface {
+	PrepareWorkAuthority(
+		context.Context,
+		workexecution.Task,
+		workexecution.Item,
+		*agentpb.BackupWorkInput,
+	) (workqueue.Change, error)
 	PublishWork(context.Context, workexecution.Task, workexecution.Item, *agentpb.BackupWorkInput,
 		idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 	Clear()
@@ -55,6 +62,7 @@ type backupRunPublication interface {
 // manual backup service. Implementations must not read state until after the
 // idempotency coordinator has completed ResolveExisting.
 type BackupRunRepository interface {
+	ReadBackupTaskAcceptance(context.Context, string) (etcd.BackupTaskAcceptance, error)
 	PrepareBackupRun(context.Context, BackupRunPrepareInput) (BackupRunPrepared, error)
 }
 
@@ -105,4 +113,11 @@ func (repository *durableBackupRunRepository) PrepareBackupRun(
 		Artifacts: prepared.Artifacts,
 		Run:       prepared.Run, Owner: prepared.Owner, Publication: prepared.Publication,
 	}, nil
+}
+
+func (repository *durableBackupRunRepository) ReadBackupTaskAcceptance(
+	ctx context.Context,
+	environmentID string,
+) (etcd.BackupTaskAcceptance, error) {
+	return repository.runtime.ReadBackupTaskAcceptance(ctx, environmentID)
 }

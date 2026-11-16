@@ -77,6 +77,25 @@ func (repository *HierarchyRepository) PrepareMutationWorkConfiguration(ctx cont
 		)
 	}
 	guards := []keyvalue.Condition{{Key: workqueue.TaskKey(task.ID)}, {Key: workqueue.ItemKey(item.ID)}}
+	if task.AcceptedIntent != nil {
+		queue, err := workqueue.NewRepository(repository.store)
+		if err != nil {
+			return MutationWorkConfiguration{}, err
+		}
+		accepted, _, err := queue.ReadTask(ctx, task.ID, 0)
+		if err != nil {
+			return MutationWorkConfiguration{}, err
+		}
+		if !accepted.Task.PendingPreparation() || accepted.Task.AcceptedIntent == nil ||
+			*accepted.Task.AcceptedIntent != *task.AcceptedIntent ||
+			accepted.Task.Scope != task.Scope {
+			return MutationWorkConfiguration{}, errs.New(
+				errs.KindStateConflict,
+				"Mutation capture lost its accepted Task",
+			)
+		}
+		guards[0].ModRevision = accepted.Revision
+	}
 	for index, key := range keys {
 		guards = append(guards, keyvalue.Condition{Key: key, ModRevision: read.Values[index].ModRevision})
 	}

@@ -157,7 +157,7 @@ export default function PlatformTenantsPage() {
           id={removing.id}
           workspace={removing.slug}
           description="Permanently removes this Tenant and every Project, Environment, workload, volume, Secret, Connector, and Runner it owns. Backing services survive."
-          onDispatch={() => store.removeTenant(removing.id)}
+          onDispatch={(after) => store.removeTenant(removing.id, after)}
           onCommit={() => setRemoving(null)}
         />
       ) : null}

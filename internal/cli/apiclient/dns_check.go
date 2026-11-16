@@ -14,23 +14,21 @@ import (
 func (client *Client) CheckDNS(
 	ctx context.Context,
 	componentID string,
+	revision int64,
 	queries []apiTypes.DNSCheckQuery,
+	after []string,
 ) (apiTypes.TaskAccepted, error) {
-	component, err := client.ShowComponent(ctx, componentID)
-	if err != nil {
-		return apiTypes.TaskAccepted{}, err
-	}
-	if component.Revision <= 0 {
-		return apiTypes.TaskAccepted{}, errs.New(
-			errs.KindStateConflict,
-			"CoreDNS snapshot has no valid revision; refresh before testing",
-		)
+	if revision < 0 {
+		return apiTypes.TaskAccepted{}, errs.New(errs.KindValidationFailed, "CoreDNS revision must not be negative")
 	}
 	transport, err := client.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	body := generated.ComponentDnsCheckJSONRequestBody{Revision: component.Revision}
+	body := generated.ComponentDnsCheckJSONRequestBody{
+		Revision: optionalTaskRevision(revision),
+		After:    optionalServiceStrings(after),
+	}
 	if len(queries) > 0 {
 		selected := make([]generated.DNSCheckQuery, 0, len(queries))
 		for _, query := range queries {

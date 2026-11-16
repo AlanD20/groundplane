@@ -2,7 +2,6 @@ package volume
 
 import (
 	"context"
-	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -70,14 +69,6 @@ func (service *mutationIdempotency) Prepare(
 	return mutationEvidence{candidate: candidate, durable: durable}, nil
 }
 
-func (service *mutationIdempotency) MatchesStaged(
-	ctx context.Context,
-	evidence mutationEvidence,
-	existing idempotencyrecord.ProtectedIntentRecord,
-) (bool, error) {
-	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
-}
-
 func (service *mutationIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
@@ -106,23 +97,6 @@ func (service *mutationIdempotency) ResolveOperationRootExisting(
 	)
 }
 
-func (service *mutationIdempotency) ResolveKnown(
-	ctx context.Context,
-	evidence mutationEvidence,
-	result etcd.IdempotencyTransactionResult,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
-}
-
-func (service *mutationIdempotency) ResolveUnknown(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence mutationEvidence,
-	original error,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
-}
-
 func mutationLocator(intent mutationIntent, idempotencyKey string) idempotencyrecord.IdempotencyLocator {
 	return idempotencyrecord.IdempotencyLocator{
 		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
@@ -146,12 +120,4 @@ func replayResponse(resolution requestidempotency.Resolution) (idempotencyrecord
 func cloneResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {
 	response.Body = append([]byte(nil), response.Body...)
 	return response
-}
-
-func isUnknownPublicationOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
 }

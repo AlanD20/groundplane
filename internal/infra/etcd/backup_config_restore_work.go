@@ -3,25 +3,24 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // PublishWork consumes the captured resource admission once and publishes native
 // execution in the same transaction. Retry resumes work; it is not republication.
-func (publication *PreparedConfigRestorePublication) PublishWork(ctx context.Context,
+func (publication *PreparedConfigRestorePublication) PrepareWorkAuthority(ctx context.Context,
 	task workexecution.Task, item workexecution.Item, input *agentpb.BackupWorkInput,
-	marker idempotency.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+) (workqueue.Change, error) {
 	if publication == nil || publication.state == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Restore publication is not prepared")
+		return workqueue.Change{}, errs.New(errs.KindInternal, "Restore publication is not prepared")
 	}
 	state := publication.state
 	state.mu.Lock()
 	if state.repository == nil {
 		state.mu.Unlock()
-		return IdempotencyTransactionResult{}, errs.New(
+		return workqueue.Change{}, errs.New(
 			errs.KindStateConflict,
 			"Restore publication is consumed or is not a new action",
 		)
@@ -33,5 +32,5 @@ func (publication *PreparedConfigRestorePublication) PublishWork(ctx context.Con
 	state.conditions, state.mutations = nil, nil
 
 	state.mu.Unlock()
-	return repository.publishRestoreWork(ctx, captured, task, item, input, marker)
+	return repository.prepareRestoreWorkAuthority(ctx, captured, task, item, input)
 }

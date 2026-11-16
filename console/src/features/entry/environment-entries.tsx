@@ -1,3 +1,5 @@
+import { EntryRemoveDialog } from "./entry-remove-dialog";
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
 import {
@@ -13,7 +15,6 @@ import {
   TablePagination,
   useTableView,
 } from "@/components/common/table-controls";
-import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { ResourcePanel } from "@/components/common/resource-panel";
 import { EntryReferenceFields } from "./entry-reference-fields";
@@ -67,6 +68,8 @@ export function EnvVarsCard({
   const [secret, setSecret] = useState(false);
   const [editing, setEditing] = useState<EnvironmentEntry | null>(null);
   const [removing, setRemoving] = useState<EnvironmentEntry | null>(null);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -142,6 +145,7 @@ export function EnvVarsCard({
     );
     setFactKey(entry.source.kind === "fact" ? entry.source.fact : "");
     setExposure([...entry.exposure]);
+    setAfter([]);
     setEditing(entry);
     setSaveError(null);
     setOpen(true);
@@ -149,6 +153,7 @@ export function EnvVarsCard({
 
   function closeDrawer() {
     setOpen(false);
+    setAfter([]);
     setEditing(null);
     setKind("env");
     setKey("");
@@ -210,7 +215,11 @@ export function EnvVarsCard({
     setSaveError(null);
     try {
       if (editing) {
-        await store.updateEntry(env.id, editing.id, { source, exposure });
+        await store.updateEntry(env.id, editing.id, {
+          source,
+          exposure,
+          after,
+        });
       } else {
         await store.addEntry(env.id, {
           type: kind,
@@ -221,6 +230,7 @@ export function EnvVarsCard({
           source,
           exposure,
           secret,
+          after,
         });
       }
       closeDrawer();
@@ -422,6 +432,11 @@ export function EnvVarsCard({
         />
         {saveError && <p className="text-sm text-destructive">{saveError}</p>}
       </div>
+      <TaskRunAfterSelector
+        value={after}
+        onChange={setAfter}
+        onBusyChange={setAfterLoading}
+      />
       <DialogFooter>
         <Button variant="outline" onClick={closeDrawer} disabled={saving}>
           Cancel
@@ -429,6 +444,7 @@ export function EnvVarsCard({
         <Button
           disabled={
             saving ||
+            afterLoading ||
             (kind === "env" ? !key.trim() : !path.trim()) ||
             exposure.length === 0 ||
             (sourceKind === "secret_ref" && !secretRef.trim()) ||
@@ -563,27 +579,11 @@ export function EnvVarsCard({
         </p>
       </ResourcePanel>
 
-      <TaskRunnerDialog
-        open={!!removing}
-        onOpenChange={(next) => !next && setRemoving(null)}
-        title={`Remove Entry · ${removing ? (removing.type === "env" ? removing.key : removing.path) : ""}`}
-        description="Remove this variable or file from all exposed Services."
-        type="destroy"
-        target={removing?.id ?? env.id}
+      <EntryRemoveDialog
+        entry={removing}
+        environmentId={env.id}
         workspace={params.tenant}
-        destructive
-        confirmText={
-          removing
-            ? removing.type === "env"
-              ? (removing.key ?? removing.id)
-              : (removing.path ?? removing.id)
-            : ""
-        }
-        startLabel="Remove Entry"
-        onDispatch={async () => {
-          if (!removing) throw new Error("No Entry selected for removal");
-          return store.removeEntry(env.id, removing.id);
-        }}
+        onClose={() => setRemoving(null)}
       />
     </>
   );

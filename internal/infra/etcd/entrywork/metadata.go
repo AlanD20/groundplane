@@ -8,7 +8,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -31,27 +30,31 @@ func metadataResultID(item workexecution.Item) string {
 }
 
 func prepareMetadataDecision(task workexecution.Task, item workexecution.Item, configurationRevision int64,
-	marker idempotency.IdempotencyMarker, at time.Time,
-) (workqueue.Change, error) {
+	at time.Time,
+) (workexecution.Item, workqueue.Change, error) {
 	value, err := recordcodec.Encode("entry-metadata-result", MetadataResult{
 		TaskID: task.ID, WorkItemID: item.ID, EnvironmentID: task.Scope.EnvironmentID,
 		TargetID: task.TargetID, RevisionID: task.ID, ConfigurationRevision: configurationRevision, At: at,
 	})
 	if err != nil {
-		return workqueue.Change{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
 	digest := sha256.Sum256(value)
-	change, err := workqueue.PrepareSettledDecision(task, item, workexecution.Input{
-		ID: metadataResultID(item), SHA256: hex.EncodeToString(digest[:]),
-	}, marker, at)
+	ready, err := workexecution.SettleUnstarted(
+		item,
+		workexecution.Completion{Outcome: workexecution.Succeeded, EffectsSettled: true, Evidence: workexecution.Input{
+			ID: metadataResultID(item), SHA256: hex.EncodeToString(digest[:]),
+		}},
+		at,
+	)
 	if err != nil {
 		clear(value)
-		return workqueue.Change{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: MetadataKey(item.ID)})
+	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: MetadataKey(item.ID)}}}
 	change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationPut,
 		Key: MetadataKey(item.ID), Value: value})
-	return change, nil
+	return ready, change, nil
 }
 
 func (repository *InputRepository) metadataConditions(ctx context.Context,

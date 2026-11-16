@@ -257,6 +257,18 @@ func decodeEnvironmentCreate(body []byte) (environmentcapability.CreateEnvironme
 			)
 		}
 		seen[member] = struct{}{}
+		if member == "after" {
+			if err := decoder.Decode(&input.After); err != nil {
+				return environmentcapability.CreateEnvironmentInput{}, projectCreateJSONError(err)
+			}
+			if len(input.After) > 16 {
+				return environmentcapability.CreateEnvironmentInput{}, errs.New(
+					errs.KindValidationFailed,
+					"Run after accepts at most 16 Tasks",
+				)
+			}
+			continue
+		}
 		if member != "project_id" && member != "name" && member != "network_pool" {
 			return environmentcapability.CreateEnvironmentInput{}, errs.New(
 				errs.KindMalformedRequest,

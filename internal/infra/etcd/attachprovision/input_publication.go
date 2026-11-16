@@ -52,9 +52,24 @@ func (repository *InputRepository) PrepareInput(ctx context.Context, task workex
 		)
 	}
 	publication := InputPublication{Generation: generation, store: repository.store}
+	taskGuard := keyvalue.Condition{Key: workqueue.TaskKey(task.ID)}
+	if task.AcceptedIntent != nil {
+		for _, guard := range guards {
+			if guard.Key == taskGuard.Key {
+				taskGuard = guard
+				break
+			}
+		}
+		if taskGuard.ModRevision <= 0 {
+			return InputPublication{}, errs.New(
+				errs.KindValidationFailed,
+				"accepted Attach compilation requires its Task revision",
+			)
+		}
+	}
 	publication.Change.Conditions = append([]keyvalue.Condition(nil), guards...)
 	publication.Change.Conditions = append(publication.Change.Conditions,
-		keyvalue.Condition{Key: workqueue.TaskKey(task.ID)},
+		taskGuard,
 		keyvalue.Condition{Key: workqueue.ItemKey(workID)},
 		keyvalue.Condition{Key: blueprintattachinputs.Key(task.ID, generation.AttachID)},
 	)
@@ -78,7 +93,7 @@ func (repository *InputRepository) PrepareInput(ctx context.Context, task workex
 		// graph. Resource comparisons join final activation; copying an Apply's
 		// accumulated comparisons here would exceed the bounded batch limit.
 		pinGuards := []tasksecretpins.Condition{
-			{Key: workqueue.TaskKey(task.ID)}, {Key: workqueue.ItemKey(workID)},
+			{Key: taskGuard.Key, ModRevision: taskGuard.ModRevision}, {Key: workqueue.ItemKey(workID)},
 			{Key: blueprintattachinputs.Key(task.ID, generation.AttachID)},
 		}
 		prepared, err := pins.PrepareOwned(
@@ -109,9 +124,15 @@ func (repository *InputRepository) PrepareInput(ctx context.Context, task workex
 	if err != nil {
 		return InputPublication{}, err
 	}
-	publication.Generation = bound
 	value, err := blueprintattachinputs.Encode(bound)
 	if err != nil {
+		return InputPublication{}, err
+	}
+	// Final publication may occur after the compiler has cleared its source
+	// captures. Transfer an independent immutable generation to that lifecycle.
+	publication.Generation, err = blueprintattachinputs.Decode(value)
+	if err != nil {
+		clear(value)
 		return InputPublication{}, err
 	}
 	publication.Change.Mutations = append(publication.Change.Mutations, keyvalue.Mutation{

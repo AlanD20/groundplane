@@ -3,37 +3,30 @@ package volume
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
-	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"math"
 	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/slug"
 	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const (
-	volumeCreationRoute           = "/volumes"
-	volumeIdentityRoute           = "/volumes/{id}"
-	maximumVolumeMutationAttempts = 3
-	volumeMutationActionAdd       = "add"
-	volumeMutationActionEdit      = "edit"
-	volumeMutationActionRemove    = "remove"
+	volumeCreationRoute        = "/volumes"
+	volumeIdentityRoute        = "/volumes/{id}"
+	volumeMutationActionAdd    = "add"
+	volumeMutationActionEdit   = "edit"
+	volumeMutationActionRemove = "remove"
 )
 
 type MutationService struct {
+	accepted    *acceptedaction.Submitter
 	repository  MutationRepository
 	idempotency *mutationIdempotency
 	reads       *ReadService
@@ -47,8 +40,9 @@ func NewMutationService(
 	idempotencyRepository *etcd.IdempotencyRepository,
 	reads *ReadService,
 	policies *etcd.BackupPolicyRepository,
+	accepted *acceptedaction.Submitter,
 ) (*MutationService, error) {
-	if repository == nil || reads == nil || policies == nil {
+	if repository == nil || reads == nil || policies == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Volume mutation service is not configured")
 	}
 	idempotency, err := newMutationIdempotency(coordinator, idempotencyRepository)
@@ -57,7 +51,7 @@ func NewMutationService(
 	}
 	return &MutationService{
 		repository: repository, idempotency: idempotency, reads: reads, now: time.Now,
-		policies: policies,
+		policies: policies, accepted: accepted,
 	}, nil
 }
 
@@ -87,12 +81,13 @@ func (service *MutationService) CreateVolume(
 			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(input.EnvironmentID)},
 			requestidempotency.Field{Name: "key", Value: requestidempotency.String(input.Key)},
 			requestidempotency.Field{Name: "slug", Value: requestidempotency.String(input.Slug)},
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
 		)),
 	}
-	return service.mutateWithRetry(ctx, volumeMutationRequest{
+	return service.acceptMutation(ctx, volumeMutationRequest{
 		action: volumeMutationActionAdd, environmentID: input.EnvironmentID,
 		slug: input.Slug, key: input.Key, keySupplied: keySupplied,
-		idempotencyKey: idempotencyKey, intent: intent,
+		idempotencyKey: idempotencyKey, intent: intent, after: append([]string(nil), input.After...),
 	})
 }
 
@@ -108,7 +103,7 @@ func (service *MutationService) EditVolume(
 			"Volume edit input is invalid",
 		)
 	}
-	projection, identity, err := service.repository.FindEnvironmentVolume(ctx, volumeID)
+	projection, identity, err := service.repository.FindEnvironmentVolumeIdentity(ctx, volumeID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -118,12 +113,13 @@ func (service *MutationService) EditVolume(
 		query: requestidempotency.Object(),
 		body: requestidempotency.JSONBody(requestidempotency.Object(
 			requestidempotency.Field{Name: "slug", Value: requestidempotency.String(input.Slug)},
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
 		)),
 	}
-	return service.mutateWithRetry(ctx, volumeMutationRequest{
+	return service.acceptMutation(ctx, volumeMutationRequest{
 		action: volumeMutationActionEdit, environmentID: projection.Record.EnvironmentID,
 		volumeID: volumeID, slug: input.Slug, key: identity.Key,
-		idempotencyKey: idempotencyKey, intent: intent,
+		idempotencyKey: idempotencyKey, intent: intent, after: append([]string(nil), input.After...),
 	})
 }
 
@@ -132,6 +128,7 @@ func (service *MutationService) RemoveVolume(
 	volumeID string,
 	impactToken string,
 	confirmKey string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil || ids.Validate(ids.KindVolume, volumeID) != nil || len(impactToken) != sha256.Size*2 {
@@ -151,9 +148,9 @@ func (service *MutationService) RemoveVolume(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
-		return service.replayVolumeRemoval(ctx, locator, volumeID, impactToken, confirmKey)
+		return service.replayVolumeRemoval(ctx, locator, volumeID, impactToken, confirmKey, input.After)
 	}
-	projection, identity, err := service.repository.FindEnvironmentVolume(ctx, volumeID)
+	projection, identity, err := service.repository.FindEnvironmentVolumeIdentity(ctx, volumeID)
 	if err != nil {
 		if kind, ok := errs.KindOf(err); ok && kind == errs.KindVolumeNotFound {
 			locator, indexed, replayErr := service.idempotency.ResolveReplayLocator(
@@ -163,32 +160,16 @@ func (service *MutationService) RemoveVolume(
 				return idempotencyrecord.IdempotencyResponse{}, replayErr
 			}
 			if indexed {
-				return service.replayVolumeRemoval(ctx, locator, volumeID, impactToken, confirmKey)
+				return service.replayVolumeRemoval(ctx, locator, volumeID, impactToken, confirmKey, input.After)
 			}
 		}
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	backupImpact, err := service.repository.ResolveVolumeRemovalImpactAtRevision(
-		ctx, projection.Record.EnvironmentID, volumeID, projection.ReadRevision, service.now().UTC(),
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	items := volumeRemovalImpactItems(projection.Record, volumeID, backupImpact)
-	expectedImpact, err := volumeImpactDigest(projection.Record, identity, backupImpact, items)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if confirmKey != identity.Key || impactToken != expectedImpact {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict, "Volume removal confirmation does not match the current fixed-revision impact",
-		)
-	}
-	intent := volumeRemovalIntent(projection.Record.EnvironmentID, volumeID, impactToken, confirmKey)
-	return service.mutateWithRetry(ctx, volumeMutationRequest{
+	intent := volumeRemovalIntent(projection.Record.EnvironmentID, volumeID, impactToken, confirmKey, input.After)
+	return service.acceptMutation(ctx, volumeMutationRequest{
 		action: volumeMutationActionRemove, environmentID: projection.Record.EnvironmentID,
 		volumeID: volumeID, slug: identity.Slug, key: identity.Key, keySupplied: true,
-		impactToken: impactToken, idempotencyKey: idempotencyKey, intent: intent,
+		impactToken: impactToken, confirmKey: confirmKey, idempotencyKey: idempotencyKey, intent: intent, after: append([]string(nil), input.After...),
 	})
 }
 
@@ -198,8 +179,9 @@ func (service *MutationService) replayVolumeRemoval(
 	volumeID string,
 	impactToken string,
 	confirmKey string,
+	after []string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	intent := volumeRemovalIntent(locator.ScopeID, volumeID, impactToken, confirmKey)
+	intent := volumeRemovalIntent(locator.ScopeID, volumeID, impactToken, confirmKey, after)
 	evidence, err := service.idempotency.Prepare(ctx, intent)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -223,6 +205,7 @@ func volumeRemovalIntent(
 	volumeID string,
 	impactToken string,
 	confirmKey string,
+	after []string,
 ) mutationIntent {
 	return mutationIntent{
 		method: http.MethodDelete, route: volumeIdentityRoute,
@@ -231,11 +214,15 @@ func volumeRemovalIntent(
 			requestidempotency.Field{Name: "confirm_key", Value: requestidempotency.String(confirmKey)},
 			requestidempotency.Field{Name: "impact_token", Value: requestidempotency.String(impactToken)},
 		),
-		body: requestidempotency.NoBody(),
+		body: requestidempotency.JSONBody(
+			requestidempotency.Object(requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(after)}),
+		),
 	}
 }
 
 type volumeMutationRequest struct {
+	after          []string
+	confirmKey     string
 	action         string
 	environmentID  string
 	volumeID       string
@@ -245,259 +232,4 @@ type volumeMutationRequest struct {
 	impactToken    string
 	idempotencyKey string
 	intent         mutationIntent
-}
-
-func (service *MutationService) mutateWithRetry(
-	ctx context.Context,
-	request volumeMutationRequest,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	for attempt := 0; attempt < maximumVolumeMutationAttempts; attempt++ {
-		response, err := service.mutateOnce(ctx, request)
-		if err == nil {
-			return response, nil
-		}
-		kind, ok := errs.KindOf(err)
-		if !ok || kind != errs.KindStateConflict || attempt == maximumVolumeMutationAttempts-1 {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(
-		errs.KindInternal,
-		"Volume mutation retry bound was not enforced",
-	)
-}
-
-func (service *MutationService) mutateOnce(
-	ctx context.Context,
-	request volumeMutationRequest,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	evidence, err := service.idempotency.Prepare(ctx, request.intent)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(evidence.durable.Ciphertext)
-	locator := mutationLocator(request.intent, request.idempotencyKey)
-	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if existing {
-		return replayResponse(resolution)
-	}
-	placement, err := service.repository.ResolveResourceHost(ctx)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	environment, err := service.repository.GetEnvironment(ctx, request.environmentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	tenant, err := service.repository.GetTenant(ctx, project.Record.TenantID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
-		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindResourceInUse,
-			"Environment is not ready for Volume mutation",
-		)
-	}
-	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, request.environmentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	current, hasCurrent, err := service.repository.GetEnvironmentComposeProjection(ctx, request.environmentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	expectedHeadRevision, generation, err := desiredState(
-		request.environmentID, head, hasHead, current, hasCurrent,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if generation > math.MaxInt32 {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindResourceInUse,
-			"Environment render generation is exhausted",
-		)
-	}
-	if err := validateVolumeMutationAgainstProjection(request, current.Record, hasCurrent); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if request.action == volumeMutationActionRemove {
-		identity := projectionrecord.EnvironmentVolumeIdentity{}
-		for _, candidate := range current.Record.Volumes {
-			if candidate.ID == request.volumeID {
-				identity = candidate
-				break
-			}
-		}
-		backupImpact, impactErr := service.repository.ResolveVolumeRemovalImpactAtRevision(
-			ctx, request.environmentID, request.volumeID, current.ReadRevision, service.now().UTC(),
-		)
-		if impactErr != nil {
-			return idempotencyrecord.IdempotencyResponse{}, impactErr
-		}
-		items := volumeRemovalImpactItems(current.Record, request.volumeID, backupImpact)
-		expectedImpact, impactErr := volumeImpactDigest(current.Record, identity, backupImpact, items)
-		if impactErr != nil {
-			return idempotencyrecord.IdempotencyResponse{}, impactErr
-		}
-		if request.impactToken != expectedImpact {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindStateConflict, "Volume removal impact changed before publication",
-			)
-		}
-	}
-
-	candidateTaskID := ids.New(ids.KindTask)
-	candidateRequest, candidateProjection, _, _, err := buildVolumeMutationCandidate(
-		tenant.Record.ID, project.Record.ID, environment.Record,
-		current.Record, hasCurrent, request, candidateTaskID, generation,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	createdAt := service.now().UTC()
-	var removalPolicy etcd.VolumeRemovalBackupPolicyPreparation
-	if request.action == volumeMutationActionRemove {
-		removalPolicy, err = service.policies.PrepareVolumeRemovalBackupPolicy(
-			ctx,
-			request.environmentID,
-			request.volumeID,
-			current.ReadRevision,
-		)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-		candidateProjection.Backup = removalPolicy.Projection()
-	}
-	claim, _, err := desiredrevision.PreflightAndClaim(
-		ctx, service.repository, candidateProjection, desiredrevision.ClaimInput{
-			EnvironmentID: request.environmentID, CandidateTaskID: candidateTaskID,
-			Locator: locator, Intent: evidence.durable, BaselineHeadRevision: expectedHeadRevision,
-			SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
-			MatchExistingIntent: func(ctx context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
-				return service.idempotency.MatchesStaged(ctx, evidence, existing)
-			},
-			RenderGeneration: generation, CreatedAt: createdAt,
-		},
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	taskID := claim.TaskID
-	request, candidate, oldArtifact, newArtifact, err := buildVolumeMutationCandidate(
-		tenant.Record.ID, project.Record.ID, environment.Record,
-		current.Record, hasCurrent, candidateRequest, claim.RevisionID, generation,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	intentDigest, err := hex.DecodeString(claim.Intent.CiphertextDigest)
-	if err != nil || len(intentDigest) != sha256.Size {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Volume protected intent digest is invalid",
-		)
-	}
-	if request.action == volumeMutationActionRemove {
-		candidate.Backup = removalPolicy.Projection()
-	}
-	projectionEvidence, err := desiredrevision.PreflightProjection(candidate)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	previousRevisionID := ""
-	if hasHead {
-		previousRevisionID = head.Record.RevisionID
-	}
-	desiredInput, err := desiredrevision.DeriveCurrentMutationDesiredInput(
-		ctx, service.repository, request.environmentID, previousRevisionID, candidate,
-		environment.Record.NetworkPool, func(input *core.BlueprintDesiredInput) error {
-			return updateAuthoredBackupVolumeReferences(input, current.Record, request)
-		},
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	dependencyDigest := projectionEvidence.DependencyDigest
-	var precondition [sha256.Size]byte
-	if request.action == volumeMutationActionRemove && hasCurrent {
-		precondition, err = blueprints.EnvironmentBlueprintDependencyDigest(current.Record)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
-	action := blueprints.EnvironmentVolumeMutationAdd
-	if request.action == volumeMutationActionEdit {
-		action = blueprints.EnvironmentVolumeMutationEdit
-	} else if request.action == volumeMutationActionRemove {
-		action = blueprints.EnvironmentVolumeMutationRemove
-	}
-	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
-		Claim: claim,
-		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Volume: &blueprints.EnvironmentVolumeMutationAudit{
-			Action: action, VolumeID: request.volumeID, Slug: request.slug, Key: request.key,
-			KeySupplied: request.keySupplied, PreconditionDigest: precondition,
-		}},
-		DesiredInput: desiredInput, DependencyDigest: dependencyDigest,
-	}); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task, item, captured, err := buildVolumeWork(workexecution.Scope{
-		TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID,
-	}, placement, claim, request, oldArtifact, newArtifact, intentDigest,
-		volumeMutationConsumerIDs(current.Record, request.volumeID))
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	response, err := volumeMutationResponse(request, environment.Record, taskID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, Intent: claim.Intent, Response: response, TaskID: taskID,
-		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
-	}
-	if request.action == volumeMutationActionRemove {
-		target := idempotencyrecord.IdempotencyReplayTarget{
-			Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
-			ID:   request.volumeID,
-		}
-		marker.ReplayTarget = &target
-	}
-	result, mutationErr := service.repository.PublishVolumeWork(ctx, etcd.VolumeWorkPublication{
-		Project: project, Environment: environment, ExpectedHeadRevision: expectedHeadRevision,
-		Claim: claim, Projection: candidate, Policy: removalPolicy,
-		Task: task, Item: item, Input: captured, Marker: marker,
-	})
-	if mutationErr != nil {
-		if !isUnknownPublicationOutcome(mutationErr) {
-			return idempotencyrecord.IdempotencyResponse{}, mutationErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if resolution.Kind == requestidempotency.ResolutionReplay {
-		return cloneResponse(resolution.Response), nil
-	}
-	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Volume mutation resolution is invalid",
-		)
-	}
-	return cloneResponse(response), nil
 }

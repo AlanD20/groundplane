@@ -328,8 +328,14 @@ func validateLocalAgentPrimary(record LocalAgentRecord) error {
 }
 
 func ValidateLocalAgentConfig(config LocalAgentConfig) error {
-	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 || config.MaxParallelOperationsPerTask < 1 || config.MaxParallelOperationsPerTask > 256 || config.MaxConcurrentTasks*config.MaxParallelOperationsPerTask > 256 {
-		return errs.New(errs.KindValidationFailed, "local Agent config pull interval must be positive and task limits must be 1..256 with at most 256 total operations")
+	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 ||
+		config.MaxParallelOperationsPerTask < 1 ||
+		config.MaxParallelOperationsPerTask > 256 ||
+		config.MaxConcurrentTasks*config.MaxParallelOperationsPerTask > 256 {
+		return errs.New(
+			errs.KindValidationFailed,
+			"local Agent config pull interval must be positive and task limits must be 1..256 with at most 256 total operations",
+		)
 	}
 	for key, value := range config.Labels {
 		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 ||

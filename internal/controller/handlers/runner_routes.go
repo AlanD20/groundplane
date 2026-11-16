@@ -42,7 +42,12 @@ type RunnerMutator interface {
 }
 
 type RunnerRemover interface {
-	RemoveRunner(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveRunner(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type RunnerProvisioner interface {

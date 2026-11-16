@@ -11,6 +11,7 @@ import (
 )
 
 type environmentBlueprintBundleFlags struct {
+	after         []string
 	service       string
 	directory     string
 	root          string
@@ -93,13 +94,24 @@ func newEnvironmentBlueprintCmd() *cobra.Command {
 	blueprint.AddCommand(validate)
 
 	applyFlags := &environmentBlueprintBundleFlags{}
-	var retryKey, retryRevision string
+	var retryKey, retryRevision, expectedRevision string
 	apply := &cobra.Command{
 		Use:   "apply <name>",
 		Short: "Apply a closed Blueprint bundle against the current revision",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			retrying := cmd.Flags().Changed("retry-key")
+			if cmd.Flags().Changed("expected-revision") && (retrying || cmd.Flags().Changed("retry-revision")) {
+				return errs.New(
+					errs.KindValidationFailed,
+					"--expected-revision authors a new Apply; use only --retry-revision for uncertain acceptance",
+				)
+			}
+			if cmd.Flags().Changed("expected-revision") &&
+				expectedRevision != apiTypes.EnvironmentBlueprintInitialRevision &&
+				ids.Validate(ids.KindTask, expectedRevision) != nil {
+				return errs.New(errs.KindValidationFailed, "--expected-revision must be 0 or an Apply Task ID")
+			}
 			if retrying != cmd.Flags().Changed("retry-revision") {
 				return errs.New(errs.KindValidationFailed, "--retry-key and --retry-revision must be supplied together")
 			}
@@ -125,16 +137,24 @@ func newEnvironmentBlueprintCmd() *cobra.Command {
 			}
 			key, revision := retryKey, retryRevision
 			if !retrying {
-				current, err := fromContext(cmd).Client.ShowEnvironmentBlueprint(cmd.Context(), id)
-				if err != nil {
-					return err
+				key = ids.NewULID()
+				if cmd.Flags().Changed("expected-revision") {
+					revision = expectedRevision
+				} else {
+					current, err := fromContext(cmd).Client.ShowEnvironmentBlueprint(cmd.Context(), id)
+					if err != nil {
+						return err
+					}
+					revision = current.Revision
 				}
-				key, revision = ids.NewULID(), current.Revision
 			}
 			return runBlueprintApply(cmd, id, revision, key, body, contentType)
 		},
 	}
 	applyFlags.bind(apply)
+	addTaskAfterFlag(apply, &applyFlags.after)
+	apply.Flags().
+		StringVar(&expectedRevision, "expected-revision", "", "explicit Blueprint revision (0 or Apply Task ID); use a prerequisite Apply Task ID when it changes this Environment")
 	apply.Flags().StringVar(&retryKey, "retry-key", "", "original Apply idempotency key after an uncertain response")
 	apply.Flags().
 		StringVar(&retryRevision, "retry-revision", "", "original Blueprint revision after an uncertain response")
@@ -159,5 +179,12 @@ func (flags *environmentBlueprintBundleFlags) bind(command *cobra.Command) {
 }
 
 func (flags environmentBlueprintBundleFlags) build() ([]byte, string, error) {
-	return buildBlueprintMultipart(flags.directory, flags.root, flags.compose, flags.interpolation, flags.service)
+	return buildBlueprintMultipart(
+		flags.directory,
+		flags.root,
+		flags.compose,
+		flags.interpolation,
+		flags.service,
+		flags.after,
+	)
 }

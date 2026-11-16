@@ -285,6 +285,16 @@ func encodeEnvironmentBlueprintClaim(writer *blueprintRecordWriter, claim Enviro
 	writer.string(claim.Locator.Method)
 	writer.string(claim.Locator.Route)
 	writer.string(claim.Locator.Key)
+	if claim.TaskLocator == nil {
+		writer.uint8(0)
+	} else {
+		writer.uint8(1)
+		writer.string(string(claim.TaskLocator.ScopeKind))
+		writer.string(claim.TaskLocator.ScopeID)
+		writer.string(claim.TaskLocator.Method)
+		writer.string(claim.TaskLocator.Route)
+		writer.string(claim.TaskLocator.Key)
+	}
 	writer.uint8(claim.Intent.EnvelopeVersion)
 	writer.string(claim.Intent.Cipher)
 	writer.string(claim.Intent.DigestAlgorithm)
@@ -314,6 +324,19 @@ func decodeEnvironmentBlueprintClaim(reader *blueprintRecordReader) EnvironmentB
 	claim.Locator = idempotencyrecord.IdempotencyLocator{
 		ScopeKind: idempotencyrecord.IdempotencyScopeKind(reader.string(32)), ScopeID: reader.string(128),
 		Method: reader.string(16), Route: reader.string(1024), Key: reader.string(128),
+	}
+	switch reader.uint8() {
+	case 0:
+	case 1:
+		claim.TaskLocator = &idempotencyrecord.IdempotencyLocator{
+			ScopeKind: idempotencyrecord.IdempotencyScopeKind(reader.string(32)),
+			ScopeID:   reader.string(128),
+			Method:    reader.string(16),
+			Route:     reader.string(1024),
+			Key:       reader.string(128),
+		}
+	default:
+		reader.err = CorruptEnvironmentBlueprintStage()
 	}
 	claim.Intent.EnvelopeVersion = reader.uint8()
 	claim.Intent.Cipher = reader.string(64)

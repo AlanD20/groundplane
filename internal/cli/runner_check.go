@@ -5,25 +5,22 @@ import "github.com/spf13/cobra"
 func newRunnerCheckCmd() *cobra.Command {
 	var key string
 	var revision int64
+	var runAfter []string
 	cmd := &cobra.Command{
 		Use:   "check <slug>",
 		Short: "Check GitHub, rootless Docker, GP API and registry from an existing Runner",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			runnerID, err := resolveRunnerTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			selected := revision
-			if selected == 0 {
-				runner, err := app.Client.ShowRunner(cmd.Context(), runnerID)
-				if err != nil {
-					return err
-				}
-				selected = runner.Revision
-			}
-			accepted, err := app.Client.CheckRunner(cmd.Context(), runnerID, selected, key)
+			accepted, err := app.Client.CheckRunner(cmd.Context(), runnerID, revision, key, after)
 			if err != nil {
 				return err
 			}
@@ -31,7 +28,9 @@ func newRunnerCheckCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&key, "idempotency-key", "", "reuse this key and --revision to resolve uncertain acceptance")
-	cmd.Flags().Int64Var(&revision, "revision", 0, "exact desired revision; defaults to the current Runner read")
+	cmd.Flags().
+		Int64Var(&revision, "revision", 0, "optional exact desired revision; omitted selects the current revision after prerequisites finish")
+	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
 

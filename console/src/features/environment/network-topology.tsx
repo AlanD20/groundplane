@@ -332,6 +332,7 @@ export function ZoneColumn({
           destructive
           confirmText={zone.name}
           startLabel="Remove zone"
+          runAfter
           review={
             <div className="flex flex-col gap-2 text-xs">
               {removalImpactError ? (
@@ -375,7 +376,7 @@ export function ZoneColumn({
               ) : null}
             </div>
           }
-          onDispatch={() => {
+          onDispatch={(after) => {
             if (!removalImpact)
               return Promise.reject(
                 new Error("Exact zone removal impact is not loaded"),
@@ -384,6 +385,7 @@ export function ZoneColumn({
               env.id,
               zone.id,
               removalImpact.impact_token,
+              after,
             );
           }}
         />

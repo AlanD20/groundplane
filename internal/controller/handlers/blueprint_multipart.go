@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,6 +19,7 @@ import (
 const blueprintManifestMaxBytes = 256 * 1024
 
 type blueprintMultipartManifest struct {
+	After          []string                 `json:"after,omitempty"`
 	Service        string                   `json:"service,omitempty"`
 	Root           string                   `json:"root"`
 	ComposeSources []string                 `json:"compose_sources"`
@@ -32,38 +34,43 @@ type blueprintMultipartFile struct {
 	SHA256 string `json:"sha256"`
 }
 
+type blueprintSubmission struct {
+	Bundle core.BlueprintBundle
+	After  []string
+}
+
 // decodeBlueprintMultipart authenticates the closed multipart namespace while
 // streaming each declared file through its bounded digest check. The manifest
 // must be first so no undeclared bytes are buffered before their identity and
 // limits are known.
-func decodeBlueprintMultipart(request *http.Request) (core.BlueprintBundle, error) {
+func decodeBlueprintMultipart(request *http.Request) (blueprintSubmission, error) {
 	if request == nil {
-		return core.BlueprintBundle{}, errs.New(errs.KindInternal, "Blueprint request is required")
+		return blueprintSubmission{}, errs.New(errs.KindInternal, "Blueprint request is required")
 	}
 	reader, err := request.MultipartReader()
 	if err != nil {
-		return core.BlueprintBundle{}, malformedBlueprintMultipart()
+		return blueprintSubmission{}, malformedBlueprintMultipart()
 	}
 
 	part, err := reader.NextPart()
 	if err != nil {
-		return core.BlueprintBundle{}, malformedBlueprintMultipart()
+		return blueprintSubmission{}, malformedBlueprintMultipart()
 	}
 	defer part.Close()
 	if part.FormName() != "manifest" || part.FileName() != "" ||
 		!blueprintPartContentType(part, "application/json") {
-		return core.BlueprintBundle{}, malformedBlueprintMultipart()
+		return blueprintSubmission{}, malformedBlueprintMultipart()
 	}
 	manifestBody, err := io.ReadAll(io.LimitReader(part, blueprintManifestMaxBytes+1))
 	if err != nil {
-		return core.BlueprintBundle{}, malformedBlueprintMultipart()
+		return blueprintSubmission{}, malformedBlueprintMultipart()
 	}
 	if len(manifestBody) > blueprintManifestMaxBytes {
-		return core.BlueprintBundle{}, errs.New(errs.KindRequestTooLarge, "Blueprint manifest exceeds its size limit")
+		return blueprintSubmission{}, errs.New(errs.KindRequestTooLarge, "Blueprint manifest exceeds its size limit")
 	}
 	manifest, err := decodeBlueprintManifest(manifestBody)
 	if err != nil {
-		return core.BlueprintBundle{}, err
+		return blueprintSubmission{}, err
 	}
 
 	bundle := core.BlueprintBundle{
@@ -74,41 +81,41 @@ func decodeBlueprintMultipart(request *http.Request) (core.BlueprintBundle, erro
 		Files:          make([]core.BlueprintFile, 0, len(manifest.Files)),
 	}
 	if len(manifest.Files) == 0 || len(manifest.Files) > core.BlueprintBundleMaxFiles {
-		return core.BlueprintBundle{}, invalidBlueprintBundle()
+		return blueprintSubmission{}, invalidBlueprintBundle()
 	}
 	totalSize := int64(0)
 	for index, declared := range manifest.Files {
 		expectedPart := blueprintFilePartName(index)
 		if declared.Part != expectedPart || declared.Size < 0 ||
 			declared.Size > core.BlueprintBundleMaxFileBytes {
-			return core.BlueprintBundle{}, invalidBlueprintBundle()
+			return blueprintSubmission{}, invalidBlueprintBundle()
 		}
 		totalSize += declared.Size
 		if totalSize > core.BlueprintBundleMaxTotalBytes {
-			return core.BlueprintBundle{}, invalidBlueprintBundle()
+			return blueprintSubmission{}, invalidBlueprintBundle()
 		}
 		digest, err := decodeBlueprintDigest(declared.SHA256)
 		if err != nil {
-			return core.BlueprintBundle{}, invalidBlueprintBundle()
+			return blueprintSubmission{}, invalidBlueprintBundle()
 		}
 
 		part, err = reader.NextPart()
 		if err != nil {
-			return core.BlueprintBundle{}, malformedBlueprintMultipart()
+			return blueprintSubmission{}, malformedBlueprintMultipart()
 		}
 		if part.FormName() != expectedPart || part.FileName() != "" ||
 			!blueprintPartContentType(part, "application/octet-stream") {
 			_ = part.Close()
-			return core.BlueprintBundle{}, malformedBlueprintMultipart()
+			return blueprintSubmission{}, malformedBlueprintMultipart()
 		}
 		content, readErr := io.ReadAll(io.LimitReader(part, declared.Size+1))
 		closeErr := part.Close()
 		if readErr != nil || closeErr != nil || int64(len(content)) != declared.Size {
-			return core.BlueprintBundle{}, malformedBlueprintMultipart()
+			return blueprintSubmission{}, malformedBlueprintMultipart()
 		}
 		actual := sha256.Sum256(content)
 		if !bytes.Equal(actual[:], digest) {
-			return core.BlueprintBundle{}, malformedBlueprintMultipart()
+			return blueprintSubmission{}, malformedBlueprintMultipart()
 		}
 		bundle.Files = append(bundle.Files, core.BlueprintFile{
 			Path: declared.Path, Content: content,
@@ -118,12 +125,12 @@ func decodeBlueprintMultipart(request *http.Request) (core.BlueprintBundle, erro
 		if trailing != nil {
 			_ = trailing.Close()
 		}
-		return core.BlueprintBundle{}, malformedBlueprintMultipart()
+		return blueprintSubmission{}, malformedBlueprintMultipart()
 	}
 	if err := bundle.Validate(); err != nil {
-		return core.BlueprintBundle{}, invalidBlueprintBundle()
+		return blueprintSubmission{}, invalidBlueprintBundle()
 	}
-	return bundle, nil
+	return blueprintSubmission{Bundle: bundle, After: append([]string(nil), manifest.After...)}, nil
 }
 
 func decodeBlueprintManifest(value []byte) (blueprintMultipartManifest, error) {
@@ -138,6 +145,16 @@ func decodeBlueprintManifest(value []byte) (blueprintMultipartManifest, error) {
 	}
 	if err := requireBlueprintJSONEOF(decoder); err != nil {
 		return blueprintMultipartManifest{}, malformedBlueprintMultipart()
+	}
+	if len(manifest.After) > 16 {
+		return blueprintMultipartManifest{}, invalidBlueprintBundle()
+	}
+	seen := map[string]bool{}
+	for _, taskID := range manifest.After {
+		if ids.Validate(ids.KindTask, taskID) != nil || seen[taskID] {
+			return blueprintMultipartManifest{}, invalidBlueprintBundle()
+		}
+		seen[taskID] = true
 	}
 	return manifest, nil
 }

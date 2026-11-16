@@ -56,6 +56,48 @@ For CLI inspection, use `groundplane task show <id>`, then `task attempts`,
 `--after` and `--revision` select its work page. Command help and
 [API conventions](../api-cli.md) own the exact invocation and wire format.
 
+## Run after whole Tasks
+
+Task-producing action review forms offer **Run after · whole Tasks**. Select
+recent Tasks or add an existing Task ID, up to 16. These are whole-Task
+prerequisites, separate from dependencies between operations inside one Task.
+Synchronous metadata saves and Retry of an existing Task do not create a new
+dependency list.
+
+The Controller accepts the requested action once and returns its Task ID.
+While prerequisites are pending, it does not capture mutable execution inputs,
+claim resources or consume an execution slot. Preparation starts only after all
+prerequisites succeed and fully settle. A prerequisite failure or cancellation
+prevents the dependent action from running; inspect the linked Task for its
+outcome. The prerequisite list is immutable and participates in request replay
+identity.
+
+Task details show the prerequisite links, whole-Task waiting state and any failed
+prerequisite. Opening Task inspection preserves the current request draft. For a
+queued Release Group rollback, sources are selected after prerequisites finish;
+the Console does not submit a preview captured before them. An explicitly
+provided API preview revision remains an operator precondition.
+
+Use repeatable `--after TASK_ID` with the matching CLI action, or include
+`"after": ["task_…"]` in its JSON request. For example:
+
+```sh
+groundplane service deploy api --after task_01J00000000000000000000000
+groundplane image fetch nginx:alpine --after task_01J00000000000000000000000
+```
+
+Acceptance identifies the Task, not a Release or an image digest that has not
+yet been selected. Read the Task and resulting resources after it succeeds.
+The CLI and Console submit once; neither client implements dependency ordering
+by polling and resubmitting requests.
+
+Simple actions may wait for prerequisites or preparation for up to 24 hours.
+Once captured, each operation keeps its usual execution timeout, bounded by the
+Task's deadline; Service and Group releases retain their configured whole-Task
+deadline. The inspector shows a temporary preparation blocker and its deadline.
+Expiry or a stopped prerequisite ends the dependent with a reason and predecessor
+links. It does not leave an executor occupied while waiting.
+
 ## Discord Task alerts
 
 Open Task alerts in Environment settings or Platform settings. Each destination

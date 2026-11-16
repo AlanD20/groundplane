@@ -25,7 +25,7 @@ func (repository *InputRepository) prepareUnpreparedRetention(ctx context.Contex
 	if settlement == nil {
 		return false, workqueue.Change{}, conflict("Unprepared Entry has no saved settlement")
 	}
-	operationID := ids.DeriveAt(ids.KindOperation, item.CreatedAt, item.ID, "entry-operation")
+	operationID := ids.DeriveAt(ids.KindOperation, task.CreatedAt, item.ID, "entry-operation")
 	guards := []keyvalue.Condition{
 		{Key: workqueue.TaskKey(task.ID), ModRevision: view.Task.Revision},
 		{Key: workqueue.ItemKey(item.ID), ModRevision: view.Item.Revision},

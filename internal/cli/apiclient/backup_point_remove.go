@@ -14,6 +14,7 @@ func (c *Client) RemoveRecoveryPoint(
 	environmentID string,
 	pointID string,
 	idempotencyKey string,
+	after []string,
 ) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
@@ -28,6 +29,7 @@ func (c *Client) RemoveRecoveryPoint(
 		environmentID,
 		pointID,
 		&generated.BackupPointsRemoveParams{IdempotencyKey: idempotencyKey},
+		generated.BackupPointsRemoveJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)

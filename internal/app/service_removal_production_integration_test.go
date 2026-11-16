@@ -11,6 +11,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/serviceremoval"
 	serviceoperations "github.com/AlanD20/groundplane/internal/controller/services"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
@@ -64,7 +65,18 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mutations, err := newControllerServiceMutations(repository, nil, nil, coordinator, replays)
+	submitter, err := newAcceptedActions(fixture.store, protector, fixture.queue, replays, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations, registrations, err := newControllerServiceMutations(
+		repository,
+		nil,
+		nil,
+		coordinator,
+		replays,
+		submitter,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,13 +142,39 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 	if err := json.Unmarshal(cleared.Body, &service); err != nil || len(service.DependsOn) != 0 {
 		t.Fatalf("dependency reset did not clear desired state: %v %#v", err, service.DependsOn)
 	}
-	removed, err := mutations.RemoveService(ctx, service.ID, "018f3111-0000-7000-8000-000000000022")
+	removed, err := mutations.RemoveService(
+		ctx,
+		service.ID,
+		api.TaskRunAfterRequest{},
+		"018f3111-0000-7000-8000-000000000022",
+	)
 	if err != nil || removed.Status != http.StatusAccepted {
 		t.Fatalf("remove undeployed Service: status=%d error=%v", removed.Status, err)
 	}
 	var accepted api.TaskAccepted
 	if err := json.Unmarshal(removed.Body, &accepted); err != nil {
 		t.Fatal(err)
+	}
+	before, err := fixture.queue.ListWork(ctx, accepted.TaskID, "", 10, 0)
+	if err != nil || len(before.Items) != 0 {
+		t.Fatalf("pure accepted removal captured work prematurely: %v", err)
+	}
+	preparations, err := taskdependencies.NewPreparations(fixture.queue, registrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		task, _, err := fixture.queue.ReadTask(ctx, accepted.TaskID, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !task.Task.PendingPreparation() {
+			break
+		}
+		changed, err := preparations.Advance(ctx, accepted.TaskID, time.Now().UTC())
+		if err != nil || !changed {
+			t.Fatalf("prepare accepted Service removal: changed=%t error=%v", changed, err)
+		}
 	}
 	// TASK-184: published removal must release private staging ownership even
 	// before execution. Its native Task, not a leftover reservation, owns cleanup.
@@ -190,7 +228,12 @@ func TestServiceRemovalBeforeFirstDeploy(t *testing.T) {
 		found {
 		t.Fatalf("removal invented applied runtime: found=%t error=%v", found, err)
 	}
-	replay, err := mutations.RemoveService(ctx, service.ID, "018f3111-0000-7000-8000-000000000022")
+	replay, err := mutations.RemoveService(
+		ctx,
+		service.ID,
+		api.TaskRunAfterRequest{},
+		"018f3111-0000-7000-8000-000000000022",
+	)
 	if err != nil || string(replay.Body) != string(removed.Body) {
 		t.Fatalf("removal replay changed: %v", err)
 	}

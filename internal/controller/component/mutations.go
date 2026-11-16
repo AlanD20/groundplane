@@ -2,14 +2,16 @@ package component
 
 import (
 	"context"
-	"encoding/json"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"net/http"
-	"strconv"
+	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,14 +24,15 @@ type mutationRepository interface {
 
 type blueprintApplier interface {
 	GetBlueprint(context.Context, string) (apiTypes.EnvironmentBlueprintDocument, error)
-	ApplyComponentBlueprint(
+	TaskAcceptanceIdentity(context.Context, string) (workexecution.Scope, string, time.Duration, error)
+	PrepareAcceptedComponentBlueprint(
 		context.Context,
-		string,
-		string,
+		workqueue.TaskSnapshot,
 		core.BlueprintBundle,
 		string,
-		string,
-	) (idempotencyrecord.IdempotencyResponse, error)
+		idempotencyrecord.IdempotencyLocator,
+		idempotencyrecord.ProtectedIntentRecord,
+	) (taskdependencies.Prepared, error)
 }
 
 type credentialReferenceResolver interface {
@@ -37,9 +40,24 @@ type credentialReferenceResolver interface {
 }
 
 type platformConfigMutator interface {
-	EnablePlatformComponent(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	DisablePlatformComponent(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	UpdatePlatformComponent(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	EnablePlatformComponent(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	DisablePlatformComponent(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	UpdatePlatformComponent(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 	ReplacePlatformComponentConfig(
 		context.Context,
 		string,
@@ -49,10 +67,11 @@ type platformConfigMutator interface {
 }
 
 type MutationService struct {
-	components  mutationRepository
-	applier     blueprintApplier
-	credentials credentialReferenceResolver
-	platform    platformConfigMutator
+	acceptedActions *acceptedaction.Submitter
+	components      mutationRepository
+	applier         blueprintApplier
+	credentials     credentialReferenceResolver
+	platform        platformConfigMutator
 }
 
 func NewMutationService(
@@ -60,12 +79,13 @@ func NewMutationService(
 	applier blueprintApplier,
 	credentials credentialReferenceResolver,
 	platform platformConfigMutator,
+	acceptedActions *acceptedaction.Submitter,
 ) (*MutationService, error) {
-	if components == nil || applier == nil || credentials == nil || platform == nil {
+	if components == nil || applier == nil || credentials == nil || platform == nil || acceptedActions == nil {
 		return nil, errs.New(errs.KindInternal, "Component mutation dependencies are not configured")
 	}
 	return &MutationService{
-		components:  components,
+		acceptedActions: acceptedActions, components: components,
 		applier:     applier,
 		credentials: credentials,
 		platform:    platform,
@@ -89,7 +109,12 @@ func (service *MutationService) EnableComponent(
 				"Platform Component enable does not accept config",
 			)
 		}
-		return service.platform.EnablePlatformComponent(ctx, componentID, idempotencyKey)
+		return service.platform.EnablePlatformComponent(
+			ctx,
+			componentID,
+			apiTypes.TaskRunAfterRequest{After: request.After},
+			idempotencyKey,
+		)
 	}
 	var config *apiTypes.ComponentConfig
 	if request.Config != nil {
@@ -104,19 +129,13 @@ func (service *MutationService) EnableComponent(
 		}
 		config = &prepared
 	}
-	return service.mutateComponent(ctx, componentID, idempotencyKey, func(spec *yaml.Node) error {
-		if config != nil {
-			if err := applyEnvironmentComponentConfig(spec, *config); err != nil {
-				return err
-			}
-		}
-		return replaceYAMLMappingValue(spec, "enabled", scalarNode("!!bool", strconv.FormatBool(true)))
-	})
+	return service.submitComponent(ctx, current.Record, "enable", config, request.After, idempotencyKey)
 }
 
 func (service *MutationService) DisableComponent(
 	ctx context.Context,
 	componentID string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	current, err := service.components.GetComponent(ctx, componentID)
@@ -124,16 +143,15 @@ func (service *MutationService) DisableComponent(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
-		return service.platform.DisablePlatformComponent(ctx, componentID, idempotencyKey)
+		return service.platform.DisablePlatformComponent(ctx, componentID, input, idempotencyKey)
 	}
-	return service.mutateComponent(ctx, componentID, idempotencyKey, func(spec *yaml.Node) error {
-		return replaceYAMLMappingValue(spec, "enabled", scalarNode("!!bool", strconv.FormatBool(false)))
-	})
+	return service.submitComponent(ctx, current.Record, "disable", nil, input.After, idempotencyKey)
 }
 
 func (service *MutationService) UpdateComponent(
 	ctx context.Context,
 	componentID string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	current, err := service.components.GetComponent(ctx, componentID)
@@ -141,9 +159,9 @@ func (service *MutationService) UpdateComponent(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
-		return service.platform.UpdatePlatformComponent(ctx, componentID, idempotencyKey)
+		return service.platform.UpdatePlatformComponent(ctx, componentID, input, idempotencyKey)
 	}
-	return service.mutateComponent(ctx, componentID, idempotencyKey, func(*yaml.Node) error { return nil })
+	return service.submitComponent(ctx, current.Record, "update", nil, input.After, idempotencyKey)
 }
 
 func (service *MutationService) SetComponentConfig(
@@ -166,83 +184,7 @@ func (service *MutationService) SetComponentConfig(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	response, err := service.mutateComponent(ctx, componentID, idempotencyKey, func(spec *yaml.Node) error {
-		return applyEnvironmentComponentConfig(spec, publicConfig)
-	})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	var accepted apiTypes.TaskAccepted
-	if err := json.Unmarshal(response.Body, &accepted); err != nil || accepted.TaskID == "" {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Component Blueprint Task response is invalid",
-		)
-	}
-	body, err := json.Marshal(apiTypes.ComponentConfigMutationResult{
-		Resource: publicConfig, ReconcileTaskID: &accepted.TaskID,
-	})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	return idempotencyrecord.IdempotencyResponse{
-		Status:      http.StatusOK,
-		ContentKind: "application/json",
-		Body:        body,
-	}, nil
-}
-
-func (service *MutationService) mutateComponent(
-	ctx context.Context,
-	componentID string,
-	idempotencyKey string,
-	mutate func(*yaml.Node) error,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Component mutation context is required",
-		)
-	}
-	component, err := service.components.GetComponent(ctx, componentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if component.Record.Desired.Owner != core.ComponentOwnerEnvironment {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"Platform Component actions require their dedicated lifecycle API",
-		)
-	}
-	if component.Record.Desired.Kind != core.ComponentKindIngressCaddy &&
-		component.Record.Desired.Kind != core.ComponentKindIngressEnvoy &&
-		component.Record.Desired.Kind != core.ComponentKindEdgeCloudflare {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"Component action is unsupported for this kind",
-		)
-	}
-	environmentID := component.Record.Desired.OwnerID
-	document, err := service.applier.GetBlueprint(ctx, environmentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if document.EnvironmentID != environmentID || document.Revision == "" {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Component Blueprint authoring identity is invalid",
-		)
-	}
-	bundle := core.BlueprintBundle{
-		RootPath: "groundplane.yaml", ComposeSources: []string{"groundplane.yaml"},
-		Files: []core.BlueprintFile{{Path: "groundplane.yaml", Content: []byte(document.Document)}},
-	}
-	if err := mutateComponentBlueprint(&bundle, component.Record.Desired.Kind, mutate); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	return service.applier.ApplyComponentBlueprint(
-		ctx, environmentID, component.Record.Desired.ID, bundle, document.Revision, idempotencyKey,
-	)
+	return service.submitComponent(ctx, current.Record, "configure", &publicConfig, request.After, idempotencyKey)
 }
 
 func mutateComponentBlueprint(

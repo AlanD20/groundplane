@@ -2,8 +2,6 @@ package environment
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -17,11 +15,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprovision"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -36,7 +36,7 @@ type environmentCreationRepository interface {
 		context.Context,
 	) (etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry], error)
 	ResolveResourceHost(context.Context) (workexecution.Placement, error)
-	CreateEnvironmentWithWork(
+	PrepareEnvironmentCreation(
 		context.Context,
 		string,
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -44,8 +44,7 @@ type environmentCreationRepository interface {
 		hierarchyrecord.EnvironmentRecord,
 		[]componentrecord.Record,
 		environmentprovision.Input,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	) (workqueue.Change, error)
 }
 
 type environmentCreationEvidence struct {
@@ -97,6 +96,7 @@ func (service *durableEnvironmentCreationIdempotency) Prepare(
 		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeProject, ID: input.ProjectID},
 		Query: requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
 			requestidempotency.Field{Name: "name", Value: requestidempotency.String(input.Name)},
 			requestidempotency.Field{Name: "network_pool", Value: requestidempotency.String(input.NetworkPool)},
 			requestidempotency.Field{Name: "project_id", Value: requestidempotency.String(input.ProjectID)},
@@ -143,6 +143,7 @@ func (service *durableEnvironmentCreationIdempotency) ResolveUnknown(
 }
 
 type environmentCreationService struct {
+	accepted        *acceptedaction.Submitter
 	volumeRoot      string
 	environmentPool netip.Prefix
 	repository      environmentCreationRepository
@@ -155,8 +156,9 @@ func NewCreationService(
 	environmentPool string,
 	repository environmentCreationRepository,
 	idempotency environmentCreationIdempotency,
+	accepted *acceptedaction.Submitter,
 ) (*environmentCreationService, error) {
-	if repository == nil || idempotency == nil {
+	if repository == nil || idempotency == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Environment creation service is not configured")
 	}
 	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
@@ -168,7 +170,7 @@ func NewCreationService(
 	}
 	return &environmentCreationService{
 		volumeRoot: volumeRoot, environmentPool: root,
-		repository: repository, idempotency: idempotency, now: time.Now,
+		repository: repository, idempotency: idempotency, accepted: accepted, now: time.Now,
 	}, nil
 }
 
@@ -236,69 +238,108 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	if project.Record.ID != input.ProjectID || project.Record.Kind != hierarchyrecord.ProjectKindTenant {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
-	poolRegistry, err := service.repository.GetEnvironmentPoolRegistry(ctx)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	now := service.now().UTC()
-	taskID := ids.New(ids.KindTask)
+	at := service.now().UTC()
 	environmentID := ids.New(ids.KindEnvironment)
-	nextPoolRegistry, networkPool, err := poolRegistry.Record.Reserve(
-		service.environmentPool,
-		environmentID,
-		input.NetworkPool,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	poolRegistry.Record = nextPoolRegistry
-	environment, err := hierarchyrecord.NewProvisioningEnvironment(
-		service.volumeRoot,
-		project.Record,
-		environmentID,
-		input.Name,
-		networkPool,
-		taskID,
-		now,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	components, err := newInitialEnvironmentComponents(environment.ID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	placement, err := service.repository.ResolveResourceHost(ctx)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	capture := environmentprovision.Input{
-		TaskID: taskID, WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
+	task := workexecution.Task{
+		ID:         ids.New(ids.KindTask),
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionCreate,
+		TargetID:   environmentID,
+		TargetName: input.Name,
 		Scope: workexecution.Scope{
 			TenantID:      project.Record.TenantID,
 			ProjectID:     project.Record.ID,
-			EnvironmentID: environment.ID,
+			EnvironmentID: environmentID,
 		},
-		HostID: placement.HostID, VolumeRoot: service.volumeRoot, Environment: environment, CreatedAt: now,
+		After: append(
+			[]string(nil),
+			input.After...),
+		CreatedAt: at,
+		UpdatedAt: at,
+		Deadline:  at.Add(acceptedaction.QueueTimeout),
 	}
-	if err := capture.Validate(); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: capture.TaskID})
+	return acceptedaction.Submit(
+		ctx,
+		service.accepted,
+		acceptedaction.Submission{Task: task, Kind: "environment-create",
+			Locator: locator, Intent: evidence.durable, Evidence: evidence.candidate},
+		input,
+	)
+}
+
+func (service *environmentCreationService) AcceptedPreparations() []taskdependencies.Registration {
+	return []taskdependencies.Registration{acceptedaction.Registration(service.accepted, "environment-create",
+		workexecution.ActionCreate, ids.KindEnvironment, service.prepareAcceptedCreation)}
+}
+
+func (service *environmentCreationService) prepareAcceptedCreation(ctx context.Context, snapshot workqueue.TaskSnapshot,
+	_ int64, at time.Time, input CreateEnvironmentInput,
+) (taskdependencies.Prepared, error) {
+	task := snapshot.Task
+	project, err := service.repository.GetProject(ctx, input.ProjectID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return taskdependencies.Prepared{}, err
 	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: append([]byte(nil), responseBody...),
+	if project.Record.ID != task.Scope.ProjectID || project.Record.TenantID != task.Scope.TenantID ||
+		project.Record.Kind != hierarchyrecord.ProjectKindTenant {
+		return taskdependencies.Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"Environment parent changed after creation was accepted",
+		)
 	}
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, Intent: evidence.durable, Response: response,
-		TaskID: capture.TaskID, CreatedAt: now, UpdatedAt: now,
+	poolRegistry, err := service.repository.GetEnvironmentPoolRegistry(ctx)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
 	}
-	result, createErr := service.repository.CreateEnvironmentWithWork(
+	nextRegistry, networkPool, err := poolRegistry.Record.Reserve(
+		service.environmentPool,
+		task.TargetID,
+		input.NetworkPool,
+	)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	poolRegistry.Record = nextRegistry
+	environment, err := hierarchyrecord.NewProvisioningEnvironment(
+		service.volumeRoot,
+		project.Record,
+		task.TargetID,
+		input.Name,
+		networkPool,
+		task.ID,
+		at,
+	)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	components, err := newInitialEnvironmentComponents(environment.ID, task.CreatedAt)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	placement, err := service.repository.ResolveResourceHost(ctx)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	capture := environmentprovision.Input{
+		TaskID:      task.ID,
+		WorkItemID:  ids.DeriveAt(ids.KindWorkItem, task.CreatedAt, task.ID, "environment-work"),
+		PlanID:      ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "environment-plan"),
+		Scope:       task.Scope,
+		HostID:      placement.HostID,
+		VolumeRoot:  service.volumeRoot,
+		Environment: environment,
+		CreatedAt:   at,
+	}
+	_, item, err := capture.Work()
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	deadline := acceptedaction.ExecutionDeadline(task, at, 120*time.Second)
+	item.Deadline = deadline
+	task.Intent = *item.Input
+	task.ExpectedItems = 1
+	task.UpdatedAt = at
+	authority, err := service.repository.PrepareEnvironmentCreation(
 		ctx,
 		service.volumeRoot,
 		project,
@@ -306,39 +347,21 @@ func (service *environmentCreationService) createEnvironmentOnce(
 		environment,
 		components,
 		capture,
-		marker,
 	)
-	if createErr != nil {
-		if !isUnknownEnvironmentCreationOutcome(createErr) {
-			return idempotencyrecord.IdempotencyResponse{}, createErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	if resolution.Kind == requestidempotency.ResolutionReplay {
-		return cloneIdempotencyResponse(resolution.Response), nil
-	}
-	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Environment creation resolution is invalid",
-		)
-	}
-	return cloneIdempotencyResponse(response), nil
+	return taskdependencies.Prepared{Task: task, Graph: []workexecution.Item{item}, Authority: authority}, nil
 }
 
-func newInitialEnvironmentComponents(environmentID string) ([]componentrecord.Record, error) {
+func newInitialEnvironmentComponents(environmentID string, at time.Time) ([]componentrecord.Record, error) {
 	components := make([]componentrecord.Record, 0, 2)
 	for _, kind := range []core.ComponentKind{
 		core.ComponentKindIngressCaddy,
 		core.ComponentKindEdgeCloudflare,
 	} {
 		record, err := componentrecord.NewRecord(core.Component{
-			ID:      ids.New(ids.KindComponent),
+			ID:      ids.DeriveAt(ids.KindComponent, at, environmentID, "initial-"+string(kind)),
 			Owner:   core.ComponentOwnerEnvironment,
 			OwnerID: environmentID,
 			Kind:    kind,
@@ -350,12 +373,4 @@ func newInitialEnvironmentComponents(environmentID string) ([]componentrecord.Re
 		components = append(components, record)
 	}
 	return components, nil
-}
-
-func isUnknownEnvironmentCreationOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
 }

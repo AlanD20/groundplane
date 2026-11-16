@@ -9,12 +9,17 @@ import (
 )
 
 func newComponentDNSCheckCmd() *cobra.Command {
-	var overrides []string
+	var overrides, runAfter []string
+	var revision int64
 	cmd := &cobra.Command{
 		Use:   "check <id>",
 		Short: "Query CoreDNS and its configured upstreams",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			queries := make([]apiTypes.DNSCheckQuery, 0, len(overrides))
 			for _, override := range overrides {
 				domain, selected, ok := strings.Cut(override, "=")
@@ -28,7 +33,7 @@ func newComponentDNSCheckCmd() *cobra.Command {
 				queries = append(queries, apiTypes.DNSCheckQuery{Domain: domain, Name: name, Type: kind})
 			}
 			app := fromContext(cmd)
-			accepted, err := app.Client.CheckDNS(cmd.Context(), target(app, args[0]), queries)
+			accepted, err := app.Client.CheckDNS(cmd.Context(), target(app, args[0]), revision, queries, after)
 			if err != nil {
 				return err
 			}
@@ -37,6 +42,9 @@ func newComponentDNSCheckCmd() *cobra.Command {
 	}
 	cmd.Flags().
 		StringArrayVar(&overrides, "query", nil, "override a forwarding domain's query: domain=name:A or domain=name:NS")
+	cmd.Flags().
+		Int64Var(&revision, "revision", 0, "optional exact CoreDNS revision; omitted selects the current revision after prerequisites finish")
+	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
 

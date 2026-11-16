@@ -28,7 +28,7 @@ func (repository *HierarchyRepository) prepareMutationDesiredRoot(ctx context.Co
 	if claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || expectedHeadRevision < 0 ||
 		projection.EnvironmentID != claim.EnvironmentID || projection.RevisionID != claim.RevisionID ||
 		task.ID != claim.TaskID || task.Scope.EnvironmentID != claim.EnvironmentID ||
-		task.ExpectedItems != 1 || task.PublicationComplete || task.FinishedAt != nil || task.Stop != nil ||
+		(task.ExpectedItems == 0 || task.ExpectedItems > workexecution.MaximumTaskItems) || task.PublicationComplete || task.FinishedAt != nil || task.Stop != nil ||
 		(task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove) ||
 		task.Intent.SHA256 != claim.Intent.CiphertextDigest || !task.CreatedAt.Equal(claim.CreatedAt) ||
 		marker.TaskID != task.ID || marker.Kind != idempotency.IdempotencyMarkerTask ||

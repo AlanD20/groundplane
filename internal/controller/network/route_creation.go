@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -33,6 +34,7 @@ func (service *routeMutationService) CreateRoute(
 	intent := routeMutationIntent{
 		method: http.MethodPost, route: routeCreationRoute, environmentID: input.EnvironmentID,
 		body: requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
 			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(input.EnvironmentID)},
 			requestidempotency.Field{Name: "exposure", Value: requestidempotency.String(input.Exposure)},
 			requestidempotency.Field{Name: "host", Value: requestidempotency.String(input.Host)},
@@ -82,16 +84,11 @@ func (service *routeMutationService) createRouteOnce(
 	if existing {
 		return routeReplayResponse(resolution)
 	}
-	environment, project, target, err := service.routeHierarchy(ctx, input.EnvironmentID, input.TargetServiceID)
+	environment, project, err := service.routeOwnership(ctx, input.EnvironmentID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if !core.ServiceExposesTCPPort(target.Record.Desired.Expose, input.TargetPort) {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindValidationFailed,
-			"Route target Service does not expose the requested TCP port",
-		)
-	}
+
 	record, err := routerecord.NewRecord(input.EnvironmentID, core.Route{
 		ID: ids.New(ids.KindRoute), Host: input.Host, Path: input.Path,
 		Exposure: input.Exposure, TargetServiceID: input.TargetServiceID,
@@ -100,17 +97,18 @@ func (service *routeMutationService) createRouteOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.acceptRouteWork(
+	return service.submitRouteWork(
 		ctx,
 		environment,
 		project,
-		target,
-		nil,
-		record,
+		record.Desired.ID,
+		record.Desired.Host+record.Desired.Path,
 		workexecution.ActionCreate,
 		locator,
 		evidence,
+		acceptedRouteMutation{Create: &input, After: input.After},
 	)
+
 }
 
 func validateRouteCreationInput(input apiTypes.RouteCreate) error {
@@ -128,13 +126,4 @@ func validateRouteCreationInput(input apiTypes.RouteCreate) error {
 		return errs.Wrap(errs.KindValidationFailed, err)
 	}
 	return nil
-}
-
-func routeAPIResponse(record routerecord.Record) apiTypes.Route {
-	return apiTypes.Route{
-		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Host: record.Desired.Host,
-		Path: record.Desired.Path, Exposure: string(record.Desired.Exposure),
-		TargetServiceID: record.Desired.TargetServiceID, TargetPort: record.Desired.TargetPort,
-		Status: string(record.Observed.Status),
-	}
 }

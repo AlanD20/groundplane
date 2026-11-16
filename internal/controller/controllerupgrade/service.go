@@ -2,7 +2,6 @@ package controllerupgrade
 
 import (
 	"context"
-	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"math"
 	"net/http"
@@ -11,11 +10,12 @@ import (
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -38,14 +38,14 @@ type AgentImageVerifier interface {
 	Verify(context.Context, string, int) error
 }
 type UpdateTaskStore interface {
-	CreateControllerSoftwareWork(
+	PrepareControllerSoftwareAuthority(
 		context.Context,
 		controllersoftware.Capture,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	) (workqueue.Change, error)
 }
 
 type ServiceDependencies struct {
+	Submitter *acceptedaction.Submitter
 	// Nil Catalog explicitly means bootstrap is absent, not that a damaged
 	// installation was accepted. Composition must reject other open failures.
 	Catalog             ReleaseCatalog
@@ -64,6 +64,7 @@ type ServiceDependencies struct {
 // Preflight verifies staged bytes and the stopped Agent image; only the claimed
 // Task coordinator can activate either executable.
 type Service struct {
+	submitter      *acceptedaction.Submitter
 	catalog        ReleaseCatalog
 	unit           BootstrapUnit
 	agents         AgentInventory
@@ -78,21 +79,37 @@ type Service struct {
 }
 
 func NewService(dependencies ServiceDependencies) (*Service, error) {
-	if dependencies.Unit == nil || dependencies.Agents == nil || dependencies.Tasks == nil ||
-		dependencies.Evidence == nil || dependencies.Intents == nil || dependencies.Records == nil || !dependencies.ProcessDigest.Valid() ||
+	if dependencies.Submitter == nil ||
+		dependencies.Unit == nil ||
+		dependencies.Agents == nil ||
+		dependencies.Tasks == nil ||
+		dependencies.Evidence == nil ||
+		dependencies.Intents == nil ||
+		dependencies.Records == nil ||
+		!dependencies.ProcessDigest.Valid() ||
 		(dependencies.BootstrapAgentImage != "" && !imageref.IsDigestPinned(dependencies.BootstrapAgentImage)) ||
 		dependencies.Catalog != nil && dependencies.AgentImages == nil {
 		return nil, errs.New(errs.KindInternal, "controller update service dependencies are invalid")
 	}
-	return &Service{catalog: dependencies.Catalog, unit: dependencies.Unit, agents: dependencies.Agents,
-		tasks: dependencies.Tasks, records: dependencies.Records, evidence: dependencies.Evidence, intents: dependencies.Intents,
-		process: dependencies.ProcessDigest, bootstrapImage: dependencies.BootstrapAgentImage,
-		agentImages: dependencies.AgentImages, now: time.Now}, nil
+	return &Service{
+		submitter:      dependencies.Submitter,
+		catalog:        dependencies.Catalog,
+		unit:           dependencies.Unit,
+		agents:         dependencies.Agents,
+		tasks:          dependencies.Tasks,
+		records:        dependencies.Records,
+		evidence:       dependencies.Evidence,
+		intents:        dependencies.Intents,
+		process:        dependencies.ProcessDigest,
+		bootstrapImage: dependencies.BootstrapAgentImage,
+		agentImages:    dependencies.AgentImages,
+		now:            time.Now,
+	}, nil
 }
 
 func (service *Service) UpdateController(
 	ctx context.Context,
-	release, key string,
+	release string, after []string, key string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
@@ -107,7 +124,7 @@ func (service *Service) UpdateController(
 			"controller release digest is invalid",
 		)
 	}
-	evidence, err := service.protect(ctx, release)
+	evidence, err := service.protect(ctx, release, after)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -121,38 +138,36 @@ func (service *Service) UpdateController(
 	if found {
 		return acceptedReplay(existing)
 	}
-	input, err := service.freeze(ctx, id)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	now := service.now().UTC()
-	capture := controllersoftware.Capture{
-		TaskID:     ids.New(ids.KindTask),
-		WorkItemID: ids.New(ids.KindWorkItem),
-		PlanID:     ids.New(ids.KindPlan),
-		Input:      input,
-		CreatedAt:  now,
-	}
-	raw, err := json.Marshal(apiTypes.TaskAccepted{TaskID: capture.TaskID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(raw)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status:      http.StatusAccepted,
-		ContentKind: "application/json",
-		Body:        raw,
+	at := service.now().UTC()
+	task := workexecution.Task{
+		ID:         ids.New(ids.KindTask),
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionUpdate,
+		TargetID:   controllersoftware.TargetID(),
+		TargetName: "Controller",
+		After:      append([]string(nil), after...),
+		CreatedAt:  at,
+		UpdatedAt:  at,
+		Deadline:   at.Add(acceptedaction.QueueTimeout),
 	}
 	intent, err := evidence.DurableRecord()
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(intent.Ciphertext)
-	result, err := service.tasks.CreateControllerSoftwareWork(ctx, capture, idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending, Locator: locator,
-		Intent: intent, Response: response, TaskID: capture.TaskID, CreatedAt: now, UpdatedAt: now,
-	})
-	return service.resolvePublication(ctx, locator, evidence, result, err, response)
+	return acceptedaction.Submit(
+		ctx,
+		service.submitter,
+		acceptedaction.Submission{
+			Task:     task,
+			Kind:     "controller-update",
+			Locator:  locator,
+			Intent:   intent,
+			Evidence: evidence,
+		},
+		controllerUpdateRequest{Release: id},
+	)
+
 }
 
 func (service *Service) freeze(ctx context.Context, release upgrade.Digest) (upgrade.Input, error) {

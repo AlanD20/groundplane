@@ -9,7 +9,11 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-func (c *Client) RotateBackupKey(ctx context.Context, environmentID string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RotateBackupKey(
+	ctx context.Context,
+	environmentID string,
+	after []string,
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -19,6 +23,7 @@ func (c *Client) RotateBackupKey(ctx context.Context, environmentID string) (api
 		ctx,
 		environmentID,
 		&generated.BackupKeyRotateParams{IdempotencyKey: ids.NewULID()},
+		generated.BackupKeyRotateJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)

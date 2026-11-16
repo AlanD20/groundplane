@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumework"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -32,15 +33,15 @@ type VolumeWorkPublication struct {
 	Marker               idempotency.IdempotencyMarker
 }
 
-// PublishVolumeWork is the atomic native Volume admission boundary. Input chunk
+// PrepareVolumeWork is the native Volume capture boundary. Input chunk
 // staging is not dispatchable; desired state, policy, ownership and work become
 // visible together under the existing final-publication transaction envelope.
-func (repository *EnvironmentBlueprintRepository) PublishVolumeWork(
+func (repository *EnvironmentBlueprintRepository) PrepareVolumeWork(
 	ctx context.Context,
 	request VolumeWorkPublication,
-) (IdempotencyTransactionResult, error) {
+) (workqueue.Change, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	if repository == nil || repository.HierarchyRepository == nil || repository.transactions == nil ||
 		hierarchyrecord.ValidateProject(
@@ -52,25 +53,21 @@ func (repository *EnvironmentBlueprintRepository) PublishVolumeWork(
 		request.Item.ID != ids.DeriveAt(ids.KindWorkItem, request.Claim.CreatedAt, request.Claim.TaskID, "volume") ||
 		request.Task.Scope.EnvironmentID != request.Environment.Record.ID || request.Task.Scope.ProjectID != request.Project.Record.ID ||
 		request.Task.Scope.TenantID != request.Project.Record.TenantID || request.Task.Actor != workexecution.OperatorActor {
-		return IdempotencyTransactionResult{}, errs.New(
+		return workqueue.Change{}, errs.New(
 			errs.KindValidationFailed,
 			"Volume publication requires its ready owning Environment",
 		)
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
-		found {
-		return existing, err
-	}
 	fence, err := repository.loadEnvironmentBlueprintMutationFence(ctx, request.Project, request.Environment)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	host, err := hostbindings.ReadLocal(ctx, repository.store, fence.ReadRevision())
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	if request.Item.Placement.HostID != host.Binding.HostID || request.Item.Placement.Executor != workexecution.Agent {
-		return IdempotencyTransactionResult{}, errs.New(
+		return workqueue.Change{}, errs.New(
 			errs.KindStateConflict,
 			"Volume target host changed before publication",
 		)
@@ -83,7 +80,7 @@ func (repository *EnvironmentBlueprintRepository) PublishVolumeWork(
 		fence.ReadRevision(),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	root, err := repository.prepareMutationDesiredRoot(
 		ctx,
@@ -94,13 +91,13 @@ func (repository *EnvironmentBlueprintRepository) PublishVolumeWork(
 		request.ExpectedHeadRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer keyvalue.ZeroMutationBytes(root.Mutations)
 	identities, err := prepareEnvironmentDesiredIdentityPublication(ctx, repository.store, request.Projection,
 		request.Claim.SourceKind, request.ExpectedHeadRevision, fence.ReadRevision())
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer identities.clear()
 	policy, err := prepareVolumeWorkPolicy(
@@ -112,16 +109,24 @@ func (repository *EnvironmentBlueprintRepository) PublishVolumeWork(
 		time.Now().UTC(),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer keyvalue.ZeroMutationBytes(policy.Mutations)
 	inputs, err := volumework.NewInputRepository(repository.store)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	admission := append(fence.TransactionConditions(), root.Conditions...)
+	taskGuard, err := blueprintStagingTaskCondition(ctx, repository.store, request.Task)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	admission = append(admission, taskGuard)
 	admission = append(admission, host.Conditions...)
 	admission = append(admission, references...)
+	if err := repository.stageNativePreparationDraft(ctx, request.Task, "volume", request.Item.ID, nil, request.Claim, admission); err != nil {
+		return workqueue.Change{}, err
+	}
 	work, err := inputs.PreparePublication(
 		ctx,
 		request.Task,
@@ -132,12 +137,12 @@ func (repository *EnvironmentBlueprintRepository) PublishVolumeWork(
 		request.Claim.RevisionID,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer keyvalue.ZeroMutationBytes(work.Mutations)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(epoch.Value)
 	ancestry, err := hierarchydeletion.BindMutationEpochs(
@@ -152,7 +157,7 @@ func (repository *EnvironmentBlueprintRepository) PublishVolumeWork(
 		nil,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer ancestry.Clear()
 	conditions, err := resourcePublicationConditions(
@@ -163,7 +168,7 @@ func (repository *EnvironmentBlueprintRepository) PublishVolumeWork(
 		ancestry.Conditions(),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	mutations := append([]keyvalue.Mutation(nil), work.Mutations...)
 	mutations = append(mutations, root.Mutations...)
@@ -178,7 +183,7 @@ func (repository *EnvironmentBlueprintRepository) PublishVolumeWork(
 		fence.ReadRevision(),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	initiation, err := newEnvironmentTaskInitiation(
 		tenant,
@@ -187,23 +192,20 @@ func (repository *EnvironmentBlueprintRepository) PublishVolumeWork(
 		taskjournal.TaskActorOperator,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	conditions, classify, err := prepareTaskInitiationFences(
+	conditions, _, err = prepareTaskInitiationFences(
 		initiation,
 		conditions,
 		resourceWorkPublicationConflict(conditions),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, classify)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
+	owned := make([]keyvalue.Mutation, len(mutations))
+	for index, mutation := range mutations {
+		owned[index] = mutation
+		owned[index].Value = append([]byte(nil), mutation.Value...)
 	}
-	replay, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return replay.applyEnvironmentBlueprint(ctx, request.Marker, plan, repository.transactions)
+	return workqueue.Change{Conditions: conditions, Mutations: owned}, nil
 }

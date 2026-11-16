@@ -5,8 +5,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/app/runnerassembly"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
@@ -38,6 +40,7 @@ func newControllerRunnerComposition(
 	idempotency *etcd.IdempotencyRepository,
 	intentCoordinator *requestidempotency.Coordinator,
 	logger *slog.Logger,
+	accepted *acceptedaction.Submitter,
 ) (*controllerRunnerComposition, error) {
 	runnerPools, err := cfg.AllocationPools()
 	if err != nil {
@@ -60,7 +63,7 @@ func newControllerRunnerComposition(
 	}
 	runnerProvisioning, err := runnercapability.NewProvisioningService(
 		runnerRecords, queue, inputs, hierarchyRecords, idempotency, intentCoordinator, runnerTokens,
-		runnerallocation.RunnerAllocationConfigFromPools(runnerPools), cfg.Runner.Image, policy,
+		runnerallocation.RunnerAllocationConfigFromPools(runnerPools), cfg.Runner.Image, policy, accepted,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner provisioning service: %w", err)
@@ -69,7 +72,7 @@ func newControllerRunnerComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner mutation service: %w", err)
 	}
-	runnerRemovals, err := runnercapability.NewRemovalService(runnerRecords, idempotency, intentCoordinator)
+	runnerRemovals, err := runnercapability.NewRemovalService(runnerRecords, idempotency, intentCoordinator, accepted)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner removal service: %w", err)
 	}
@@ -81,7 +84,15 @@ func newControllerRunnerComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner lifecycle: %w", err)
 	}
-	capabilities, err := runnerassembly.New(store, runnerRecords, idempotency, intentCoordinator, lifecycle, logger)
+	capabilities, err := runnerassembly.New(
+		store,
+		runnerRecords,
+		idempotency,
+		intentCoordinator,
+		lifecycle,
+		logger,
+		accepted,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -98,4 +109,11 @@ func newControllerRunnerComposition(
 		checks:           capabilities.Checks,
 		checkExecutor:    capabilities.CheckExecutor,
 	}, nil
+}
+
+func (composition *controllerRunnerComposition) AcceptedPreparations() []taskdependencies.Registration {
+	registrations := composition.provisioning.AcceptedPreparations()
+	registrations = append(registrations, composition.removals.AcceptedPreparations()...)
+	registrations = append(registrations, composition.software.AcceptedPreparations()...)
+	return append(registrations, composition.checks.AcceptedPreparations()...)
 }

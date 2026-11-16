@@ -25,8 +25,12 @@ export type ScriptActions = {
     scriptId: string,
     patch: ScriptPatch,
   ) => Promise<Script>;
-  runScript: (scriptId: string) => Promise<string>;
-  removeScript: (envId: string, scriptId: string) => Promise<string>;
+  runScript: (scriptId: string, after?: string[]) => Promise<string>;
+  removeScript: (
+    envId: string,
+    scriptId: string,
+    after?: string[],
+  ) => Promise<string>;
 };
 export function createScriptActions(
   update: (change: (draft: EnvironmentRemovalDraft) => void) => void,
@@ -81,21 +85,22 @@ export function createScriptActions(
       });
       return edited;
     },
-    runScript: async (scriptId) => {
+    runScript: async (scriptId, after = []) => {
       const accepted = await controllerRequest<ScriptRunResponse>(
         `/scripts/${encodeURIComponent(scriptId)}/run`,
         202,
         {
           method: "POST",
-          body: undefined,
+          body: after.length ? { after } : {},
         },
       );
       return requireTaskId(accepted, "Script run");
     },
-    removeScript: (envId, scriptId) => (
+    removeScript: (envId, scriptId, after = []) => (
       assertEnvironmentMutable(envId, "Script mutation"),
       dispatchResourceRemoval({
         kind: "script",
+        after,
         environmentId: envId,
         resourceId: scriptId,
       })

@@ -40,6 +40,20 @@ func NewTokenBroker() *TokenBroker {
 	return &TokenBroker{tokens: make(map[TokenKey]*stagedToken)}
 }
 
+// Available checks transient ownership without exposing or consuming token
+// bytes. Deferred registration refuses missing material before allocating host
+// resources; consuming it remains the runtime registration step's responsibility.
+func (broker *TokenBroker) Available(key TokenKey) bool {
+	if broker == nil || !key.valid() {
+		return false
+	}
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	entry := broker.tokens[key]
+	return entry != nil && time.Now().Before(entry.deadline) && entry.token != nil &&
+		validRegistrationToken(entry.token.value)
+}
+
 // Stage copies token into broker-owned zeroable storage and clears the caller's
 // object. A duplicate key cannot replace another Task attempt's token.
 func (broker *TokenBroker) Stage(key TokenKey, token *RegistrationToken, deadline time.Time) error {

@@ -4,8 +4,8 @@ import { entryFromAPI } from "@/features/entry/projection";
 import { controllerRequest } from "@/lib/controller-json-request";
 export type EntryPageResponse =
   operations["entry.list"]["responses"][200]["content"]["application/json"];
-export type EntryResponse =
-  operations["entry.edit"]["responses"][200]["content"]["application/json"];
+export type EntryMutationAccepted =
+  operations["entry.edit"]["responses"][202]["content"]["application/json"];
 export type EntryCreateRequest =
   operations["entry.create"]["requestBody"]["content"]["application/json"];
 export type EntryEditRequest =

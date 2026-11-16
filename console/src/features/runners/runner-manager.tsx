@@ -1,3 +1,4 @@
+import { RunnerRemoveDialog } from "./runner-remove-dialog";
 import { CreationButton } from "@/components/common/creation-button";
 ("use client");
 
@@ -24,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import type { Runner } from "@/lib/types";
-import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { RunnerOwnerPicker } from "./runner-owner-picker";
 import { RunnerInventory } from "./runner-inventory";
 import { RunnerCreationFields } from "./runner-creation-fields";
@@ -81,6 +82,8 @@ export default function RunnerManager({
   const [retryError, setRetryError] = useState<string | null>(null);
   const [submittingRetry, setSubmittingRetry] = useState(false);
   const [acceptedTaskId, setAcceptedTaskId] = useState<string | null>(null);
+  const [createAfter, setCreateAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
 
   useEffect(() => {
     if (tenantId === "") return;
@@ -138,6 +141,7 @@ export default function RunnerManager({
       onClick={() => {
         setCreateOwner(owner === "all" ? "tenant" : owner);
         setCreating(true);
+        setCreateAfter([]);
         setCreateError(null);
       }}
     >
@@ -228,7 +232,9 @@ export default function RunnerManager({
       >
         <DialogHeader>
           <DialogTitle>Runner settings</DialogTitle>
-          <DialogDescription>Configure the GP slug and automatic software updates.</DialogDescription>
+          <DialogDescription>
+            Configure the GP slug and automatic software updates.
+          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -431,6 +437,7 @@ export default function RunnerManager({
                   memoryBytes: Math.round(Number(memoryGiB) * 2 ** 30),
                   labels: normalizedLabels,
                   registrationToken,
+                  after: createAfter,
                 });
                 setAcceptedTaskId(taskId);
                 setRegistrationToken("");
@@ -505,6 +512,11 @@ export default function RunnerManager({
             submittingCreate={submittingCreate}
             createError={createError}
           />
+          <TaskRunAfterSelector
+            value={createAfter}
+            onChange={setCreateAfter}
+            onBusyChange={setAfterLoading}
+          />
           <DialogFooter>
             <Button
               type="button"
@@ -521,6 +533,7 @@ export default function RunnerManager({
               type="submit"
               disabled={
                 submittingCreate ||
+                afterLoading ||
                 !createSlug.trim() ||
                 !githubUrl.trim() ||
                 !runnerGroup.trim() ||
@@ -569,27 +582,11 @@ export default function RunnerManager({
         onRemove={setRemoving}
       />
 
-      <TaskRunnerDialog
-        open={removing !== null}
-        onOpenChange={(open) => {
-          if (!open) setRemoving(null);
-        }}
-        title={`Remove Runner · ${removing?.slug ?? ""}`}
-        description="Remove this Runner. You must also deregister it in GitHub."
-        type="remove"
-        target={removing?.id ?? tenant.id}
+      <RunnerRemoveDialog
+        runner={removing}
+        tenantId={tenant.id}
         workspace={params.tenant}
-        destructive
-        startLabel="Remove Runner"
-        onDispatch={() =>
-          removing
-            ? store.removeRunner(removing.id)
-            : Promise.reject(new Error("No Runner selected"))
-        }
-        onCommit={() => {
-          setRemoving(null);
-          void store.refreshRunners(tenant.id).catch(() => undefined);
-        }}
+        onClose={() => setRemoving(null)}
       />
     </div>
   );

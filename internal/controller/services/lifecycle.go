@@ -2,21 +2,15 @@ package services
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/servicelifecyclework"
-	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const (
@@ -25,58 +19,48 @@ const (
 	serviceDestroyRoute                   = "/services/{id}/destroy"
 	serviceLifecycleAgentTimeoutSeconds   = int64(120)
 	serviceLifecycleControlTimeoutSeconds = int64(30)
-	maximumServiceLifecycleAttempts       = 3
 )
 
 type serviceLifecycleService struct {
 	repository  serviceLifecycleRepository
 	idempotency serviceLifecycleIdempotency
 	hookInputs  serviceLifecycleHookInputs
+	accepted    *acceptedaction.Submitter
 	now         func() time.Time
 }
 
-func NewLifecycleService(
-	repository serviceLifecycleRepository,
-	idempotency serviceLifecycleIdempotency,
-	hookInputs serviceLifecycleHookInputs,
+func NewLifecycleService(repository serviceLifecycleRepository, idempotency serviceLifecycleIdempotency,
+	hookInputs serviceLifecycleHookInputs, accepted *acceptedaction.Submitter,
 ) (*serviceLifecycleService, error) {
-	if repository == nil || idempotency == nil || hookInputs == nil {
+	if repository == nil || idempotency == nil || hookInputs == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle service is not configured")
 	}
 	return &serviceLifecycleService{
-		repository: repository, idempotency: idempotency, hookInputs: hookInputs, now: time.Now,
+		repository:  repository,
+		idempotency: idempotency,
+		hookInputs:  hookInputs,
+		accepted:    accepted,
+		now:         time.Now,
 	}, nil
 }
 
-func (service *serviceMutationService) StartService(
-	ctx context.Context,
-	serviceID string,
-	idempotencyKey string,
+func (service *serviceMutationService) StartService(ctx context.Context, serviceID string,
+	input apiTypes.TaskRunAfterRequest, key string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, workexecution.ActionStart)
+	return service.runServiceLifecycle(ctx, serviceID, input, key, workexecution.ActionStart)
 }
-
-func (service *serviceMutationService) StopService(
-	ctx context.Context,
-	serviceID string,
-	idempotencyKey string,
+func (service *serviceMutationService) StopService(ctx context.Context, serviceID string,
+	input apiTypes.TaskRunAfterRequest, key string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, workexecution.ActionStop)
+	return service.runServiceLifecycle(ctx, serviceID, input, key, workexecution.ActionStop)
 }
-
-func (service *serviceMutationService) DestroyService(
-	ctx context.Context,
-	serviceID string,
-	idempotencyKey string,
+func (service *serviceMutationService) DestroyService(ctx context.Context, serviceID string,
+	input apiTypes.TaskRunAfterRequest, key string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, workexecution.ActionDestroy)
+	return service.runServiceLifecycle(ctx, serviceID, input, key, workexecution.ActionDestroy)
 }
-
-func (service *serviceMutationService) runServiceLifecycle(
-	ctx context.Context,
-	serviceID string,
-	idempotencyKey string,
-	taskType workexecution.Action,
+func (service *serviceMutationService) runServiceLifecycle(ctx context.Context, serviceID string,
+	input apiTypes.TaskRunAfterRequest, key string, action workexecution.Action,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.lifecycle == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
@@ -84,50 +68,19 @@ func (service *serviceMutationService) runServiceLifecycle(
 			"Service lifecycle is not configured",
 		)
 	}
-	return service.lifecycle.Run(ctx, serviceID, idempotencyKey, taskType)
+	return service.lifecycle.Run(ctx, serviceID, input, key, action)
 }
 
-func (service *serviceLifecycleService) Run(
-	ctx context.Context,
-	serviceID string,
-	idempotencyKey string,
-	taskType workexecution.Action,
+func (service *serviceLifecycleService) Run(ctx context.Context, serviceID string, input apiTypes.TaskRunAfterRequest,
+	key string, action workexecution.Action,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Service lifecycle context is required",
-		)
-	}
-	if ids.Validate(ids.KindService, serviceID) != nil {
+	if ctx == nil || ids.Validate(ids.KindService, serviceID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
-			"Service lifecycle requires a stable Service id",
+			"Service lifecycle requires a stable Service id and context",
 		)
 	}
-	for attempt := 0; attempt < maximumServiceLifecycleAttempts; attempt++ {
-		response, err := service.runOnce(ctx, serviceID, idempotencyKey, taskType)
-		if err == nil {
-			return response, nil
-		}
-		kind, ok := errs.KindOf(err)
-		if !ok || kind != errs.KindStateConflict || attempt == maximumServiceLifecycleAttempts-1 {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(
-		errs.KindInternal,
-		"Service lifecycle retry bound was not enforced",
-	)
-}
-
-func (service *serviceLifecycleService) runOnce(
-	ctx context.Context,
-	serviceID string,
-	idempotencyKey string,
-	taskType workexecution.Action,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	route, _, err := serviceLifecycleContract(taskType)
+	route, _, err := serviceLifecycleContract(action)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -135,40 +88,19 @@ func (service *serviceLifecycleService) runOnce(
 		Kind: idempotencyrecord.IdempotencyReplayTargetService,
 		ID:   serviceID,
 	}
-	locator, indexed, err := service.idempotency.ResolveReplayLocator(
-		ctx, target, http.MethodPost, route, idempotencyKey,
-	)
+	locator, indexed, err := service.idempotency.ResolveReplayLocator(ctx, target, http.MethodPost, route, key)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if indexed {
-		evidence, prepareErr := service.idempotency.Prepare(ctx, locator, serviceID, taskType, route)
-		if prepareErr != nil {
-			return idempotencyrecord.IdempotencyResponse{}, prepareErr
+	if !indexed {
+		current, err := service.repository.GetService(ctx, serviceID)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
-		defer clear(evidence.durable.Ciphertext)
-		resolution, existing, resolveErr := service.idempotency.ResolveExisting(ctx, locator, evidence)
-		if resolveErr != nil {
-			return idempotencyrecord.IdempotencyResponse{}, resolveErr
-		}
-		if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Service lifecycle replay target is inconsistent",
-			)
-		}
-		return requestidempotency.CloneResponse(resolution.Response), nil
+		locator = idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
+			ScopeID: current.Record.EnvironmentID, Method: http.MethodPost, Route: route, Key: key}
 	}
-
-	current, err := service.repository.GetService(ctx, serviceID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	locator = idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: current.Record.EnvironmentID,
-		Method: http.MethodPost, Route: route, Key: idempotencyKey,
-	}
-	evidence, err := service.idempotency.Prepare(ctx, locator, serviceID, taskType, route)
+	evidence, err := service.idempotency.Prepare(ctx, locator, serviceID, action, route, input.After)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -178,15 +110,19 @@ func (service *serviceLifecycleService) runOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Service lifecycle replay resolution is invalid",
-			)
-		}
-		return requestidempotency.CloneResponse(resolution.Response), nil
+		return serviceReplayResponse(resolution)
 	}
-
+	if indexed {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Service lifecycle replay target is inconsistent",
+		)
+	}
+	// Only identity and ancestry are needed before predecessors complete.
+	current, err := service.repository.GetService(ctx, serviceID)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	environment, err := service.repository.GetEnvironment(ctx, current.Record.EnvironmentID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -195,146 +131,15 @@ func (service *serviceLifecycleService) runOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	var tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord]
-	switch project.Record.Kind {
-	case hierarchyrecord.ProjectKindTenant:
-		if project.Record.TenantID == "" {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Service Project Tenant is missing",
-			)
-		}
-		currentTenant, getErr := service.repository.GetTenant(ctx, project.Record.TenantID)
-		if getErr != nil {
-			return idempotencyrecord.IdempotencyResponse{}, getErr
-		}
-		tenant = &currentTenant
-	case hierarchyrecord.ProjectKindBacking:
-		if project.Record.TenantID != "" {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing Project has a Tenant")
-		}
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"Service Project kind is invalid",
-		)
-	}
-	projection, hasProjection, err := service.repository.GetEnvironmentAppliedComposeProjection(
-		ctx,
-		environment.Record.ID,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	runtime, err := service.repository.GetServiceRemovalRuntime(
-		ctx, environment.Record.ID, serviceID, projection.ReadRevision,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	nativeBacking := project.Record.Kind == hierarchyrecord.ProjectKindBacking &&
-		runtime.Revision == 0 && hasProjection
-	applied := runtime.Revision > 0 || nativeBacking
-	if nativeBacking {
-		if _, _, err := projectionrecord.SelectBackingRuntime(projection.Record, serviceID); err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
 	now := service.now().UTC()
-	capture := servicelifecyclework.Input{
-		TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem), PlanID: ids.New(ids.KindPlan),
-		Action: taskType, ServiceID: serviceID, ServiceRevision: current.Revision,
+	task := workexecution.Task{ID: ids.New(ids.KindTask), Actor: workexecution.OperatorActor, Action: action,
 		Scope: workexecution.Scope{
 			TenantID:      project.Record.TenantID,
 			ProjectID:     project.Record.ID,
 			EnvironmentID: environment.Record.ID,
 		},
-		CreatedAt: now,
-	}
-	timeout := serviceLifecycleControlTimeoutSeconds
-	var sealedHookInputs *taskconfiguration.BackingHookEncryptedInputs
-	defer func() {
-		if sealedHookInputs != nil {
-			clear(sealedHookInputs.Ciphertext)
-		}
-	}()
-	if applied {
-		input, sealed, captureErr := service.prepareAppliedServiceLifecycle(
-			ctx,
-			capture.Action,
-			current,
-			tenant,
-			project,
-			environment,
-			projection,
-			nativeBacking,
-			capture.PlanID,
-			ids.New(ids.KindOperation),
-		)
-		if captureErr != nil {
-			return idempotencyrecord.IdempotencyResponse{}, captureErr
-		}
-		sealedHookInputs, capture.Runtime = sealed, &input
-		placement, err := service.repository.ResolveLifecycleHost(ctx)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-		capture.HostID = placement.HostID
-		timeout = serviceLifecycleAgentTimeoutSeconds
-		if definition := serviceLifecycleHookDefinition(capture.Action, input.HookConfiguration); definition != nil {
-			timeout = max(timeout, int64(definition.TimeoutSeconds)+serviceLifecycleControlTimeoutSeconds)
-		}
-		if sealed != nil {
-			capture.HookInputs = &servicelifecyclework.HookInputs{OperationID: sealed.OperationID,
-				CiphertextSHA256: sealed.CiphertextSHA256, SecretSources: sealed.SecretSources}
-		}
-	}
-
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: capture.TaskID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
-	}
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
-		TaskID: capture.TaskID, CreatedAt: now, UpdatedAt: now,
-	}
-	result, mutationErr := service.repository.PublishServiceLifecycle(
-		ctx, tenant, project, environment, current, capture,
-		sealedHookInputs, now.Add(time.Duration(timeout)*time.Second), marker,
-	)
-	if mutationErr != nil {
-		if !isUnknownServiceLifecycleMutationOutcome(mutationErr) {
-			return idempotencyrecord.IdempotencyResponse{}, mutationErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return requestidempotency.CloneResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Service lifecycle resolution is invalid",
-		)
-	}
-}
-
-func isUnknownServiceLifecycleMutationOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
+		TargetID: serviceID, TargetName: current.Record.Desired.Name, After: append([]string(nil), input.After...),
+		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(acceptedaction.QueueTimeout)}
+	return acceptedaction.Submit(ctx, service.accepted, acceptedaction.Submission{
+		Task: task, Kind: "service-" + string(action), ReplayTarget: &target, Locator: locator, Intent: evidence.durable, Evidence: evidence.candidate}, input)
 }

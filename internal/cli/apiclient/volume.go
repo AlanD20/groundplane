@@ -67,26 +67,26 @@ func (c *Client) GetVolume(ctx context.Context, id string) (apiTypes.Volume, err
 func (c *Client) CreateVolume(
 	ctx context.Context,
 	input apiTypes.VolumeCreate,
-) (apiTypes.VolumeMutationResponse, error) {
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.VolumeMutationResponse{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	body := generatedVolumeCreateBody(input)
 	response, err := client.VolumeCreateWithResponse(
 		ctx, &generated.VolumeCreateParams{IdempotencyKey: ids.NewULID()}, body,
 	)
 	if err != nil {
-		return apiTypes.VolumeMutationResponse{}, generatedCallError(ctx, http.MethodPost, "/api/v1/volumes", err)
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, "/api/v1/volumes", err)
 	}
 	if err := generatedResponseError(
-		http.MethodPost, "/api/v1/volumes", response.HTTPResponse, response.Body, http.StatusCreated,
+		http.MethodPost, "/api/v1/volumes", response.HTTPResponse, response.Body, http.StatusAccepted,
 	); err != nil {
-		return apiTypes.VolumeMutationResponse{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
-	var result apiTypes.VolumeMutationResponse
+	var result apiTypes.TaskAccepted
 	if err := decodeSingleJSON(http.MethodPost, "/api/v1/volumes", bytes.NewReader(response.Body), &result); err != nil {
-		return apiTypes.VolumeMutationResponse{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	return result, nil
 }
@@ -95,10 +95,10 @@ func (c *Client) EditVolume(
 	ctx context.Context,
 	id string,
 	input apiTypes.VolumeEdit,
-) (apiTypes.VolumeMutationResponse, error) {
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.VolumeMutationResponse{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	body := generatedVolumeEditBody(input)
 	path := "/api/v1/volumes/" + id
@@ -106,14 +106,14 @@ func (c *Client) EditVolume(
 		ctx, id, &generated.VolumeEditParams{IdempotencyKey: ids.NewULID()}, body,
 	)
 	if err != nil {
-		return apiTypes.VolumeMutationResponse{}, generatedCallError(ctx, http.MethodPatch, path, err)
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPatch, path, err)
 	}
-	if err := generatedResponseError(http.MethodPatch, path, response.HTTPResponse, response.Body, http.StatusOK); err != nil {
-		return apiTypes.VolumeMutationResponse{}, err
+	if err := generatedResponseError(http.MethodPatch, path, response.HTTPResponse, response.Body, http.StatusAccepted); err != nil {
+		return apiTypes.TaskAccepted{}, err
 	}
-	var result apiTypes.VolumeMutationResponse
+	var result apiTypes.TaskAccepted
 	if err := decodeSingleJSON(http.MethodPatch, path, bytes.NewReader(response.Body), &result); err != nil {
-		return apiTypes.VolumeMutationResponse{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	return result, nil
 }
@@ -156,6 +156,7 @@ func (c *Client) RemoveVolume(
 	id string,
 	impactToken string,
 	confirmKey string,
+	after []string,
 ) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
@@ -164,7 +165,7 @@ func (c *Client) RemoveVolume(
 	path := "/api/v1/volumes/" + id
 	response, err := client.VolumeRemoveWithResponse(ctx, id, &generated.VolumeRemoveParams{
 		ImpactToken: impactToken, ConfirmKey: confirmKey, IdempotencyKey: ids.NewULID(),
-	})
+	}, generated.VolumeRemoveJSONRequestBody{After: optionalServiceStrings(after)})
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
 	}
@@ -182,6 +183,7 @@ func generatedVolumeCreateBody(input apiTypes.VolumeCreate) generated.VolumeCrea
 	body := generated.VolumeCreate{
 		EnvironmentId: input.EnvironmentID,
 		Slug:          input.Slug,
+		After:         optionalServiceStrings(input.After),
 	}
 	if input.Key != "" {
 		key := input.Key
@@ -191,5 +193,5 @@ func generatedVolumeCreateBody(input apiTypes.VolumeCreate) generated.VolumeCrea
 }
 
 func generatedVolumeEditBody(input apiTypes.VolumeEdit) generated.VolumeEditJSONRequestBody {
-	return generated.VolumeEdit{Slug: input.Slug}
+	return generated.VolumeEdit{Slug: input.Slug, After: optionalServiceStrings(input.After)}
 }

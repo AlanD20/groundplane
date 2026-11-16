@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -18,14 +17,15 @@ import (
 )
 
 type routeWorkStageRequest struct {
-	Current      keyvalue.Versioned[environmentprojection.EnvironmentComposeProjection]
-	Route        routes.Record
-	Action       workexecution.Action
-	ReadRevision int64
-	Locator      idempotency.IdempotencyLocator
-	Evidence     routeMutationEvidence
-	Idempotency  routeMutationIdempotency
-	CreatedAt    time.Time
+	TaskID               string
+	AcceptedTaskRevision int64
+	Current              keyvalue.Versioned[environmentprojection.EnvironmentComposeProjection]
+	Route                routes.Record
+	Action               workexecution.Action
+	ReadRevision         int64
+	Locator              idempotency.IdempotencyLocator
+	Evidence             routeMutationEvidence
+	CreatedAt            time.Time
 }
 
 type stagedRouteWork struct {
@@ -41,16 +41,16 @@ func (publisher *RouteWorkPublisher) stage(
 	request routeWorkStageRequest,
 ) (stagedRouteWork, error) {
 	current := request.Current
-	if request.Idempotency == nil || request.CreatedAt.IsZero() ||
+	if request.TaskID == "" || request.AcceptedTaskRevision <= 0 || request.CreatedAt.IsZero() ||
 		request.Route.EnvironmentID != current.Record.EnvironmentID ||
 		(request.Action != workexecution.ActionCreate && request.Action != workexecution.ActionUpdate && request.Action != workexecution.ActionRemove) {
 		return stagedRouteWork{}, errs.New(errs.KindValidationFailed, "Route staged action is invalid")
 	}
 	claim, err := desiredrevision.Claim(ctx, publisher.desired, desiredrevision.ClaimInput{
-		EnvironmentID: current.Record.EnvironmentID, CandidateTaskID: ids.New(ids.KindTask),
-		Locator: request.Locator, Intent: request.Evidence.durable,
+		EnvironmentID: current.Record.EnvironmentID, CandidateTaskID: request.TaskID, AcceptedTaskRevision: request.AcceptedTaskRevision,
+		Locator: request.Locator, TaskLocator: &request.Locator, Intent: request.Evidence.durable,
 		MatchExistingIntent: func(ctx context.Context, existing idempotency.ProtectedIntentRecord) (bool, error) {
-			return request.Idempotency.MatchesStaged(ctx, request.Evidence, existing)
+			return existing.CiphertextDigest == request.Evidence.durable.CiphertextDigest, nil
 		},
 		BaselineHeadRevision: current.Revision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
 		RenderGeneration: current.Record.RenderGeneration + 1, CreatedAt: request.CreatedAt,
@@ -69,15 +69,7 @@ func (publisher *RouteWorkPublisher) stageClaimed(ctx context.Context, request r
 	claim blueprints.EnvironmentBlueprintStageClaim,
 ) (stagedRouteWork, error) {
 	record := request.Route
-	if request.Action == workexecution.ActionCreate {
-		desired := record.Desired
-		desired.ID = ids.DeriveAt(ids.KindRoute, claim.CreatedAt, claim.TaskID, "route")
-		var err error
-		record, err = routes.NewRecord(record.EnvironmentID, desired)
-		if err != nil {
-			return stagedRouteWork{}, err
-		}
-	}
+
 	audit := blueprints.EnvironmentRouteMutationAudit{
 		BaseRevisionID: request.Current.Record.RevisionID,
 		RouteID:        record.Desired.ID,

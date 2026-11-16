@@ -104,6 +104,7 @@ func (c *Client) CreateRunner(
 	body := generated.RunnerCreateJSONRequestBody{
 		AutoUpdate: request.AutoUpdate, Slug: request.Slug, GithubUrl: request.GitHubURL, RunnerGroup: request.RunnerGroup, GithubName: &request.GitHubName, CpuMillis: request.CPUMillis, MemoryBytes: request.MemoryBytes,
 		RegistrationToken: request.RegistrationToken,
+		After:             optionalServiceStrings(request.After),
 	}
 	defer func() { body.RegistrationToken = "" }()
 	if request.TenantID != "" {
@@ -184,7 +185,7 @@ func (c *Client) EditRunner(ctx context.Context, id, slug string, autoUpdate *bo
 	return generatedRunnerBody(http.MethodPatch, path, response.Body, response.JSON200)
 }
 
-func (c *Client) RemoveRunner(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RemoveRunner(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -194,6 +195,7 @@ func (c *Client) RemoveRunner(ctx context.Context, id string) (apiTypes.TaskAcce
 		ctx,
 		id,
 		&generated.RunnerRemoveParams{IdempotencyKey: ids.NewULID()},
+		generated.RunnerRemoveJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)

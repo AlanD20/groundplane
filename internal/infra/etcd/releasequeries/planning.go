@@ -43,6 +43,17 @@ type ReleasePlanningService struct {
 	ProjectionRevision int64
 }
 
+// LoadTaskAcceptanceScope resolves only stable ancestor identity. A queued
+// operator request does not require a prepared Blueprint projection or runtime.
+func (ledger *Reader) LoadTaskAcceptanceScope(ctx context.Context, environmentID string) (workexecution.Scope, error) {
+	parents, err := ledger.loadPlanningHierarchy(ctx, environmentID, 0)
+	if err != nil {
+		return workexecution.Scope{}, err
+	}
+	return workexecution.Scope{TenantID: parents.Project.Record.TenantID, ProjectID: parents.Project.Record.ID,
+		EnvironmentID: parents.Environment.Record.ID}, nil
+}
+
 func (scope ReleasePlanningScope) Clone() ReleasePlanningScope {
 	clone := scope
 	clone.EnvironmentEpochValue = slices.Clone(scope.EnvironmentEpochValue)

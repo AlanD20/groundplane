@@ -1,11 +1,9 @@
 package cli
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
-	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/spf13/cobra"
 )
@@ -16,6 +14,7 @@ func newImageCmd() *cobra.Command {
 		Short: "Manage local Agent host images from public and GP private registries",
 	}
 	var key string
+	var fetchAfter []string
 	fetch := &cobra.Command{
 		Use: "fetch <reference>", Short: "Fetch an explicit registry tag or digest without deploying", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -23,26 +22,15 @@ func newImageCmd() *cobra.Command {
 				return err
 			}
 			app := fromContext(cmd)
-			accepted, err := app.Client.FetchImage(cmd.Context(), args[0], key)
+			after, err := validatedTaskAfter(fetchAfter)
 			if err != nil {
 				return err
 			}
-			if app.Out.Format == clicommon.FormatTable {
-				_, err := fmt.Fprintf(
-					cmd.OutOrStdout(),
-					"task %s dispatched\nimage %s\nconfiguration digest %s\nWait for `groundplane task show %s` to report completed before Deploy.\n",
-					accepted.TaskID,
-					accepted.Image,
-					accepted.ConfigDigest,
-					accepted.TaskID,
-				)
+			accepted, err := app.Client.FetchImage(cmd.Context(), args[0], key, after)
+			if err != nil {
 				return err
 			}
-			return app.Out.RenderOne(
-				[]string{"task_id", "image", "config_digest"},
-				[]string{accepted.TaskID, accepted.Image, accepted.ConfigDigest},
-				accepted,
-			)
+			return renderDispatchedTask(cmd, accepted)
 		},
 	}
 	fetch.Flags().
@@ -112,6 +100,7 @@ func newImageCmd() *cobra.Command {
 		},
 	}
 	var removeKey string
+	var removeAfter []string
 	remove := &cobra.Command{
 		Use:   "remove <image-id>",
 		Short: "Remove an unreferenced image without force or pruning",
@@ -121,7 +110,11 @@ func newImageCmd() *cobra.Command {
 				return err
 			}
 			app := fromContext(cmd)
-			accepted, err := app.Client.RemoveImage(cmd.Context(), args[0], removeKey)
+			after, err := validatedTaskAfter(removeAfter)
+			if err != nil {
+				return err
+			}
+			accepted, err := app.Client.RemoveImage(cmd.Context(), args[0], removeKey, after)
 			if err != nil {
 				return err
 			}
@@ -130,6 +123,8 @@ func newImageCmd() *cobra.Command {
 	}
 	remove.Flags().
 		StringVar(&removeKey, "idempotency-key", "", "reuse this key to resolve uncertain acceptance of the same request")
+	addTaskAfterFlag(fetch, &fetchAfter)
+	addTaskAfterFlag(remove, &removeAfter)
 	command.AddCommand(fetch, list, remove)
 	return withExecutionClass(command, executionAPI)
 }

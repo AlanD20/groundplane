@@ -51,26 +51,29 @@ func newEtcdConfigCmd() *cobra.Command {
 	}
 	set.Flags().StringVar(&file, "file", "", "YAML file to save")
 	_ = set.MarkFlagRequired("file")
-	cmd.AddCommand(
-		set,
-		&cobra.Command{
-			Use:   "apply",
-			Short: "Restart only etcd to activate its saved configuration",
-			Args:  cobra.NoArgs,
-			RunE: func(cmd *cobra.Command, _ []string) error {
-				app := fromContext(cmd)
-				current, err := app.Client.ShowEtcdConfig(cmd.Context())
-				if err != nil {
-					return err
-				}
-				accepted, err := app.Client.ApplyEtcdConfig(cmd.Context(), current.Revision)
-				if err != nil {
-					return err
-				}
-				return renderDispatchedTask(cmd, accepted)
-			},
+	var runAfter []string
+	var expectedRevision string
+	apply := &cobra.Command{
+		Use:   "apply",
+		Short: "Restart only etcd to activate its saved configuration",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
+			app := fromContext(cmd)
+			accepted, err := app.Client.ApplyEtcdConfig(cmd.Context(), expectedRevision, after)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
-	)
+	}
+	apply.Flags().
+		StringVar(&expectedRevision, "expected-revision", "", "optional exact saved configuration revision; omitted resolves after prerequisites")
+	addTaskAfterFlag(apply, &runAfter)
+	cmd.AddCommand(set, apply)
 	return withExecutionClass(cmd, executionAPI)
 }
 

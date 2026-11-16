@@ -66,7 +66,10 @@ export function PlatformAgentActions({
         destructive
         confirmText={agent.host}
         startLabel="Remove Agent"
-        onDispatch={async () => (await removeAgent(agent.id)).task_id}
+        runAfter
+        onDispatch={async (after) =>
+          (await removeAgent(agent.id, after)).task_id
+        }
       />
     </>
   );

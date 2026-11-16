@@ -16,6 +16,7 @@ import {
   type ControllerRelease,
 } from "./controller-release-details";
 import { ControllerUpdateProgress } from "./controller-update-progress";
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 
 export function ControllerUpdateCard() {
   const {
@@ -31,6 +32,8 @@ export function ControllerUpdateCard() {
     pendingControllerUpdate,
   } = useStore();
   const [review, setReview] = useState<ControllerRelease | null>(null);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const update = host?.controller.update;
   const candidate = update?.candidate;
   const alreadyRunning =
@@ -46,10 +49,10 @@ export function ControllerUpdateCard() {
   const unresolved = pendingControllerUpdate && !pendingControllerUpdate.taskId;
 
   function confirm() {
-    if (!review || disabled) return;
+    if (!review || disabled || afterLoading) return;
     const release = review.release;
     setReview(null);
-    void updateController(release).catch(() => undefined);
+    void updateController(release, after).catch(() => undefined);
   }
 
   return (
@@ -116,7 +119,10 @@ export function ControllerUpdateCard() {
               size="sm"
               disabled={disabled}
               onClick={() => {
-                if (candidate) setReview(candidate);
+                if (candidate) {
+                  setAfter([]);
+                  setReview(candidate);
+                }
               }}
             >
               <ArrowUpCircle className="size-4" />{" "}
@@ -151,6 +157,11 @@ export function ControllerUpdateCard() {
             </DialogDescription>
           </DialogHeader>
           {review ? <ControllerReleaseDetails release={review} /> : null}
+          <TaskRunAfterSelector
+            value={after}
+            onChange={setAfter}
+            onBusyChange={setAfterLoading}
+          />
           <p className="text-xs text-muted-foreground">
             Cannot be aborted once activation starts.
           </p>
@@ -158,7 +169,7 @@ export function ControllerUpdateCard() {
             <Button variant="outline" onClick={() => setReview(null)}>
               Cancel
             </Button>
-            <Button disabled={disabled} onClick={confirm}>
+            <Button disabled={disabled || afterLoading} onClick={confirm}>
               Update Controller
             </Button>
           </DialogFooter>

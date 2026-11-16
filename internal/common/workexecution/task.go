@@ -1,6 +1,7 @@
 package workexecution
 
 import (
+	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -78,6 +79,8 @@ type Task struct {
 	TargetID            string           `json:"target_id"`
 	TargetName          string           `json:"target_name"`
 	Intent              Input            `json:"intent"`
+	AcceptedIntent      *Input           `json:"accepted_intent,omitempty"`
+	After               []string         `json:"after,omitempty"`
 	CreatedAt           time.Time        `json:"created_at"`
 	UpdatedAt           time.Time        `json:"updated_at"`
 	Deadline            time.Time        `json:"deadline"`
@@ -131,12 +134,30 @@ func (task Task) Validate() error {
 	if err := task.Scope.Validate(); err != nil {
 		return err
 	}
-	if err := task.Intent.Validate(); err != nil {
+	if task.AcceptedIntent != nil {
+		if err := task.AcceptedIntent.Validate(); err != nil {
+			return err
+		}
+	}
+	if len(task.After) != 0 {
+		if task.AcceptedIntent == nil {
+			return invalid("Run after requires an accepted operator intent")
+		}
+		if err := ValidateTaskDependencies(task.ID, task.After); err != nil {
+			return err
+		}
+	}
+	if task.AcceptedIntent != nil && task.Intent == (Input{}) {
+		if task.ExpectedItems != 0 || task.Progress.Total() != 0 || task.Activation != nil ||
+			task.PublicationComplete && (task.FinishedAt == nil || task.Outcome == Succeeded) {
+			return invalid("unprepared operator intent cannot contain execution work or claim success")
+		}
+	} else if err := task.Intent.Validate(); err != nil {
 		return err
 	}
 	if !validTime(task.CreatedAt) || !validTime(task.UpdatedAt) || !validTime(task.Deadline) ||
 		task.UpdatedAt.Before(task.CreatedAt) || !task.Deadline.After(task.CreatedAt) ||
-		(task.ExpectedItems == 0 && task.Action != ActionApply && task.Action != ActionRemove) || task.ExpectedItems > MaximumTaskItems ||
+		(task.ExpectedItems == 0 && task.Action != ActionApply && task.Action != ActionRemove && task.AcceptedIntent == nil) || task.ExpectedItems > MaximumTaskItems ||
 		task.Progress.Total() > uint64(task.ExpectedItems) ||
 		task.PublicationComplete && task.Progress.Total() != uint64(task.ExpectedItems) {
 		return invalid("task publication or timing is inconsistent")
@@ -199,6 +220,11 @@ func (progress Progress) Unsettled() uint64 {
 
 func CloneTask(task Task) Task {
 	copy := task
+	copy.After = slices.Clone(task.After)
+	if task.AcceptedIntent != nil {
+		intent := *task.AcceptedIntent
+		copy.AcceptedIntent = &intent
+	}
 	if task.Activation != nil {
 		activation := *task.Activation
 		copy.Activation = &activation
@@ -224,4 +250,10 @@ func CloneTask(task Task) Task {
 		copy.CollectionStartedAt = &at
 	}
 	return copy
+}
+
+// PendingPreparation identifies accepted pure intent that has no execution
+// capture yet. It is not an Agent assignment or a reserved execution slot.
+func (task Task) PendingPreparation() bool {
+	return task.AcceptedIntent != nil && task.Intent == (Input{}) && task.FinishedAt == nil
 }

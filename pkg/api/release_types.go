@@ -63,12 +63,6 @@ type ReleaseDetail struct {
 	RollbackMaterial         *ReleaseRollbackMaterial `json:"rollback_material,omitempty"`
 }
 
-type ReleaseTaskAccepted struct {
-	TaskID      string `json:"task_id"`
-	OperationID string `json:"operation_id"`
-	ReleaseID   string `json:"release_id"`
-}
-
 // ReleaseGroup coordinates multiple services under one task lock and
 // one failure policy — never inferred, always explicit. See
 // blueprint.md, "x-gp-release-group".
@@ -99,25 +93,10 @@ type ReleaseGroupEditRequest struct {
 	OnFailure  *OnFailure             `json:"on_failure,omitempty"`
 }
 
-type ReleaseGroupMutationAccepted struct {
-	TaskID         string `json:"task_id"`
-	ReleaseGroupID string `json:"release_group_id"`
-}
-
-type ReleaseGroupMemberRelease struct {
-	ServiceID string `json:"service_id"`
-	ReleaseID string `json:"release_id"`
-}
-
-type ReleaseGroupTaskAccepted struct {
-	TaskID                  string                      `json:"task_id"`
-	ReleaseGroupOperationID string                      `json:"release_group_operation_id"`
-	Releases                []ReleaseGroupMemberRelease `json:"releases"`
-}
-
 // --- Ops action request bodies (every action returns a TaskAccepted) ---
 
 type DeployRequest struct {
+	After     []string  `json:"after,omitempty" maxItems:"16" uniqueItems:"true" doc:"Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs"`
 	Image     string    `json:"image,omitempty" maxLength:"512" doc:"Host-local registry reference for this Release only; mutually exclusive with tag"`
 	Tag       string    `json:"tag,omitempty"`        // omitted => the service's current tag
 	Strategy  string    `json:"strategy,omitempty"`   // omitted => the service's declared default
@@ -125,9 +104,11 @@ type DeployRequest struct {
 }
 
 type RollbackRequest struct {
-	Tag string `json:"tag,omitempty"` // omitted => the pre-selected previous tag
+	After []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true" doc:"Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs"`
+	Tag   string   `json:"tag,omitempty"` // omitted => the pre-selected previous tag
 }
 
 type ReleaseGroupDeployRequest struct {
-	Tag string `json:"tag,omitempty"`
+	After []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true" doc:"Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs"`
+	Tag   string   `json:"tag,omitempty"`
 }

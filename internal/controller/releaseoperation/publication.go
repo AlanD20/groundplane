@@ -1,17 +1,11 @@
 package releaseoperation
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
-	"net/http"
 	"strings"
 
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/distribution/reference"
 )
@@ -56,52 +50,6 @@ func releasePriorStrategy(serving domain.Intent, hasServing bool) domain.Strateg
 		return serving.Strategy
 	}
 	return domain.StrategyRecreate
-}
-
-func releaseAcceptedResponse(
-	groupID string,
-	taskID string,
-	operationID string,
-	members []domain.GroupMember,
-) (idempotencyrecord.IdempotencyResponse, []byte, error) {
-	var value any
-	if groupID == "" {
-		value = apiTypes.ReleaseTaskAccepted{TaskID: taskID, OperationID: operationID, ReleaseID: members[0].ReleaseID}
-	} else {
-		releases := make([]apiTypes.ReleaseGroupMemberRelease, len(members))
-		for index, member := range members {
-			releases[index] = apiTypes.ReleaseGroupMemberRelease{ServiceID: member.ServiceID, ReleaseID: member.ReleaseID}
-		}
-		value = apiTypes.ReleaseGroupTaskAccepted{
-			TaskID: taskID, ReleaseGroupOperationID: operationID, Releases: releases,
-		}
-	}
-	body, err := json.Marshal(value)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, nil, errs.Wrap(errs.KindInternal, err)
-	}
-	return idempotencyrecord.IdempotencyResponse{
-		Status:      http.StatusAccepted,
-		ContentKind: "application/json",
-		Body:        body,
-	}, body, nil
-}
-
-func releaseOperationResolution(
-	resolution requestidempotency.Resolution,
-	applied idempotencyrecord.IdempotencyResponse,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return cloneIdempotencyResponse(applied), nil
-	case requestidempotency.ResolutionReplay:
-		return cloneIdempotencyResponse(resolution.Response), nil
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"release idempotency resolution is invalid",
-		)
-	}
 }
 
 func releaseImageWithTag(value string, requested string, current string) (string, string, string, error) {
@@ -163,12 +111,4 @@ func releaseFailurePolicy(requested domain.OnFailure, declared core.OnFailure) (
 func cloneIdempotencyResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {
 	response.Body = append([]byte(nil), response.Body...)
 	return response
-}
-
-func releaseGroupUnknownOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
 }

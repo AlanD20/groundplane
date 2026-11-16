@@ -4,9 +4,9 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -73,29 +73,22 @@ func (service *routeMutationService) editRouteOnce(
 	if existing {
 		return routeReplayResponse(resolution)
 	}
-	environment, project, target, err := service.routeHierarchy(
-		ctx, current.Record.EnvironmentID, current.Record.Desired.TargetServiceID,
-	)
+	environment, project, err := service.routeOwnership(ctx, current.Record.EnvironmentID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	desired := current.Record.Desired
-	desired.Exposure = input.Exposure
-	replacement, err := routerecord.ReplaceDesired(current.Record, desired)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	return service.acceptRouteWork(
+	return service.submitRouteWork(
 		ctx,
 		environment,
 		project,
-		target,
-		&current,
-		replacement,
+		routeID,
+		current.Record.Desired.Host+current.Record.Desired.Path,
 		workexecution.ActionUpdate,
 		locator,
 		evidence,
+		acceptedRouteMutation{Edit: &input, After: input.After},
 	)
+
 }
 
 func routeEditMutationIntent(
@@ -107,6 +100,7 @@ func routeEditMutationIntent(
 		method: http.MethodPatch, route: routeEditRoute, environmentID: environmentID,
 		path: []requestidempotency.PathBinding{{Name: "id", Value: routeID}},
 		body: requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
 			requestidempotency.Field{Name: "exposure", Value: requestidempotency.String(input.Exposure)},
 		),
 	}

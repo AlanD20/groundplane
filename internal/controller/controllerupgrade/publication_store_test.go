@@ -137,7 +137,15 @@ func (store *publicationStore) Transact(
 	store.transactions++
 	for _, mutation := range mutations {
 		if mutation.Prefix {
-			return testkeyvalue.TransactionResult{}, unexpectedStorage()
+			if mutation.Type != testkeyvalue.MutationDelete {
+				return testkeyvalue.TransactionResult{}, unexpectedStorage()
+			}
+			for key := range store.entries {
+				if strings.HasPrefix(key, mutation.Key) {
+					delete(store.entries, key)
+				}
+			}
+			continue
 		}
 		if mutation.Type == testkeyvalue.MutationDelete {
 			delete(store.entries, mutation.Key)

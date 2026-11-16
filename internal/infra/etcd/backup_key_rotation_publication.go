@@ -3,22 +3,23 @@ package etcd
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"time"
 )
 
-// PublishBackupKeyRotation joins captured key authority, the Environment lock,
-// one native Task/work item and request replay in one atomic transaction.
-func (repository *BackupPolicyRepository) PublishBackupKeyRotation(ctx context.Context,
-	prepared PreparedBackupKeyRotation, marker idempotency.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+// PrepareBackupKeyRotationAuthority returns the captured key and lock writes
+// to promote the original accepted Task; it creates no second Task or marker.
+func (repository *BackupPolicyRepository) PrepareBackupKeyRotationAuthority(ctx context.Context,
+	prepared PreparedBackupKeyRotation, accepted workexecution.Task, at time.Time,
+) (BackupKeyRotationCapture, error) {
 	publication := prepared.Publication
 	if publication == nil || publication.state == nil {
-		return IdempotencyTransactionResult{}, errs.New(
+		return BackupKeyRotationCapture{}, errs.New(
 			errs.KindInternal,
 			"backup key rotation publication is not prepared",
 		)
@@ -26,7 +27,7 @@ func (repository *BackupPolicyRepository) PublishBackupKeyRotation(ctx context.C
 	publication.state.mu.Lock()
 	if publication.state.consumed || publication.state.repository != repository {
 		publication.state.mu.Unlock()
-		return IdempotencyTransactionResult{}, errs.New(
+		return BackupKeyRotationCapture{}, errs.New(
 			errs.KindStateConflict,
 			"backup key rotation publication is unavailable",
 		)
@@ -38,43 +39,48 @@ func (repository *BackupPolicyRepository) PublishBackupKeyRotation(ctx context.C
 	defer plan.clear()
 	reference, err := backupruntime.KeyRotationInput(plan.record)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return BackupKeyRotationCapture{}, err
 	}
 	if plan.task.Intent != reference || plan.item.Input == nil || *plan.item.Input != reference ||
-		marker.TaskID != plan.task.ID {
-		return IdempotencyTransactionResult{}, errs.New(
+		accepted.ID != plan.task.ID || accepted.Scope != plan.task.Scope {
+		return BackupKeyRotationCapture{}, errs.New(
 			errs.KindStateConflict,
 			"backup key rotation publication input changed",
 		)
 	}
-	work, err := workqueue.PrepareSingleTask(plan.task, plan.item, marker)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
+	task := accepted
+	task.Intent, task.ExpectedItems, task.UpdatedAt = reference, 1, at
+	item := plan.item
+	item.TargetName = task.TargetName
+	item.Deadline = at.Add(time.Duration(backupKeyRotationTimeoutSeconds) * time.Second)
+	if task.Deadline.Before(item.Deadline) {
+		item.Deadline = task.Deadline
 	}
-	defer keyvalue.ClearMutationValues(work.Mutations)
-	conditions := append(work.Conditions, plan.conditions...)
-	mutations := append(work.Mutations, plan.mutations...)
+	conditions := append([]keyvalue.Condition(nil), plan.conditions...)
+	mutations := keyvalue.CloneMutations(plan.mutations)
 	initiation, err := newTaskInitiation(plan.owner, taskjournal.TaskActorOperator)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return BackupKeyRotationCapture{}, err
 	}
 	classify := func(_ int64, _ []*keyvalue.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "backup key rotation publication state changed")
 	}
-	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
+	conditions, _, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return BackupKeyRotationCapture{}, err
 	}
-	transaction, err := newIdempotencyMutationPlanForMarker(
-		idempotency.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		classify,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return (&IdempotencyRepository{store: repository.store}).Apply(ctx, marker, transaction)
+	return BackupKeyRotationCapture{
+		Task:      task,
+		Item:      item,
+		Authority: workqueue.Change{Conditions: conditions, Mutations: mutations},
+	}, nil
+
+}
+
+type BackupKeyRotationCapture struct {
+	Task      workexecution.Task
+	Item      workexecution.Item
+	Authority workqueue.Change
 }
 
 func (plan *backupKeyRotationPublicationPlan) clear() {

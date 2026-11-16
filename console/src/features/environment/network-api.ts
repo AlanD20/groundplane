@@ -21,14 +21,13 @@ export type GeneratedRouteResponse =
 export type RouteCreateResponse = GeneratedRouteResponse & {
   status: Route["status"];
 };
-export type RouteCreateAccepted = {
-  route: RouteCreateResponse;
-  task_id: string;
-};
+export type RouteCreateAccepted =
+  operations["route.create"]["responses"][202]["content"]["application/json"];
 export type RouteEditRequest =
   operations["route.edit"]["requestBody"]["content"]["application/json"];
 export type RouteEditResponse = RouteCreateResponse;
-export type RouteEditAccepted = { route: RouteEditResponse; task_id: string };
+export type RouteEditAccepted =
+  operations["route.edit"]["responses"][202]["content"]["application/json"];
 export type RouteShowResponse = RouteCreateResponse;
 export type ZoneShowResponse =
   operations["zone.show"]["responses"][200]["content"]["application/json"];

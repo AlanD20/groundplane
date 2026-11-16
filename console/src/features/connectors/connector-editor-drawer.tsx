@@ -456,7 +456,9 @@ export function ConnectorEditorDrawer(props: ConnectorEditorProps) {
             if (mode === "edit" && snapshot && editInput)
               return {
                 connector_id: snapshot.connector.id,
-                revision: connectorSnapshotRevision(snapshot),
+                revision: hasEdit(editInput)
+                  ? connectorSnapshotRevision(snapshot)
+                  : 0,
                 changes: hasEdit(editInput)
                   ? connectorEditRequest(editInput)
                   : undefined,

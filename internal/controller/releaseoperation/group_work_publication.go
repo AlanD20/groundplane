@@ -2,28 +2,29 @@ package releaseoperation
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-// publishGroupWork accepts the complete native graph and immutable member
-// captures. No member can dispatch until publication has installed every typed
-// source and descriptor; retries never rebuild this capture from current state.
-func (service *Service) publishGroupWork(ctx context.Context, scope releasequeries.ReleasePlanningScope,
-	group releasegroup.Versioned, candidates []releaseCandidateInput, locator idempotency.IdempotencyLocator,
-	durable idempotency.ProtectedIntentRecord, protected requestidempotency.ProtectedEvidence,
-) (idempotency.IdempotencyResponse, error) {
+// prepareGroupWork compiles the complete native graph after prerequisites
+// succeed. Promotion retains the original Task and keeps dispatch closed while
+// the publication owner installs every typed source and member descriptor.
+func (service *Service) prepareGroupWork(ctx context.Context, scope releasequeries.ReleasePlanningScope,
+	group releasegroup.Versioned, candidates []releaseCandidateInput, accepted workqueue.TaskSnapshot,
+) (taskdependencies.Prepared, error) {
 	if err := service.sealCandidates(ctx, candidates); err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	projection, err := service.captureDesiredProjection(ctx, scope)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	proxies := make([]core.Service, len(candidates))
 	for index, candidate := range candidates {
@@ -32,7 +33,7 @@ func (service *Service) publishGroupWork(ctx context.Context, scope releasequeri
 	}
 	addresses, err := taskplanning.PrepareServiceProxyAddresses(ctx, service.ledger.Planner, projection, proxies)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	defer addresses.Clear()
 	capture, err := service.captureGroupWork(
@@ -42,38 +43,36 @@ func (service *Service) publishGroupWork(ctx context.Context, scope releasequeri
 		projection,
 		candidates,
 		addresses,
-		durable.CiphertextDigest,
+		accepted.Task,
 	)
 	defer capture.Clear()
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	task, err := capture.Root.Task()
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	response, _, err := releaseAcceptedResponse(task.TargetID, task.ID, capture.Root.Policy.Manifest.OperationID,
-		capture.Root.Policy.Manifest.Members)
+	authority, err := service.ledger.PrepareGroupReleaseCapture(ctx, accepted, capture, addresses)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	marker := idempotency.IdempotencyMarker{Kind: idempotency.IdempotencyMarkerTask,
-		State: idempotency.IdempotencyMarkerPending, Locator: locator, Intent: durable, Response: response,
-		TaskID: task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt}
-	result, err := service.ledger.PublishGroupReleaseWithWork(ctx, capture, addresses, marker)
-	if err != nil {
-		if !releaseGroupUnknownOutcome(err) {
-			return idempotency.IdempotencyResponse{}, err
+	authority.Mutations = keyvalue.CloneMutations(authority.Mutations)
+	task.AcceptedIntent = accepted.Task.AcceptedIntent
+	task.After = accepted.Task.After
+	firstID := capture.Root.Policy.Members[0].ForwardID
+	var initial []workexecution.Item
+	for _, item := range capture.Root.Graph {
+		if item.ID == firstID {
+			initial = []workexecution.Item{item}
+			break
 		}
-		resolution, resolveErr := service.coordinator.ResolveUnknown(ctx, service.idempotency, locator, protected, err)
-		if resolveErr != nil {
-			return idempotency.IdempotencyResponse{}, resolveErr
-		}
-		return releaseOperationResolution(resolution, response)
 	}
-	resolution, err := service.coordinator.ResolveKnown(ctx, protected, result)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	return releaseOperationResolution(resolution, response)
+	return taskdependencies.Prepared{
+		Task:      task,
+		Graph:     append([]workexecution.Item(nil), capture.Root.Graph...),
+		Initial:   initial,
+		Authority: authority,
+		Staged:    true,
+	}, nil
 }

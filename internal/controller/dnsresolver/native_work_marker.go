@@ -22,6 +22,7 @@ func prepareNativeResolverMarker(
 		work.Input.ComponentID,
 		"update",
 		platformComponentUpdateRoute,
+		nil,
 	)
 	if err != nil {
 		return idempotency.IdempotencyMarker{}, err

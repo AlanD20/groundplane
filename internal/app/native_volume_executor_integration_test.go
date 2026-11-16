@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -124,7 +123,7 @@ func TestNativeVolumeExecutorCreateRemoveSettlesExactResource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var edited api.VolumeMutationResponse
+	var edited api.TaskAccepted
 	if err := json.Unmarshal(rename.Body, &edited); err != nil {
 		t.Fatal(err)
 	}
@@ -143,24 +142,42 @@ func TestNativeVolumeExecutorCreateRemoveSettlesExactResource(t *testing.T) {
 	if err != nil || beforeTasks.More {
 		t.Fatalf("Task inventory before protected removal: %v", err)
 	}
-	if _, err := f.mutations.RemoveVolume(t.Context(), f.created.Volume.ID, impact.ImpactToken,
-		"data", "native-volume-source-protected-remove"); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
-		t.Fatalf("prepared Script source did not protect native removal: %v", err)
+	protected, err := f.mutations.RemoveVolume(
+		t.Context(),
+		f.created.Volume.ID,
+		impact.ImpactToken,
+		"data",
+		api.TaskRunAfterRequest{},
+		"native-volume-source-protected-remove",
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
+	var rejected api.TaskAccepted
+	if err := json.Unmarshal(protected.Body, &rejected); err != nil {
+		t.Fatal(err)
+	}
+	f.preparationFailure(t, rejected.TaskID, errs.KindResourceInUse)
 	afterHead, found, err := f.blueprint.GetEnvironmentBlueprintHead(t.Context(), f.environmentID)
 	if err != nil || !found || afterHead.Revision != beforeHead.Revision {
 		t.Fatalf("refused removal changed desired state: %v", err)
 	}
 	afterTasks, err := f.queue.ListTasks(t.Context(), f.environmentID, "", 10, 0)
-	if err != nil || afterTasks.More || !slices.EqualFunc(beforeTasks.Tasks, afterTasks.Tasks,
-		func(before, after workqueue.TaskSnapshot) bool {
-			return before.Task.ID == after.Task.ID && before.Revision == after.Revision
-		}) {
-		t.Fatal("refused removal changed desired state or published work")
+	if err != nil || afterTasks.More || len(afterTasks.Tasks) != len(beforeTasks.Tasks)+1 {
+		t.Fatalf("rejected preparation lost Task history: %v", err)
+	}
+	previous := map[string]int64{}
+	for _, task := range afterTasks.Tasks {
+		previous[task.Task.ID] = task.Revision
+	}
+	for _, task := range beforeTasks.Tasks {
+		if previous[task.Task.ID] != task.Revision {
+			t.Fatal("rejected removal changed another Task")
+		}
 	}
 	releaseSource()
 	response, err := f.mutations.RemoveVolume(t.Context(), f.created.Volume.ID, impact.ImpactToken,
-		"data", "native-volume-executor-remove")
+		"data", api.TaskRunAfterRequest{}, "native-volume-executor-remove")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,7 +21,7 @@ export type TenantActions = {
     patch: { name: string; description: string },
   ) => Promise<Tenant>;
   renameTenant: (slug: string, nextSlug: string) => Promise<Tenant>;
-  removeTenant: (tenantId: string) => Promise<string>;
+  removeTenant: (tenantId: string, after?: string[]) => Promise<string>;
 };
 export function createTenantActions(
   state: { tenants: Tenant[] },
@@ -79,11 +79,11 @@ export function createTenantActions(
       });
       return renamed;
     },
-    removeTenant: async (tenantId) => {
+    removeTenant: async (tenantId, after = []) => {
       const accepted = await controllerRequest<HierarchyTaskAccepted>(
         `/tenants/${encodeURIComponent(tenantId)}`,
         202,
-        { method: "DELETE" },
+        { method: "DELETE", body: { after } },
       );
       if (!accepted.task_id)
         throw new Error("Controller response is missing task_id");

@@ -83,8 +83,8 @@ func (reconciler *ConfigurationReconciler) reconcile(ctx context.Context) error 
 	if err != nil {
 		return err
 	}
-	prepared, err := reconciler.planner.PrepareHostWork(ctx, reconciler.tasks, current, desired,
-		workexecution.SystemActor, workexecution.ActionUpdate, false, time.Now().UTC(), 8*time.Minute)
+	prepared, err := reconciler.planner.PrepareSystemHostWork(ctx, reconciler.tasks, current, desired,
+		workexecution.ActionUpdate, false, time.Now().UTC(), 8*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (reconciler *ConfigurationReconciler) reconcile(ctx context.Context) error 
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, err := reconciler.tasks.PublishResolverWork(ctx, prepared.Input, prepared.Capture, marker)
+	result, err := reconciler.tasks.PublishSystemResolverWork(ctx, prepared.Input, prepared.Capture, marker)
 	if err != nil {
 		return err
 	}

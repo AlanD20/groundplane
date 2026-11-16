@@ -4,7 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -56,7 +58,13 @@ func (CheckImageCompletion) PrepareFinish(
 			"task requires its operation's aggregate settlement",
 		)
 	}
-	if item.Item.Phase != workexecution.Settled || item.Item.Result == nil || item.Item.TargetID != task.TargetID {
+	matchingTarget := item.Item.TargetID == task.TargetID
+	if item.Item.Operation == workexecution.Image && task.Action == workexecution.ActionFetch &&
+		ids.Validate(ids.KindHost, task.TargetID) == nil && workloadimage.LocalIDValid(item.Item.TargetID) &&
+		item.Item.Input != nil && *item.Item.Input == task.Intent {
+		matchingTarget = true
+	}
+	if item.Item.Phase != workexecution.Settled || item.Item.Result == nil || !matchingTarget {
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "task has no matching settled result evidence")
 	}
 	return workqueue.Change{

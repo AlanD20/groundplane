@@ -57,7 +57,7 @@ type serviceMutationRepository interface {
 		etcdstore.Versioned[servicerecord.ServiceRecord],
 		etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	) error
-	PublishServiceRemoval(context.Context, etcd.ServiceRemovalPublication) (etcd.IdempotencyTransactionResult, error)
+	PrepareServiceRemoval(context.Context, etcd.ServiceRemovalPublication) (etcd.ServiceRemovalCapture, error)
 }
 
 type MutationRepository struct {
@@ -172,9 +172,9 @@ func (repository *MutationRepository) ValidateServiceRemovalReferences(
 	return repository.services.ValidateServiceRemovalReferences(ctx, current, projection)
 }
 
-func (repository *MutationRepository) PublishServiceRemoval(
+func (repository *MutationRepository) PrepareServiceRemoval(
 	ctx context.Context,
 	request etcd.ServiceRemovalPublication,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.services.PublishServiceRemoval(ctx, request)
+) (etcd.ServiceRemovalCapture, error) {
+	return repository.services.PrepareServiceRemoval(ctx, request)
 }

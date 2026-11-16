@@ -11,6 +11,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
@@ -154,26 +156,18 @@ func newNativeRotationFixture(t *testing.T) *nativeRotationFixture {
 		Intent: idempotency.ProtectedIntentRecord{EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 			CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: intent},
 		Response: idempotency.IdempotencyResponse{Status: 202, ContentKind: "application/json", Body: body}}
-	prepared, err := f.repository.PrepareBackupKeyRotation(
+	publishRotationFixture(
+		t,
 		t.Context(),
+		f.store,
+		f.repository,
 		f.input,
 		backuppolicymutations.BackupPolicyInitialKeyMaterial{
 			Recipient:  f.nextKey.Recipient,
 			Ciphertext: f.nextCiphertext,
 		},
+		f.marker,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer prepared.Clear()
-	result, err := f.repository.PublishBackupKeyRotation(t.Context(), prepared, f.marker)
-	if err != nil {
-		t.Fatal(err)
-	}
-	outcome, _, conflict, err := result.Classify()
-	if err != nil || conflict != nil || outcome != etcd.IdempotencyKnownApplied {
-		t.Fatalf("native rotation publication outcome=%v conflict=%v error=%v", outcome, conflict, err)
-	}
 	return f
 }
 
@@ -235,5 +229,105 @@ func (f *nativeRotationFixture) state(t *testing.T, era int, phase workexecution
 			view.Item.Item.Phase,
 			view.Item.Item.Outcome,
 		)
+	}
+}
+
+func publishRotationFixture(
+	t *testing.T,
+	ctx context.Context,
+	store keyvalue.Store,
+	repository *etcd.BackupPolicyRepository,
+	input etcd.BackupKeyRotationInput,
+	material backuppolicymutations.BackupPolicyInitialKeyMaterial,
+	marker idempotency.IdempotencyMarker,
+) {
+	t.Helper()
+	owner, err := repository.ReadBackupTaskAcceptance(ctx, input.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queue, err := workqueue.NewRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := etcd.NewIdempotencyRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	protector, encrypted := manualJourneyEncryptedValue(t, "rotation-request")
+	clear(encrypted)
+	coordinator, err := requestidempotency.NewCoordinator(protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	submitter, err := newAcceptedActions(store, protector, queue, replay, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent, err := submitter.Begin(
+		ctx,
+		requestidempotency.CanonicalIntentV1{
+			Method: marker.Locator.Method,
+			Route:  marker.Locator.Route,
+			Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: input.EnvironmentID},
+			Path:   []requestidempotency.PathBinding{{Name: "id", Value: input.EnvironmentID}},
+			Query:  requestidempotency.Object(),
+			Body:   requestidempotency.JSONBody(requestidempotency.Object()),
+		},
+		marker.Locator,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer intent.Destroy()
+	task := workexecution.Task{
+		ID:         input.TaskID,
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionRotate,
+		TargetID:   input.EnvironmentID,
+		TargetName: owner.Name,
+		Scope: workexecution.Scope{
+			TenantID:      owner.Owner.TenantID,
+			ProjectID:     owner.Owner.ProjectID,
+			EnvironmentID: input.EnvironmentID,
+		},
+		CreatedAt: input.CreatedAt,
+		UpdatedAt: input.CreatedAt,
+		Deadline:  input.CreatedAt.Add(acceptedaction.QueueTimeout),
+	}
+	if _, err := acceptedaction.Submit(ctx, submitter, intent.Submission(task, "backup-key-rotate"), struct{}{}); err != nil {
+		t.Fatal(err)
+	}
+	accepted, _, err := queue.ReadTask(ctx, task.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := repository.PrepareBackupKeyRotation(ctx, input, material)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Clear()
+	captured, err := repository.PrepareBackupKeyRotationAuthority(ctx, prepared, accepted.Task, input.CreatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer keyvalue.ClearMutationValues(captured.Authority.Mutations)
+	promotion, err := queue.PrepareAcceptedTaskPromotion(
+		ctx,
+		accepted,
+		captured.Task,
+		[]workexecution.Item{captured.Item},
+		nil,
+		false,
+		input.CreatedAt,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer keyvalue.ClearMutationValues(promotion.Mutations)
+	result, err := queue.Commit(ctx, promotion, captured.Authority)
+	keyvalue.ClearValues(result.FailureReads)
+	if err != nil || !result.Succeeded {
+		t.Fatalf("rotation promotion failed: %v", err)
 	}
 }

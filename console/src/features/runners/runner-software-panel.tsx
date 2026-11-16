@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { Download, RefreshCw } from "lucide-react";
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
+import { requestTask, type TaskResponse } from "@/features/task/api";
+import { TaskExecution } from "@/features/task/task-execution";
 
 type Versions =
   operations["runner.versions"]["responses"][200]["content"]["application/json"];
@@ -16,8 +19,6 @@ type UpdateResult =
   operations["runner.update.show"]["responses"][200]["content"]["application/json"];
 type UpdateRequest =
   operations["runner.update"]["requestBody"]["content"]["application/json"];
-type RunnerRead =
-  operations["runner.show"]["responses"][200]["content"]["application/json"];
 
 export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
   const [versions, setVersions] = useState<Versions["items"]>([]);
@@ -26,6 +27,9 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
   const [error, setError] = useState<string | null>(null);
   const [task, setTask] = useState<string | null>(null);
   const [result, setResult] = useState<UpdateResult | null>(null);
+  const [detail, setDetail] = useState<TaskResponse | null>(null);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const pending = useRef<{ key: string; body: UpdateRequest } | null>(null);
   const path = `/runners/${encodeURIComponent(runner.id)}`;
   useEffect(() => {
@@ -77,14 +81,20 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
       try {
-        const response = await controllerRequest<UpdateResult>(
-          `${path}/updates?task=${encodeURIComponent(task!)}`,
-          200,
-          { signal: controller.signal },
-        );
+        const current = await requestTask(task!, controller.signal);
         if (controller.signal.aborted) return;
-        setResult(response);
-        if (response.phase !== "finished") timer = setTimeout(refresh, 2000);
+        setDetail(current);
+        if (current.work.items.length > 0) {
+          const response = await controllerRequest<UpdateResult>(
+            `${path}/updates?task=${encodeURIComponent(task!)}`,
+            200,
+            { signal: controller.signal },
+          );
+          if (controller.signal.aborted) return;
+          setResult(response);
+        } else setResult(null);
+        setError(null);
+        if (!current.task.finished_at) timer = setTimeout(refresh, 2000);
       } catch (cause) {
         if (!controller.signal.aborted)
           setError(
@@ -106,12 +116,9 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
     setError(null);
     try {
       if (!pending.current) {
-        const current = await controllerRequest<RunnerRead>(path, 200);
-        if (!current.revision)
-          throw new Error("Refresh the Runner before updating its software");
         pending.current = {
           key: crypto.randomUUID(),
-          body: { revision: current.revision, version },
+          body: { version, after: [...after] },
         };
       }
       const accepted = await controllerRequest<{ task_id: string }>(
@@ -125,6 +132,7 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
       );
       setTask(accepted.task_id);
       setResult(null);
+      setDetail(null);
       pending.current = null;
     } catch (cause) {
       if (cause instanceof ControllerRequestError && cause.status < 500) {
@@ -139,6 +147,7 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
       setBusy(false);
     }
   }
+  const active = !!task && !detail?.task.finished_at;
   return (
     <ResourcePanel title="GitHub runner software">
       <DetailRow
@@ -176,12 +185,7 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
               onValueChange={(next) => {
                 if (!pending.current) setVersion(next);
               }}
-              disabled={
-                busy ||
-                !!pending.current ||
-                runner.lifecycle !== "ready" ||
-                (!!task && result?.phase !== "finished")
-              }
+              disabled={busy || !!pending.current || active}
             />
           </div>
           <Button
@@ -197,9 +201,10 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
             onClick={update}
             disabled={
               busy ||
+              afterLoading ||
               !version ||
-              runner.lifecycle !== "ready" ||
-              (!!task && result?.phase !== "finished")
+              (runner.lifecycle !== "ready" && after.length === 0) ||
+              active
             }
           >
             <Download className="size-3.5" />
@@ -211,11 +216,21 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
           </Button>
         </div>
       )}
+      {!runner.autoUpdate && (
+        <fieldset disabled={busy || !!pending.current || active}>
+          <TaskRunAfterSelector
+            value={after}
+            onChange={setAfter}
+            onBusyChange={setAfterLoading}
+          />
+        </fieldset>
+      )}
       <p className="text-xs text-muted-foreground">
         Available downloads are not a guarantee that GitHub still accepts an
         older version.
       </p>
       {task && <TaskLink taskId={task}>Open software update Task</TaskLink>}
+      {!result && detail && <TaskExecution detail={detail} />}
       {result && (
         <p className="text-sm">
           {result.version}: {result.outcome || result.phase}

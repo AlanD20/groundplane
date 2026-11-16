@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	fileplanning "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
@@ -17,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entrywork"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -26,6 +28,7 @@ import (
 // file sources. Publication supplies the captured input and opens the barrier.
 func NewEntryConfigurationWork(scope workexecution.Scope, placement workexecution.Placement,
 	claim blueprints.EnvironmentBlueprintStageClaim, action workexecution.Action, targetID, targetName string,
+	accepted workqueue.TaskSnapshot, at time.Time,
 ) (workexecution.Task, workexecution.Item, error) {
 	if blueprints.ValidateEnvironmentBlueprintStageClaim(claim) != nil ||
 		claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
@@ -37,24 +40,31 @@ func NewEntryConfigurationWork(scope workexecution.Scope, placement workexecutio
 			"Entry action requires its sealed mutation and Agent host",
 		)
 	}
-	task := workexecution.Task{
-		ID: claim.TaskID, Actor: workexecution.OperatorActor, Scope: scope, Action: action,
-		TargetID: targetID, TargetName: targetName,
-		Intent: workexecution.Input{
-			ID:     ids.DeriveAt(ids.KindPlan, claim.CreatedAt, claim.TaskID, "request-intent"),
-			SHA256: claim.Intent.CiphertextDigest,
-		},
-		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
-		Deadline: claim.CreatedAt.Add(
-			time.Duration(controllerrevision.TaskTimeoutSeconds) * time.Second,
-		), ExpectedItems: 1,
+	task := accepted.Task
+	if accepted.Revision <= 0 || !task.PendingPreparation() || task.ID != claim.TaskID || task.Scope != scope ||
+		task.Action != action ||
+		task.TargetID != targetID {
+		return workexecution.Task{}, workexecution.Item{}, errs.New(
+			errs.KindStateConflict,
+			"Entry capture lost its accepted Task",
+		)
 	}
+	task.Intent = workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "request-intent"),
+		SHA256: claim.Intent.CiphertextDigest,
+	}
+	task.UpdatedAt, task.ExpectedItems = at, 1
+	deadline := acceptedaction.ExecutionDeadline(
+		task,
+		at,
+		time.Duration(controllerrevision.TaskTimeoutSeconds)*time.Second,
+	)
 	item := workexecution.Item{
-		ID: ids.DeriveAt(ids.KindWorkItem, claim.CreatedAt, claim.TaskID, "entry-configuration"), TaskID: task.ID,
+		ID: ids.DeriveAt(ids.KindWorkItem, task.CreatedAt, claim.TaskID, "entry-configuration"), TaskID: task.ID,
 		Operation: workexecution.EntryConfiguration, TargetID: scope.EnvironmentID,
 		Placement: placement, Phase: workexecution.Waiting, Cleanup: workexecution.CleanupNone,
 		Wait:      &workexecution.Wait{Reason: workexecution.WaitInput},
-		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline,
+		CreatedAt: at, UpdatedAt: at, Deadline: deadline,
 		Claims: []workexecution.Claim{{ScopeID: scope.EnvironmentID}},
 	}
 	if placement.Executor == workexecution.Agent {

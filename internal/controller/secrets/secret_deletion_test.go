@@ -3,8 +3,11 @@ package secrets
 import (
 	"context"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,7 +15,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -21,9 +23,9 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-// Rationale: first dispatch must derive ownership from the durable Secret and
-// publish the exact native input and protected replay target.
-func TestSecretDeletionPublishesCapturedNativeRemoval(t *testing.T) {
+// Rationale: acceptance preserves only metadata and replay identity; native value
+// revision capture and deletion authority belong to preparation of that same Task.
+func TestSecretDeletionAcceptsPureIntentThenCapturesOriginalTask(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 22, 23, 0, 0, 0, time.UTC)
 	projectID := ids.NewAt(ids.KindProject, now, 1)
@@ -44,15 +46,21 @@ func TestSecretDeletionPublishesCapturedNativeRemoval(t *testing.T) {
 		},
 		secret: testkeyvalue.Versioned[testsecrets.Record]{Record: record, Revision: 7, ReadRevision: 7},
 	}
-	idempotency := &fakeSecretDeletionIdempotency{
-		known: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
-	}
-	service, err := NewDeletionService(repository, idempotency)
-	if err != nil {
-		t.Fatalf("NewDeletionService() error = %v", err)
+	idempotency := &fakeSecretDeletionIdempotency{}
+	acceptance := &fakeSecretDeletionAcceptance{}
+	service := &secretDeletionService{
+		repository:  repository,
+		idempotency: idempotency,
+		acceptance:  acceptance,
+		now:         time.Now,
 	}
 	service.now = func() time.Time { return now }
-	response, err := service.DeleteSecret(context.Background(), secretID, "secret-delete-key-0001")
+	response, err := service.DeleteSecret(
+		context.Background(),
+		secretID,
+		apiTypes.TaskRunAfterRequest{After: []string{ids.NewAt(ids.KindTask, now, 7)}},
+		"secret-delete-key-0001",
+	)
 	if err != nil {
 		t.Fatalf("DeleteSecret() error = %v", err)
 	}
@@ -60,26 +68,37 @@ func TestSecretDeletionPublishesCapturedNativeRemoval(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatalf("decode TaskAccepted: %v", err)
 	}
+	if repository.captureCalls != 0 || repository.beginCalls != 0 || acceptance.calls != 1 ||
+		acceptance.task.ExpectedItems != 0 || acceptance.task.Intent != (workexecution.Input{}) || len(acceptance.task.After) != 1 || !reflect.DeepEqual(acceptance.task.After, acceptance.request.After) ||
+		!acceptance.task.PendingPreparation() || accepted.TaskID != acceptance.task.ID ||
+		acceptance.submission.ReplayTarget == nil || *acceptance.submission.ReplayTarget != (testidempotency.IdempotencyReplayTarget{Kind: testidempotency.IdempotencyReplayTargetSecret, ID: secretID}) ||
+		acceptance.submission.Locator.ScopeKind != testidempotency.IdempotencyScopeProject || acceptance.submission.Locator.ScopeID != projectID {
+		t.Fatalf("acceptance captured native state or lost replay metadata: %#v / %#v", acceptance, repository)
+	}
+	prepared, err := service.prepareAcceptedDeletion(
+		context.Background(),
+		workqueue.TaskSnapshot{Task: acceptance.task, Revision: 1},
+		0,
+		now.Add(5*time.Second),
+		acceptance.request,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	reference, err := repository.input.Reference()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Status != http.StatusAccepted || accepted.TaskID != repository.task.ID ||
-		repository.task.Validate() != nil || repository.task.Action != workexecution.ActionRemove ||
-		repository.task.Actor != workexecution.OperatorActor || repository.task.Scope.ProjectID != projectID ||
-		repository.task.Scope.TenantID != tenantID || repository.task.TargetID != secretID ||
-		repository.task.TargetName != "TOKEN" || repository.task.Intent != reference ||
-		!repository.task.Deadline.Equal(now.Add(time.Duration(secretDeletionTimeoutSeconds)*time.Second)) ||
-		repository.marker.TaskID != repository.task.ID ||
-		repository.marker.ReplayTarget == nil ||
-		*repository.marker.ReplayTarget != (testidempotency.IdempotencyReplayTarget{
-			Kind: testidempotency.IdempotencyReplayTargetSecret, ID: secretID,
-		}) || repository.marker.Locator.ScopeKind != testidempotency.IdempotencyScopeProject ||
-		repository.marker.Locator.ScopeID != projectID ||
-		repository.input.SecretRevision != repository.secret.Revision {
-		t.Fatalf("deletion response/task/marker/input = %#v/%#v/%#v/%#v",
-			response, repository.task, repository.marker, repository.input)
+	if response.Status != http.StatusAccepted || prepared.Task.ID != accepted.TaskID ||
+		prepared.Task.Intent != reference || prepared.Task.ExpectedItems != 1 ||
+		prepared.Task.Scope.TenantID != tenantID || prepared.Task.Scope.ProjectID != projectID ||
+		!prepared.Task.Deadline.Equal(now.Add(24*time.Hour)) ||
+		repository.input.TaskID != accepted.TaskID || repository.captureCalls != 1 || repository.beginCalls != 1 ||
+		repository.input.SecretRevision != repository.secret.Revision || len(prepared.Graph) != 1 ||
+		prepared.Graph[0].TaskID != accepted.TaskID || !prepared.Graph[0].Deadline.Equal(now.Add(35*time.Second)) || workexecution.ValidateGraph(prepared.Task, prepared.Graph) != nil {
+		t.Fatalf("late preparation did not preserve original Task/deadline/authority: %#v / %#v", prepared, repository)
 	}
+
 }
 
 // Rationale: exact retries must resolve through the stable Secret replay index
@@ -103,11 +122,19 @@ func TestSecretDeletionReplaysBeforeTargetLookup(t *testing.T) {
 			Kind: idempotentintent.ResolutionReplay, Response: want,
 		},
 	}
-	service, err := NewDeletionService(repository, idempotency)
-	if err != nil {
-		t.Fatalf("NewDeletionService() error = %v", err)
+	acceptance := &fakeSecretDeletionAcceptance{}
+	service := &secretDeletionService{
+		repository:  repository,
+		idempotency: idempotency,
+		acceptance:  acceptance,
+		now:         time.Now,
 	}
-	got, err := service.DeleteSecret(context.Background(), secretID, "secret-delete-key-0002")
+	got, err := service.DeleteSecret(
+		context.Background(),
+		secretID,
+		apiTypes.TaskRunAfterRequest{},
+		"secret-delete-key-0002",
+	)
 	if err != nil || !reflect.DeepEqual(got, want) || repository.readCalls != 0 || repository.beginCalls != 0 {
 		t.Fatalf(
 			"DeleteSecret(replay) = %#v/%v, repository calls = %d/%d",
@@ -120,13 +147,13 @@ func TestSecretDeletionReplaysBeforeTargetLookup(t *testing.T) {
 }
 
 type fakeSecretDeletionRepository struct {
-	project    testkeyvalue.Versioned[testhierarchy.ProjectRecord]
-	secret     testkeyvalue.Versioned[testsecrets.Record]
-	input      secretremoval.Input
-	task       workexecution.Task
-	marker     testidempotency.IdempotencyMarker
-	readCalls  int
-	beginCalls int
+	project      testkeyvalue.Versioned[testhierarchy.ProjectRecord]
+	secret       testkeyvalue.Versioned[testsecrets.Record]
+	input        secretremoval.Input
+	task         workexecution.Task
+	readCalls    int
+	captureCalls int
+	beginCalls   int
 }
 
 func (repository *fakeSecretDeletionRepository) GetProject(
@@ -157,20 +184,21 @@ func (repository *fakeSecretDeletionRepository) CaptureSecretRemoval(
 	if owner.Project != nil {
 		input.ProjectID, input.TenantID = owner.Project.Record.ID, owner.Project.Record.TenantID
 	}
+	repository.captureCalls++
+	repository.input = input
 	return input, nil
 }
 
-func (repository *fakeSecretDeletionRepository) PublishSecretRemoval(
+func (repository *fakeSecretDeletionRepository) PrepareSecretRemovalAuthority(
 	_ context.Context,
 	_ testsecrets.Owner,
 	_ testkeyvalue.Versioned[testsecrets.Record],
 	input secretremoval.Input,
 	task workexecution.Task,
-	marker testidempotency.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
+) (workqueue.Change, error) {
 	repository.beginCalls++
-	repository.input, repository.task, repository.marker = input, task, marker
-	return etcd.IdempotencyTransactionResult{}, nil
+	repository.input, repository.task = input, task
+	return workqueue.Change{}, nil
 }
 
 type fakeSecretDeletionIdempotency struct {
@@ -178,7 +206,6 @@ type fakeSecretDeletionIdempotency struct {
 	indexed            bool
 	existing           bool
 	existingResolution idempotentintent.Resolution
-	known              idempotentintent.Resolution
 }
 
 func (idempotency *fakeSecretDeletionIdempotency) ResolveReplayLocator(
@@ -195,6 +222,7 @@ func (idempotency *fakeSecretDeletionIdempotency) Prepare(
 	_ context.Context,
 	_ testidempotency.IdempotencyLocator,
 	_ string,
+	_ []string,
 ) (secretDeletionEvidence, error) {
 	return secretDeletionEvidence{}, nil
 }
@@ -207,19 +235,27 @@ func (idempotency *fakeSecretDeletionIdempotency) ResolveExisting(
 	return idempotency.existingResolution, idempotency.existing, nil
 }
 
-func (idempotency *fakeSecretDeletionIdempotency) ResolveKnown(
-	_ context.Context,
-	_ secretDeletionEvidence,
-	_ etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
-	return idempotency.known, nil
+type fakeSecretDeletionAcceptance struct {
+	calls      int
+	submission acceptedaction.Submission
+	request    secretDeletionRequest
+	task       workexecution.Task
 }
 
-func (idempotency *fakeSecretDeletionIdempotency) ResolveUnknown(
+func (acceptance *fakeSecretDeletionAcceptance) SubmitSecretDeletion(
 	_ context.Context,
-	_ testidempotency.IdempotencyLocator,
-	_ secretDeletionEvidence,
-	_ error,
-) (idempotentintent.Resolution, error) {
-	return idempotency.known, nil
+	submission acceptedaction.Submission,
+	request secretDeletionRequest,
+) (testidempotency.IdempotencyResponse, error) {
+	acceptance.calls++
+	acceptance.submission, acceptance.request = submission, request
+	acceptance.task = submission.Task
+	// The protected shared acceptance boundary supplies this sealed request handle.
+	acceptance.task.AcceptedIntent = &workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: strings.Repeat("a", 64)}
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: acceptance.task.ID})
+	return testidempotency.IdempotencyResponse{
+		Status:      http.StatusAccepted,
+		ContentKind: "application/json",
+		Body:        body,
+	}, err
 }

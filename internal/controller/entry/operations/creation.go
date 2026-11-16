@@ -2,7 +2,6 @@ package operations
 
 import (
 	"context"
-	"errors"
 	"sort"
 	"time"
 
@@ -16,9 +15,8 @@ import (
 )
 
 const (
-	entryCreationRoute           = "/entries"
-	maximumEntryCreationAttempts = 3
-	maximumEntryNumericID        = int64(1<<32 - 2)
+	entryCreationRoute    = "/entries"
+	maximumEntryNumericID = int64(1<<32 - 2)
 )
 
 type entryCreationGenerator interface {
@@ -141,36 +139,4 @@ func entryCreationNumericID(value *int64, field string) (*uint32, error) {
 	}
 	converted := uint32(*value)
 	return &converted, nil
-}
-
-func entryCreationResponse(entry core.EnvEntry) apiTypes.Entry {
-	response := apiTypes.Entry{
-		ID: entry.ID, Type: string(entry.Kind), Key: entry.Key, Path: entry.Path,
-		Source: apiTypes.EntrySource{
-			Kind: string(entry.Source.Kind), Literal: entry.Source.Literal, SecretRef: entry.Source.SecretRef,
-		},
-		Exposure: append([]string(nil), entry.Exposure...), Secret: entry.Secret,
-	}
-	if entry.UID != nil {
-		value := int64(*entry.UID)
-		response.UID = &value
-	}
-	if entry.GID != nil {
-		value := int64(*entry.GID)
-		response.GID = &value
-	}
-	if entry.Source.Fact != nil {
-		response.Source.AttachID = entry.Source.Fact.Attach
-		response.Source.GrantAttachID = entry.Source.Fact.Grant
-		response.Source.Fact = entry.Source.Fact.Key
-	}
-	return response
-}
-
-func isUnknownEntryCreationOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
 }

@@ -185,7 +185,12 @@ func (c *Client) GetZoneRemovalImpact(ctx context.Context, id string) (apiTypes.
 	return impact, nil
 }
 
-func (c *Client) RemoveZone(ctx context.Context, id string, impactToken string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RemoveZone(
+	ctx context.Context,
+	id string,
+	impactToken string,
+	after []string,
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -195,7 +200,12 @@ func (c *Client) RemoveZone(ctx context.Context, id string, impactToken string) 
 	if impactToken != "" {
 		params.ImpactToken = &impactToken
 	}
-	response, err := client.ZoneRemoveWithResponse(ctx, id, params)
+	response, err := client.ZoneRemoveWithResponse(
+		ctx,
+		id,
+		params,
+		generated.ZoneRemoveJSONRequestBody{After: optionalServiceStrings(after)},
+	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
 	}

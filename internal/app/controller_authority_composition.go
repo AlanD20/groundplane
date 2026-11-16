@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	agentchannel "github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/config"
 
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -21,6 +21,8 @@ import (
 )
 
 type controllerAuthorityComposition struct {
+	executionQueue              *workqueue.Repository
+	acceptedActions             *acceptedaction.Submitter
 	runnerRecords               *etcd.RunnerRepository
 	tasks                       *etcd.TaskRepository
 	idempotency                 *etcd.IdempotencyRepository
@@ -41,39 +43,32 @@ func newControllerAuthorityComposition(
 ) (controllerAuthorityComposition, error) {
 	runnerRecords, err := etcd.NewRunnerRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize Runner repository: %w", err)
 	}
 	tasks, err := etcd.NewTaskRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize Task repository: %w", err)
 	}
 	execution, err := workqueue.NewRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize execution schema owner: %w", err)
 	}
 	if err := execution.EnsureSchema(ctx); err != nil {
-		closeErr := store.Close()
-		return controllerAuthorityComposition{}, errs.Wrap(errs.KindInternal, errors.Join(
+		return controllerAuthorityComposition{}, errs.Wrap(
+			errs.KindInternal,
 			wrapControllerRunError("admit native execution storage", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
+		)
 	}
 	idempotency, err := etcd.NewIdempotencyRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize idempotency repository: %w", err)
 	}
 	hierarchyRecords, err := etcd.NewHierarchyRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize hierarchy repository: %w", err)
 	}
 	environmentBlueprintRecords, err := etcd.NewEnvironmentBlueprintRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf(
 			"controller: initialize Environment Blueprint repository: %w",
 			err,
@@ -81,16 +76,13 @@ func newControllerAuthorityComposition(
 	}
 	releaseGroups, err := etcdreleasegroup.New(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize release group repository: %w", err)
 	}
 	releaseLedger, err := etcd.NewReleaseLedger(store, tasks)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize release ledger: %w", err)
 	}
 	if err := hierarchyRecords.ValidateEnvironmentVolumeDirs(ctx, cfg.Storage.VolumeRoot); err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf(
 			"controller: validate persisted environment volume directories: %w",
 			err,
@@ -98,22 +90,18 @@ func newControllerAuthorityComposition(
 	}
 	hierarchyRepository, err := hierarchycontroller.NewEtcdRepository(hierarchyRecords)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize hierarchy adapter: %w", err)
 	}
 	hierarchyService, err := hierarchycontroller.NewService(hierarchyRepository)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize hierarchy service: %w", err)
 	}
 	agents, err := agentregistration.NewRepository(store)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize local Agent repository: %w", err)
 	}
 	authenticator, err := channeltransport.NewAuthenticator(agents)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf(
 			"controller: initialize Agent channel authenticator: %w",
 			err,
@@ -121,12 +109,10 @@ func newControllerAuthorityComposition(
 	}
 	controllerKey := &ageinfra.ControllerKey{Path: cfg.AgeKeyPath}
 	if err := controllerKey.Load(ctx); err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: load Controller age key: %w", err)
 	}
 	intentProtector, err := secretvalue.NewControllerKeyProtector(controllerKey)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf(
 			"controller: initialize idempotent intent protector: %w",
 			err,
@@ -134,13 +120,18 @@ func newControllerAuthorityComposition(
 	}
 	intentCoordinator, err := requestidempotency.NewCoordinator(intentProtector)
 	if err != nil {
-		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf(
 			"controller: initialize idempotent intent coordinator: %w",
 			err,
 		)
 	}
+	acceptedActions, err := newAcceptedActions(store, intentProtector, execution, idempotency, intentCoordinator)
+	if err != nil {
+		return controllerAuthorityComposition{}, err
+	}
 	return controllerAuthorityComposition{
+		executionQueue:              execution,
+		acceptedActions:             acceptedActions,
 		runnerRecords:               runnerRecords,
 		tasks:                       tasks,
 		idempotency:                 idempotency,

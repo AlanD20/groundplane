@@ -2,6 +2,7 @@ package operations
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -15,7 +16,7 @@ type entryDesiredRemovalEvidence struct {
 }
 
 type entryDesiredRemovalIdempotency interface {
-	Prepare(context.Context, string, string) (entryDesiredRemovalEvidence, error)
+	Prepare(context.Context, string, string, []string) (entryDesiredRemovalEvidence, error)
 	ResolveReplayLocator(
 		context.Context,
 		idempotencyrecord.IdempotencyReplayTarget,
@@ -61,12 +62,13 @@ func (service *durableEntryDesiredRemovalIdempotency) Prepare(
 	ctx context.Context,
 	environmentID string,
 	entryID string,
+	after []string,
 ) (entryDesiredRemovalEvidence, error) {
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: entryEditRoute,
 		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: entryID}},
-		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
+		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(after)})),
 	})
 	if err != nil {
 		return entryDesiredRemovalEvidence{}, err

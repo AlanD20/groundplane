@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	commandrunner "github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	dockerrunner "github.com/AlanD20/groundplane/internal/infra/docker/runner"
@@ -15,7 +16,7 @@ import (
 
 func newSoftware(store etcd.EnvironmentBlueprintStore, runners *etcd.RunnerRepository,
 	evidence *etcd.IdempotencyRepository, coordinator *requestidempotency.Coordinator,
-	lifecycle *runnercapability.Executor, logger *slog.Logger,
+	lifecycle *runnercapability.Executor, logger *slog.Logger, accepted *acceptedaction.Submitter,
 ) (*runnercapability.SoftwareService, *runnercapability.SoftwareExecutor, error) {
 	records, err := runnerupdates.NewRepository(store)
 	if err != nil {
@@ -39,6 +40,7 @@ func newSoftware(store etcd.EnvironmentBlueprintStore, runners *etcd.RunnerRepos
 		evidence,
 		coordinator,
 		githubrunner.NewCatalog(),
+		accepted,
 	)
 	if err != nil {
 		return nil, nil, err

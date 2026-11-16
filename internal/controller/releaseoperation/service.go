@@ -3,11 +3,14 @@ package releaseoperation
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"net/http"
 	"strconv"
 	"strings"
@@ -36,19 +39,21 @@ type localAgentReader interface {
 }
 
 type Service struct {
-	agents      localAgentReader
-	images      workloadseal.Resolver
-	observer    rollingpredecessor.Observer
-	ledger      *etcd.ReleaseLedger
-	services    *etcd.ServiceRepository
-	groups      *etcdrg.Store
-	idempotency *etcd.IdempotencyRepository
-	coordinator *requestidempotency.Coordinator
-	plans       *taskplanning.TaskPlanResolver
-	scripts     *etcd.ScriptRepository
-	preparation *taskplanning.ScriptRunnerPreparationService
-	timeout     time.Duration
-	now         func() time.Time
+	acceptedActions *acceptedaction.Submitter
+	queue           *workqueue.Repository
+	agents          localAgentReader
+	images          workloadseal.Resolver
+	observer        rollingpredecessor.Observer
+	ledger          *etcd.ReleaseLedger
+	services        *etcd.ServiceRepository
+	groups          *etcdrg.Store
+	idempotency     *etcd.IdempotencyRepository
+	coordinator     *requestidempotency.Coordinator
+	plans           *taskplanning.TaskPlanResolver
+	scripts         *etcd.ScriptRepository
+	preparation     *taskplanning.ScriptRunnerPreparationService
+	timeout         time.Duration
+	now             func() time.Time
 }
 
 type releaseCandidateInput struct {
@@ -78,9 +83,10 @@ func NewService(
 	agents *agentregistration.Repository,
 	images workloadseal.Resolver,
 	observer rollingpredecessor.Observer,
+	acceptedActions *acceptedaction.Submitter, queue *workqueue.Repository,
 ) (*Service, error) {
 	if ledger == nil || services == nil || groups == nil || idempotency == nil || coordinator == nil ||
-		plans == nil || scripts == nil || artifacts == nil || agents == nil || images == nil || observer == nil {
+		plans == nil || scripts == nil || artifacts == nil || agents == nil || images == nil || observer == nil || acceptedActions == nil || queue == nil {
 		return nil, errs.New(errs.KindInternal, "release operation dependencies are not configured")
 	}
 	if timeout == 0 {
@@ -97,7 +103,7 @@ func NewService(
 		return nil, err
 	}
 	return &Service{
-		agents: agents, images: images, observer: observer,
+		agents: agents, images: images, observer: observer, acceptedActions: acceptedActions, queue: queue,
 		ledger: ledger, services: services, groups: groups, idempotency: idempotency,
 		coordinator: coordinator, plans: plans, scripts: scripts, preparation: preparation,
 		timeout: timeout, now: time.Now,
@@ -120,6 +126,7 @@ func (service *Service) DeployService(
 		requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)},
 		requestidempotency.Field{Name: "strategy", Value: requestidempotency.String(string(request.Strategy))},
 		requestidempotency.Field{Name: "on_failure", Value: requestidempotency.String(string(request.OnFailure))},
+		requestidempotency.Field{Name: "after", Value: releaseAfterValue(request.After)},
 	))
 	locator, protected, durable, replay, err := service.begin(
 		ctx, current.Record.EnvironmentID, http.MethodPost, serviceDeployRoute, serviceID,
@@ -133,27 +140,20 @@ func (service *Service) DeployService(
 	}
 	defer protected.Destroy()
 	defer clear(durable.Ciphertext)
-	scope, err := service.ledger.LoadPlanningScope(ctx, current.Record.EnvironmentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	planning, err := service.ledger.LoadPlanningServices(ctx, scope, []string{serviceID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	selected, err := service.deployCandidate(
+	return acceptReleaseRequest(
 		ctx,
-		scope,
-		planning[0],
-		request.Tag,
-		string(request.Strategy),
-		request.OnFailure,
-		request.Image,
+		service,
+		current.Record.EnvironmentID,
+		serviceID,
+		current.Record.Desired.Name,
+		workexecution.ActionDeploy,
+		"service-deploy",
+		request.After,
+		request,
+		locator,
+		durable,
+		protected,
 	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	return service.publishServiceWork(ctx, scope, selected, locator, durable, protected)
 }
 
 func (service *Service) RollbackService(
@@ -180,19 +180,20 @@ func (service *Service) RollbackService(
 	}
 	defer protected.Destroy()
 	defer clear(durable.Ciphertext)
-	scope, err := service.ledger.LoadPlanningScope(ctx, current.Record.EnvironmentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	planning, err := service.ledger.LoadPlanningServices(ctx, scope, []string{serviceID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	selected, err := service.rollbackCandidate(ctx, scope, planning[0], request.Tag, "")
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	return service.publishServiceWork(ctx, scope, selected, locator, durable, protected)
+	return acceptReleaseRequest(
+		ctx,
+		service,
+		current.Record.EnvironmentID,
+		serviceID,
+		current.Record.Desired.Name,
+		workexecution.ActionRollback,
+		"service-rollback",
+		request.After,
+		request,
+		locator,
+		durable,
+		protected,
+	)
 }
 
 func (service *Service) DeployReleaseGroup(
@@ -207,7 +208,11 @@ func (service *Service) DeployReleaseGroup(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	body := requestidempotency.JSONBody(requestidempotency.Object(
-		requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)},
+		requestidempotency.Field{
+			Name:  "tag",
+			Value: requestidempotency.String(request.Tag),
+		},
+		requestidempotency.Field{Name: "after", Value: releaseAfterValue(request.After)},
 	))
 	locator, protected, durable, replay, err := service.begin(
 		ctx, current.Group.EnvironmentID, http.MethodPost, releaseGroupDeployRoute, groupID,
@@ -221,44 +226,20 @@ func (service *Service) DeployReleaseGroup(
 	}
 	defer protected.Destroy()
 	defer clear(durable.Ciphertext)
-	scope, err := service.ledger.LoadPlanningScope(ctx, current.Group.EnvironmentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	group, err := service.groups.GetAtRevision(ctx, groupID, scope.ReadRevision)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	tag := request.Tag
-	if tag == "" {
-		tag = group.Group.DefaultTag
-	}
-	if tag == "" {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindReleaseGroupTagRequired,
-			"release group deploy requires a tag or group default",
-		)
-	}
-	planning, err := service.ledger.LoadPlanningServices(ctx, scope, group.Group.Order)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	candidates := make([]releaseCandidateInput, len(planning))
-	for index := range planning {
-		candidates[index], err = service.deployCandidate(
-			ctx,
-			scope,
-			planning[index],
-			tag,
-			"",
-			domain.OnFailure(group.Group.OnFailure),
-			"",
-		)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
-	return service.publishGroupWork(ctx, scope, group, candidates, locator, durable, protected)
+	return acceptReleaseRequest(
+		ctx,
+		service,
+		current.Group.EnvironmentID,
+		groupID,
+		current.Group.Name,
+		workexecution.ActionDeploy,
+		"group-deploy",
+		request.After,
+		request,
+		locator,
+		durable,
+		protected,
+	)
 }
 
 func (service *Service) RollbackReleaseGroup(ctx context.Context, groupID string,
@@ -280,21 +261,16 @@ func (service *Service) RollbackReleaseGroup(ctx context.Context, groupID string
 	}
 	defer protected.Destroy()
 	defer clear(durable.Ciphertext)
-	selection, err := service.selectGroupRollback(
+	return acceptReleaseRequest(
 		ctx,
+		service,
 		current.Group.EnvironmentID,
 		groupID,
-		request.Tag,
-		request.PreviewRevision,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	return service.publishGroupWork(
-		ctx,
-		selection.scope,
-		selection.group,
-		selection.candidates,
+		current.Group.Name,
+		workexecution.ActionRollback,
+		"group-rollback",
+		request.After,
+		request,
 		locator,
 		durable,
 		protected,
@@ -377,12 +353,15 @@ func (service *Service) selectGroupRollback(
 
 func releaseRollbackRequestBody(request domain.ServiceRollbackInput) requestidempotency.Body {
 	return requestidempotency.JSONBody(
-		requestidempotency.Object(requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)}),
+		requestidempotency.Object(
+			requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)},
+			requestidempotency.Field{Name: "after", Value: releaseAfterValue(request.After)},
+		),
 	)
 }
 
 func groupRollbackRequestBody(request domain.GroupRollbackInput) requestidempotency.Body {
-	fields := make([]requestidempotency.Field, 0, 2)
+	fields := []requestidempotency.Field{{Name: "after", Value: releaseAfterValue(request.After)}}
 	if request.Tag != nil {
 		fields = append(fields, requestidempotency.Field{Name: "tag", Value: requestidempotency.String(*request.Tag)})
 	}

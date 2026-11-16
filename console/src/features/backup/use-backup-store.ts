@@ -146,7 +146,7 @@ function recoveryPointFromAPI(point: RecoveryPointPageItem): RecoveryPoint {
     throw new Error("Controller returned an invalid Recovery Point size");
   }
   const base = {
-	 database: point.database,
+    database: point.database,
     capture: point.capture
       ? {
           taskId: point.capture.task_id,
@@ -490,12 +490,12 @@ export function useBackupStore({
   );
 
   const runBackup = useCallback(
-    async (environmentId: string): Promise<string> => {
+    async (environmentId: string, after: string[] = []): Promise<string> => {
       assertEnvironmentMutable(environmentId, "Backup run");
       const response = await request<BackupRunTaskAccepted>(
         `/environments/${encodeURIComponent(environmentId)}/backup-run`,
         202,
-        { method: "POST" },
+        { method: "POST", body: { after } },
       );
       return requiredTaskId(response, "Backup run");
     },
@@ -524,12 +524,13 @@ export function useBackupStore({
       environmentId: string,
       recoveryPointId: string,
       idempotencyKey: string,
+      after: string[] = [],
     ): Promise<string> => {
       assertEnvironmentMutable(environmentId, "Recovery Point deletion");
       const response = await request<TaskAccepted>(
         `/environments/${encodeURIComponent(environmentId)}/recovery-points/${encodeURIComponent(recoveryPointId)}`,
         202,
-        { method: "DELETE", idempotencyKey },
+        { method: "DELETE", body: { after }, idempotencyKey },
       );
       return requiredTaskId(response, "Recovery Point deletion");
     },
@@ -537,12 +538,12 @@ export function useBackupStore({
   );
 
   const rotateBackupKey = useCallback(
-    async (environmentId: string): Promise<string> => {
+    async (environmentId: string, after: string[] = []): Promise<string> => {
       assertEnvironmentMutable(environmentId, "Backup key rotation");
       const response = await request<BackupKeyRotateResponse>(
         `/environments/${encodeURIComponent(environmentId)}/rotate-key`,
         202,
-        { method: "POST" },
+        { method: "POST", body: { after } },
       );
       if (!response.task_id)
         throw new Error(

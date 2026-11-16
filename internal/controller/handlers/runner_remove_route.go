@@ -2,8 +2,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -13,16 +11,18 @@ import (
 )
 
 type runnerRemoveInput struct {
-	ID             string `path:"id" required:"true" pattern:"^run_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID             string                        `path:"id" required:"true" pattern:"^run_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 func (s *Server) registerRunnerRemove() {
 	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
+	s.setRoutePolicy("DELETE /api/v1/runners/{id}", routePolicy{body: jsonBody})
 	huma.Register(s.API, huma.Operation{
 		OperationID: "runner.remove", Method: http.MethodDelete, Path: "/runners/{id}",
 		Summary: "Remove a managed Runner", Tags: []string{"Runner"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectRunnerRemoveBody, s.rejectRunnerRemoveQuery},
+		Middlewares: huma.Middlewares{s.rejectRunnerRemoveQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.removeRunner)
 }
@@ -34,21 +34,11 @@ func (s *Server) removeRunner(
 	if s.runnerRemovals == nil {
 		return nil, errs.New(errs.KindInternal, "Runner remover is not configured")
 	}
-	response, err := s.runnerRemovals.RemoveRunner(ctx, request.ID, request.IdempotencyKey)
+	response, err := s.runnerRemovals.RemoveRunner(ctx, request.ID, taskRunAfter(request.Body), request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
 	return s.runnerMutationResponse(response), nil
-}
-
-func (s *Server) rejectRunnerRemoveBody(ctx huma.Context, next func(huma.Context)) {
-	var probe [1]byte
-	count, err := ctx.BodyReader().Read(probe[:])
-	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		s.writeRunnerRemoveProblem(ctx, "Runner removal body is not allowed")
-		return
-	}
-	next(ctx)
 }
 
 func (s *Server) rejectRunnerRemoveQuery(ctx huma.Context, next func(huma.Context)) {

@@ -45,10 +45,10 @@ export function useControllerUpdate(
     setError(null);
     try {
       const taskID = await intent.publish(
-        (release, idempotencyKey) =>
+        (release, idempotencyKey, after) =>
           request<ControllerUpdateAccepted>("/controller/update", 202, {
             method: "POST",
-            body: { release },
+            body: { release, after },
             idempotencyKey,
           }),
         rejected,
@@ -69,9 +69,9 @@ export function useControllerUpdate(
   }, [intent, request, rejected]);
 
   const updateController = useCallback(
-    async (release: string) => {
+    async (release: string, after: string[] = []) => {
       try {
-        intent.begin(release, newULID());
+        intent.begin(release, newULID(), after);
         setPending(intent.current);
         setTask(null);
         setTrackedTaskID(null);

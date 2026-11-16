@@ -303,6 +303,12 @@ Restore or Point removal when you need to resolve uncertain acceptance. See
 selection, overwrite, downtime and Retry restrictions. Use the API when automation
 needs explicit replay control for other implemented operations.
 
+Whole-Task dependencies use an optional `after` array in the supported action's
+request body, not the pagination cursor named `after`. The immutable list accepts
+up to 16 existing Task IDs. Repeat `--after TASK_ID` on the corresponding CLI
+command. See [Run after whole Tasks](features/tasks-and-logs.md#run-after-whole-tasks)
+for supported actions, deferred preparation, failure propagation and inspection.
+
 ## Blueprint requests
 
 For CLI commands and replay, see [Blueprint authoring](features/blueprints.md#read-edit-validate-and-apply).
@@ -319,6 +325,14 @@ Validate uses `POST /api/v1/environments/{id}/blueprint/validate`; Apply uses
 bundle. Validate returns the compared revision and changes (`create`, `update`,
 `remove`, `retain`), without a Task or desired revision. Apply additionally
 requires an idempotency key and returns a reconcile Task.
+
+For Apply, the multipart manifest may include an optional `after` array of
+whole-Task prerequisites. It is request metadata, never a Blueprint YAML field;
+Validate rejects it. Apply retains the exact `If-Match` precondition while
+waiting. If a prerequisite applies the same Environment, use its Task ID as
+the intended expected Blueprint revision. The CLI supports
+`--expected-revision` for this explicit fence; `--retry-revision` remains the
+separate recovery input for uncertain acceptance.
 
 ### Upload encoding
 

@@ -132,7 +132,7 @@ func (c *Client) EditService(ctx context.Context, id string, input apiTypes.Serv
 	return decodeServiceResponse(http.MethodPatch, path, response.Body)
 }
 
-func (c *Client) RemoveService(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RemoveService(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -140,6 +140,7 @@ func (c *Client) RemoveService(ctx context.Context, id string) (apiTypes.TaskAcc
 	path := "/api/v1/services/" + id
 	response, err := client.ServiceRemoveWithResponse(
 		ctx, id, &generated.ServiceRemoveParams{IdempotencyKey: ids.NewULID()},
+		generated.ServiceRemoveJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
@@ -174,7 +175,7 @@ func (c *Client) DeployService(
 	); err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	return generatedReleaseTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
 func (c *Client) RollbackService(
@@ -199,10 +200,10 @@ func (c *Client) RollbackService(
 	); err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	return generatedReleaseTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
-func (c *Client) StartService(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) StartService(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -210,6 +211,7 @@ func (c *Client) StartService(ctx context.Context, id string) (apiTypes.TaskAcce
 	path := "/api/v1/services/" + id + "/start"
 	response, err := client.ServiceStartWithResponse(
 		ctx, id, &generated.ServiceStartParams{IdempotencyKey: ids.NewULID()},
+		generated.ServiceStartJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
@@ -222,7 +224,7 @@ func (c *Client) StartService(ctx context.Context, id string) (apiTypes.TaskAcce
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
-func (c *Client) StopService(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) StopService(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -230,6 +232,7 @@ func (c *Client) StopService(ctx context.Context, id string) (apiTypes.TaskAccep
 	path := "/api/v1/services/" + id + "/stop"
 	response, err := client.ServiceStopWithResponse(
 		ctx, id, &generated.ServiceStopParams{IdempotencyKey: ids.NewULID()},
+		generated.ServiceStopJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
@@ -242,7 +245,7 @@ func (c *Client) StopService(ctx context.Context, id string) (apiTypes.TaskAccep
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
-func (c *Client) DestroyService(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) DestroyService(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -250,6 +253,7 @@ func (c *Client) DestroyService(ctx context.Context, id string) (apiTypes.TaskAc
 	path := "/api/v1/services/" + id + "/destroy"
 	response, err := client.ServiceDestroyWithResponse(
 		ctx, id, &generated.ServiceDestroyParams{IdempotencyKey: ids.NewULID()},
+		generated.ServiceDestroyJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)

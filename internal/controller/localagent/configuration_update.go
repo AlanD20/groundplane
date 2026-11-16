@@ -21,8 +21,14 @@ func (manager *Manager) UpdateConfig(
 	if err := validateAgentID(agentID); err != nil {
 		return nil, err
 	}
-	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 || config.MaxParallelOperationsPerTask < 1 || config.MaxParallelOperationsPerTask > 256 || config.MaxConcurrentTasks*config.MaxParallelOperationsPerTask > 256 {
-		return nil, errs.New(errs.KindValidationFailed, "agent runtime config pull interval must be positive and task limits must be 1..256 with at most 256 total operations")
+	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 ||
+		config.MaxParallelOperationsPerTask < 1 ||
+		config.MaxParallelOperationsPerTask > 256 ||
+		config.MaxConcurrentTasks*config.MaxParallelOperationsPerTask > 256 {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"agent runtime config pull interval must be positive and task limits must be 1..256 with at most 256 total operations",
+		)
 	}
 	if !validLabels(config.Labels) {
 		return nil, errs.New(errs.KindValidationFailed, "agent labels must contain valid NUL-free UTF-8")

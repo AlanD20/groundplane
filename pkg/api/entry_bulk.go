@@ -13,13 +13,9 @@ type EntryBulkItem struct {
 }
 
 type EntryBulkUpsertRequest struct {
+	After         []string        `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 	EnvironmentID string          `json:"environment_id"`
 	Entries       []EntryBulkItem `json:"entries"`
 	Exposure      []string        `json:"exposure"`
 	Secret        bool            `json:"secret"`
-}
-
-type EntryBulkUpsertResult struct {
-	TaskID  string  `json:"task_id"`
-	Entries []Entry `json:"entries"`
 }

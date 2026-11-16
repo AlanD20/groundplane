@@ -32,7 +32,7 @@ func (repository *RouteRepository) LoadTunnelCheckSource(ctx context.Context, en
 		ids.Validate(
 			ids.KindService,
 			originServiceID,
-		) != nil || connectorRevision <= 0 || port == 0 || target.Validate() != nil {
+		) != nil || connectorRevision < 0 || port == 0 || target.Validate() != nil {
 		return EdgeCheckSource{}, errs.New(
 			errs.KindValidationFailed,
 			"Tunnel check requires its current revision, an origin Service HTTP port and a concrete public hostname/path",
@@ -83,12 +83,13 @@ func (repository *RouteRepository) LoadTunnelCheckSource(ctx context.Context, en
 			)
 		}
 	}
-	if read.Values[0].ModRevision != connectorRevision {
+	if connectorRevision != 0 && read.Values[0].ModRevision != connectorRevision {
 		return EdgeCheckSource{}, errs.New(
 			errs.KindStateConflict,
 			"Tunnel changed; refresh its configuration before checking access",
 		)
 	}
+	connectorRevision = read.Values[0].ModRevision
 	if read.Values[4] != nil || read.Values[5] != nil {
 		return EdgeCheckSource{}, errs.New(
 			errs.KindResourceInUse,

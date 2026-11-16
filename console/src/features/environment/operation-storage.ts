@@ -24,6 +24,7 @@ export type EnvironmentMutationIntent = {
   environmentId?: string;
   name?: string;
   networkPool?: string;
+  after?: string[];
 };
 
 export function environmentMutationKey(
@@ -41,12 +42,23 @@ const deletionFailureStorageKey = "groundplane-environment-deletion-failures";
 const mutationIntentStorageKey = "groundplane-environment-mutation-intents";
 
 export function resourceRemovalKey(removal: PendingResourceRemoval) {
-  return `${removal.kind}:${removal.resourceId}`;
+  return `${removal.kind}:${removal.resourceId}:${JSON.stringify(removal.after ?? [])}`;
 }
 
 function decodeRemoval(value: unknown): PendingResourceRemoval | undefined {
   if (!value || typeof value !== "object") return undefined;
   const candidate = value as Record<string, unknown>;
+  const after = candidate.after;
+  if (
+    after !== undefined &&
+    (!Array.isArray(after) ||
+      after.length > 16 ||
+      after.some(
+        (id) =>
+          typeof id !== "string" || !/^task_[0-9A-HJKMNP-TV-Z]{26}$/.test(id),
+      ))
+  )
+    return undefined;
   if (
     candidate.kind === "environment" &&
     typeof candidate.projectId === "string" &&
@@ -56,6 +68,7 @@ function decodeRemoval(value: unknown): PendingResourceRemoval | undefined {
       kind: "environment",
       projectId: candidate.projectId,
       resourceId: candidate.resourceId,
+      after: after as string[] | undefined,
       generation:
         typeof candidate.generation === "number" &&
         Number.isFinite(candidate.generation)
@@ -75,6 +88,7 @@ function decodeRemoval(value: unknown): PendingResourceRemoval | undefined {
       kind: candidate.kind,
       environmentId: candidate.environmentId,
       resourceId: candidate.resourceId,
+      after: after as string[] | undefined,
       generation:
         typeof candidate.generation === "number" &&
         Number.isFinite(candidate.generation)

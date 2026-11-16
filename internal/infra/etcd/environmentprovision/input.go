@@ -119,7 +119,8 @@ func (input Input) Match(task workexecution.Task, item workexecution.Item) error
 	}
 	if task.ID != input.TaskID || task.Action != expectedTask.Action || task.Actor != expectedTask.Actor ||
 		task.Scope != input.Scope || task.TargetID != expectedTask.TargetID || task.TargetName != expectedTask.TargetName ||
-		task.Intent != expectedTask.Intent || task.ExpectedItems != 1 || !task.CreatedAt.Equal(input.CreatedAt) ||
+		task.Intent != expectedTask.Intent || task.ExpectedItems != 1 || task.CreatedAt.After(input.CreatedAt) ||
+		task.Deadline.Before(item.Deadline) || item.Deadline.After(input.CreatedAt.Add(120*time.Second)) ||
 		item.ID != input.WorkItemID || item.TaskID != input.TaskID || item.Operation != expectedItem.Operation || item.TargetID != input.Environment.ID ||
 		item.Placement != expectedItem.Placement || item.Input == nil || *item.Input != expectedTask.Intent ||
 		len(

@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/imagefence"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintcoordinator"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
@@ -22,11 +22,11 @@ import (
 )
 
 const (
-	environmentBlueprintRoute           = "/environments/{id}/blueprint"
-	maximumEnvironmentBlueprintAttempts = 3
+	environmentBlueprintRoute = "/environments/{id}/blueprint"
 )
 
 type Service struct {
+	acceptedActions   *acceptedaction.Submitter
 	volumeRoot        string
 	environmentPool   netip.Prefix
 	repository        environmentBlueprintRepository
@@ -62,6 +62,7 @@ func NewService(
 	backups environmentBlueprintBackupRepository,
 	backupKeys environmentBlueprintBackupKeyFactory,
 	executionTimeout time.Duration,
+	acceptedActions *acceptedaction.Submitter,
 ) (*Service, error) {
 	parsedEnvironmentPool, poolErr := netip.ParsePrefix(environmentPool)
 	if poolErr != nil || !parsedEnvironmentPool.Addr().Is4() ||
@@ -72,7 +73,7 @@ func NewService(
 		releaseGroups == nil ||
 		entryGeneration == nil ||
 		attachFacts == nil ||
-		blueprintReleases == nil || configuration == nil || workAdmission == nil {
+		blueprintReleases == nil || configuration == nil || workAdmission == nil || acceptedActions == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
 	}
 	if executionTimeout < 40*time.Minute || executionTimeout > 24*time.Hour || executionTimeout%time.Second != 0 {
@@ -82,7 +83,7 @@ func NewService(
 		)
 	}
 	return &Service{
-		volumeRoot: volumeRoot, environmentPool: parsedEnvironmentPool, repository: repository, idempotency: idempotency,
+		acceptedActions: acceptedActions, volumeRoot: volumeRoot, environmentPool: parsedEnvironmentPool, repository: repository, idempotency: idempotency,
 		materials: materials, releaseGroups: releaseGroups, blueprintReleases: blueprintReleases,
 		configuration:    configuration,
 		workAdmission:    workAdmission,
@@ -102,24 +103,9 @@ func (service *Service) ApplyBlueprint(
 	bundle core.BlueprintBundle,
 	expectedRevision string,
 	idempotencyKey string,
+	after []string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.applyBlueprint(ctx, environmentID, bundle, expectedRevision, idempotencyKey, false)
-}
-
-func (service *Service) ApplyComponentBlueprint(
-	ctx context.Context,
-	environmentID string,
-	componentID string,
-	bundle core.BlueprintBundle,
-	expectedRevision, idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if ids.Validate(ids.KindComponent, componentID) != nil || expectedRevision == "" {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindValidationFailed,
-			"Component id or Blueprint revision is invalid",
-		)
-	}
-	return service.applyBlueprint(ctx, environmentID, bundle, expectedRevision, idempotencyKey, true)
+	return service.applyBlueprint(ctx, environmentID, bundle, expectedRevision, idempotencyKey, false, after)
 }
 
 func (service *Service) applyBlueprint(
@@ -129,6 +115,7 @@ func (service *Service) applyBlueprint(
 	expectedRevision string,
 	idempotencyKey string,
 	preserveRoutes bool,
+	after []string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
@@ -139,32 +126,11 @@ func (service *Service) applyBlueprint(
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Environment id is invalid")
 	}
-	ctx = imagefence.WithScope(ctx)
 	if err := bundle.Validate(); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint bundle is invalid",
 		)
 	}
-	for attempt := 0; attempt < maximumEnvironmentBlueprintAttempts; attempt++ {
-		response, err := service.applyAuthoredOnce(
-			ctx,
-			environmentID,
-			bundle,
-			expectedRevision,
-			idempotencyKey,
-			preserveRoutes,
-		)
-		if err == nil {
-			return response, nil
-		}
-		kind, ok := errs.KindOf(err)
-		if !ok || kind != errs.KindStateConflict || attempt == maximumEnvironmentBlueprintAttempts-1 {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(
-		errs.KindInternal,
-		"Environment Blueprint retry bound was not enforced",
-	)
+	return service.acceptBlueprint(ctx, environmentID, bundle, expectedRevision, idempotencyKey, preserveRoutes, after)
 }

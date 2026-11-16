@@ -25,9 +25,24 @@ type BackingServiceMutator interface {
 		apiTypes.BackingServiceCreate,
 		string,
 	) (idempotencyrecord.IdempotencyResponse, error)
-	StartBackingService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	StopBackingService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	DestroyBackingService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	StartBackingService(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	StopBackingService(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	DestroyBackingService(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type backingServiceListInput struct {
@@ -40,8 +55,9 @@ type backingServiceShowInput struct {
 }
 
 type backingServiceActionInput struct {
-	ProjectID      string `path:"project_id" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ProjectID      string                        `path:"project_id" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type backingServiceCreateInput struct {
@@ -62,9 +78,9 @@ func (s *Server) registerBackingServices() {
 	s.registerBackingAdapterCatalog()
 	backingServiceCreateSchema(s.API.OpenAPI().Components.Schemas)
 	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
-	createdSchema := openAPISchema[apiTypes.BackingServiceCreated](
+	createdSchema := openAPISchema[apiTypes.TaskAccepted](
 		s.API.OpenAPI().Components.Schemas,
-		"BackingServiceCreated",
+		"TaskAccepted",
 	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backing-service.list", Method: http.MethodGet, Path: "/backing-services",
@@ -73,11 +89,11 @@ func (s *Server) registerBackingServices() {
 	}, s.listBackingServices)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backing-service.create", Method: http.MethodPost, Path: "/backing-services",
-		Summary: "Create a backing service", Tags: []string{"Backing service"}, DefaultStatus: http.StatusCreated,
+		Summary: "Create a backing service", Tags: []string{"Backing service"}, DefaultStatus: http.StatusAccepted,
 		Middlewares: huma.Middlewares{s.rejectTaskMutationQuery},
 		Responses: map[string]*huma.Response{
-			strconv.Itoa(http.StatusCreated): {
-				Description: http.StatusText(http.StatusCreated),
+			strconv.Itoa(http.StatusAccepted): {
+				Description: http.StatusText(http.StatusAccepted),
 				Content:     map[string]*huma.MediaType{"application/json": {Schema: createdSchema}},
 			},
 		},
@@ -99,9 +115,10 @@ func (s *Server) registerBackingServices() {
 		huma.Register(s.API, huma.Operation{
 			OperationID: action.id, Method: http.MethodPost, Path: action.path,
 			Summary: action.id, Tags: []string{"Backing service"}, DefaultStatus: http.StatusAccepted,
-			Middlewares: huma.Middlewares{s.rejectTaskMutationBody, s.rejectTaskMutationQuery},
+			Middlewares: huma.Middlewares{s.rejectTaskMutationQuery},
 			Responses:   attachMutationResponses(taskAcceptedSchema),
 		}, action.handler)
+		s.setRoutePolicy("POST /api/v1"+action.path, routePolicy{body: jsonBody})
 	}
 }
 
@@ -167,12 +184,12 @@ func (s *Server) destroyBackingService(
 func (s *Server) mutateBackingService(
 	ctx context.Context,
 	request *backingServiceActionInput,
-	mutate func(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error),
+	mutate func(context.Context, string, apiTypes.TaskRunAfterRequest, string) (idempotencyrecord.IdempotencyResponse, error),
 ) (*backingServiceMutationOutput, error) {
 	if s.backingServiceMutations == nil || mutate == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service mutator is not configured")
 	}
-	response, err := mutate(ctx, request.ProjectID, request.IdempotencyKey)
+	response, err := mutate(ctx, request.ProjectID, taskRunAfter(request.Body), request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}

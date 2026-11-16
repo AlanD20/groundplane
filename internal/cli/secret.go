@@ -91,23 +91,30 @@ func newSecretCmd() *cobra.Command {
 		},
 	})
 
-	cmd.AddCommand(&cobra.Command{
+	var removeAfter []string
+	remove := &cobra.Command{
 		Use:     "remove <key>",
 		Aliases: []string{"delete"},
 		Short:   "Remove a secret",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(removeAfter)
+			if err != nil {
+				return err
+			}
 			id, err := resolveSecretTarget(cmd, args[0], platform)
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.RemoveSecret(cmd.Context(), id)
+			accepted, err := fromContext(cmd).Client.RemoveSecret(cmd.Context(), id, after)
 			if err != nil {
 				return err
 			}
 			return renderTaskAccepted(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &removeAfter)
+	cmd.AddCommand(remove)
 
 	return cmd
 }

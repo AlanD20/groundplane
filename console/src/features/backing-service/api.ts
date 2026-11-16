@@ -34,5 +34,5 @@ export type BackingServiceCreateRequest = CreateBase &
 export type BackingAdapterCatalog =
   operations["backing-service.adapters"]["responses"][200]["content"]["application/json"];
 
-export type BackingServiceCreatedResponse =
-  operations["backing-service.create"]["responses"][201]["content"]["application/json"];
+export type BackingServiceCreateAccepted =
+  operations["backing-service.create"]["responses"][202]["content"]["application/json"];

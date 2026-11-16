@@ -94,6 +94,7 @@ type ComponentDNSForwarder struct {
 }
 
 type ComponentConfigMutationRequest struct {
+	After  []string                     `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 	Config ComponentConfigMutationInput `json:"config"`
 }
 

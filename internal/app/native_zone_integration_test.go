@@ -41,7 +41,7 @@ func TestNativeZoneRemovalCapturesHostAndPendingReplay(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("Zone baseline: %v", err)
 	}
-	removed, err := f.network.RemoveZone(t.Context(), zone.ID, "native-zone-remove-isolated")
+	removed, err := f.network.RemoveZone(t.Context(), zone.ID, "native-zone-remove-isolated", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,6 +50,7 @@ func TestNativeZoneRemovalCapturesHostAndPendingReplay(t *testing.T) {
 		removed.Status != http.StatusAccepted {
 		t.Fatalf("Zone removal: %v", err)
 	}
+	f.prepare(t, accepted.TaskID)
 	page, err := f.base.queue.ListWork(t.Context(), accepted.TaskID, "", 10, 0)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatalf("Zone work: %v", err)
@@ -83,7 +84,7 @@ func TestNativeZoneRemovalCapturesHostAndPendingReplay(t *testing.T) {
 		t.Fatalf("Zone removal changed unrelated desired state: %v", err)
 	}
 	revision := f.base.store.revision
-	_, err = f.network.RemoveZone(t.Context(), zone.ID, "native-zone-remove-isolated")
+	_, err = f.network.RemoveZone(t.Context(), zone.ID, "native-zone-remove-isolated", nil)
 	if !errors.Is(err, errs.New(errs.KindIdempotencyInProgress, "")) || f.base.store.revision != revision {
 		t.Fatalf("pending Zone replay allocated more work: %v", err)
 	}
@@ -214,27 +215,44 @@ func TestNativeBackingZoneRemovalRequiresReadyEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var created api.BackingServiceCreated
-	if err := json.Unmarshal(response.Body, &created); err != nil {
-		t.Fatal(err)
-	}
+	created := nativeBackingCreationResult(t, f.base, response)
 	zoneID := created.BackingService.BackingNetworkID
 	impact, err := f.network.GetZoneRemovalImpact(t.Context(), zoneID)
 	if err != nil || impact.ImpactToken == "" || impact.Mode != networkmodel.ZoneRemovalImpactCascade {
 		t.Fatalf("Backing Zone impact: %v", err)
 	}
-	revision := f.base.store.revision
-	if _, err := f.network.RemoveZone(t.Context(), zoneID, "native-backing-zone-no-approval"); err == nil ||
-		f.base.store.revision != revision {
-		t.Fatalf("Backing Zone bypassed impact approval: %v", err)
+	removed, err := f.network.RemoveZone(t.Context(), zoneID, "native-backing-zone-no-approval", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	_, err = f.network.RemoveZoneWithImpact(
+	assertNativeZonePreparationFailure(t, f, removed.Body, errs.KindStateConflict)
+	removed, err = f.network.RemoveZoneWithImpact(
 		t.Context(),
 		zoneID,
 		"native-backing-zone-approved",
 		impact.ImpactToken,
+		nil,
 	)
-	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) || f.base.store.revision != revision {
-		t.Fatalf("unfinished Backing provisioning admitted Zone removal or changed state: %v", err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertNativeZonePreparationFailure(t, f, removed.Body, errs.KindResourceInUse)
+}
+
+func assertNativeZonePreparationFailure(t *testing.T, f *nativeRouteFixture, body []byte, kind errs.Kind) {
+	t.Helper()
+	var accepted api.TaskAccepted
+	if err := json.Unmarshal(body, &accepted); err != nil {
+		t.Fatal(err)
+	}
+	f.prepare(t, accepted.TaskID)
+	task, _, err := f.base.queue.ReadTask(t.Context(), accepted.TaskID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failure, err := f.base.queue.ReadAcceptedPreparationFailure(t.Context(), accepted.TaskID, 0)
+	if err != nil || failure == nil || task.Task.Outcome != workexecution.Failed ||
+		failure.Code != string(errs.New(kind, "").ToProblem().Code) {
+		t.Fatalf("Zone unsafe preparation outcome=%+v evidence=%+v error=%v", task.Task, failure, err)
 	}
 }

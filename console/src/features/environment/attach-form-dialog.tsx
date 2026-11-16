@@ -1,3 +1,4 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { AnimatedSection } from "@/components/common/animated-section";
 import {
   ResourceForm,
@@ -57,7 +58,7 @@ function AttachForm({
   const store = useStore();
   const available = store.backingProjects.filter((g) => {
     const service = g.environments?.[0]?.services[0];
-    return service?.runtimeIntent === "running";
+    return Boolean(service);
   });
   const [gid, setGid] = useState(available[0]?.id ?? "");
   const [service, setService] = useState(
@@ -72,6 +73,8 @@ function AttachForm({
   const [name, setName] = useState("");
   const [saveError, setSaveError] = useState<string>();
   const [saving, setSaving] = useState(false);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const g = store.getBackingProject(gid);
   const svc = g?.environments?.[0]?.services[0];
   const adapter = store.adapters.find((a) => a.key === svc?.adapter);
@@ -93,7 +96,7 @@ function AttachForm({
     (attach) =>
       attach.backingServiceId === svc?.id &&
       attach.credential.mode === "new" &&
-      attach.status === "healthy",
+      (attach.status === "healthy" || after.length > 0),
   );
   const grantOptions = env.attaches.filter(
     (a) => a.projectId === gid && a.database !== "—",
@@ -397,6 +400,11 @@ function AttachForm({
           </div>
         )}
       </div>
+      <TaskRunAfterSelector
+        value={after}
+        onChange={setAfter}
+        onBusyChange={setAfterLoading}
+      />
       <DialogFooter>
         <Button variant="outline" onClick={() => onOpenChange(false)}>
           Cancel
@@ -407,6 +415,7 @@ function AttachForm({
         <Button
           disabled={
             saving ||
+            afterLoading ||
             authenticationUnavailable ||
             !available.some((candidate) => candidate.id === gid) ||
             !attachName ||
@@ -424,6 +433,7 @@ function AttachForm({
             void store
               .addAttach(env.id, {
                 serviceId: consumer.id,
+                after,
                 backingServiceId: svc.id,
                 name: attachName,
                 credential:

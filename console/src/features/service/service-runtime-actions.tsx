@@ -70,26 +70,16 @@ export function ServiceRuntimeActions({
       }
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            onClick={() => onAction("start")}
-            disabled={service.runtimeIntent === "running"}
-          >
+          <Button size="sm" onClick={() => onAction("start")}>
             <CirclePlay className="size-3.5" /> Start
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onAction("stop")}
-            disabled={service.runtimeIntent === "stopped"}
-          >
+          <Button size="sm" variant="outline" onClick={() => onAction("stop")}>
             <CircleStop className="size-3.5" /> Stop
           </Button>
           <Button
             size="sm"
             variant="destructive"
             onClick={() => onAction("destroy")}
-            disabled={service.runtimeIntent === "absent"}
           >
             <Ban className="size-3.5" /> Remove containers
           </Button>
@@ -139,12 +129,32 @@ export function ServiceOperationDialog({
     >
       <TaskRunnerDialog
         open
+        runAfter
         onOpenChange={onOpenChange}
         title={title}
         description={description}
         type={operation}
         target={service.id}
         workspace={workspace}
+        onSettled={() => store.refreshEnvironmentServices(env.id)}
+        startDisabled={(after) =>
+          after.length === 0 &&
+          ((operation === "start" && service.runtimeIntent === "running") ||
+            (operation === "stop" && service.runtimeIntent === "stopped") ||
+            (operation === "destroy" && service.runtimeIntent === "absent"))
+        }
+        review={(after) =>
+          !removing &&
+          after.length === 0 &&
+          ((operation === "start" && service.runtimeIntent === "running") ||
+            (operation === "stop" && service.runtimeIntent === "stopped") ||
+            (operation === "destroy" && service.runtimeIntent === "absent")) ? (
+            <p className="text-sm text-muted-foreground">
+              The Service already has this runtime state. Choose a prerequisite
+              to run this action after another Task changes it.
+            </p>
+          ) : null
+        }
         destructive={operation === "destroy" || removing}
         confirmText={
           operation === "destroy" || removing ? service.name : undefined
@@ -158,12 +168,18 @@ export function ServiceOperationDialog({
         }
         {...(removing
           ? {
-              onDispatch: () => store.deleteService(env.id, service.id),
+              onDispatch: (after: string[]) =>
+                store.deleteService(env.id, service.id, after),
               onCommit: onRemoved,
             }
           : {
-              onDispatch: () =>
-                store.runServiceRuntimeAction(env.id, service.id, operation),
+              onDispatch: (after: string[]) =>
+                store.runServiceRuntimeAction(
+                  env.id,
+                  service.id,
+                  operation,
+                  after,
+                ),
             })}
       />
     </DNSProtectedRemoval>

@@ -1,7 +1,9 @@
 package etcd
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,7 +56,7 @@ func TestNativeConnectorRemovalSettlesCapturedResourceAndReplays(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			replay, err := restarted.PublishConnectorRemoval(t.Context(), fixture.environment, fixture.project,
+			replay, err := publishConnectorRemovalFixture(restarted, t.Context(), fixture.environment, fixture.project,
 				fixture.current, fixture.input, fixture.task, fixture.marker)
 			if err != nil || replay.kind != idempotencyTransactionExisting || fixture.store.revision != before {
 				t.Fatalf("exact replay lost acceptance or wrote after settlement: %v", err)
@@ -90,7 +92,7 @@ func TestNativeConnectorRemovalReferenceFences(t *testing.T) {
 				if timing == "before-acceptance" {
 					put()
 					before := fixture.store.revision
-					_, err := fixture.repository.PublishConnectorRemoval(
+					_, err := publishConnectorRemovalFixture(fixture.repository,
 						t.Context(),
 						fixture.environment,
 						fixture.project,
@@ -99,7 +101,7 @@ func TestNativeConnectorRemovalReferenceFences(t *testing.T) {
 						fixture.task,
 						fixture.marker,
 					)
-					if !isKind(err, want) || fixture.store.revision != before {
+					if !isKind(err, want) || fixture.store.revision <= before {
 						t.Fatalf("referenced Connector removal wrote or returned wrong failure: %v", err)
 					}
 					fixture.assertResource(t, true, false)
@@ -229,7 +231,7 @@ func (fixture *nativeConnectorFixture) capture(t *testing.T, at time.Time) {
 
 func (fixture nativeConnectorFixture) publish(t *testing.T) {
 	t.Helper()
-	result, err := fixture.repository.PublishConnectorRemoval(t.Context(), fixture.environment, fixture.project,
+	result, err := publishConnectorRemovalFixture(fixture.repository, t.Context(), fixture.environment, fixture.project,
 		fixture.current, fixture.input, fixture.task, fixture.marker)
 	if err != nil || result.kind != idempotencyTransactionApplied {
 		t.Fatalf("publish native Connector removal: %v", err)
@@ -297,4 +299,106 @@ func (fixture nativeConnectorFixture) reference(t *testing.T, kind string) (stri
 		taskID := ids.New(ids.KindTask)
 		return connectorchecks.ReferenceKey(id, taskID), []byte(taskID)
 	}
+}
+
+func acceptNativeOwnerFixture(
+	ctx context.Context,
+	store hierarchyStore,
+	native workexecution.Task,
+	marker idempotency.IdempotencyMarker,
+) (workqueue.TaskSnapshot, error) {
+	queue, err := workqueue.NewRepository(store)
+	if err != nil {
+		return workqueue.TaskSnapshot{}, err
+	}
+	task := workexecution.CloneTask(native)
+	task.Intent = workexecution.Input{}
+	task.ExpectedItems = 0
+	task.AcceptedIntent = &workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "operator-request"),
+		SHA256: strings.Repeat("a", 64),
+	}
+	change, err := queue.PrepareAcceptedTask(ctx, task, marker)
+	if err != nil {
+		return workqueue.TaskSnapshot{}, err
+	}
+	defer keyvalue.ClearMutationValues(change.Mutations)
+	conditions, mutations, err := idempotency.PreparePublication(marker)
+	if err != nil {
+		return workqueue.TaskSnapshot{}, err
+	}
+	defer keyvalue.ClearMutationValues(mutations)
+	committed, err := queue.Commit(ctx, change, workqueue.Change{Conditions: conditions, Mutations: mutations})
+	keyvalue.ClearValues(committed.FailureReads)
+	if err != nil {
+		return workqueue.TaskSnapshot{}, err
+	}
+	if !committed.Succeeded {
+		return workqueue.TaskSnapshot{}, errs.New(errs.KindStateConflict, "fixture acceptance changed")
+	}
+	accepted, _, err := queue.ReadTask(ctx, task.ID, 0)
+	return accepted, err
+}
+
+func promoteNativeOwnerFixture(
+	ctx context.Context,
+	store hierarchyStore,
+	accepted workqueue.TaskSnapshot,
+	native workexecution.Task,
+	item workexecution.Item,
+	authority workqueue.Change,
+) (IdempotencyTransactionResult, error) {
+	queue, err := workqueue.NewRepository(store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	native.AcceptedIntent = accepted.Task.AcceptedIntent
+	promotion, err := queue.PrepareAcceptedTaskPromotion(
+		ctx,
+		accepted,
+		native,
+		[]workexecution.Item{item},
+		nil,
+		false,
+		native.UpdatedAt,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer keyvalue.ClearMutationValues(promotion.Mutations)
+	result, err := queue.Commit(ctx, promotion, authority)
+	keyvalue.ClearValues(result.FailureReads)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if !result.Succeeded {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "fixture promotion changed")
+	}
+	return IdempotencyTransactionResult{kind: idempotencyTransactionApplied, revision: result.Revision}, nil
+}
+
+func publishConnectorRemovalFixture(
+	repository *ConnectorRepository,
+	ctx context.Context,
+	environment keyvalue.Versioned[hierarchy.EnvironmentRecord],
+	project keyvalue.Versioned[hierarchy.ProjectRecord],
+	current keyvalue.Versioned[connectors.Record],
+	input connectorremoval.Input,
+	task workexecution.Task,
+	marker idempotency.IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
+		return existing, err
+	}
+	accepted, err := acceptNativeOwnerFixture(ctx, repository.store, task, marker)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	task.AcceptedIntent = accepted.Task.AcceptedIntent
+	authority, item, err := repository.PrepareConnectorRemovalAuthority(ctx, environment, project, current, input, task)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer keyvalue.ClearMutationValues(authority.Mutations)
+	return promoteNativeOwnerFixture(ctx, repository.store, accepted, task, item, authority)
 }

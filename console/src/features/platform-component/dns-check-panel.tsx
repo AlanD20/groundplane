@@ -1,3 +1,5 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
+import { TaskExecution } from "@/features/task/task-execution";
 import { useState } from "react";
 import { LoaderCircle, Network, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -47,15 +49,13 @@ export function DNSCheckPanel({
   domains?: string[];
   disabled?: boolean;
 }) {
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterBusy, setAfterBusy] = useState(false);
   const [queries, setQueries] = useState<DNSCheckQuery[]>([]);
   const check = useDNSCheck(componentId, open, taskId);
   const result = check.result;
   const locked =
-    disabled ||
-    check.sending ||
-    check.loading ||
-    check.active ||
-    check.uncertain;
+    check.sending || check.loading || check.active || check.uncertain;
   return (
     <ResourcePanel
       title="DNS connection check"
@@ -66,9 +66,13 @@ export function DNSCheckPanel({
             variant="outline"
             size="sm"
             disabled={
-              disabled || check.sending || check.loading || check.active
+              (disabled && after.length === 0) ||
+              afterBusy ||
+              check.sending ||
+              check.loading ||
+              check.active
             }
-            onClick={() => void check.run(queries)}
+            onClick={() => void check.run(queries, after)}
           >
             {check.sending ? (
               <LoaderCircle className="size-3.5 animate-spin" />
@@ -88,9 +92,17 @@ export function DNSCheckPanel({
           </p>
           {disabled && (
             <p className="text-xs text-muted-foreground">
-              Enable CoreDNS and finish its configuration Task before testing.
+              Enable CoreDNS first, or queue this check after its configuration
+              Task.
             </p>
           )}
+          <fieldset disabled={locked}>
+            <TaskRunAfterSelector
+              value={after}
+              onChange={setAfter}
+              onBusyChange={setAfterBusy}
+            />
+          </fieldset>
           <DNSCheckQueries
             domains={domains}
             queries={queries}
@@ -105,6 +117,10 @@ export function DNSCheckPanel({
         </p>
       )}
       {check.taskId && <TaskLink taskId={check.taskId} />}
+      {!check.result && check.taskDetail && (
+        <TaskExecution detail={check.taskDetail} />
+      )}
+
       {check.uncertain && (
         <p role="status" className="text-xs text-warning">
           Submission was not confirmed. Resolve submission uses the same

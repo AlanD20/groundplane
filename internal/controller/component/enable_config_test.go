@@ -2,8 +2,12 @@ package component
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -28,20 +32,24 @@ func (fixture *enableBlueprintFixture) GetBlueprint(
 	}, nil
 }
 
-func (fixture *enableBlueprintFixture) ApplyComponentBlueprint(
+func (fixture *enableBlueprintFixture) TaskAcceptanceIdentity(
 	_ context.Context,
-	_, _ string,
+	environmentID string,
+) (workexecution.Scope, string, time.Duration, error) {
+	return workexecution.Scope{EnvironmentID: environmentID}, "environment", 15 * time.Hour, nil
+}
+func (fixture *enableBlueprintFixture) PrepareAcceptedComponentBlueprint(
+	_ context.Context,
+	task workqueue.TaskSnapshot,
 	bundle core.BlueprintBundle,
 	expectedRevision string,
-	_ string,
-) (testidempotencyowner.IdempotencyResponse, error) {
+	_ testidempotencyowner.IdempotencyLocator,
+	_ testidempotencyowner.ProtectedIntentRecord,
+) (taskdependencies.Prepared, error) {
 	fixture.calls++
 	fixture.expectedRevision = expectedRevision
 	fixture.bundle = bundle
-	return testidempotencyowner.IdempotencyResponse{
-		Status: 202,
-		Body:   []byte(`{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`),
-	}, nil
+	return taskdependencies.Prepared{Task: task.Task}, nil
 }
 
 // CMP-01: first enable must author the missing declaration in one guarded Apply;
@@ -51,14 +59,16 @@ func TestEnableComponentAuthorsConfigurationInOneApply(t *testing.T) {
 	zones := []string{"net_01ARZ3NDEKTSV4RRFFQ69G5FAX", "net_01ARZ3NDEKTSV4RRFFQ69G5FAW"}
 	input := apiTypes.ComponentConfigMutationInput{Caddy: &apiTypes.CaddyComponentConfigMutationInput{ZoneIDs: zones}}
 	for _, test := range []struct {
-		name       string
-		components string
-		config     *apiTypes.ComponentConfigMutationInput
-		alias      string
-		template   string
-		reject     bool
+		name            string
+		components      string
+		config          *apiTypes.ComponentConfigMutationInput
+		alias           string
+		template        string
+		reject          bool
+		missingRevision bool
 	}{
 		{name: "missing section", config: &input},
+		{name: "missing authoring revision", config: &input, reject: true, missingRevision: true},
 		{name: "missing router", components: "x-gp-components:\n  edge-tunnel:\n    implementation: cloudflare-tunnel\n    enabled: false\n", config: &input},
 		{name: "existing router with replacement", components: "x-gp-components:\n  http-router:\n    implementation: caddy\n    enabled: false\n", config: &input},
 		{name: "existing router without replacement", components: "x-gp-components:\n  http-router:\n    implementation: caddy\n    enabled: false\n    settings:\n      zone_ids: [net_01ARZ3NDEKTSV4RRFFQ69G5FAX, net_01ARZ3NDEKTSV4RRFFQ69G5FAW]\n      alias: saved-router\n    implementation_config:\n      caddyfile_template: |\n        {gp.routes}\n", alias: "saved-router", template: "{gp.routes}\n"},
@@ -73,6 +83,9 @@ func TestEnableComponentAuthorsConfigurationInOneApply(t *testing.T) {
 					RootPath: "compose.yaml", Files: []core.BlueprintFile{{Path: "compose.yaml", Content: []byte(original)}},
 				},
 			}
+			if test.missingRevision {
+				fixture.revision = ""
+			}
 			service := &MutationService{
 				components: managedConfigReadRepository{
 					record: testcomponents.Record{Desired: testcomponents.DesiredRecord{
@@ -81,8 +94,35 @@ func TestEnableComponentAuthorsConfigurationInOneApply(t *testing.T) {
 					}},
 				}, applier: fixture,
 			}
-			_, err := service.EnableComponent(context.Background(), "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-				apiTypes.ComponentEnableRequest{Config: test.config}, "enable-key-123456")
+			var configured *apiTypes.ComponentConfig
+			if test.config != nil {
+				config, err := service.environmentComponentConfig(
+					context.Background(),
+					testcomponents.DesiredRecord{Kind: core.ComponentKindIngressCaddy},
+					*test.config,
+					"enable-key-123456",
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				configured = &config
+			}
+			_, err := service.prepareAcceptedComponent(
+				context.Background(),
+				workqueue.TaskSnapshot{
+					Task: workexecution.Task{
+						Scope: workexecution.Scope{EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+					},
+				},
+				0,
+				time.Now().UTC(),
+				acceptedComponentMutation{
+					ComponentID: "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+					Action:      "enable",
+					Config:      configured,
+				},
+			)
+
 			if test.reject {
 				if err == nil || fixture.calls != 0 || string(fixture.bundle.Files[0].Content) != original {
 					t.Fatalf("invalid declaration published or rewritten: calls %d, error %v", fixture.calls, err)

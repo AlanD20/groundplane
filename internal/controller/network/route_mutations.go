@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -35,6 +36,7 @@ type routeMutationEvidence struct {
 }
 
 type routeMutationService struct {
+	accepted    *acceptedaction.Submitter
 	repository  routeMutationRepository
 	idempotency routeMutationIdempotency
 	publisher   *RouteWorkPublisher
@@ -45,11 +47,12 @@ func newRouteMutationService(
 	repository routeMutationRepository,
 	idempotency routeMutationIdempotency,
 	publisher *RouteWorkPublisher,
+	accepted *acceptedaction.Submitter,
 ) (*routeMutationService, error) {
-	if repository == nil || idempotency == nil || publisher == nil {
+	if repository == nil || idempotency == nil || publisher == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutation service is not configured")
 	}
 	return &routeMutationService{
-		repository: repository, idempotency: idempotency, publisher: publisher, now: time.Now,
+		repository: repository, idempotency: idempotency, publisher: publisher, accepted: accepted, now: time.Now,
 	}, nil
 }

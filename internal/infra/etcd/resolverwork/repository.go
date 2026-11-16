@@ -197,7 +197,7 @@ func (repository *Repository) Load(ctx context.Context, view workqueue.View) (St
 		view.Task.Task.TargetName != capture.TargetName {
 		return StoredInput{}, invalid("DNS resolver accepted action differs from its immutable capture")
 	}
-	if !view.Task.Task.CreatedAt.Equal(input.CreatedAt) || capture.ReadRevision > view.ReadRevision {
+	if input.CreatedAt.Before(view.Task.Task.CreatedAt) || capture.ReadRevision > view.ReadRevision {
 		return StoredInput{}, invalid("DNS resolver source snapshot is newer than its native publication")
 	}
 	return StoredInput{Input: input, Capture: capture, Reference: reference, Guards: []keyvalue.Condition{

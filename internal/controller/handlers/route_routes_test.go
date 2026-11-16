@@ -66,6 +66,7 @@ func (fake *fakeRouteMutator) EditRoute(
 func (fake *fakeRouteMutator) RemoveRoute(
 	_ context.Context,
 	routeID string,
+	_ apiTypes.TaskRunAfterRequest,
 	key string,
 ) (corenetwork.MutationResponse, error) {
 	fake.routeID, fake.key = routeID, key

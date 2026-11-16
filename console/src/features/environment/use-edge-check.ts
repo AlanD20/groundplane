@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { readCheckTaskResult } from "@/features/task/check-result";
+import type { TaskResponse } from "@/features/task/api";
 import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { newULID } from "@/lib/utils";
 import { retryTask, type TaskRetryRequest } from "@/features/task/api";
@@ -23,13 +25,6 @@ const pendingCleanup = new Map<
   string,
   { key: string; input?: TaskRetryRequest }
 >();
-const runningPhases = new Set([
-  "ready",
-  "private_checking",
-  "public_checking",
-  "cleaning",
-]);
-
 export function useEdgeCheck(
   environmentId: string,
   open: boolean,
@@ -40,6 +35,7 @@ export function useEdgeCheck(
   tunnel?: TunnelCheckSelection,
 ) {
   const [taskId, setTaskId] = useState(initialTaskId ?? "");
+  const [taskDetail, setTaskDetail] = useState<TaskResponse | null>(null);
   const [result, setResult] = useState<EdgeCheckResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,6 +63,7 @@ export function useEdgeCheck(
     const controller = new AbortController();
     scope.current = controller;
     setTaskId(initialTaskId ?? "");
+    setTaskDetail(null);
     setResult(null);
     setError(null);
     setSending(false);
@@ -124,15 +121,18 @@ export function useEdgeCheck(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
-        const next = await getEdgeCheck(environmentId, controller.signal, {
+        const next = await readCheckTaskResult(
           taskId,
-        });
+          controller.signal,
+          () => getEdgeCheck(environmentId, controller.signal, { taskId }),
+          setTaskDetail,
+        );
         if (controller.signal.aborted) return;
-        setResult(next);
+        setResult(next.result);
         setError(null);
         timer = setTimeout(
           () => void poll(),
-          runningPhases.has(next.phase) ? 1000 : 10000,
+          next.taskDetail.task.finished_at ? 10000 : 1000,
         );
       } catch (cause) {
         if (!controller.signal.aborted)
@@ -149,7 +149,7 @@ export function useEdgeCheck(
       if (timer) clearTimeout(timer);
     };
   }, [environmentId, taskId, open, reload]);
-  async function run() {
+  async function run(after: string[] = []) {
     if (
       busy.current ||
       loading ||
@@ -180,24 +180,13 @@ export function useEdgeCheck(
         if (routeId)
           pending.submission = {
             kind: "route",
-            body: await edgeCheckRequest(
-              environmentId,
-              routeId,
-              connectorId,
-              path,
-              signal,
-            ),
+            body: edgeCheckRequest(routeId, connectorId, path, after),
           };
         else if (tunnel)
           pending.submission = {
             kind: "tunnel",
             connectorId,
-            body: await tunnelCheckRequest(
-              environmentId,
-              connectorId,
-              tunnel,
-              signal,
-            ),
+            body: tunnelCheckRequest(tunnel, after),
           };
       }
       if (!pending.submission)
@@ -212,6 +201,7 @@ export function useEdgeCheck(
       );
       pendingChecks.delete(identity);
       if (generation.current === current) {
+        setTaskDetail(null);
         setResult(null);
         setTaskId(accepted);
         setReload((value) => value + 1);
@@ -259,8 +249,10 @@ export function useEdgeCheck(
       const next = await retryTask(taskId, captured.input, captured.key);
       pendingCleanup.delete(taskId);
       if (generation.current === current) {
+        setTaskDetail(null);
         setResult(null);
         setTaskId(next);
+        setReload((value) => value + 1);
       }
     } catch (cause) {
       if (generation.current === current)
@@ -278,12 +270,14 @@ export function useEdgeCheck(
   }
   return {
     taskId,
+    taskDetail,
+    uncertain: pendingChecks.has(identity),
     result,
     error,
     loading,
     sending,
     run,
     cleanup,
-    active: !!taskId && (!result || runningPhases.has(result.phase)),
+    active: !!taskId && !taskDetail?.task.finished_at,
   };
 }

@@ -4,6 +4,7 @@ package runnerassembly
 import (
 	"log/slog"
 
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -23,12 +24,13 @@ func New(
 	coordinator *requestidempotency.Coordinator,
 	lifecycle *runner.Executor,
 	logger *slog.Logger,
+	accepted *acceptedaction.Submitter,
 ) (Capabilities, error) {
-	checks, checkExecutor, err := newChecks(store, records, evidence, coordinator, lifecycle, logger)
+	checks, checkExecutor, err := newChecks(store, records, evidence, coordinator, lifecycle, logger, accepted)
 	if err != nil {
 		return Capabilities{}, err
 	}
-	software, softwareExecutor, err := newSoftware(store, records, evidence, coordinator, lifecycle, logger)
+	software, softwareExecutor, err := newSoftware(store, records, evidence, coordinator, lifecycle, logger, accepted)
 	if err != nil {
 		return Capabilities{}, err
 	}

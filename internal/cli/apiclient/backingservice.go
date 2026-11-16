@@ -13,13 +13,14 @@ import (
 func (c *Client) CreateBackingService(
 	ctx context.Context,
 	input apiTypes.BackingServiceCreate,
-) (apiTypes.BackingServiceCreated, error) {
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.BackingServiceCreated{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	body := generated.BackingServiceCreate{
-		Slug: input.Slug, Name: input.Name, Adapter: input.Adapter, NetworkPool: input.NetworkPool,
+		After: optionalServiceStrings(input.After),
+		Slug:  input.Slug, Name: input.Name, Adapter: input.Adapter, NetworkPool: input.NetworkPool,
 		Zone: generated.BackingServiceZoneCreate{
 			Name:     input.Zone.Name,
 			Subnet:   input.Zone.Subnet,
@@ -56,24 +57,14 @@ func (c *Client) CreateBackingService(
 		body,
 	)
 	if err != nil {
-		return apiTypes.BackingServiceCreated{}, generatedCallError(ctx, http.MethodPost, path, err)
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
 	}
 	if err := generatedResponseError(
-		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusCreated,
+		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted,
 	); err != nil {
-		return apiTypes.BackingServiceCreated{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
-	parsed := response.JSON201
-	if parsed == nil {
-		parsed = &generated.BackingServiceCreated{}
-		if err := decodeSingleJSON(http.MethodPost, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.BackingServiceCreated{}, err
-		}
-	}
-	return apiTypes.BackingServiceCreated{
-		BackingService: backingServiceFromGenerated(parsed.BackingService),
-		TaskID:         parsed.TaskId,
-	}, nil
+	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
 func (c *Client) ListBackingServices(
@@ -152,7 +143,11 @@ func (c *Client) ShowBackingService(ctx context.Context, projectID string) (apiT
 	return backingServiceFromGenerated(*parsed), nil
 }
 
-func (c *Client) StartBackingService(ctx context.Context, projectID string) (apiTypes.TaskAccepted, error) {
+func (c *Client) StartBackingService(
+	ctx context.Context,
+	projectID string,
+	after []string,
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -160,6 +155,7 @@ func (c *Client) StartBackingService(ctx context.Context, projectID string) (api
 	path := "/api/v1/backing-services/" + projectID + "/start"
 	response, err := client.BackingServiceStartWithResponse(
 		ctx, projectID, &generated.BackingServiceStartParams{IdempotencyKey: ids.NewULID()},
+		generated.BackingServiceStartJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
@@ -172,7 +168,11 @@ func (c *Client) StartBackingService(ctx context.Context, projectID string) (api
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
-func (c *Client) StopBackingService(ctx context.Context, projectID string) (apiTypes.TaskAccepted, error) {
+func (c *Client) StopBackingService(
+	ctx context.Context,
+	projectID string,
+	after []string,
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -180,6 +180,7 @@ func (c *Client) StopBackingService(ctx context.Context, projectID string) (apiT
 	path := "/api/v1/backing-services/" + projectID + "/stop"
 	response, err := client.BackingServiceStopWithResponse(
 		ctx, projectID, &generated.BackingServiceStopParams{IdempotencyKey: ids.NewULID()},
+		generated.BackingServiceStopJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
@@ -192,7 +193,11 @@ func (c *Client) StopBackingService(ctx context.Context, projectID string) (apiT
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
-func (c *Client) DestroyBackingService(ctx context.Context, projectID string) (apiTypes.TaskAccepted, error) {
+func (c *Client) DestroyBackingService(
+	ctx context.Context,
+	projectID string,
+	after []string,
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -200,6 +205,7 @@ func (c *Client) DestroyBackingService(ctx context.Context, projectID string) (a
 	path := "/api/v1/backing-services/" + projectID + "/destroy"
 	response, err := client.BackingServiceDestroyWithResponse(
 		ctx, projectID, &generated.BackingServiceDestroyParams{IdempotencyKey: ids.NewULID()},
+		generated.BackingServiceDestroyJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
@@ -210,6 +216,35 @@ func (c *Client) DestroyBackingService(ctx context.Context, projectID string) (a
 		return apiTypes.TaskAccepted{}, err
 	}
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+}
+
+func (c *Client) RemoveBackingService(
+	ctx context.Context,
+	projectID string,
+	after []string,
+) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/backing-services/" + projectID
+	response, err := client.BackingServiceDeleteWithResponse(
+		ctx,
+		projectID,
+		&generated.BackingServiceDeleteParams{IdempotencyKey: ids.NewULID()},
+		generated.BackingServiceDeleteJSONRequestBody{After: optionalServiceStrings(after)},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	var accepted apiTypes.TaskAccepted
+	if err := decodeSingleJSON(http.MethodDelete, path, bytes.NewReader(response.Body), &accepted); err != nil {
+		return accepted, err
+	}
+	return accepted, nil
 }
 
 func backingServiceFromGenerated(item generated.BackingService) apiTypes.BackingService {

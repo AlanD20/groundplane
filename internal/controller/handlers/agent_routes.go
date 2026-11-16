@@ -2,9 +2,7 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -30,9 +28,14 @@ type AgentReader interface {
 }
 
 type AgentMutator interface {
-	EnrollAgent(context.Context, string) (idempotencyrecord.IdempotencyResponse, error)
-	UpdateAgent(context.Context, string, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	RemoveAgent(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	EnrollAgent(context.Context, apiTypes.TaskRunAfterRequest, string) (idempotencyrecord.IdempotencyResponse, error)
+	UpdateAgent(context.Context, string, apiTypes.AgentUpdate, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveAgent(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type agentListInput struct {
@@ -49,12 +52,14 @@ type agentIDInput struct {
 }
 
 type agentEnrollInput struct {
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type agentRemoveInput struct {
-	ID             string `path:"id" pattern:"^agt_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID             string                        `path:"id" pattern:"^agt_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type agentUpdateInput struct {
@@ -101,10 +106,12 @@ func (s *Server) registerAgents() {
 		true,
 		"AgentConfig",
 	)
+	s.setRoutePolicy("POST /api/v1/agents", routePolicy{body: jsonBody})
+	s.setRoutePolicy("DELETE /api/v1/agents/{id}", routePolicy{body: jsonBody})
 	huma.Register(s.API, huma.Operation{
 		OperationID: "agent.join", Method: http.MethodPost, Path: "/agents",
 		Summary: "Create and start the local Agent", Tags: []string{"Agent"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectAgentMutationBody, s.rejectAgentQuery},
+		Middlewares: huma.Middlewares{s.rejectAgentQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.enrollAgent)
 	huma.Register(s.API, huma.Operation{
@@ -142,7 +149,7 @@ func (s *Server) registerAgents() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "agent.remove", Method: http.MethodDelete, Path: "/agents/{id}",
 		Summary: "Remove the local Agent", Tags: []string{"Agent"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectAgentMutationBody, s.rejectAgentQuery},
+		Middlewares: huma.Middlewares{s.rejectAgentQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.removeAgent)
 	s.setRoutePolicy("PUT /api/v1/agents/{id}/config", routePolicy{body: jsonBody})
@@ -196,7 +203,7 @@ func (s *Server) enrollAgent(ctx context.Context, request *agentEnrollInput) (*a
 	if s.agentMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Agent mutation service is not configured")
 	}
-	response, err := s.agentMutations.EnrollAgent(ctx, request.IdempotencyKey)
+	response, err := s.agentMutations.EnrollAgent(ctx, taskRunAfter(request.Body), request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -207,7 +214,7 @@ func (s *Server) removeAgent(ctx context.Context, request *agentRemoveInput) (*a
 	if s.agentMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Agent mutation service is not configured")
 	}
-	response, err := s.agentMutations.RemoveAgent(ctx, request.ID, request.IdempotencyKey)
+	response, err := s.agentMutations.RemoveAgent(ctx, request.ID, taskRunAfter(request.Body), request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -218,7 +225,7 @@ func (s *Server) updateAgent(ctx context.Context, request *agentUpdateInput) (*a
 	if s.agentMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Agent mutation service is not configured")
 	}
-	response, err := s.agentMutations.UpdateAgent(ctx, request.ID, request.Body.Image, request.IdempotencyKey)
+	response, err := s.agentMutations.UpdateAgent(ctx, request.ID, request.Body, request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -286,16 +293,6 @@ func (s *Server) writeAgentRequestProblem(ctx huma.Context, detail string) {
 	if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, detail); err != nil && s.Logger != nil {
 		s.Logger.Error("controller: write Agent request problem", slog.Any("error", err))
 	}
-}
-
-func (s *Server) rejectAgentMutationBody(ctx huma.Context, next func(huma.Context)) {
-	var probe [1]byte
-	count, err := ctx.BodyReader().Read(probe[:])
-	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		s.writeAgentRequestProblem(ctx, "Agent mutation body is not allowed")
-		return
-	}
-	next(ctx)
 }
 
 func (s *Server) rejectAgentQuery(ctx huma.Context, next func(huma.Context)) {

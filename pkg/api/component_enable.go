@@ -10,18 +10,19 @@ func (request *ComponentEnableRequest) UnmarshalJSON(data []byte) error {
 	}
 	var wire struct {
 		Config json.RawMessage `json:"config"`
+		After  []string        `json:"after"`
 	}
 	if err := decodeComponentConfigWire(data, &wire); err != nil {
 		return err
 	}
 	if !present(wire.Config) {
-		*request = ComponentEnableRequest{}
+		*request = ComponentEnableRequest{After: wire.After}
 		return nil
 	}
 	var config ComponentConfigMutationInput
 	if err := decodeRequiredField(wire.Config, "config", &config); err != nil {
 		return err
 	}
-	*request = ComponentEnableRequest{Config: &config}
+	*request = ComponentEnableRequest{Config: &config, After: wire.After}
 	return nil
 }

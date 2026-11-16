@@ -265,7 +265,9 @@ func assignmentFixture(
 				AgentID:    ids.New(ids.KindAgent),
 				Generation: 1,
 			},
-			ProcessGeneration: [16]byte{1}, Ready: true, Capacity: 3, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1,
+			ProcessGeneration: [16]byte{
+				1,
+			}, Ready: true, Capacity: 3, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1,
 			Operations: []workexecution.Operation{workexecution.Backup, workexecution.Release},
 		}}
 		raw, err := EncodeExecutor(executor.Record)

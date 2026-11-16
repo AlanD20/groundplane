@@ -12,22 +12,33 @@ import (
 func newSoftwareCmd() *cobra.Command {
 	command := &cobra.Command{Use: "software", Short: "Prepare and apply Controller and Agent software"}
 	var selection, source, ref, prepareKey string
+	var prepareAfter []string
 	prepare := &cobra.Command{
 		Use:   "prepare",
 		Short: "Build a source ref or retain published artifacts without activation",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			after, err := validatedTaskAfter(prepareAfter)
+			if err != nil {
+				return err
+			}
 			if err := softwareSelection(selection); err != nil {
 				return err
 			}
 			if source != "source_ref" && source != "release" {
 				return errs.New(errs.KindValidationFailed, "source must be source_ref or release")
 			}
-			accepted, err := fromContext(cmd).Client.PrepareSoftware(cmd.Context(), apiTypes.SoftwarePreparationRequest{
-				Selection: apiTypes.SoftwareSelection(
-					selection,
-				), SourceKind: apiTypes.SoftwareSourceKind(source), Ref: ref,
-			}, prepareKey)
+			accepted, err := fromContext(
+				cmd,
+			).Client.PrepareSoftware(
+				cmd.Context(),
+				apiTypes.SoftwarePreparationRequest{After: after,
+					Selection: apiTypes.SoftwareSelection(
+						selection,
+					), SourceKind: apiTypes.SoftwareSourceKind(source), Ref: ref,
+				},
+				prepareKey,
+			)
 			if err != nil {
 				return err
 			}
@@ -42,13 +53,19 @@ func newSoftwareCmd() *cobra.Command {
 	for _, flag := range []string{"component", "source", "ref"} {
 		_ = prepare.MarkFlagRequired(flag)
 	}
+	addTaskAfterFlag(prepare, &prepareAfter)
 	var applyKey string
+	var applyAfter []string
 	apply := &cobra.Command{
 		Use:   "apply <preparation-task-id>",
 		Short: "Apply previously verified outputs; never rebuild",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			accepted, err := fromContext(cmd).Client.ApplySoftware(cmd.Context(), args[0], applyKey)
+			after, err := validatedTaskAfter(applyAfter)
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.ApplySoftware(cmd.Context(), args[0], applyKey, after)
 			if err != nil {
 				return err
 			}
@@ -57,6 +74,7 @@ func newSoftwareCmd() *cobra.Command {
 	}
 	apply.Flags().
 		StringVar(&applyKey, "idempotency-key", "", "reuse to resolve uncertain acceptance of this exact activation")
+	addTaskAfterFlag(apply, &applyAfter)
 	var limit int
 	var cursor string
 	list := &cobra.Command{Use: "ls", Short: "List newest preparations first", Args: cobra.NoArgs,

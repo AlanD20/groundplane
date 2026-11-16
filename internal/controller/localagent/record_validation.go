@@ -27,8 +27,14 @@ func validateEnrollRequest(request EnrollRequest) error {
 	if request.Config.PullIntervalSeconds <= 0 {
 		return errs.New(errs.KindValidationFailed, "agent pull interval must be positive")
 	}
-	if request.Config.MaxConcurrentTasks < 1 || request.Config.MaxConcurrentTasks > 256 || request.Config.MaxParallelOperationsPerTask < 1 || request.Config.MaxParallelOperationsPerTask > 256 || request.Config.MaxConcurrentTasks*request.Config.MaxParallelOperationsPerTask > 256 {
-		return errs.New(errs.KindValidationFailed, "agent task limits must each be 1..256 with at most 256 total operations")
+	if request.Config.MaxConcurrentTasks < 1 || request.Config.MaxConcurrentTasks > 256 ||
+		request.Config.MaxParallelOperationsPerTask < 1 ||
+		request.Config.MaxParallelOperationsPerTask > 256 ||
+		request.Config.MaxConcurrentTasks*request.Config.MaxParallelOperationsPerTask > 256 {
+		return errs.New(
+			errs.KindValidationFailed,
+			"agent task limits must each be 1..256 with at most 256 total operations",
+		)
 	}
 	if !validLabels(request.Config.Labels) {
 		return errs.New(errs.KindValidationFailed, "agent labels must contain valid NUL-free UTF-8")
@@ -99,7 +105,11 @@ func validateStored(stored StoredRecord) error {
 			return errs.Wrap(errs.KindInternal, err)
 		}
 	}
-	if stored.Record.Config.PullIntervalSeconds <= 0 || stored.Record.Config.MaxConcurrentTasks < 1 || stored.Record.Config.MaxConcurrentTasks > 256 || stored.Record.Config.MaxParallelOperationsPerTask < 1 || stored.Record.Config.MaxParallelOperationsPerTask > 256 || stored.Record.Config.MaxConcurrentTasks*stored.Record.Config.MaxParallelOperationsPerTask > 256 {
+	if stored.Record.Config.PullIntervalSeconds <= 0 || stored.Record.Config.MaxConcurrentTasks < 1 ||
+		stored.Record.Config.MaxConcurrentTasks > 256 ||
+		stored.Record.Config.MaxParallelOperationsPerTask < 1 ||
+		stored.Record.Config.MaxParallelOperationsPerTask > 256 ||
+		stored.Record.Config.MaxConcurrentTasks*stored.Record.Config.MaxParallelOperationsPerTask > 256 {
 		return errs.New(errs.KindInternal, "local agent record has an invalid runtime config")
 	}
 	if !validLabels(stored.Record.Config.Labels) {

@@ -5,9 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"net/http"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
@@ -131,8 +135,12 @@ func TestNativeEntryEditPreservesShapeAndProtectsValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	submitter, err := newAcceptedActions(f.store, protector, f.queue, replay, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
 	mutations, err := entryoperations.NewDesiredMutationService(repository, generator,
-		materials, creation, edit, removal, runtime, f.blueprint.HierarchyRepository)
+		materials, creation, edit, removal, runtime, f.blueprint.HierarchyRepository, submitter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,10 +153,15 @@ func TestNativeEntryEditPreservesShapeAndProtectsValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var original api.Entry
-	if err := json.Unmarshal(created.Body, &original); err != nil || original.ID == "" {
+	var originalTask api.TaskAccepted
+	if err := json.Unmarshal(created.Body, &originalTask); err != nil || originalTask.TaskID == "" {
 		t.Fatalf("create Entry response: %v", err)
 	}
+	preparedCreate := nativePrepareEntry(t, f.queue, mutations.AcceptedPreparations(), originalTask.TaskID)
+	if preparedCreate.Outcome != "" {
+		t.Fatalf("Entry creation capture failed: %+v", preparedCreate)
+	}
+	originalID := preparedCreate.TargetID
 	before, found, err := f.blueprint.GetEnvironmentComposeProjection(t.Context(), f.environmentID)
 	if err != nil || !found || len(before.Record.Entries) != 1 {
 		t.Fatalf("created Entry: %v", err)
@@ -158,12 +171,19 @@ func TestNativeEntryEditPreservesShapeAndProtectsValue(t *testing.T) {
 		Source:   api.EntrySource{Kind: "literal", Literal: "replacement-private-value"},
 		Exposure: []string{"all"},
 	}
-	response, err := mutations.EditEntry(t.Context(), original.ID, input, "native-entry-edit-value")
+	response, err := mutations.EditEntry(t.Context(), originalID, input, "native-entry-edit-value")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Status != http.StatusOK || bytes.Contains(response.Body, []byte(input.Source.Literal)) {
+	if response.Status != http.StatusAccepted || bytes.Contains(response.Body, []byte(input.Source.Literal)) {
 		t.Fatal("edit exposed private input or returned the wrong status")
+	}
+	var acceptedEdit api.TaskAccepted
+	if err := json.Unmarshal(response.Body, &acceptedEdit); err != nil {
+		t.Fatal(err)
+	}
+	if prepared := nativePrepareEntry(t, f.queue, mutations.AcceptedPreparations(), acceptedEdit.TaskID); prepared.Outcome != "" {
+		t.Fatalf("Entry edit capture failed: %+v", prepared)
 	}
 	after, found, err := f.blueprint.GetEnvironmentComposeProjection(t.Context(), f.environmentID)
 	if err != nil || !found || len(after.Record.Entries) != 1 {
@@ -176,7 +196,7 @@ func TestNativeEntryEditPreservesShapeAndProtectsValue(t *testing.T) {
 		current.CurrentValueGenerationID == previous.CurrentValueGenerationID {
 		t.Fatal("edit changed immutable Entry shape, leaked literal metadata or reused its generation")
 	}
-	protected, found, err := values.GetSecret(t.Context(), original.ID, current.CurrentValueGenerationID)
+	protected, found, err := values.GetSecret(t.Context(), originalID, current.CurrentValueGenerationID)
 	if err != nil || !found {
 		t.Fatalf("encrypted edit generation: %v", err)
 	}
@@ -189,7 +209,7 @@ func TestNativeEntryEditPreservesShapeAndProtectsValue(t *testing.T) {
 	if string(opened) != input.Source.Literal {
 		t.Fatal("edit encrypted different value bytes")
 	}
-	plain, found, err := values.GetPlain(t.Context(), original.ID, current.CurrentValueGenerationID)
+	plain, found, err := values.GetPlain(t.Context(), originalID, current.CurrentValueGenerationID)
 	clear(plain.Content)
 	if err != nil || found {
 		t.Fatal("edit also persisted an unencrypted generation")
@@ -203,17 +223,17 @@ func TestNativeEntryEditPreservesShapeAndProtectsValue(t *testing.T) {
 	marker, err := evidence.Marker()
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	if err != nil || marker.ReplayTarget == nil || marker.ReplayTarget.ID != original.ID ||
+	if err != nil || marker.ReplayTarget == nil || marker.ReplayTarget.ID != originalID ||
 		!bytes.Equal(marker.Response.Body, response.Body) {
 		t.Fatalf("edit replay evidence: %v", err)
 	}
 	revision := f.store.revision
-	_, err = mutations.EditEntry(t.Context(), original.ID, input, locator.Key)
+	_, err = mutations.EditEntry(t.Context(), originalID, input, locator.Key)
 	if !errors.Is(err, errs.New(errs.KindIdempotencyInProgress, "")) || f.store.revision != revision {
 		t.Fatalf("pending edit replay changed state or did not identify active work: %v", err)
 	}
 	input.Source.Literal = "different-private-input"
-	if _, err := mutations.EditEntry(t.Context(), original.ID, input, locator.Key); !errors.Is(
+	if _, err := mutations.EditEntry(t.Context(), originalID, input, locator.Key); !errors.Is(
 		err,
 		errs.New(errs.KindIdempotencyMismatch, ""),
 	) {
@@ -231,4 +251,32 @@ func (nativeEntryNoFacts) ResolveFact(
 	secretvalue.PlaintextConsumer,
 ) error {
 	return errs.New(errs.KindInternal, "literal Entry unexpectedly requested an Attach fact")
+}
+
+func nativePrepareEntry(
+	t *testing.T,
+	queue *workqueue.Repository,
+	registrations []taskdependencies.Registration,
+	taskID string,
+) workexecution.Task {
+	t.Helper()
+	preparations, err := taskdependencies.NewPreparations(queue, registrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		task, _, err := queue.ReadTask(t.Context(), taskID, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !task.Task.PendingPreparation() {
+			return task.Task
+		}
+		changed, err := preparations.Advance(t.Context(), taskID, time.Now().UTC())
+		if err != nil || !changed {
+			t.Fatalf("Entry capture: changed=%t error=%v", changed, err)
+		}
+	}
+	t.Fatal("Entry capture did not settle")
+	return workexecution.Task{}
 }

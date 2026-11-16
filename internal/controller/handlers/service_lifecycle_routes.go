@@ -2,9 +2,7 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	"io"
 	"net/http"
 	"reflect"
 
@@ -14,8 +12,9 @@ import (
 )
 
 type serviceLifecycleInput struct {
-	ID             string `path:"id" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID             string                        `path:"id" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 func (s *Server) registerServiceLifecycleRoutes() {
@@ -35,9 +34,10 @@ func (s *Server) registerServiceLifecycleRoutes() {
 		huma.Register(s.API, huma.Operation{
 			OperationID: operation.id, Method: http.MethodPost, Path: operation.path,
 			Summary: operation.summary, Tags: []string{"Service"}, DefaultStatus: http.StatusAccepted,
-			Middlewares: huma.Middlewares{s.rejectServiceLifecycleBody, s.rejectServiceLifecycleQuery},
+			Middlewares: huma.Middlewares{s.rejectServiceLifecycleQuery},
 			Responses:   attachMutationResponses(taskAcceptedSchema),
 		}, operation.handler)
+		s.setRoutePolicy("POST /api/v1"+operation.path, routePolicy{body: jsonBody})
 	}
 }
 
@@ -70,7 +70,14 @@ func (s *Server) runServiceLifecycle(
 	if s.serviceMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Service mutator is not configured")
 	}
-	result, err := serviceLifecycleMutation(ctx, s.serviceMutations, input.ID, input.IdempotencyKey, action)
+	result, err := serviceLifecycleMutation(
+		ctx,
+		s.serviceMutations,
+		input.ID,
+		taskRunAfter(input.Body),
+		input.IdempotencyKey,
+		action,
+	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -81,32 +88,23 @@ func serviceLifecycleMutation(
 	ctx context.Context,
 	mutator ServiceMutator,
 	serviceID string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 	action string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	switch action {
 	case "start":
-		return mutator.StartService(ctx, serviceID, idempotencyKey)
+		return mutator.StartService(ctx, serviceID, input, idempotencyKey)
 	case "stop":
-		return mutator.StopService(ctx, serviceID, idempotencyKey)
+		return mutator.StopService(ctx, serviceID, input, idempotencyKey)
 	case "destroy":
-		return mutator.DestroyService(ctx, serviceID, idempotencyKey)
+		return mutator.DestroyService(ctx, serviceID, input, idempotencyKey)
 	default:
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Service lifecycle action is invalid",
 		)
 	}
-}
-
-func (s *Server) rejectServiceLifecycleBody(ctx huma.Context, next func(huma.Context)) {
-	var probe [1]byte
-	count, err := ctx.BodyReader().Read(probe[:])
-	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		s.writeServiceProblem(ctx, "Service lifecycle body is not allowed")
-		return
-	}
-	next(ctx)
 }
 
 func (s *Server) rejectServiceLifecycleQuery(ctx huma.Context, next func(huma.Context)) {

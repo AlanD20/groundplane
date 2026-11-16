@@ -5,4 +5,5 @@ package api
 type EntryEditRequest struct {
 	Source   EntrySource `json:"source"`
 	Exposure []string    `json:"exposure"`
+	After    []string    `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 }

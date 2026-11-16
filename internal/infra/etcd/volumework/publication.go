@@ -12,10 +12,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// PreparePublication captures the executable input and prepares one visible
-// Task with one native Volume work item. The Environment publisher joins this
-// change with its desired revision, impact/policy guards and replay marker.
-// It cannot publish a Task independently from those resource decisions.
+// PreparePublication captures native Volume input after the whole-Task gate.
+// The Environment publisher joins this guarded authority with its desired
+// revision and impact/policy checks when promoting the accepted Task.
 func (repository *InputRepository) PreparePublication(ctx context.Context, task workexecution.Task,
 	item workexecution.Item, input *agentpb.VolumeWorkInput, marker idempotency.IdempotencyMarker,
 	admission []keyvalue.Condition, desiredRevision string,
@@ -67,10 +66,7 @@ func (repository *InputRepository) PreparePublication(ctx context.Context, task 
 			return workqueue.Change{}, conflict("Volume publication is missing a resource claim")
 		}
 	}
-	change, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		return workqueue.Change{}, err
-	}
+	change := workqueue.Change{}
 	ownership, err := prepareRemovalOwnership(task, item)
 	if err != nil {
 		keyvalue.ZeroMutationBytes(change.Mutations)

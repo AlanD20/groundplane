@@ -75,6 +75,7 @@ func (mutator *recordingEnvironmentBlueprintMutator) ApplyBlueprint(
 	bundle core.BlueprintBundle,
 	expectedRevision string,
 	idempotencyKey string,
+	_ []string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	mutator.environmentID = environmentID
 	mutator.expectedRevision = expectedRevision

@@ -5,7 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"net/http"
 	"testing"
 	"time"
@@ -41,13 +42,8 @@ import (
 // is needed, and replay cannot retire another value generation.
 func TestNativeEntryDefinitionRemovalSettlesWithoutAgent(t *testing.T) {
 	f := newNativeEntryDefinitionFixture(t)
-	result, err := f.hierarchy.PublishEntryConfigurationWork(t.Context(), f.request)
-	if err != nil {
+	if err := promoteNativeEntryDefinition(t, f.hierarchy, f.store, f.request); err != nil {
 		t.Fatal(err)
-	}
-	outcome, _, conflict, err := result.Classify()
-	if err != nil || conflict != nil || outcome != etcd.IdempotencyKnownApplied {
-		t.Fatalf("Entry removal acceptance: %v, %v, %v", outcome, conflict, err)
 	}
 	queue, err := workqueue.NewRepository(f.store)
 	if err != nil {
@@ -71,13 +67,6 @@ func TestNativeEntryDefinitionRemovalSettlesWithoutAgent(t *testing.T) {
 		if err != nil || read.Entry != nil {
 			t.Fatalf("Entry retirement retained %s: %v", key, err)
 		}
-	}
-	beforeReplay := f.store.revision
-	if _, err := f.hierarchy.PublishEntryConfigurationWork(t.Context(), f.request); err != nil {
-		t.Fatalf("same removal did not replay after retirement: %v", err)
-	}
-	if f.store.revision != beforeReplay {
-		t.Fatal("removal replay changed durable state")
 	}
 	finishNativeEntryDefinition(t, f, queue)
 	replay, err := etcd.NewIdempotencyRepository(f.store)
@@ -125,7 +114,7 @@ func finishNativeEntryDefinition(t *testing.T, f *nativeEntryDefinitionFixture, 
 // history when the exact saved removal result is missing or corrupt.
 func TestNativeEntryDefinitionCompletionRejectsCorruptResult(t *testing.T) {
 	f := newNativeEntryDefinitionFixture(t)
-	if _, err := f.hierarchy.PublishEntryConfigurationWork(t.Context(), f.request); err != nil {
+	if err := promoteNativeEntryDefinition(t, f.hierarchy, f.store, f.request); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.Put(t.Context(), entrywork.DefinitionKey(f.request.Item.ID), []byte("invalid removal result")); err != nil {
@@ -194,12 +183,21 @@ func TestNativeEntryDefinitionRemovalRejectsAppliedOrChangedConfiguration(t *tes
 				// source check, not merely a stale acknowledgement number.
 				f.request.DefinitionConfigurationRevision = revision
 			}
-			_, err := publisher.PublishEntryConfigurationWork(t.Context(), f.request)
+			store := keyvalue.Store(f.store)
+			if race != nil {
+				store = race
+			}
+			err := promoteNativeEntryDefinition(t, publisher, store, f.request)
 			if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || race != nil && race.before != nil {
 				t.Fatalf("unsafe definition-only removal was not fenced at its intended boundary: %v", err)
 			}
 			read, err := f.store.Get(t.Context(), workqueue.TaskKey(f.request.Task.ID))
-			if err != nil || read.Entry != nil {
+			if err != nil || read.Entry == nil {
+				t.Fatalf("rejected Entry removal lost its accepted Task: %v", err)
+			}
+			accepted, err := workqueue.DecodeTask(read.Entry.Value)
+			clear(read.Entry.Value)
+			if err != nil || !accepted.PendingPreparation() {
 				t.Fatalf("rejected Entry removal published execution: %v", err)
 			}
 			current, found, err := f.hierarchy.GetEnvironmentComposeProjection(
@@ -248,7 +246,7 @@ func TestNativeEntryDefinitionRemovalRequiresExactSealedCandidate(t *testing.T) 
 	}
 	_, hostItem, err := taskplanning.NewEntryConfigurationWork(f.request.Task.Scope,
 		workexecution.Placement{Executor: workexecution.Agent, HostID: ids.New(ids.KindHost)},
-		f.request.Claim, workexecution.ActionRemove, f.entryID, "REMOVE")
+		f.request.Claim, workexecution.ActionRemove, f.entryID, "REMOVE", f.request.Accepted, f.request.Item.CreatedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,24 +389,88 @@ func newNativeEntryDefinitionFixture(t *testing.T) *nativeEntryDefinitionFixture
 		t.Fatal(err)
 	}
 	taskID := ids.New(ids.KindTask)
-	marker := agentConfigurationTestMarker()
-	marker.Kind, marker.State, marker.TaskID = idempotency.IdempotencyMarkerTask, idempotency.IdempotencyMarkerPending, taskID
-	marker.CreatedAt, marker.UpdatedAt, marker.TerminalAt, marker.RetainUntil = at, at, time.Time{}, time.Time{}
-	marker.Locator = idempotency.IdempotencyLocator{ScopeKind: idempotency.IdempotencyScopeEnvironment,
-		ScopeID: environment.ID, Method: http.MethodDelete, Route: "/entries/{id}", Key: "native-entry-definition-removal"}
-	marker.ReplayTarget = &idempotency.IdempotencyReplayTarget{
+	queue, err := workqueue.NewRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := etcd.NewIdempotencyRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	protector, encrypted := manualJourneyEncryptedValue(t, "entry-removal-request")
+	clear(encrypted)
+	coordinator, err := requestidempotency.NewCoordinator(protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	submitter, err := newAcceptedActions(f.store, protector, queue, replay, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locator := idempotency.IdempotencyLocator{
+		ScopeKind: idempotency.IdempotencyScopeEnvironment,
+		ScopeID:   environment.ID,
+		Method:    http.MethodDelete,
+		Route:     "/entries/{id}",
+		Key:       "native-entry-definition-removal",
+	}
+	intent, err := submitter.Begin(
+		ctx,
+		requestidempotency.CanonicalIntentV1{
+			Method: http.MethodDelete,
+			Route:  locator.Route,
+			Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environment.ID},
+			Path:   []requestidempotency.PathBinding{{Name: "id", Value: entry.Entry.ID}},
+			Query:  requestidempotency.Object(),
+			Body: requestidempotency.JSONBody(
+				requestidempotency.Object(
+					requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(nil)},
+				),
+			),
+		},
+		locator,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer intent.Destroy()
+	pure := workexecution.Task{
+		ID:         taskID,
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionRemove,
+		TargetID:   entry.Entry.ID,
+		TargetName: "REMOVE",
+		Scope:      workexecution.Scope{TenantID: tenant.ID, ProjectID: project.ID, EnvironmentID: environment.ID},
+		CreatedAt:  at,
+		UpdatedAt:  at,
+		Deadline:   at.Add(acceptedaction.QueueTimeout),
+	}
+	submission := intent.Submission(pure, "entry-definition-removal")
+	submission.ReplayTarget = &idempotency.IdempotencyReplayTarget{
 		Kind: idempotency.IdempotencyReplayTargetEntry,
 		ID:   entry.Entry.ID,
 	}
-	marker.Response = idempotency.IdempotencyResponse{
-		Status:      202,
-		ContentKind: "application/json",
-		Body:        []byte(fmt.Sprintf(`{"task_id":%q}`, taskID)),
+	if _, err := acceptedaction.Submit(ctx, submitter, submission, struct {
+		EntryID string `json:"entry_id"`
+	}{EntryID: entry.Entry.ID}); err != nil {
+		t.Fatal(err)
+	}
+	accepted, _, err := queue.ReadTask(ctx, taskID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := replay.Read(ctx, locator)
+	if err != nil || evidence == nil {
+		t.Fatalf("accepted Entry replay: %v", err)
+	}
+	marker, err := evidence.Marker()
+	if err != nil {
+		t.Fatal(err)
 	}
 	claim, err := desired.ClaimEnvironmentBlueprintStage(ctx, blueprints.EnvironmentBlueprintStageClaimRequest{
 		EnvironmentID: environment.ID, CandidateRevisionID: taskID, CandidateTaskID: taskID, Locator: marker.Locator,
 		Intent: marker.Intent, BaselineHeadRevision: committed.Revision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
-		RenderGeneration: 2, ProjectionSchema: blueprints.EnvironmentDesiredInputSchema, CreatedAt: at})
+		RenderGeneration: 2, ProjectionSchema: blueprints.EnvironmentDesiredInputSchema, CreatedAt: at, AcceptedTaskRevision: accepted.Revision, TaskLocator: &locator})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,12 +502,12 @@ func newNativeEntryDefinitionFixture(t *testing.T) *nativeEntryDefinitionFixture
 	}
 	task, item, err := taskplanning.NewEntryConfigurationWork(workexecution.Scope{TenantID: tenant.ID,
 		ProjectID: project.ID, EnvironmentID: environment.ID}, workexecution.Placement{Executor: workexecution.Controller},
-		claim, workexecution.ActionRemove, entry.Entry.ID, "REMOVE")
+		claim, workexecution.ActionRemove, entry.Entry.ID, "REMOVE", accepted, at.Add(time.Nanosecond))
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.request = etcd.EntryWorkPublication{Project: projectRecord, Environment: environmentRecord, Claim: claim,
-		Projection: candidate, EpochRevision: epoch.Revision, Task: task, Item: item, Marker: marker,
+		Projection: candidate, EpochRevision: epoch.Revision, Task: task, Item: item, Marker: marker, Accepted: accepted,
 		Capture: entrywork.Capture{Removal: &entrywork.Removal{EntryID: entry.Entry.ID, BaseRevisionID: baseID,
 			HeadRevision: committed.Revision, DescriptorID: claim.DescriptorID, RevisionID: taskID}}}
 	return f
@@ -522,4 +584,54 @@ func nativeEntryDefinitionPut[T any](t *testing.T, store *memoryHierarchyStore, 
 		t.Fatal(err)
 	}
 	return keyvalue.Versioned[T]{Record: record, Revision: revision, ReadRevision: revision}
+}
+
+func promoteNativeEntryDefinition(
+	t *testing.T,
+	publisher *etcd.HierarchyRepository,
+	store keyvalue.Store,
+	request etcd.EntryWorkPublication,
+) error {
+	t.Helper()
+	capture, err := publisher.PrepareEntryConfigurationWork(t.Context(), request)
+	if err != nil {
+		return err
+	}
+	defer keyvalue.ClearMutationValues(capture.Change.Mutations)
+	applied := false
+	defer func() {
+		if err := capture.Finish(t.Context(), applied); err != nil {
+			t.Errorf("Entry capture cleanup: %v", err)
+		}
+	}()
+	queue, err := workqueue.NewRepository(store)
+	if err != nil {
+		return err
+	}
+	var promotion workqueue.Change
+	if capture.Decision == nil {
+		return errs.New(errs.KindInternal, "Entry definition did not capture its Controller decision")
+	}
+	promotion, err = queue.PrepareAcceptedTaskDecision(
+		t.Context(),
+		request.Accepted,
+		capture.Task,
+		capture.Item,
+		*capture.Decision,
+		request.Item.CreatedAt,
+	)
+	if err != nil {
+		return err
+	}
+	defer keyvalue.ClearMutationValues(promotion.Mutations)
+	result, err := queue.Commit(t.Context(), promotion, capture.Change)
+	keyvalue.ClearValues(result.FailureReads)
+	if err != nil {
+		return err
+	}
+	if !result.Succeeded {
+		return errs.New(errs.KindStateConflict, "Entry definition authority changed before promotion")
+	}
+	applied = true
+	return nil
 }

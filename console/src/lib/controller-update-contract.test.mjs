@@ -17,17 +17,20 @@ test('native update retains one release and key across uncertain acceptance and 
   const first = new ControllerUpdateIntent(saved)
   const calls = []
   let loseResponse = true
-  const send = async (body, idempotencyKey) => {
-    calls.push([body, idempotencyKey])
+  const dependency = `task_${key}`
+  const after = [dependency]
+  const send = async (body, idempotencyKey, dependencies) => {
+    calls.push([body, idempotencyKey, dependencies])
     if (loseResponse) { loseResponse = false; throw new Error('disconnected') }
     return { task_id: 'task_update' }
   }
-  first.begin(release, key)
+  first.begin(release, key, after)
+  after.length = 0
   await assert.rejects(first.publish(send, () => false), /disconnected/)
   const resumed = new ControllerUpdateIntent(saved)
-  assert.deepEqual(resumed.current, { release, idempotencyKey: key })
+  assert.deepEqual(resumed.current, { release, idempotencyKey: key, after: [dependency] })
   assert.equal(await resumed.publish(send, () => false), 'task_update')
-  assert.deepEqual(calls, [[release, key], [release, key]])
+  assert.deepEqual(calls, [[release, key, [dependency]], [release, key, [dependency]]])
   assert.equal(new ControllerUpdateIntent(saved).current.taskId, 'task_update')
   assert.throws(() => resumed.begin(release, 'different'), /unresolved/)
   resumed.settle('other_task')

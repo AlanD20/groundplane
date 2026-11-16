@@ -2,16 +2,13 @@ package agentmanagement
 
 import (
 	"context"
-	"net/http"
-	"reflect"
 	"testing"
 	"time"
 
-	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
-	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/pkg/api"
 )
 
 const (
@@ -20,173 +17,88 @@ const (
 	testAgentUpdateDesiredImage  = "ghcr.io/aland20/groundplane-agent@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 )
 
-func TestAgentUpdateServiceCreatesPinnedControllerTask(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.August, 23, 10, 0, 0, 0, time.UTC)
+// Rationale: update must capture the generation and predecessor that exist
+// after prerequisite completion, not the state that existed at acceptance.
+func TestAgentUpdateCapturesCurrentPredecessor(t *testing.T) {
+	at := time.Date(2026, 8, 23, 10, 0, 0, 0, time.UTC)
+	task := acceptedAgentFixture(at, workexecution.ActionUpdate)
 	targets := &fakeAgentUpdateTargets{health: localagent.Health{Agent: localagent.Agent{
-		ID: testAgentUpdateID, Image: testAgentUpdatePreviousImage,
-		Generation: 7, Phase: localagent.PhaseReady,
-	}}}
-	tasks := &fakeAgentUpdateTasks{}
-	idempotency := &fakeAgentUpdateIdempotency{
-		resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
-	}
-	service, err := NewUpdateService(targets, tasks, idempotency, targets)
-	if err != nil {
-		t.Fatalf("NewUpdateService() error = %v", err)
-	}
-	service.now = func() time.Time { return now }
-
-	response, err := service.UpdateAgent(
-		context.Background(),
-		testAgentUpdateID,
-		testAgentUpdateDesiredImage,
-		"agent-update-key-0001",
+		ID: testAgentUpdateID, Image: testAgentUpdatePreviousImage, Generation: 7, Phase: localagent.PhaseReady}}}
+	records := &fakeAgentCaptureRepository{}
+	service := &agentUpdateService{targets: targets, tasks: records, images: targets}
+	prepared, err := service.prepareAcceptedUpdate(
+		t.Context(),
+		workqueue.TaskSnapshot{Task: task, Revision: 1},
+		1,
+		at.Add(time.Minute),
+		api.AgentUpdate{Image: testAgentUpdateDesiredImage},
 	)
 	if err != nil {
-		t.Fatalf("UpdateAgent() error = %v", err)
+		t.Fatal(err)
 	}
-	if response.Status != http.StatusAccepted || response.ContentKind != "application/json" {
-		t.Fatalf("UpdateAgent() response = %#v", response)
-	}
-	request := replacement(tasks.capture)
-	if request.AgentID != testAgentUpdateID || request.PreviousImage != testAgentUpdatePreviousImage ||
-		request.DesiredImage != testAgentUpdateDesiredImage || request.StartingGeneration != 7 {
-		t.Fatalf("captured update request = %#v", request)
-	}
-	if tasks.marker.Locator.Method != http.MethodPost ||
-		tasks.marker.Locator.Route != agentUpdateRoute ||
-		tasks.marker.Locator.Key != "agent-update-key-0001" {
-		t.Fatalf("Agent update marker = %#v", tasks.marker)
+	request := replacement(records.capture)
+	if request.AgentID != task.TargetID || request.PreviousImage != testAgentUpdatePreviousImage ||
+		request.DesiredImage != testAgentUpdateDesiredImage ||
+		request.StartingGeneration != 7 ||
+		prepared.Task.ID != task.ID ||
+		!prepared.Task.Deadline.Equal(task.Deadline) ||
+		!prepared.Graph[0].Deadline.Equal(at.Add(6*time.Minute)) ||
+		targets.calls != 1 ||
+		targets.verifyCalls != 1 {
+		t.Fatalf("late update capture: %#v / %#v", prepared, request)
 	}
 }
 
-func TestAgentUpdateServiceReplaysBeforeTargetLookup(t *testing.T) {
-	t.Parallel()
-
-	want := testidempotency.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: []byte(`{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`),
-	}
-	targets := &fakeAgentUpdateTargets{}
-	service, err := NewUpdateService(
-		targets,
-		&fakeAgentUpdateTasks{},
-		&fakeAgentUpdateIdempotency{
-			existing: true,
-			resolution: idempotentintent.Resolution{
-				Kind: idempotentintent.ResolutionReplay, Response: want,
-			},
-		},
-		targets,
-	)
-	if err != nil {
-		t.Fatalf("NewUpdateService() error = %v", err)
-	}
-	got, err := service.UpdateAgent(
-		context.Background(),
-		testAgentUpdateID,
-		testAgentUpdateDesiredImage,
-		"agent-update-key-0002",
-	)
-	if err != nil || !reflect.DeepEqual(got, want) {
-		t.Fatalf("UpdateAgent(replay) = %#v, %v", got, err)
-	}
-	if targets.calls != 0 {
-		t.Fatalf("Health() calls = %d during replay", targets.calls)
-	}
-}
-
-// Rationale: captured rollback generations must not wrap, and selecting the
-// running image cannot publish a second replacement operation.
+// Rationale: deterministic generation overflow, same-image selection and a
+// non-ready predecessor must fail before publishing any execution authority.
 func TestAgentUpdateRefusesInvalidReplacementBeforePublication(t *testing.T) {
-	for _, scenario := range []string{"generation overflow", "same image"} {
+	for _, scenario := range []string{"generation overflow", "same image", "not ready"} {
 		t.Run(scenario, func(t *testing.T) {
-			generation := uint64(7)
+			at := time.Date(2026, 8, 23, 10, 0, 0, 0, time.UTC)
+			task := acceptedAgentFixture(at, workexecution.ActionUpdate)
+			agent := localagent.Agent{
+				ID:         task.TargetID,
+				Image:      testAgentUpdatePreviousImage,
+				Generation: 7,
+				Phase:      localagent.PhaseReady,
+			}
 			image := testAgentUpdateDesiredImage
-			if scenario == "generation overflow" {
-				generation = ^uint64(0) - 1
-			} else {
-				image = testAgentUpdatePreviousImage
+			switch scenario {
+			case "generation overflow":
+				agent.Generation = ^uint64(0) - 1
+			case "same image":
+				image = agent.Image
+			case "not ready":
+				agent.Phase = localagent.PhaseUpdating
 			}
-			tasks := &fakeAgentUpdateTasks{}
-			service, err := NewUpdateService(&fakeAgentUpdateTargets{health: localagent.Health{Agent: localagent.Agent{
-				ID: testAgentUpdateID, Image: testAgentUpdatePreviousImage, Generation: generation, Phase: localagent.PhaseReady,
-			}}}, tasks, &fakeAgentUpdateIdempotency{resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied}}, &fakeAgentUpdateTargets{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := service.UpdateAgent(t.Context(), testAgentUpdateID, image, "invalid-agent-update-0001"); err == nil ||
-				tasks.capture.TaskID != "" {
-				t.Fatalf("invalid replacement published: %#v, %v", tasks.capture, err)
+			targets := &fakeAgentUpdateTargets{health: localagent.Health{Agent: agent}}
+			records := &fakeAgentCaptureRepository{}
+			service := &agentUpdateService{targets: targets, tasks: records, images: targets}
+			_, err := service.prepareAcceptedUpdate(
+				t.Context(),
+				workqueue.TaskSnapshot{Task: task, Revision: 1},
+				1,
+				at.Add(time.Minute),
+				api.AgentUpdate{Image: image},
+			)
+			if err == nil || records.capture.TaskID != "" {
+				t.Fatalf("invalid capture published: %#v / %v", records.capture, err)
 			}
 		})
 	}
 }
 
 type fakeAgentUpdateTargets struct {
-	health localagent.Health
-	err    error
-	calls  int
+	health             localagent.Health
+	err                error
+	calls, verifyCalls int
 }
 
-func (*fakeAgentUpdateTargets) Verify(context.Context, string, int) error { return nil }
-
+func (targets *fakeAgentUpdateTargets) Verify(context.Context, string, int) error {
+	targets.verifyCalls++
+	return nil
+}
 func (targets *fakeAgentUpdateTargets) Health(context.Context, string) (localagent.Health, error) {
 	targets.calls++
 	return targets.health, targets.err
-}
-
-type fakeAgentUpdateTasks struct {
-	capture agentoperations.Capture
-	marker  testidempotency.IdempotencyMarker
-}
-
-func (tasks *fakeAgentUpdateTasks) CreateAgentWork(
-	_ context.Context,
-	capture agentoperations.Capture,
-	marker testidempotency.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	tasks.capture = capture
-	tasks.marker = marker
-	return etcd.IdempotencyTransactionResult{}, nil
-}
-
-type fakeAgentUpdateIdempotency struct {
-	existing   bool
-	resolution idempotentintent.Resolution
-}
-
-func (idempotency *fakeAgentUpdateIdempotency) Prepare(
-	context.Context,
-	string,
-	string,
-) (agentUpdateEvidence, error) {
-	return agentUpdateEvidence{}, nil
-}
-
-func (idempotency *fakeAgentUpdateIdempotency) ResolveExisting(
-	context.Context, testidempotency.IdempotencyLocator,
-
-	agentUpdateEvidence,
-) (idempotentintent.Resolution, bool, error) {
-	return idempotency.resolution, idempotency.existing, nil
-}
-
-func (idempotency *fakeAgentUpdateIdempotency) ResolveKnown(
-	context.Context,
-	agentUpdateEvidence,
-	etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
-	return idempotency.resolution, nil
-}
-
-func (idempotency *fakeAgentUpdateIdempotency) ResolveUnknown(
-	context.Context, testidempotency.IdempotencyLocator,
-
-	agentUpdateEvidence,
-	error,
-) (idempotentintent.Resolution, error) {
-	return idempotency.resolution, nil
 }

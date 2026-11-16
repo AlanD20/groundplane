@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,13 +99,63 @@ func TestNativeResolverPublicationReplaysAndFencesHostAndSources(t *testing.T) {
 	wrongInput.HostID = ids.New(ids.KindHost)
 	wrongCapture.HostID = wrongInput.HostID
 	before := store.revision
-	if _, err := tasks.PublishResolverWork(t.Context(), wrongInput, wrongCapture, marker); err == nil ||
+	if _, err := tasks.PrepareResolverAuthority(t.Context(), wrongInput, wrongCapture); err == nil ||
 		store.revision != before {
 		t.Fatal("resolver accepted another host or partially published rejected work")
 	}
-	published, err := tasks.PublishResolverWork(t.Context(), input, capture, marker)
-	if err != nil || published.kind != idempotencyTransactionApplied {
-		t.Fatalf("publish native resolver: %v", err)
+	nativeTask, item, err := resolverwork.NewWork(input, capture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accepted := workexecution.CloneTask(nativeTask)
+	accepted.Intent, accepted.ExpectedItems = workexecution.Input{}, 0
+	accepted.AcceptedIntent = &workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: strings.Repeat("a", 64)}
+	pure, err := queue.PrepareAcceptedTask(t.Context(), accepted, marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer keyvalue.ClearMutationValues(pure.Mutations)
+	conditions, mutations, err := idempotency.PreparePublication(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer keyvalue.ClearMutationValues(mutations)
+	acceptance, err := workqueue.JoinChanges(pure, workqueue.Change{Conditions: conditions, Mutations: mutations})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := queue.Commit(t.Context(), acceptance); err != nil || !result.Succeeded {
+		t.Fatalf("accept pure resolver Task: %v", err)
+	}
+	snapshot, _, err := queue.ReadTask(t.Context(), input.TaskID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nativeTask.AcceptedIntent = accepted.AcceptedIntent
+	promotion, err := queue.PrepareAcceptedTaskPromotion(
+		t.Context(),
+		snapshot,
+		nativeTask,
+		[]workexecution.Item{item},
+		nil,
+		false,
+		at,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer keyvalue.ClearMutationValues(promotion.Mutations)
+	authority, err := tasks.PrepareResolverAuthority(t.Context(), input, capture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer keyvalue.ClearMutationValues(authority.Mutations)
+	publication, err := workqueue.JoinChanges(promotion, authority)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := queue.Commit(t.Context(), publication); err != nil || !result.Succeeded {
+		t.Fatalf("promote native resolver: %v", err)
 	}
 	acceptedRevision := store.revision
 	view, err := queue.ReadWork(t.Context(), input.TaskID, input.WorkID, acceptedRevision)
@@ -120,15 +171,12 @@ func TestNativeResolverPublicationReplaysAndFencesHostAndSources(t *testing.T) {
 		selected.Record.InputSHA256 != projection.InputSHA256 {
 		t.Fatalf("resolver projection was not published with its native work: %v", err)
 	}
-	restarted, err := newTaskRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
 	// Reconciliation reuses the persisted projection. An empty route set must
 	// remain valid across decoding, rather than becoming an absent route set.
 	capture.Projection = selected.Record
-	replayed, err := restarted.PublishResolverWork(t.Context(), input, capture, marker)
-	if err != nil || replayed.kind != idempotencyTransactionExisting || store.revision != acceptedRevision {
+	replayed, foundReplay, err := existingIdempotencyTransaction(t.Context(), store, marker)
+	if err != nil || !foundReplay || replayed.kind != idempotencyTransactionExisting ||
+		store.revision != acceptedRevision {
 		t.Fatalf("resolver replay wrote storage or lost acceptance: %v", err)
 	}
 	records, err := tasks.ResolverWorkRepository()

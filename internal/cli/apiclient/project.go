@@ -158,7 +158,7 @@ func (c *Client) RenameProject(ctx context.Context, id, slug string) (apiTypes.P
 	return generatedProjectBody(http.MethodPost, path, response.Body, response.JSON200)
 }
 
-func (c *Client) DeleteProject(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) DeleteProject(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -166,6 +166,7 @@ func (c *Client) DeleteProject(ctx context.Context, id string) (apiTypes.TaskAcc
 	path := "/api/v1/projects/" + id
 	response, err := client.ProjectDeleteWithResponse(
 		ctx, id, &generated.ProjectDeleteParams{IdempotencyKey: ids.NewULID()},
+		generated.ProjectDeleteJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)

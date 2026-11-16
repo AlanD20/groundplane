@@ -89,7 +89,7 @@ func (c *Client) CreateEnvironment(
 	}
 	params := &generated.EnvironmentCreateParams{IdempotencyKey: ids.NewULID()}
 	body := generated.EnvironmentCreateJSONRequestBody{
-		ProjectId: input.ProjectID, Name: input.Name, NetworkPool: input.NetworkPool,
+		ProjectId: input.ProjectID, Name: input.Name, NetworkPool: input.NetworkPool, After: optionalServiceStrings(input.After),
 	}
 	response, err := client.EnvironmentCreateWithResponse(ctx, params, body)
 	if err != nil {
@@ -156,14 +156,19 @@ func (c *Client) EditEnvironment(
 	return generatedEnvironmentBody(http.MethodPatch, path, response.Body, response.JSON200)
 }
 
-func (c *Client) DeleteEnvironment(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) DeleteEnvironment(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
 	path := "/api/v1/environments/" + id
 	params := &generated.EnvironmentDeleteParams{IdempotencyKey: ids.NewULID()}
-	response, err := client.EnvironmentDeleteWithResponse(ctx, id, params)
+	response, err := client.EnvironmentDeleteWithResponse(
+		ctx,
+		id,
+		params,
+		generated.EnvironmentDeleteJSONRequestBody{After: optionalServiceStrings(after)},
+	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
 	}

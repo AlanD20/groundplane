@@ -73,6 +73,10 @@ type EnvironmentBlueprintSeal struct {
 // EnvironmentBlueprintStageClaimRequest contains the stable candidate and
 // protected replay evidence reserved before any chunk write.
 type EnvironmentBlueprintStageClaimRequest struct {
+	// AcceptedTaskRevision binds post-dependency compilation to an existing
+	// pure operator Task. Zero is reserved for internal staging before publication.
+	AcceptedTaskRevision int64
+	TaskLocator          *idempotencyrecord.IdempotencyLocator
 	EnvironmentID        string
 	CandidateRevisionID  string
 	CandidateTaskID      string
@@ -89,6 +93,8 @@ type EnvironmentBlueprintStageClaimRequest struct {
 // is true when another request already owns the locator. The Controller must
 // compare the returned protected intent before it resumes that claim.
 type EnvironmentBlueprintStageClaim struct {
+	// TaskLocator is the public accepted-request authority; Locator isolates the Environment draft.
+	TaskLocator          *idempotencyrecord.IdempotencyLocator
 	DescriptorID         string
 	EnvironmentID        string
 	RevisionID           string

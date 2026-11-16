@@ -62,6 +62,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
     environmentId: string;
     connectorId: string;
     intent: ConnectorMutationIntent | null;
+    after?: string[];
   } | null>(null);
 
   useEffect(() => {
@@ -273,18 +274,9 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                       variant="ghost"
                       size="icon-sm"
                       className="text-muted-foreground hover:text-destructive"
-                      onClick={() =>
-                        policyAuthoritative && !active && beginRemove(connector)
-                      }
-                      disabled={!policyAuthoritative || active}
+                      onClick={() => beginRemove(connector)}
                       aria-label={`Remove destination ${connector.name}`}
-                      title={
-                        !policyAuthoritative
-                          ? "Load the Backup Policy before removing this connector"
-                          : active
-                            ? "Disable the backup policy before removing this connector"
-                            : "Remove destination"
-                      }
+                      title="Remove destination"
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -357,6 +349,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
       </Card>
 
       <TaskRunnerDialog
+        runAfter
         open={removing !== null}
         onOpenChange={(open) => {
           if (!open) cancelRemove();
@@ -372,7 +365,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
         destructive
         confirmText={removing?.name ?? ""}
         startLabel="Remove destination"
-        onDispatch={() => {
+        onDispatch={(after) => {
           if (!removing)
             return Promise.reject(new Error("No Connector selected"));
           if (removing.scopeRef !== env.id) {
@@ -389,13 +382,14 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
             cancelRemove();
             return Promise.reject(new Error("No Connector removal intent"));
           }
-          if (!policyAuthoritative) {
+          if (after.length === 0 && !policyAuthoritative) {
             clearRemoveDispatchIntent();
             return Promise.reject(
               new Error("Backup Policy state is not authoritative"),
             );
           }
           if (
+            after.length === 0 &&
             backupPolicy.enabled &&
             backupPolicy.connectorId === removing.id
           ) {
@@ -403,6 +397,16 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
             return Promise.reject(
               new Error(
                 "Disable the Backup Policy before removing this Connector",
+              ),
+            );
+          }
+          if (
+            removeIntent.intent &&
+            JSON.stringify(removeIntent.after ?? []) !== JSON.stringify(after)
+          ) {
+            return Promise.reject(
+              new Error(
+                "Retry the same removal prerequisites while the previous request outcome is unknown.",
               ),
             );
           }
@@ -416,11 +420,11 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                 current.intent !== null
               )
                 return current;
-              return { ...current, intent };
+              return { ...current, intent, after: [...after] };
             });
           }
           return store
-            .removeConnector(removing.id, intent)
+            .removeConnector(removing.id, intent, after)
             .then((taskID) => {
               setRemoveIntent((current) => {
                 if (

@@ -69,14 +69,7 @@ func TestAgentPublicationRespectsImageCleanupState(t *testing.T) {
 				ContentKind: "application/json",
 				Body:        []byte(fmt.Sprintf(`{"task_id":%q}`, capture.TaskID)),
 			}
-			result, err := repository.CreateAgentWork(t.Context(), capture, marker)
-			if err == nil {
-				_, _, conflict, classifyErr := result.Classify()
-				if classifyErr != nil {
-					t.Fatal(classifyErr)
-				}
-				err = conflict
-			}
+			err = acceptAgentFixture(t, t.Context(), store, repository, capture, marker)
 			if test.want != 0 {
 				if !errors.Is(err, errs.New(test.want, "")) {
 					t.Fatalf("publication: %v", err)

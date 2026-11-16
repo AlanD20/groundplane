@@ -55,40 +55,42 @@ type BackingServiceCreation struct {
 	Marker          idempotencyrecord.IdempotencyMarker
 }
 
-// PublishBackingServiceWithWork atomically creates one backing facade and
+// PrepareBackingServiceCreation atomically creates one backing facade and
 // queues the Agent reconciliation pinned to its immutable desired revision.
 // Blueprint audit and projection chunks must already be sealed by the normal
 // staging protocol.
-func (repository *HierarchyRepository) PublishBackingServiceWithWork(
+func (repository *HierarchyRepository) PrepareBackingServiceCreation(
 	ctx context.Context,
 	creation BackingServiceCreation,
-) (IdempotencyTransactionResult, error) {
+) (workqueue.Change, error) {
 	if err := validateBackingServiceCreation(ctx, creation); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, creation.Marker); err != nil ||
-		found {
-		return existing, err
+	name, err := repository.store.Get(ctx, hierarchyrecord.ProjectSlugKey(creation.Project))
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	if name == nil {
+		return workqueue.Change{}, errs.New(errs.KindInternal, "Backing service name lookup is incomplete")
+	}
+	if name.Entry != nil {
+		clear(name.Entry.Value)
+		return workqueue.Change{}, errs.New(errs.KindNameConflict, "Backing service slug is already in use")
 	}
 	task, item, err := creation.Work.Input.Work()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	native, err := workqueue.PrepareSingleTask(task, item, creation.Marker)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer etcdstore.ClearMutationValues(native.Mutations)
 	host, err := hostbindings.ReadLocal(ctx, repository.store, 0)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	if host.Binding.HostID != item.Placement.HostID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backing creation target host changed")
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "backing creation target host changed")
 	}
 	configuration, err := creation.Work.ConfigurationConditions(ctx, host.ReadRevision)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	publication, err := repository.prepareEnvironmentBlueprintPublication(
 		ctx,
@@ -101,7 +103,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithWork(
 		0,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(publication.publishedDescriptor)
 	identityPublication, err := prepareEnvironmentDesiredIdentityPublication(
@@ -113,18 +115,18 @@ func (repository *HierarchyRepository) PublishBackingServiceWithWork(
 		creation.Stage.ReadRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer identityPublication.clear()
 
 	projectValue, err := hierarchyrecord.EncodeProject(creation.Project)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(projectValue)
 	environmentValue, err := hierarchyrecord.EncodeEnvironment(creation.Environment)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(environmentValue)
 	projectCoordinationValue, err := hierarchydeletion.EncodeInitialCoordination(
@@ -132,7 +134,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithWork(
 		creation.Project.ID,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(projectCoordinationValue)
 	environmentCoordinationValue, err := hierarchydeletion.EncodeInitialCoordination(
@@ -140,40 +142,40 @@ func (repository *HierarchyRepository) PublishBackingServiceWithWork(
 		creation.Environment.ID,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(environmentCoordinationValue)
 	scriptSetValue, err := scriptrecord.EncodeScriptSetGeneration(scriptrecord.SetGenerationRecord{
 		EnvironmentID: creation.Environment.ID, GenerationID: creation.Environment.ID,
 	})
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(scriptSetValue)
 	poolRegistryValue, err := recordcodec.Encode("environment_pool_registry", creation.PoolRegistry.Record)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(poolRegistryValue)
 	zoneRegistryValue, err := recordcodec.Encode("zone_pool_registry", networkreservations.ZonePoolRegistry{
 		Reservations: map[string]string{creation.Zone.Desired.ID: creation.Zone.Desired.Subnet},
 	})
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(zoneRegistryValue)
 	serviceValue, err := servicerecord.EncodeServiceRuntimeRecord(
 		servicerecord.NewServiceRuntimeRecord(creation.Service),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(serviceValue)
 	var postgresReleaseValue []byte
 	if creation.PostgresRelease != nil {
 		postgresReleaseValue, err = backingpostgresrelease.Encode(*creation.PostgresRelease)
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return workqueue.Change{}, err
 		}
 		defer clear(postgresReleaseValue)
 	}
@@ -181,19 +183,19 @@ func (repository *HierarchyRepository) PublishBackingServiceWithWork(
 		EnvironmentID: creation.Environment.ID,
 	})
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(epochValue)
 	taskReference, err := idempotencyrecord.EncodeTaskReference(creation.Task.ID)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(taskReference)
 	componentValues := make([][]byte, len(creation.Components))
 	for index := range creation.Components {
 		componentValues[index], err = componentrecord.EncodeRecord(creation.Components[index])
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return workqueue.Change{}, err
 		}
 		defer clear(componentValues[index])
 	}
@@ -203,7 +205,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithWork(
 	for index := range creation.Entries {
 		entryValues[index], err = entryrecord.EncodeRecord(creation.Entries[index])
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return workqueue.Change{}, err
 		}
 		defer clear(entryValues[index])
 		entryGenerationKeys[index], entryGenerationValues[index], err = entryrecord.PrepareEntryGeneration(
@@ -211,7 +213,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithWork(
 			creation.EntryValues[index],
 		)
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return workqueue.Change{}, err
 		}
 		defer clear(entryGenerationValues[index])
 	}
@@ -220,23 +222,22 @@ func (repository *HierarchyRepository) PublishBackingServiceWithWork(
 	for index := range creation.Secrets {
 		secretValues[index], err = secretrecord.EncodeRecord(creation.Secrets[index])
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return workqueue.Change{}, err
 		}
 		defer clear(secretValues[index])
 		secretEncryptedValues[index], err = secretrecord.EncodeEncryptedValue(creation.SecretValues[index])
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return workqueue.Change{}, err
 		}
 		defer clear(secretEncryptedValues[index])
 	}
 
 	creationStageKey, err := backingServiceCreationStageKey(creation.Stage.Record.Locator)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	conditions := backingServiceCreationConditions(creation, publication, creationStageKey)
 	conditions = append(conditions, identityPublication.conditions...)
-	conditions = append(conditions, native.Conditions...)
 	conditions = append(conditions, creation.Work.Change.Conditions...)
 	conditions = append(conditions, host.Conditions...)
 	conditions = append(conditions, configuration...)
@@ -387,31 +388,25 @@ func (repository *HierarchyRepository) PublishBackingServiceWithWork(
 		)
 	}
 	mutations = append(mutations, identityPublication.mutations...)
-	mutations = append(mutations, native.Mutations...)
 	mutations = append(mutations, creation.Work.Change.Mutations...)
 	conditions, err = resourcePublicationConditions(conditions)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer etcdstore.ClearMutationValues(mutations)
-	plan, err := newIdempotencyMutationPlanForMarker(idempotencyrecord.IdempotencyMarkerTask, conditions, mutations,
-		classifyBackingServiceCreation(creation, conditions))
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
+	if err := validateBackingServicePublicationBudget(conditions, mutations); err != nil {
+		return workqueue.Change{}, err
 	}
-	if err := plan.enforceTransactionBounds(validateBackingServicePublicationBudget); err != nil {
-		return IdempotencyTransactionResult{}, err
+	return workqueue.Change{
+		Conditions: append([]etcdstore.Condition(nil), conditions...),
+		Mutations:  cloneBackingCreationMutations(mutations),
+	}, nil
+}
+
+func cloneBackingCreationMutations(mutations []etcdstore.Mutation) []etcdstore.Mutation {
+	out := append([]etcdstore.Mutation(nil), mutations...)
+	for i := range out {
+		out[i].Value = append([]byte(nil), out[i].Value...)
 	}
-	idempotency, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	transactions, ok := repository.store.(backingServiceTransactionStore)
-	if !ok {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindInternal,
-			"Backing-service transaction executor is required",
-		)
-	}
-	return idempotency.apply(ctx, creation.Marker, plan, transactions.TransactBackingService)
+	return out
 }

@@ -33,10 +33,11 @@ export type EnvironmentActions = {
     projectId: string,
     name: string,
     networkPool: string,
+    after?: string[],
   ) => Promise<EnvironmentTaskAccepted>;
   editEnvironment: (envId: string, networkPool: string) => Promise<Environment>;
   renameEnvironment: (envId: string, name: string) => Promise<Environment>;
-  deleteEnvironment: (envId: string) => Promise<string>;
+  deleteEnvironment: (envId: string, after?: string[]) => Promise<string>;
 };
 type Options = {
   state: Workspace;
@@ -58,7 +59,6 @@ export function createEnvironmentActions({
     environmentGenerations,
     isEnvironmentDeletionPending,
     dispatchResourceRemoval,
-    waitForResourceRemoval,
   } = lifecycle;
   const {
     environmentMutationIntents,
@@ -66,16 +66,18 @@ export function createEnvironmentActions({
     clearEnvironmentMutationIntent,
   } = mutations;
   return {
-    addEnvironment: async (projectId, name, networkPool) => {
+    addEnvironment: async (projectId, name, networkPool, after = []) => {
       const body: EnvironmentCreateRequest = {
         project_id: projectId,
         name,
         network_pool: networkPool,
+        after,
       };
       const key = environmentMutationKey("create", [
         projectId,
         name,
         networkPool,
+        JSON.stringify(after),
       ]);
       const intent = environmentMutationIntents.current.get(key) ?? {
         key,
@@ -84,6 +86,7 @@ export function createEnvironmentActions({
         projectId,
         name,
         networkPool,
+        after: [...after],
       };
       persistEnvironmentMutationIntent(intent);
       try {
@@ -219,7 +222,7 @@ export function createEnvironmentActions({
         throw error;
       }
     },
-    deleteEnvironment: async (envId) => {
+    deleteEnvironment: async (envId, after = []) => {
       if (!isEnvironmentDeletionPending(envId))
         assertEnvironmentMutable(envId, "Environment deletion");
       const project = [...state.tenantProjects, ...state.backingProjects].find(
@@ -230,19 +233,14 @@ export function createEnvironmentActions({
       );
       if (!project)
         return Promise.reject(new Error(`Environment ${envId} is not loaded`));
-      const generation = nextEnvironmentGeneration(envId, "delete");
+      const generation = environmentGenerations.current.get(envId) ?? 0;
       const taskId = await dispatchResourceRemoval({
         kind: "environment",
         projectId: project.id,
         resourceId: envId,
         generation,
+        after,
       });
-      const task = await waitForResourceRemoval(taskId);
-      if (task.task.status !== "succeeded") {
-        throw new Error(
-          `Environment deletion Task ${taskId} ${task.task.status}`,
-        );
-      }
       return taskId;
     },
   };

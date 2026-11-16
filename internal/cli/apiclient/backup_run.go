@@ -9,7 +9,7 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-func (c *Client) RunBackup(ctx context.Context, environmentID string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RunBackup(ctx context.Context, environmentID string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -19,6 +19,7 @@ func (c *Client) RunBackup(ctx context.Context, environmentID string) (apiTypes.
 		ctx,
 		environmentID,
 		&generated.BackupRunParams{IdempotencyKey: ids.NewULID()},
+		generated.BackupRunJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)

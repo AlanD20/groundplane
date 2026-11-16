@@ -58,9 +58,14 @@ func TestLocalAgentRuntimeAdapterMaterializesCompleteRuntime(t *testing.T) {
 	}
 	labels := map[string]string{"arch": "arm64"}
 	material := localagent.RuntimeMaterial{
-		AgentID:        runtimeAdapterAgentID,
-		Generation:     7,
-		Config:         localagent.Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1, Labels: labels},
+		AgentID:    runtimeAdapterAgentID,
+		Generation: 7,
+		Config: localagent.Config{
+			PullIntervalSeconds:          2,
+			MaxConcurrentTasks:           3,
+			MaxParallelOperationsPerTask: 1,
+			Labels:                       labels,
+		},
 		EncryptedToken: []byte("stored-ciphertext"),
 	}
 	if err := adapter.Materialize(context.Background(), material); err != nil {

@@ -21,11 +21,16 @@ export type ReleaseGroupActions = {
     groupId: string,
     patch: Pick<ReleaseGroup, "name" | "services" | "order" | "onFailure">,
   ) => Promise<ReleaseGroup>;
-  removeReleaseGroup: (envId: string, groupId: string) => Promise<string>;
+  removeReleaseGroup: (
+    envId: string,
+    groupId: string,
+    after?: string[],
+  ) => Promise<string>;
   deployReleaseGroup: (
     envId: string,
     groupId: string,
     tag?: string,
+    after?: string[],
   ) => Promise<string>;
   previewReleaseGroupRollback: (
     envId: string,
@@ -36,7 +41,8 @@ export type ReleaseGroupActions = {
     envId: string,
     groupId: string,
     tag: string | undefined,
-    previewRevision: string,
+    previewRevision: string | undefined,
+    after?: string[],
   ) => Promise<string>;
 };
 export function createReleaseGroupActions(
@@ -131,18 +137,21 @@ export function createReleaseGroupActions(
       });
       return edited;
     },
-    removeReleaseGroup: async (_envId, groupId) => {
+    removeReleaseGroup: async (_envId, groupId, after = []) => {
       assertEnvironmentMutable(_envId, "Release group mutation");
       const response = await controllerRequest<ReleaseGroupMutationAccepted>(
         `/release-groups/${encodeURIComponent(groupId)}`,
         202,
-        { method: "DELETE" },
+        { method: "DELETE", body: { after } },
       );
       return requireTaskId(response, "Release group removal");
     },
-    deployReleaseGroup: async (_envId, groupId, tag) => {
+    deployReleaseGroup: async (_envId, groupId, tag, after = []) => {
       assertEnvironmentMutable(_envId, "Release group mutation");
-      const body = tag ? { tag } : {};
+      const body = {
+        ...(tag ? { tag } : {}),
+        ...(after.length ? { after } : {}),
+      };
       const response = await controllerRequest<ReleaseGroupTaskAccepted>(
         `/release-groups/${encodeURIComponent(groupId)}/deploy`,
         202,
@@ -155,7 +164,13 @@ export function createReleaseGroupActions(
         `/release-groups/${encodeURIComponent(groupId)}/rollback-preview${tag === undefined ? "" : `?tag=${encodeURIComponent(tag)}`}`,
         200,
       ),
-    rollbackReleaseGroup: async (_envId, groupId, tag, previewRevision) => {
+    rollbackReleaseGroup: async (
+      _envId,
+      groupId,
+      tag,
+      previewRevision,
+      after = [],
+    ) => {
       assertEnvironmentMutable(_envId, "Release group mutation");
       const response = await controllerRequest<ReleaseGroupTaskAccepted>(
         `/release-groups/${encodeURIComponent(groupId)}/rollback`,
@@ -164,7 +179,10 @@ export function createReleaseGroupActions(
           method: "POST",
           body: {
             ...(tag === undefined ? {} : { tag }),
-            preview_revision: previewRevision,
+            ...(previewRevision === undefined
+              ? {}
+              : { preview_revision: previewRevision }),
+            ...(after.length ? { after } : {}),
           },
         },
       );

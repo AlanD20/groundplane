@@ -36,7 +36,11 @@ func TestNativeConnectAuthenticationFailsClosed(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			server, peer, request := nativeConnectFixture(t)
 			auth := &fakeAuthenticator{authorization: Authorization{Generation: 1,
-				Config: &agentpb.AgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}}}
+				Config: &agentpb.AgentConfig{
+					PullIntervalSeconds:          2,
+					MaxConcurrentTasks:           1,
+					MaxParallelOperationsPerTask: 1,
+				}}}
 			server.auth = auth
 			messages := []*agentpb.AgentMessage{request}
 			switch test.name {

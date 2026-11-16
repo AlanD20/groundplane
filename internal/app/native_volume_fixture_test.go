@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/volume"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
@@ -24,12 +25,16 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumework"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	api "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // Uses the public mutation producer and actual native repositories over MVCC
 // memory storage. Host observations are supplied by the test, not by Docker.
 type nativeVolumeFixture struct {
+	backingPreparations interface {
+		Advance(context.Context, string, time.Time) (bool, error)
+	}
 	store         *nativeVolumeStore
 	agents        *agentregistration.Repository
 	queue         *workqueue.Repository
@@ -40,7 +45,13 @@ type nativeVolumeFixture struct {
 	blueprint     *etcd.EnvironmentBlueprintRepository
 	authorization agentregistration.WorkAuthorization
 	environmentID string
-	created       api.VolumeMutationResponse
+	created       nativeVolumeCreated
+	preparations  *taskdependencies.Preparations
+}
+
+type nativeVolumeCreated struct {
+	TaskID string `json:"task_id"`
+	Volume api.Volume
 }
 
 type nativeDesiredRepository struct {
@@ -64,7 +75,11 @@ func (store *nativeVolumeStore) Transact(
 	if store.beforeCommit != nil {
 		store.beforeCommit(mutations)
 	}
-	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
+	result, err := store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
+	if err == nil && store.afterBlueprintCommit != nil {
+		store.afterBlueprintCommit(result)
+	}
+	return result, err
 }
 
 func (store *nativeVolumeStore) TransactEnvironmentBlueprint(
@@ -189,13 +204,22 @@ func newNativeVolumeFixture(t *testing.T) *nativeVolumeFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	accepted, err := newAcceptedActions(f.store, protector, f.queue, replay, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.mutations, err = volume.NewMutationService(
 		nativeDesiredRepository{f.blueprint, desired},
 		coordinator,
 		replay,
 		f.reads,
 		policies,
+		accepted,
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.preparations, err = taskdependencies.NewPreparations(f.queue, f.mutations.AcceptedPreparations())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,6 +246,11 @@ func newNativeVolumeFixture(t *testing.T) *nativeVolumeFixture {
 	if err := json.Unmarshal(response.Body, &f.created); err != nil || f.created.TaskID == "" {
 		t.Fatalf("Volume create response: %v", err)
 	}
+	task := f.prepare(t, f.created.TaskID)
+	f.created.Volume, err = f.reads.GetVolume(ctx, task.TargetID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return f
 }
 
@@ -240,6 +269,7 @@ func (f *nativeVolumeFixture) authorize(t *testing.T) {
 func (f *nativeVolumeFixture) assign(t *testing.T, taskID string) workqueue.ResumeView {
 	t.Helper()
 	ctx := t.Context()
+	f.prepare(t, taskID)
 	workID := ""
 	page, err := f.queue.ListWork(ctx, taskID, "", 10, 0)
 	if err != nil {
@@ -381,4 +411,37 @@ func (cipher nativeVolumeCipher) Open(ctx context.Context, value []byte) ([]byte
 		return nil, err
 	}
 	return ageinfra.Decrypt(cipher.key.Identity, value)
+}
+
+func (f *nativeVolumeFixture) prepare(t *testing.T, taskID string) workexecution.Task {
+	t.Helper()
+	for range 8 {
+		task, _, err := f.queue.ReadTask(t.Context(), taskID, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !task.Task.PendingPreparation() {
+			return task.Task
+		}
+		changed, err := f.preparations.Advance(t.Context(), taskID, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A compared source race may retain the same pure Task for another capture.
+		_ = changed
+	}
+	t.Fatal("native Volume preparation did not settle")
+	return workexecution.Task{}
+}
+func (f *nativeVolumeFixture) preparationFailure(t *testing.T, taskID string, kind errs.Kind) {
+	t.Helper()
+	task := f.prepare(t, taskID)
+	if task.FinishedAt == nil || task.Outcome != workexecution.Failed || task.ExpectedItems != 0 ||
+		task.Intent != (workexecution.Input{}) {
+		t.Fatalf("rejected Volume gained native work: %#v", task)
+	}
+	failure, err := f.queue.ReadAcceptedPreparationFailure(t.Context(), taskID, 0)
+	if err != nil || failure == nil || failure.Code != string(errs.New(kind, "").ToProblem().Code) {
+		t.Fatalf("Volume preparation failure: %#v, %v", failure, err)
+	}
 }

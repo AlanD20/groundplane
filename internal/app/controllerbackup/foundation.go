@@ -3,10 +3,10 @@
 package controllerbackup
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
@@ -36,7 +36,7 @@ type Foundation struct {
 	Schedules  *backupcapability.BackupScheduleService
 }
 
-// NewFoundation preserves the original initialization and cleanup order.
+// NewFoundation constructs Backup services using the caller-owned store.
 func NewFoundation(
 	store etcdstore.Store,
 	logger *slog.Logger,
@@ -48,14 +48,15 @@ func NewFoundation(
 	idempotency *etcd.IdempotencyRepository,
 	intentProtector *secretvalue.Protector,
 	controllerKey *ageinfra.ControllerKey,
+	accepted *acceptedaction.Submitter,
 ) (*Foundation, error) {
 	backupPolicyIdempotency, err := backupcapability.NewDurableBackupPolicyIdempotency(intentCoordinator, idempotency)
 	if err != nil {
-		return nil, closeStoreError(store, "initialize backup policy idempotency", err)
+		return nil, initializationError("initialize backup policy idempotency", err)
 	}
 	backupPolicyKeys, err := backupcapability.NewAgeBackupPolicyKeyFactory(intentProtector)
 	if err != nil {
-		return nil, closeStoreError(store, "initialize backup policy key factory", err)
+		return nil, initializationError("initialize backup policy key factory", err)
 	}
 	backupPolicies, err := backupcapability.NewBackupPolicyService(
 		backupPolicyRepository,
@@ -63,7 +64,7 @@ func NewFoundation(
 		backupPolicyIdempotency,
 	)
 	if err != nil {
-		return nil, closeStoreError(store, "initialize backup policy service", err)
+		return nil, initializationError("initialize backup policy service", err)
 	}
 	backupPointReads, err := backupcapability.NewRecoveryPointReadService(
 		hierarchyRecords,
@@ -71,7 +72,7 @@ func NewFoundation(
 		secretvalue.NewControllerKeyCipher(controllerKey),
 	)
 	if err != nil {
-		return nil, closeStoreError(store, "initialize recovery point reads", err)
+		return nil, initializationError("initialize recovery point reads", err)
 	}
 	backupRunRepository, err := backupcapability.NewDurableBackupRunRepository(
 		backupRuntimeRecords,
@@ -80,21 +81,24 @@ func NewFoundation(
 		intentProtector,
 	)
 	if err != nil {
-		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup run repository: %w", err)
 	}
 	backupRunIdempotency, err := backupcapability.NewDurableBackupRunIdempotency(intentCoordinator, idempotency)
 	if err != nil {
-		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup run idempotency: %w", err)
 	}
 	backupRuns := backupcapability.NewBackupRunService(
 		backupRunRepository,
 		backupRunIdempotency,
+		accepted, intentCoordinator,
 	)
-	backupRetention, err := backupcapability.NewBackupPruneService(backupRuntimeRecords, backupRunIdempotency)
+	backupRetention, err := backupcapability.NewBackupPruneService(
+		backupRuntimeRecords,
+		backupRunIdempotency,
+		accepted,
+		intentCoordinator,
+	)
 	if err != nil {
-		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup retention: %w", err)
 	}
 	orphanCredentials, err := backupcapability.NewBackupOrphanCredentialStore(
@@ -104,12 +108,10 @@ func NewFoundation(
 		intentProtector,
 	)
 	if err != nil {
-		_ = store.Close()
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	backupOrphans, err := backupcapability.NewBackupOrphanReconciliationService(backupRuntimeRecords, orphanCredentials)
 	if err != nil {
-		_ = store.Close()
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	backupCleanup, err := backupcapability.NewDeletionCleanup(
@@ -117,11 +119,10 @@ func NewFoundation(
 		orphanCredentials,
 	)
 	if err != nil {
-		return nil, closeStoreError(store, "initialize backup deletion cleanup", err)
+		return nil, initializationError("initialize backup deletion cleanup", err)
 	}
 	backupSchedules, err := backupcapability.NewBackupScheduleService(backupscheduling.New(store), backupRuns, logger)
 	if err != nil {
-		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup scheduler: %w", err)
 	}
 	return &Foundation{
@@ -136,16 +137,6 @@ func NewFoundation(
 	}, nil
 }
 
-func closeStoreError(store etcdstore.Store, operation string, err error) error {
-	return errs.Wrap(errs.KindInternal, errors.Join(
-		fmt.Errorf("controller: %s: %w", operation, err),
-		wrapCloseError(store.Close()),
-	))
-}
-
-func wrapCloseError(err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("controller: close etcd: %w", err)
+func initializationError(operation string, err error) error {
+	return errs.Wrap(errs.KindInternal, fmt.Errorf("controller: %s: %w", operation, err))
 }

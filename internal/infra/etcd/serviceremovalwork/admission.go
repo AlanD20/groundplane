@@ -5,51 +5,35 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 )
 
-// PrepareAdmission constructs a direct Remove Task. The caller joins hierarchy,
-// references, DNS withdrawal, staged desired revision and request publication in
-// this same transaction. This does not delete the definition ahead of execution.
-func PrepareAdmission(
+// PrepareCapture prepares the native removal item and resource ownership.
+// Its caller joins the source, hierarchy and original accepted Task promotion.
+// This does not delete the definition ahead of execution.
+func PrepareCapture(
 	input Input,
 	current keyvalue.Versioned[services.ServiceRecord],
 	deadline time.Time,
-	marker idempotency.IdempotencyMarker,
-) (workexecution.Task, workqueue.Change, error) {
-	ref, err := input.Reference()
-	if err != nil {
-		return workexecution.Task{}, workqueue.Change{}, err
-	}
+) (workexecution.Item, workqueue.Change, error) {
 	if input.DesiredRevisionID != input.TaskID || !deadline.After(input.CreatedAt) {
-		return workexecution.Task{}, workqueue.Change{}, conflict(
+		return workexecution.Item{}, workqueue.Change{}, conflict(
 			"Service removal action does not own its desired revision or deadline",
 		)
 	}
 	resource, err := PrepareResource(input, current)
 	if err != nil {
-		return workexecution.Task{}, workqueue.Change{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
-	task := workexecution.Task{ID: input.TaskID, Actor: workexecution.OperatorActor,
-		Scope: input.Scope, Action: workexecution.ActionRemove, TargetID: input.ServiceID, TargetName: input.ServiceName,
-		Intent: ref, ExpectedItems: 1, CreatedAt: input.CreatedAt, UpdatedAt: input.CreatedAt, Deadline: deadline}
 	item, err := NewItem(input, deadline)
 	if err != nil {
 		keyvalue.ClearMutationValues(resource.Mutations)
-		return workexecution.Task{}, workqueue.Change{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
-	change, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		keyvalue.ClearMutationValues(resource.Mutations)
-		return workexecution.Task{}, workqueue.Change{}, err
-	}
-	change.Conditions = append(change.Conditions, resource.Conditions...)
-	change.Mutations = append(change.Mutations, resource.Mutations...)
-	return task, change, nil
+	return item, resource, nil
 }
 
 // NewItem is shared by direct removal and Blueprint omission publication. Apply

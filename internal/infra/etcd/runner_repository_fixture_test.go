@@ -11,6 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
@@ -259,17 +260,79 @@ func prepareRunnerCreationFixture(t *testing.T, repository *RunnerRepository,
 	return runnerCreationFixture{source: source, input: input, task: task, marker: marker}, nil
 }
 
-func (fixture runnerCreationFixture) publish(t *testing.T, repository *RunnerRepository) IdempotencyTransactionResult {
+// The fixture exercises accepted Task publication and same-ID native promotion.
+// Payload encryption is tested at its own boundary; this storage fixture uses
+// the canonical request marker digest as its immutable pure-intent reference.
+type runnerFixturePublication struct {
+	Applied      bool
+	ReplayTaskID string
+}
+
+func (fixture runnerCreationFixture) publish(t *testing.T, repository *RunnerRepository) runnerFixturePublication {
 	t.Helper()
-	result, err := repository.PublishRunnerCreation(
+	if existing, found, err := existingIdempotencyTransaction(t.Context(), repository.store, fixture.marker); err != nil {
+		t.Fatal(err)
+	} else if found {
+		_, marker, _, err := existing.Classify()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return runnerFixturePublication{ReplayTaskID: marker.TaskID}
+	}
+	queue, err := workqueue.NewRepository(repository.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := fixture.task
+	intent := workexecution.Input{
+		ID:     ids.DeriveAt(ids.KindPlan, task.CreatedAt, task.ID, "runner-request"),
+		SHA256: fixture.marker.Intent.CiphertextDigest,
+	}
+	task.AcceptedIntent, task.Intent, task.ExpectedItems = &intent, workexecution.Input{}, 0
+	acceptance, err := queue.PrepareAcceptedTask(t.Context(), task, fixture.marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testkeyvalue.ClearMutationValues(acceptance.Mutations)
+	receipts, err := NewIdempotencyRepository(repository.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = receipts.PublishAcceptedAction(t.Context(), fixture.marker, acceptance); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, _, err := queue.ReadTask(t.Context(), task.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.Intent, task.ExpectedItems = fixture.task.Intent, 1
+	item := workexecution.Item{ID: fixture.input.WorkItemID, TaskID: task.ID, Operation: workexecution.Runner,
+		TargetID: task.TargetID, Placement: workexecution.Placement{Executor: workexecution.Controller},
+		Claims: []workexecution.Claim{{ScopeID: task.TargetID}}, Input: &task.Intent,
+		Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
+		CreatedAt: fixture.input.CreatedAt, UpdatedAt: fixture.input.CreatedAt, Deadline: task.Deadline}
+	capture, err := repository.PrepareRunnerCreationCapture(t.Context(), fixture.source, fixture.input, task, item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testkeyvalue.ClearMutationValues(capture.Mutations)
+	promotion, err := queue.PrepareAcceptedTaskPromotion(
 		t.Context(),
-		fixture.source,
-		fixture.input,
-		fixture.task,
-		fixture.marker,
+		snapshot,
+		task,
+		[]workexecution.Item{item},
+		nil,
+		false,
+		task.UpdatedAt,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return result
+	defer testkeyvalue.ClearMutationValues(promotion.Mutations)
+	result, err := queue.Commit(t.Context(), capture, promotion)
+	testkeyvalue.ClearValues(result.FailureReads)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return runnerFixturePublication{Applied: result.Succeeded}
 }

@@ -15,6 +15,7 @@ import { useStore } from "@/lib/store";
 import { newULID } from "@/lib/utils";
 import type { Environment } from "@/lib/types";
 import type { RecoveryPointGroup } from "./recovery-point-groups";
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { backupSourceLabel } from "./environment-backup-projection";
 
 export function RecoveryGroupDeleteDialog({
@@ -29,7 +30,8 @@ export function RecoveryGroupDeleteDialog({
   const store = useStore();
   const [typed, setTyped] = useState("");
   const [running, setRunning] = useState(false);
-  const [completed, setCompleted] = useState(0);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const [error, setError] = useState("");
   const [tasks, setTasks] = useState<
     { point: string; id: string; status: string }[]
@@ -45,11 +47,52 @@ export function RecoveryGroupDeleteDialog({
     return () => controller.abort();
   }, []);
 
+  const taskIds = tasks.map((task) => task.id).join(",");
+  const completed = tasks.filter((task) => task.status === "succeeded").length;
+  const { getTask, loadRecoveryPoints } = store;
+  useEffect(() => {
+    if (!taskIds) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function refresh() {
+      try {
+        const details = await Promise.all(
+          taskIds.split(",").map((id) => getTask(id, controller.signal)),
+        );
+        if (controller.signal.aborted) return;
+        setTasks((prior) =>
+          prior.map((item) => ({
+            ...item,
+            status:
+              details.find((detail) => detail.task.id === item.id)?.task
+                .status ?? item.status,
+          })),
+        );
+        if (details.some((detail) => !detail.task.finished_at))
+          timer = setTimeout(() => void refresh(), 1500);
+        else await loadRecoveryPoints(env.id);
+      } catch (cause) {
+        if (!controller.signal.aborted)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Unable to refresh deletion Tasks",
+          );
+      }
+    }
+    void refresh();
+    return () => {
+      controller.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }, [taskIds, getTask, loadRecoveryPoints, env.id]);
+
   async function remove() {
-    if (started.current) return;
+    if (started.current || afterLoading) return;
     started.current = true;
     setRunning(true);
     const signal = lifetime.current.signal;
+    let prerequisites = [...after];
     try {
       for (const point of group.points) {
         if (signal.aborted) return;
@@ -57,46 +100,21 @@ export function RecoveryGroupDeleteDialog({
           env.id,
           point.id,
           keys.current.get(point.id)!,
+          prerequisites,
         );
         if (signal.aborted) return;
         setTasks((prior) => [
           ...prior,
           { point: point.id, id, status: "queued" },
         ]);
-        for (;;) {
-          const task = await store.getTask(id, signal);
-          if (signal.aborted) return;
-          setTasks((prior) =>
-            prior.map((item) =>
-              item.id === id ? { ...item, status: task.task.status } : item,
-            ),
-          );
-          if (task.task.finished_at && task.task.status === "succeeded") break;
-          if (task.task.finished_at) {
-            throw new Error(
-              "Deletion stopped. Inspect the linked Task; no further archives were selected.",
-            );
-          }
-          await new Promise<void>((resolve) => {
-            const finish = () => {
-              clearTimeout(timer);
-              signal.removeEventListener("abort", finish);
-              resolve();
-            };
-            const timer = setTimeout(finish, 1500);
-            signal.addEventListener("abort", finish, { once: true });
-          });
-          if (signal.aborted) return;
-        }
-        setCompleted((value) => value + 1);
-        await store.loadRecoveryPoints(env.id);
+        prerequisites = [id];
       }
     } catch (failure) {
       if (!signal.aborted)
         setError(
           failure instanceof Error
             ? failure.message
-            : "Unable to delete backup archives",
+            : "Unable to submit archive deletion",
         );
     } finally {
       if (!signal.aborted) setRunning(false);
@@ -144,6 +162,13 @@ export function RecoveryGroupDeleteDialog({
             />
           </div>
         )}
+        {!started.current && (
+          <TaskRunAfterSelector
+            value={after}
+            onChange={setAfter}
+            onBusyChange={setAfterLoading}
+          />
+        )}
         {tasks.length > 0 && (
           <div className="space-y-2 rounded-lg border border-border p-3 text-xs">
             <p>
@@ -160,7 +185,8 @@ export function RecoveryGroupDeleteDialog({
             ))}
             {running && (
               <p className="text-muted-foreground">
-                Closing stops the queue. An already accepted Task continues.
+                Accepted deletion Tasks continue on the server after this dialog
+                closes. Each archive waits for the previous deletion to succeed.
               </p>
             )}
           </div>
@@ -172,12 +198,12 @@ export function RecoveryGroupDeleteDialog({
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            {running ? "Close and stop queue" : "Close"}
+            {running ? "Close and stop submissions" : "Close"}
           </Button>
           {!started.current && (
             <Button
               variant="destructive"
-              disabled={typed !== env.name}
+              disabled={typed !== env.name || afterLoading}
               onClick={() => void remove()}
             >
               Permanently delete backup

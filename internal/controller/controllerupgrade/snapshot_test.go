@@ -19,10 +19,12 @@ import (
 func TestControllerUpdateSnapshotReadsDifferentEpochWithoutAuthorizingExecution(t *testing.T) {
 	h := newServiceHarness(t)
 	ctx := context.Background()
-	if _, err := h.service.UpdateController(ctx, string(h.input.Release), "snapshot-recorded-epoch-0001"); err != nil {
+	response, err := h.service.UpdateController(ctx, string(h.input.Release), nil, "snapshot-recorded-epoch-0001")
+	if err != nil {
 		t.Fatal(err)
 	}
 
+	h.prepare(t, response.Body)
 	current, found, err := h.service.records.Current(ctx, 0)
 	if err != nil || !found {
 		t.Fatalf("published activation: %v, %v", found, err)
@@ -76,7 +78,7 @@ func TestControllerUpdateSnapshotRefusesChangedInstalledPredecessor(t *testing.T
 func TestControllerUpdateSnapshotUsesTaskAndHonestUnavailableState(t *testing.T) {
 	h := newServiceHarness(t)
 	ctx := context.Background()
-	response, err := h.service.UpdateController(ctx, string(h.input.Release), "snapshot-native-key-0001")
+	response, err := h.service.UpdateController(ctx, string(h.input.Release), nil, "snapshot-native-key-0001")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +86,7 @@ func TestControllerUpdateSnapshotUsesTaskAndHonestUnavailableState(t *testing.T)
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatal(err)
 	}
+	h.prepare(t, response.Body)
 	snapshot, err := h.service.ControllerUpdateSnapshot(ctx)
 	if err != nil || !snapshot.Available || snapshot.RunningSHA256 != string(h.input.PreviousController) ||
 		snapshot.LastUpdate == nil || snapshot.LastUpdate.TaskID != accepted.TaskID || snapshot.LastUpdate.Status != "queued" ||
@@ -103,9 +106,11 @@ func TestControllerUpdateSnapshotUsesTaskAndHonestUnavailableState(t *testing.T)
 func TestControllerUpdateSnapshotRetainsHistoryWhenReleaseStateFails(t *testing.T) {
 	h := newServiceHarness(t)
 	ctx := context.Background()
-	if _, err := h.service.UpdateController(ctx, string(h.input.Release), "snapshot-native-key-0002"); err != nil {
+	response, err := h.service.UpdateController(ctx, string(h.input.Release), nil, "snapshot-native-key-0002")
+	if err != nil {
 		t.Fatal(err)
 	}
+	h.prepare(t, response.Body)
 	h.catalog.failure = errs.New(errs.KindInternal, "private release detail")
 	snapshot, err := h.service.ControllerUpdateSnapshot(ctx)
 	if err != nil || snapshot.Available || snapshot.Error != "Native release state is unavailable or invalid." ||

@@ -52,13 +52,13 @@ type attachMutationRepository interface {
 		string,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	PublishAttachWork(context.Context, etcd.AttachWorkPublication) (etcd.IdempotencyTransactionResult, error)
+	PrepareAttachWork(context.Context, etcd.AttachWorkPublication) (etcd.AttachWorkCapture, error)
 	CaptureDetachSnapshot(
 		context.Context,
 		etcdstore.Versioned[attachrecord.Record],
 	) (attachremoval.DetachSnapshot, error)
 	ResolveDetachHost(context.Context) (workexecution.Placement, error)
-	PublishDetachWork(context.Context, etcd.DetachWorkPublication) (etcd.IdempotencyTransactionResult, error)
+	PrepareDetachWork(context.Context, etcd.DetachWorkPublication) (etcd.DetachWorkCapture, error)
 }
 
 type durableAttachMutationRepository struct {
@@ -168,11 +168,11 @@ func (repository *durableAttachMutationRepository) RenameAttachIdempotent(
 	return repository.attaches.RenameAttachIdempotent(ctx, environment, project, current, name, marker)
 }
 
-func (repository *durableAttachMutationRepository) PublishAttachWork(
+func (repository *durableAttachMutationRepository) PrepareAttachWork(
 	ctx context.Context,
 	request etcd.AttachWorkPublication,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.attaches.PublishAttachWork(ctx, request)
+) (etcd.AttachWorkCapture, error) {
+	return repository.attaches.PrepareAttachWork(ctx, request)
 }
 
 func (repository *durableAttachMutationRepository) CaptureDetachSnapshot(ctx context.Context,
@@ -187,8 +187,8 @@ func (repository *durableAttachMutationRepository) ResolveDetachHost(
 	return repository.attaches.ResolveDetachHost(ctx)
 }
 
-func (repository *durableAttachMutationRepository) PublishDetachWork(ctx context.Context,
+func (repository *durableAttachMutationRepository) PrepareDetachWork(ctx context.Context,
 	request etcd.DetachWorkPublication,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.attaches.PublishDetachWork(ctx, request)
+) (etcd.DetachWorkCapture, error) {
+	return repository.attaches.PrepareDetachWork(ctx, request)
 }

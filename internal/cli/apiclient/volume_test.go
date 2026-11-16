@@ -35,10 +35,10 @@ func TestVolumeMutationsUseADR0049Shapes(t *testing.T) {
 			if input.EnvironmentID != "env_1" || input.Slug != "uploads" || input.Key != "uploads-data" {
 				t.Errorf("create input = %#v", input)
 			}
-			writer.WriteHeader(http.StatusCreated)
+			writer.WriteHeader(http.StatusAccepted)
 			_, _ = io.WriteString(
 				writer,
-				`{"volume":{"id":"vol_1","environment_id":"env_1","slug":"uploads","key":"uploads-data"},"task_id":"tsk_create"}`,
+				`{"task_id":"tsk_create"}`,
 			)
 		case request.Method == http.MethodPatch && request.URL.Path == "/api/v1/volumes/vol_1":
 			var input apiTypes.VolumeEdit
@@ -48,10 +48,10 @@ func TestVolumeMutationsUseADR0049Shapes(t *testing.T) {
 			if input.Slug != "archive" {
 				t.Errorf("edit input = %#v", input)
 			}
-			writer.WriteHeader(http.StatusOK)
+			writer.WriteHeader(http.StatusAccepted)
 			_, _ = io.WriteString(
 				writer,
-				`{"volume":{"id":"vol_1","environment_id":"env_1","slug":"archive","key":"uploads-data"},"task_id":"tsk_edit"}`,
+				`{"task_id":"tsk_edit"}`,
 			)
 		case request.Method == http.MethodDelete && request.URL.Path == "/api/v1/volumes/vol_1":
 			query := request.URL.Query()
@@ -71,14 +71,14 @@ func TestVolumeMutationsUseADR0049Shapes(t *testing.T) {
 	created, err := client.CreateVolume(context.Background(), apiTypes.VolumeCreate{
 		EnvironmentID: "env_1", Slug: "uploads", Key: "uploads-data",
 	})
-	if err != nil || created.TaskID != "tsk_create" || created.Volume.Key != "uploads-data" {
+	if err != nil || created.TaskID != "tsk_create" {
 		t.Fatalf("create = %#v, %v", created, err)
 	}
 	edited, err := client.EditVolume(context.Background(), "vol_1", apiTypes.VolumeEdit{Slug: "archive"})
-	if err != nil || edited.TaskID != "tsk_edit" || edited.Volume.Slug != "archive" {
+	if err != nil || edited.TaskID != "tsk_edit" {
 		t.Fatalf("edit = %#v, %v", edited, err)
 	}
-	removed, err := client.RemoveVolume(context.Background(), "vol_1", "impact", "uploads-data")
+	removed, err := client.RemoveVolume(context.Background(), "vol_1", "impact", "uploads-data", nil)
 	if err != nil || removed.TaskID != "tsk_remove" {
 		t.Fatalf("remove = %#v, %v", removed, err)
 	}

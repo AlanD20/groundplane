@@ -61,18 +61,23 @@ func newEnvironmentCmd() *cobra.Command {
 	})
 
 	var networkPool string
+	var createAfter []string
 	create := &cobra.Command{
 		Use:   "create <name>",
 		Short: "Create an environment",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(createAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			projectID, err := resolveProjectTarget(cmd, app.Scope.Project)
 			if err != nil {
 				return err
 			}
 			accepted, err := app.Client.CreateEnvironment(cmd.Context(), apiTypes.EnvironmentCreate{
-				Name: args[0], ProjectID: projectID, NetworkPool: networkPool,
+				Name: args[0], ProjectID: projectID, NetworkPool: networkPool, After: after,
 			})
 			if err != nil {
 				return err
@@ -82,6 +87,7 @@ func newEnvironmentCmd() *cobra.Command {
 	}
 	create.Flags().StringVar(&networkPool, "network-pool", "", "reserved IPv4 CIDR for the environment")
 	_ = create.MarkFlagRequired("network-pool")
+	addTaskAfterFlag(create, &createAfter)
 	cmd.AddCommand(create)
 
 	var replacementNetworkPool string
@@ -166,23 +172,30 @@ func newEnvironmentCmd() *cobra.Command {
 	logs.Flags().BoolVarP(&follow, "follow", "f", false, "stream new log lines as they arrive")
 	cmd.AddCommand(logs)
 
-	cmd.AddCommand(&cobra.Command{
+	var deleteAfter []string
+	remove := &cobra.Command{
 		Use:     "delete <name>",
 		Aliases: []string{"remove"},
 		Short:   "Delete an environment (typed confirmation in the Console; removes everything scoped to it — dispatches a task)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(deleteAfter)
+			if err != nil {
+				return err
+			}
 			id, err := resolveEnvironmentTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.DeleteEnvironment(cmd.Context(), id)
+			accepted, err := fromContext(cmd).Client.DeleteEnvironment(cmd.Context(), id, after)
 			if err != nil {
 				return err
 			}
 			return renderTaskAccepted(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &deleteAfter)
+	cmd.AddCommand(remove)
 
 	return cmd
 }

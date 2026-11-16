@@ -6,7 +6,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/connectorchecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -14,35 +13,34 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// CreateConnectorCheck publishes the visible Task, one work item, captured input
-// and at most two exact Secret pins atomically. There is no old Task publication.
-func (repository *ConnectorRepository) CreateConnectorCheck(ctx context.Context,
+// PrepareConnectorCheck returns captured input, exact Secret pins and resource
+// authority for promotion of the existing accepted Task.
+func (repository *ConnectorRepository) PrepareConnectorCheck(ctx context.Context,
 	source ConnectorCheckSource, input connectorchecks.Record, task workexecution.Task,
-	marker idempotencyrecord.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	if err := validateConnectorCheckPublication(source, input, task, marker); err != nil {
-		return IdempotencyTransactionResult{}, err
+) (workexecution.Item, workqueue.Change, error) {
+	if err := validateCapturedConnectorCheck(source, input, task); err != nil {
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
 	item := workexecution.Item{
 		ID: input.Owner.WorkItemID, TaskID: task.ID, Operation: workexecution.ConnectorCheck,
 		TargetID: task.TargetID, Placement: workexecution.Placement{Executor: workexecution.Controller},
 		Claims: []workexecution.Claim{{ScopeID: task.TargetID}}, Input: &task.Intent,
 		Phase: workexecution.Ready, Cleanup: workexecution.CleanupNone,
-		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline,
+		CreatedAt: input.CreatedAt, UpdatedAt: input.CreatedAt, Deadline: task.Deadline,
 	}
-	work, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer keyvalue.ClearMutationValues(work.Mutations)
 	inputConditions, inputMutations, err := connectorchecks.PreparePublication(input)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
-	defer keyvalue.ClearMutationValues(inputMutations)
-	conditions := append(work.Conditions, source.conditions...)
+	conditions := append([]keyvalue.Condition(nil), source.conditions...)
 	conditions = append(conditions, inputConditions...)
-	mutations := append(work.Mutations, inputMutations...)
+	mutations := inputMutations
+	keep := false
+	defer func() {
+		if !keep {
+			keyvalue.ClearMutationValues(mutations)
+		}
+	}()
 	if !input.Draft {
 		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut,
 			Key: connectorchecks.LatestKey(task.TargetID), Value: []byte(task.ID)})
@@ -54,7 +52,7 @@ func (repository *ConnectorRepository) CreateConnectorCheck(ctx context.Context,
 		pin := source.Pin
 		if previous, present := pins[pin.SecretID]; present {
 			if previous != pin {
-				return IdempotencyTransactionResult{}, errs.New(
+				return workexecution.Item{}, workqueue.Change{}, errs.New(
 					errs.KindStateConflict,
 					"connector check requires conflicting Secret versions",
 				)
@@ -64,18 +62,16 @@ func (repository *ConnectorRepository) CreateConnectorCheck(ctx context.Context,
 		pins[pin.SecretID] = pin
 		value, err := tasksecretpinrecord.Encode(pin)
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return workexecution.Item{}, workqueue.Change{}, err
 		}
 		key := tasksecretpinrecord.Key(pin.SecretID, pin.OperationID)
 		conditions = append(conditions, keyvalue.Condition{Key: key})
 		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: value})
 	}
-	defer keyvalue.ClearMutationValues(mutations)
 	epoch, err := source.fence.EpochRewriteMutation()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
-	defer clear(epoch.Value)
 	mutations = append(mutations, epoch)
 	ancestry, err := hierarchydeletion.BindMutationEpochs(
 		ctx,
@@ -89,9 +85,8 @@ func (repository *ConnectorRepository) CreateConnectorCheck(ctx context.Context,
 		nil,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
-	defer ancestry.Clear()
 	conditions = append(conditions, ancestry.Conditions()...)
 	mutations = append(mutations, ancestry.Mutations()...)
 	tenant, err := loadConnectorTaskInitiationTenantAtRevision(
@@ -101,7 +96,7 @@ func (repository *ConnectorRepository) CreateConnectorCheck(ctx context.Context,
 		source.fence.ReadRevision(),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
 	initiation, err := newEnvironmentTaskInitiation(
 		tenant,
@@ -110,51 +105,21 @@ func (repository *ConnectorRepository) CreateConnectorCheck(ctx context.Context,
 		taskjournal.TaskActorOperator,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
-	conditions, classify, err := prepareTaskInitiationFences(
-		initiation,
-		conditions,
-		connectorCheckPublicationConflict(conditions),
+	joined, err := workqueue.JoinChanges(
+		workqueue.Change{Conditions: conditions, Mutations: mutations},
+		workqueue.Change{Conditions: initiation.fences},
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(
-		idempotencyrecord.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		classify,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
+	keep = true
+	return item, joined, nil
 }
 
-func connectorCheckPublicationConflict(conditions []keyvalue.Condition) idempotencyPlanClassifier {
-	return func(_ int64, values []*keyvalue.KeyValue) error {
-		if len(values) != len(conditions) {
-			return errs.New(errs.KindInternal, "connector check publication evidence is incomplete")
-		}
-		for index, condition := range conditions {
-			if keyvalue.RevisionOf(values[index]) != condition.ModRevision {
-				return errs.New(
-					errs.KindStateConflict,
-					"connector check source, credentials or operation changed; submit a new check",
-				)
-			}
-		}
-		return nil
-	}
-}
-
-func validateConnectorCheckPublication(source ConnectorCheckSource, input connectorchecks.Record,
-	task workexecution.Task, marker idempotencyrecord.IdempotencyMarker,
+func validateCapturedConnectorCheck(source ConnectorCheckSource, input connectorchecks.Record,
+	task workexecution.Task,
 ) error {
 	if task.Validate() != nil || source.fence.ReadRevision() <= 0 ||
 		source.fence.EnvironmentID() != source.environment.Record.ID ||
@@ -172,14 +137,7 @@ func validateConnectorCheckPublication(source ConnectorCheckSource, input connec
 		task.Actor != workexecution.OperatorActor ||
 		task.Action != workexecution.ActionCheck ||
 		task.ExpectedItems != 1 ||
-		marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
-		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID ||
-		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != task.Scope.EnvironmentID ||
-		!marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
-		!input.CreatedAt.Equal(task.CreatedAt) {
+		input.CreatedAt.Before(task.CreatedAt) || input.CreatedAt.After(task.UpdatedAt) {
 		return errs.New(errs.KindValidationFailed, "connector check publication differs from captured authority")
 	}
 	sources, values := source.SecretValues(input.Owner.OperationID)
@@ -203,5 +161,5 @@ func validateConnectorCheckPublication(source ConnectorCheckSource, input connec
 	if err != nil || expected.ConfigurationSHA256 != input.ConfigurationSHA256 || digest != task.Intent.SHA256 {
 		return errs.New(errs.KindValidationFailed, "connector check captured sources do not match its work")
 	}
-	return idempotencyrecord.ValidateIdempotencyMarker(marker)
+	return nil
 }

@@ -3,14 +3,17 @@ package app
 import (
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	"github.com/AlanD20/groundplane/internal/controller/handlers"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
 type controllerHierarchyMutations struct {
+	preparations         []taskdependencies.Registration
 	tenantMutations      handlers.TenantMutator
 	tenantChanges        handlers.TenantChanger
 	projectMutations     handlers.ProjectMutator
@@ -25,6 +28,7 @@ func newControllerHierarchyMutations(
 	zoneRecords *etcd.ZoneRepository,
 	intentCoordinator *requestidempotency.Coordinator,
 	idempotency *etcd.IdempotencyRepository,
+	accepted *acceptedaction.Submitter,
 ) (*controllerHierarchyMutations, error) {
 	tenantCreationIdempotency, err := hierarchycontroller.NewTenantCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -86,11 +90,13 @@ func newControllerHierarchyMutations(
 		cfg.EnvironmentPool,
 		hierarchyRecords,
 		environmentCreationIdempotency,
+		accepted,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Environment creation service: %w", err)
 	}
 	return &controllerHierarchyMutations{
+		preparations:         environmentMutations.AcceptedPreparations(),
 		tenantMutations:      tenantMutations,
 		tenantChanges:        tenantChanges,
 		projectMutations:     projectMutations,

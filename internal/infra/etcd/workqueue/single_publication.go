@@ -27,6 +27,9 @@ func PrepareSmallGraph(
 	items []workexecution.Item,
 	marker idempotency.IdempotencyMarker,
 ) (Change, error) {
+	if len(task.After) != 0 || task.PendingPreparation() {
+		return Change{}, invalid("accepted intent must pass whole-Task preparation before publishing execution work")
+	}
 	if len(items) < 1 || len(items) > 8 || task.PublicationComplete || task.Progress.Total() != 0 ||
 		task.Outcome != "" || task.FirstFailure != nil || task.FinishedAt != nil || task.Stop != nil || task.Activation != nil ||
 		!task.UpdatedAt.Equal(task.CreatedAt) {

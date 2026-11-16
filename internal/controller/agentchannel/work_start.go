@@ -74,7 +74,12 @@ type HierarchyReporter interface {
 
 type WorkDispatcher interface {
 	AccountJournal(context.Context, agentregistration.WorkAuthorization, string, *agentpb.WorkAttemptIdentity) error
-	Ready(context.Context, agentregistration.WorkAuthorization, workexecution.AgentConcurrency, bool) ([]workdispatch.Issue, error)
+	Ready(
+		context.Context,
+		agentregistration.WorkAuthorization,
+		workexecution.AgentConcurrency,
+		bool,
+	) ([]workdispatch.Issue, error)
 	Dispatch(
 		context.Context,
 		agentregistration.WorkAuthorization,

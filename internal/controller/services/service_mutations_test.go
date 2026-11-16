@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -304,7 +305,7 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 	idempotency := &fakeServiceMutationIdempotency{
 		evidence: serviceMutationEvidence{durable: serviceTestProtectedIntent()},
 	}
-	service, err := NewMutationService(repository, idempotency, nil)
+	service, err := NewMutationService(repository, idempotency, nil, &acceptedaction.Submitter{})
 	if err != nil {
 		t.Fatalf("NewMutationService() error = %v", err)
 	}
@@ -379,7 +380,7 @@ func TestServiceCreationBootstrapsMissingEnvironmentDesiredState(t *testing.T) {
 	idempotency := &fakeServiceMutationIdempotency{
 		evidence: serviceMutationEvidence{durable: serviceTestProtectedIntent()},
 	}
-	service, err := NewMutationService(repository, idempotency, nil)
+	service, err := NewMutationService(repository, idempotency, nil, &acceptedaction.Submitter{})
 	if err != nil {
 		t.Fatalf("NewMutationService() error = %v", err)
 	}
@@ -441,7 +442,7 @@ func TestServiceMutationsRejectComponentGeneratedService(t *testing.T) {
 			Revision: 10, ReadRevision: 10,
 		},
 	}
-	service, err := NewMutationService(repository, &fakeServiceMutationIdempotency{}, nil)
+	service, err := NewMutationService(repository, &fakeServiceMutationIdempotency{}, nil, &acceptedaction.Submitter{})
 	if err != nil {
 		t.Fatalf("NewMutationService() error = %v", err)
 	}
@@ -451,7 +452,7 @@ func TestServiceMutationsRejectComponentGeneratedService(t *testing.T) {
 		t.Fatalf("EditService(generated) error = %v", err)
 	}
 	if _, err := service.RemoveService(
-		context.Background(), serviceID, "remove-generated-0001",
+		context.Background(), serviceID, apiTypes.TaskRunAfterRequest{}, "remove-generated-0001",
 	); !isAppErrorKind(err, errs.KindResourceInUse) {
 		t.Fatalf("RemoveService(generated) error = %v", err)
 	}

@@ -16,6 +16,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { useRunnerCheck } from "./use-runner-check";
+import { useState } from "react";
+import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { TaskExecution } from "@/features/task/task-execution";
 
 const stages = [
   ["github", "GitHub network access"],
@@ -57,6 +60,7 @@ export function RunnerCheckPanel({
   disabled?: boolean;
 }) {
   const check = useRunnerCheck(runnerId, open, taskId);
+  const [reviewing, setReviewing] = useState(false);
   const result = check.result;
   return (
     <ResourcePanel
@@ -70,9 +74,9 @@ export function RunnerCheckPanel({
             disabled={
               check.sending ||
               check.loading ||
-              (!check.uncertain && (disabled || check.active))
+              (!check.uncertain && check.active)
             }
-            onClick={() => void check.run()}
+            onClick={() => setReviewing(true)}
           >
             {check.sending ? (
               <LoaderCircle className="size-3.5 animate-spin" />
@@ -84,6 +88,25 @@ export function RunnerCheckPanel({
         )
       }
     >
+      <TaskRunnerDialog
+        open={reviewing}
+        onOpenChange={setReviewing}
+        title="Check Runner connections"
+        type="run"
+        target={runnerId}
+        workspace="Runner"
+        startLabel={check.uncertain ? "Resolve retained request" : "Run check"}
+        runAfter={!check.uncertain}
+        startDisabled={(after) =>
+          !check.uncertain && disabled && after.length === 0
+        }
+        review={
+          check.uncertain
+            ? "Resolve the original request with its retained prerequisites."
+            : undefined
+        }
+        onDispatch={(after) => check.run(after)}
+      />
       {!taskId && (
         <p className="text-xs text-muted-foreground">
           Runs read-only checks inside the registered Runner. Does not register,
@@ -107,6 +130,9 @@ export function RunnerCheckPanel({
         </p>
       )}
       {check.taskId && <TaskLink taskId={check.taskId} />}
+      {!result && check.taskDetail && (
+        <TaskExecution detail={check.taskDetail} />
+      )}
       {check.error && (
         <p role="alert" className="text-xs text-destructive">
           {check.error}

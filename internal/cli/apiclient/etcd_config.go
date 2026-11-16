@@ -59,7 +59,7 @@ func (c *Client) SetEtcdConfig(
 	}
 	return document, nil
 }
-func (c *Client) ApplyEtcdConfig(ctx context.Context, revision string) (apiTypes.TaskAccepted, error) {
+func (c *Client) ApplyEtcdConfig(ctx context.Context, revision string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -68,7 +68,10 @@ func (c *Client) ApplyEtcdConfig(ctx context.Context, revision string) (apiTypes
 	response, err := client.EtcdConfigApplyWithResponse(
 		ctx,
 		&generated.EtcdConfigApplyParams{IdempotencyKey: ids.NewULID()},
-		generated.EtcdConfigApplyJSONRequestBody{ExpectedRevision: revision},
+		generated.EtcdConfigApplyJSONRequestBody{
+			ExpectedRevision: optionalServiceString(revision),
+			After:            optionalServiceStrings(after),
+		},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)

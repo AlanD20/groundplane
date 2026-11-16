@@ -160,8 +160,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { actions: networkActions, reconcileZoneRemoval } = useNetworkActions({
     update,
     assertEnvironmentMutable,
-    nextEnvironmentGeneration,
-    environmentGenerations,
     dispatchResourceRemoval,
   });
 
@@ -435,13 +433,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ),
       ...createReleaseGroupActions(state, update, assertEnvironmentMutable),
       ...createAttachActions(update, assertEnvironmentMutable),
-      ...createEntryActions(
-        update,
-        assertEnvironmentMutable,
-        nextEnvironmentGeneration,
-        environmentGenerations,
-        dispatchResourceRemoval,
-      ),
+      ...createEntryActions(assertEnvironmentMutable, dispatchResourceRemoval),
       ...createSecretActions(state, update, refreshReusableSecrets),
       ...connectorActions,
       refreshRunners,
@@ -449,7 +441,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       editRunner,
       retryRunner,
       removeRunner,
-      ...createBackingServiceActions(state, update),
+      ...createBackingServiceActions(),
       ...createComponentActions(),
     };
   }, [

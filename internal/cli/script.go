@@ -151,32 +151,46 @@ func newScriptCmd() *cobra.Command {
 	)
 	cmd.AddCommand(edit)
 
-	cmd.AddCommand(&cobra.Command{
+	var runAfter []string
+	run := &cobra.Command{
 		Use: "run <slug>", Short: "Run a script now", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			scriptID, err := resolveScriptTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			return runAction(cmd, "/api/v1/scripts/"+scriptID+"/run", nil)
+			return runAction(cmd, "/api/v1/scripts/"+scriptID+"/run", apiTypes.TaskRunAfterRequest{After: after})
 		},
-	})
+	}
+	addTaskAfterFlag(run, &runAfter)
+	cmd.AddCommand(run)
 
-	cmd.AddCommand(&cobra.Command{
+	var removeAfter []string
+	remove := &cobra.Command{
 		Use: "remove <slug>", Aliases: []string{"delete"},
 		Short: "Remove a script (dispatches a task)", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(removeAfter)
+			if err != nil {
+				return err
+			}
 			scriptID, err := resolveScriptTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.RemoveScript(cmd.Context(), scriptID)
+			accepted, err := fromContext(cmd).Client.RemoveScript(cmd.Context(), scriptID, after)
 			if err != nil {
 				return err
 			}
 			return renderTaskAccepted(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &removeAfter)
+	cmd.AddCommand(remove)
 
 	return cmd
 }

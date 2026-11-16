@@ -13,9 +13,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// PreparePublication stages immutable input and prepares the visible direct
-// removal Task. The Environment publisher must atomically join its revision,
-// impact checks, deletion fence and replay marker. Staging grants no execution.
+// PreparePublication stages immutable input for the accepted direct removal.
+// The Environment publisher joins its desired revision, impact checks and
+// deletion fence to the original Task promotion. Staging grants no execution.
 func (repository *InputRepository) PreparePublication(ctx context.Context, task workexecution.Task,
 	item workexecution.Item, input *agentpb.NetworkWorkInput, marker idempotency.IdempotencyMarker,
 	admission []keyvalue.Condition, desiredRevision string,
@@ -23,10 +23,7 @@ func (repository *InputRepository) PreparePublication(ctx context.Context, task 
 	if len(item.Dependencies) != 0 {
 		return workqueue.Change{}, conflict("direct Zone removal cannot contain consumer dependencies")
 	}
-	change, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		return workqueue.Change{}, err
-	}
+	change := workqueue.Change{}
 	captured, err := repository.prepareRemovalInput(ctx, task, item, input, marker, admission, desiredRevision)
 	if err != nil {
 		keyvalue.ZeroMutationBytes(change.Mutations)

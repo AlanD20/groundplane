@@ -11,7 +11,7 @@ import (
 )
 
 type EtcdConfigApplier interface {
-	Apply(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	Apply(context.Context, string, []string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 type etcdConfigOutput struct{ Body apiTypes.EtcdConfigDocument }
 type etcdConfigReplacementInput struct {
@@ -110,7 +110,12 @@ func (s *Server) applyEtcdConfig(ctx context.Context, request *etcdConfigApplyIn
 	if s.etcdConfigApplier == nil {
 		return nil, errs.New(errs.KindInternal, "etcd configuration activation is not configured")
 	}
-	response, err := s.etcdConfigApplier.Apply(ctx, request.Body.ExpectedRevision, request.IdempotencyKey)
+	response, err := s.etcdConfigApplier.Apply(
+		ctx,
+		request.Body.ExpectedRevision,
+		request.Body.After,
+		request.IdempotencyKey,
+	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}

@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"strconv"
 	"testing"
 
@@ -71,7 +70,7 @@ func TestNativeVolumeRemovalJoinsBackupPolicyAndRejectsRacingAuthority(t *testin
 					for _, mutation := range mutations {
 						task, err := workqueue.DecodeTask(mutation.Value)
 						if err != nil || mutation.Key != workqueue.TaskKey(task.ID) ||
-							task.Action != workexecution.ActionRemove {
+							task.Action != workexecution.ActionRemove || task.ExpectedItems == 0 {
 							continue
 						}
 						f.store.beforeCommit = nil
@@ -91,9 +90,16 @@ func TestNativeVolumeRemovalJoinsBackupPolicyAndRejectsRacingAuthority(t *testin
 				t.Context(),
 				f.created.Volume.ID,
 				impact.ImpactToken,
-				"data",
-				"native-volume-policy-remove",
+				"data", api.TaskRunAfterRequest{}, "native-volume-policy-remove",
 			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var accepted api.TaskAccepted
+			if err := json.Unmarshal(response.Body, &accepted); err != nil {
+				t.Fatal(err)
+			}
+			prepared := f.prepare(t, accepted.TaskID)
 			if test.race != "" && (!injected || !staleRefused) {
 				t.Fatalf(
 					"racing %s bypassed the stale comparison: %v; injected=%t refused=%t",
@@ -104,9 +110,7 @@ func TestNativeVolumeRemovalJoinsBackupPolicyAndRejectsRacingAuthority(t *testin
 				)
 			}
 			if test.race == "policy" || test.race == "source" {
-				if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-					t.Fatalf("changed removal impact accepted: %v", err)
-				}
+				f.preparationFailure(t, accepted.TaskID, errs.KindStateConflict)
 				current, readErr := f.store.Get(t.Context(), headKey)
 				if readErr != nil || current.Entry == nil || current.Entry.ModRevision != baseline.Entry.ModRevision {
 					t.Fatalf("rejected removal changed desired state: %v", readErr)
@@ -116,8 +120,9 @@ func TestNativeVolumeRemovalJoinsBackupPolicyAndRejectsRacingAuthority(t *testin
 					t.Fatal(readErr)
 				}
 				for _, task := range page.Tasks {
-					if task.Task.Action == workexecution.ActionRemove {
-						t.Fatal("racing policy published a removal Task")
+					if task.Task.Action == workexecution.ActionRemove &&
+						(task.Task.ExpectedItems != 0 || task.Task.Intent != (workexecution.Input{})) {
+						t.Fatal("racing policy published executable removal work")
 					}
 				}
 				return
@@ -125,9 +130,9 @@ func TestNativeVolumeRemovalJoinsBackupPolicyAndRejectsRacingAuthority(t *testin
 			if err != nil {
 				t.Fatal(err)
 			}
-			var accepted api.TaskAccepted
-			if err := json.Unmarshal(response.Body, &accepted); err != nil {
-				t.Fatal(err)
+			if prepared.FinishedAt != nil || prepared.ExpectedItems != 1 {
+				failure, _ := f.queue.ReadAcceptedPreparationFailure(t.Context(), accepted.TaskID, 0)
+				t.Fatalf("native removal did not promote: %#v", failure)
 			}
 			task, _, err := f.queue.ReadTask(t.Context(), accepted.TaskID, 0)
 			if err != nil {
@@ -177,8 +182,7 @@ func TestNativeVolumeRemovalJoinsBackupPolicyAndRejectsRacingAuthority(t *testin
 				t.Context(),
 				f.created.Volume.ID,
 				impact.ImpactToken,
-				"data",
-				"native-volume-policy-remove",
+				"data", api.TaskRunAfterRequest{}, "native-volume-policy-remove",
 			)
 			if err != nil || !bytes.Equal(again.Body, response.Body) || f.store.revision != before {
 				t.Fatalf("native policy removal replay rewrote state: %v", err)
@@ -209,12 +213,15 @@ func configureNativeVolumeBackupPolicy(t *testing.T, f *nativeVolumeFixture, cou
 		if err != nil {
 			t.Fatal(err)
 		}
-		var created api.VolumeMutationResponse
+		var created api.TaskAccepted
 		if err := json.Unmarshal(response.Body, &created); err != nil {
 			t.Fatal(err)
 		}
 		finishNativeVolumeFixture(t, f, created.TaskID)
-		sources = append(sources, api.BackupSourceInput{Kind: api.BackupSourceVolume, TargetID: created.Volume.ID})
+		sources = append(
+			sources,
+			api.BackupSourceInput{Kind: api.BackupSourceVolume, TargetID: f.prepare(t, created.TaskID).TargetID},
+		)
 	}
 	connector, err := connectors.NewRecord(
 		core.Connector{ID: ids.New(ids.KindConnector), EnvironmentID: f.environmentID,

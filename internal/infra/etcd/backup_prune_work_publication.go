@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
@@ -11,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -118,54 +118,75 @@ func preparePruneWorkMutation(
 	input *agentpb.BackupWorkInput,
 	marker idempotency.IdempotencyMarker,
 ) (*idempotencyMutationPlan, error) {
-	if input == nil || scope == nil || hostID == "" || item.Placement.HostID != hostID ||
-		task.Actor != workexecution.SystemActor || task.ID != dispatch.TaskID || task.TargetID != dispatch.EnvironmentID ||
-		task.Scope.TenantID != owner.TenantID || task.Scope.ProjectID != owner.ProjectID || task.Scope.EnvironmentID != owner.EnvironmentID ||
-		!task.CreatedAt.Equal(dispatch.CreatedAt) || !task.Deadline.Equal(dispatch.CreatedAt.Add(30*time.Minute)) ||
-		input.ProjectId != scope.ProjectId || input.EnvironmentId != scope.EnvironmentId ||
-		!proto.Equal(input.Project, scope.Project) || !proto.Equal(input.Environment, scope.Environment) ||
-		len(input.Services) != 0 || len(input.Artifacts) != 0 ||
-		marker.Kind != idempotency.IdempotencyMarkerTask || marker.State != idempotency.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != dispatch.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
-		return nil, errs.New(errs.KindValidationFailed, "Prune captured publication changed")
+	if task.Actor != workexecution.SystemActor || marker.TaskID != task.ID {
+		return nil, errs.New(errs.KindValidationFailed, "Retention prune requires a system action")
 	}
-	if err := backupplanning.ValidateBackupPruneWorkInput(dispatch, plan.evidence, input); err != nil {
-		return nil, err
-	}
-	change, err := backupwork.PrepareExecutionPublication(task, item, input, marker)
+	authority, err := preparePruneWorkAuthority(plan, scope, owner, dispatch, hostID, task, item, input)
 	if err != nil {
 		return nil, err
+	}
+	defer keyvalue.ClearMutationValues(authority.Mutations)
+	work, err := workqueue.PrepareSingleTask(task, item, marker)
+	if err != nil {
+		return nil, err
+	}
+	defer keyvalue.ClearMutationValues(work.Mutations)
+	joined, err := workqueue.JoinChanges(authority, work)
+	if err != nil {
+		return nil, err
+	}
+	return newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, joined.Conditions, joined.Mutations,
+		func(_ int64, _ []*keyvalue.KeyValue) error {
+			return errs.New(errs.KindStateConflict, "Retention prune admission changed")
+		})
+}
+
+func preparePruneWorkAuthority(
+	plan backupPruneTransactionPlan,
+	scope *agentpb.BackupPlanScope,
+	owner taskjournal.TaskOwner,
+	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
+	hostID string,
+	task workexecution.Task,
+	item workexecution.Item,
+	input *agentpb.BackupWorkInput,
+) (workqueue.Change, error) {
+	if input == nil || scope == nil || hostID == "" || item.Placement.HostID != hostID ||
+		(task.Actor != workexecution.SystemActor && task.Actor != workexecution.OperatorActor) || task.ID != dispatch.TaskID || task.TargetID != dispatch.EnvironmentID ||
+		task.Scope.TenantID != owner.TenantID || task.Scope.ProjectID != owner.ProjectID || task.Scope.EnvironmentID != owner.EnvironmentID ||
+		!task.UpdatedAt.Equal(dispatch.CreatedAt) || task.CreatedAt.After(dispatch.CreatedAt) ||
+		input.ProjectId != scope.ProjectId || input.EnvironmentId != scope.EnvironmentId ||
+		!proto.Equal(input.Project, scope.Project) || !proto.Equal(input.Environment, scope.Environment) ||
+		len(input.Services) != 0 || len(input.Artifacts) != 0 {
+		return workqueue.Change{}, errs.New(errs.KindValidationFailed, "Prune captured publication changed")
+	}
+	if err := backupplanning.ValidateBackupPruneWorkInput(dispatch, plan.evidence, input); err != nil {
+		return workqueue.Change{}, err
+	}
+	change, err := backupwork.PrepareExecutionAuthority(task, item, input)
+	if err != nil {
+		return workqueue.Change{}, err
 	}
 	defer keyvalue.ClearMutationValues(change.Mutations)
 	conditions, mutations, err := plan.composeTransaction(change.Conditions, change.Mutations)
 	if err != nil {
-		return nil, err
+		return workqueue.Change{}, err
 	}
 	defer keyvalue.ClearMutationValues(mutations)
-	initiation, err := newTaskInitiation(owner, taskjournal.TaskActorSystem)
+	actor := taskjournal.TaskActorSystem
+	if task.Actor == workexecution.OperatorActor {
+		actor = taskjournal.TaskActorOperator
+	}
+	initiation, err := newTaskInitiation(owner, actor)
 	if err != nil {
-		return nil, err
+		return workqueue.Change{}, err
 	}
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*keyvalue.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "Prune retained object ownership changed before admission")
 	})
-	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
+	conditions, _, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
-		return nil, err
+		return workqueue.Change{}, err
 	}
-	mutation, err := newIdempotencyMutationPlanForMarker(
-		idempotency.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		classify,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if err := mutation.enforceTransactionBounds(backupruntime.ValidateBackupRuntimeTransactionBounds); err != nil {
-		return nil, err
-	}
-
-	return mutation, nil
+	return workqueue.Change{Conditions: conditions, Mutations: keyvalue.CloneMutations(mutations)}, nil
 }

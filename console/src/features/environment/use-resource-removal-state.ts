@@ -75,22 +75,7 @@ export function useResourceRemovalState<
         kind: EnvironmentMutationKind;
         outcome: "pending" | "succeeded" | "failed";
       }
-    >(
-      [...pendingResourceRemovals.current].flatMap(([, removal]) =>
-        removal.kind === "environment"
-          ? [
-              [
-                removal.resourceId,
-                {
-                  generation: removal.generation,
-                  kind: "delete" as const,
-                  outcome: "pending" as const,
-                },
-              ],
-            ]
-          : [],
-      ),
-    ),
+    >(),
   );
   const successfulEnvironmentDeletions = useRef(new Map<string, string>());
   const nextEnvironmentGeneration = useCallback(
@@ -147,18 +132,19 @@ export function useResourceRemovalState<
   }, []);
 
   const isEnvironmentDeletionPending = useCallback((environmentId: string) => {
-    return (
-      [...pendingResourceRemovals.current.values()].some(
-        (removal) =>
-          removal.kind === "environment" &&
-          removal.resourceId === environmentId,
-      ) ||
-      [...resourceRemovalIntents.current.values()].some(
-        ({ removal }) =>
-          removal.kind === "environment" &&
-          removal.resourceId === environmentId,
+    return [...pendingResourceRemovals.current].some(([taskId, removal]) => {
+      if (
+        removal.kind !== "environment" ||
+        removal.resourceId !== environmentId
       )
-    );
+        return false;
+      const observed = resourceRemovalObservations.current.get(taskId)?.task;
+      return (
+        !!observed &&
+        !observed.task.pending_preparation &&
+        observed.work.items.some((work) => work.phase !== "settled")
+      );
+    });
   }, []);
 
   const forgetResourceRemoval = useCallback(

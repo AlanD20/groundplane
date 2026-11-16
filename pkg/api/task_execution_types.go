@@ -8,22 +8,33 @@ import (
 
 // TaskSummary describes the operator action, not an executor or hidden child Task.
 type TaskSummary struct {
-	ResourceKind   string                 `json:"resource_kind"`
-	ID             string                 `json:"id"`
-	Action         workexecution.Action   `json:"action"`
-	TargetID       string                 `json:"target_id"`
-	TargetName     string                 `json:"target_name"`
-	Scope          workexecution.Scope    `json:"scope"`
-	Actor          workexecution.Actor    `json:"actor" enum:"operator,system"`
-	Status         string                 `json:"status" enum:"queued,preparing,waiting,running,attention_required,stopping,finishing,succeeded,failed,cancelled,superseded"`
-	Counts         TaskCounts             `json:"counts"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
-	Deadline       time.Time              `json:"deadline"`
-	FinishedAt     *time.Time             `json:"finished_at,omitempty"`
-	HistoryExpired bool                   `json:"history_expired"`
-	StopRequested  bool                   `json:"stop_requested"`
-	Cancel         TaskActionAvailability `json:"cancel"`
+	PreparationWait    *workexecution.Wait     `json:"preparation_wait,omitempty"`
+	After              []string                `json:"after,omitempty" maxItems:"16"`
+	PendingPreparation bool                    `json:"pending_preparation" doc:"Accepted pure intent has not been compiled into executable work"`
+	Dependencies       *TaskDependencyDecision `json:"dependencies,omitempty"`
+	ResourceKind       string                  `json:"resource_kind"`
+	ID                 string                  `json:"id"`
+	Action             workexecution.Action    `json:"action"`
+	TargetID           string                  `json:"target_id"`
+	TargetName         string                  `json:"target_name"`
+	Scope              workexecution.Scope     `json:"scope"`
+	Actor              workexecution.Actor     `json:"actor" enum:"operator,system"`
+	Status             string                  `json:"status" enum:"queued,preparing,waiting,running,attention_required,stopping,finishing,succeeded,failed,cancelled,superseded"`
+	Counts             TaskCounts              `json:"counts"`
+	CreatedAt          time.Time               `json:"created_at"`
+	UpdatedAt          time.Time               `json:"updated_at"`
+	Deadline           time.Time               `json:"deadline"`
+	FinishedAt         *time.Time              `json:"finished_at,omitempty"`
+	HistoryExpired     bool                    `json:"history_expired"`
+	StopRequested      bool                    `json:"stop_requested"`
+	Cancel             TaskActionAvailability  `json:"cancel"`
+}
+
+// TaskDependencyDecision describes whole-Task prerequisites, not work-item dependencies.
+type TaskDependencyDecision struct {
+	Ready   bool                                 `json:"ready"`
+	Waiting []string                             `json:"waiting,omitempty"`
+	Failed  *workexecution.TaskDependencyFailure `json:"failed,omitempty"`
 }
 
 // TaskCounts reports recorded work states, not an execution-time percentage.
@@ -79,7 +90,7 @@ type TaskDetails struct {
 }
 
 type TaskPreparation struct {
-	Reason     string                `json:"reason" enum:"planning_deadline_exceeded,planning_stopped,planning_invalid_input,planning_dependency_conflict"`
+	Reason     string                `json:"reason" enum:"planning_deadline_exceeded,planning_stopped,planning_invalid_input,planning_dependency_conflict,dependency.failed"`
 	Outcome    workexecution.Outcome `json:"outcome" enum:"failed,cancelled,superseded"`
 	Summary    string                `json:"summary"`
 	NextAction string                `json:"next_action"`
@@ -116,4 +127,9 @@ type TaskStages struct {
 	Sequence   uint64                `json:"sequence"`
 	UpdatedAt  *time.Time            `json:"updated_at,omitempty"`
 	Revision   int64                 `json:"revision"`
+}
+
+// TaskRunAfterRequest is the pure prerequisite input for Task actions without other authored options.
+type TaskRunAfterRequest struct {
+	After []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true" doc:"Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs"`
 }

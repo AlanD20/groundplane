@@ -169,6 +169,7 @@ export function useEnvironmentLifecycle<
         resource,
         trackedRemoval.resourceId,
         intent.idempotencyKey,
+        intent.removal.after,
       )
         .then((acceptedTaskId) => {
           pendingResourceRemovals.current.set(acceptedTaskId, trackedRemoval);
@@ -176,13 +177,6 @@ export function useEnvironmentLifecycle<
           persistPendingResourceRemovals(pendingResourceRemovals.current);
           update((draft) => {
             draft.environmentDeletionRevision += 1;
-            if (trackedRemoval.kind === "environment") {
-              const environment = findEnvironment(
-                draft,
-                trackedRemoval.resourceId,
-              );
-              if (environment) environment.deletionTaskId = acceptedTaskId;
-            }
           });
           monitorResourceRemoval(acceptedTaskId);
           return acceptedTaskId;
@@ -314,13 +308,6 @@ export function useEnvironmentLifecycle<
           persistPendingResourceRemovals(pendingResourceRemovals.current);
           update((draft) => {
             draft.environmentDeletionRevision += 1;
-            if (acceptedRemoval.kind === "environment") {
-              const environment = findEnvironment(
-                draft,
-                acceptedRemoval.resourceId,
-              );
-              if (environment) environment.deletionTaskId = acceptedTaskId;
-            }
           });
           resourceRemovalRetryIntents.current.delete(taskId);
           persistResourceRemovalRetryIntents(
@@ -422,15 +409,6 @@ export function useEnvironmentLifecycle<
           if (!environment.deletionTaskId) continue;
           if (successfulEnvironmentDeletions.current.has(environment.id))
             continue;
-          for (const [taskId, removal] of pendingResourceRemovals.current) {
-            if (
-              removal.kind === "environment" &&
-              removal.resourceId === environment.id &&
-              taskId !== environment.deletionTaskId
-            ) {
-              pendingResourceRemovals.current.delete(taskId);
-            }
-          }
           const generation =
             environmentGenerations.current.get(environment.id) ?? 0;
           environmentMutationOutcomes.current.set(environment.id, {
@@ -438,14 +416,19 @@ export function useEnvironmentLifecycle<
             kind: "delete",
             outcome: "pending",
           });
-          pendingResourceRemovals.current.set(environment.deletionTaskId, {
-            kind: "environment",
-            projectId: project.id,
-            resourceId: environment.id,
-            generation,
-          });
+          const removal: PendingResourceRemoval =
+            pendingResourceRemovals.current.get(environment.deletionTaskId) ?? {
+              kind: "environment",
+              projectId: project.id,
+              resourceId: environment.id,
+              generation,
+            };
+          pendingResourceRemovals.current.set(
+            environment.deletionTaskId,
+            removal,
+          );
           resourceRemovalTasks.current.set(
-            `environment:${environment.id}`,
+            resourceRemovalKey(removal),
             environment.deletionTaskId,
           );
           persistPendingResourceRemovals(pendingResourceRemovals.current);

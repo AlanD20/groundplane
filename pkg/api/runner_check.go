@@ -1,7 +1,8 @@
 package api
 
 type RunnerCheckRequest struct {
-	Revision int64 `json:"revision" required:"true" minimum:"1"`
+	After    []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	Revision int64    `json:"revision,omitempty" minimum:"0"`
 }
 
 type RunnerCheckConfiguration struct {

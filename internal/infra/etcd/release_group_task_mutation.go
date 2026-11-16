@@ -2,7 +2,9 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredauthoring"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -61,39 +63,69 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-// PublishReleaseGroupRemoval commits desired authoring and native execution together.
-func (repository *TaskRepository) PublishReleaseGroupRemoval(
+// PrepareReleaseGroupRemovalAuthority captures desired authoring and native removal for promotion of the accepted Task.
+func (repository *TaskRepository) PrepareReleaseGroupRemovalAuthority(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	prepared groupstore.ReleaseGroupPreparedMutation,
-	input groupstore.RemovalInput, marker idempotencyrecord.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+	input groupstore.RemovalInput,
+	task workexecution.Task,
+	acceptedRevision int64,
+	locator idempotencyrecord.IdempotencyLocator,
+) (workqueue.Change, workexecution.Item, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
+	}
+	if task.Validate() != nil || task.Actor != workexecution.OperatorActor || task.AcceptedIntent == nil ||
+		!task.UpdatedAt.Equal(input.CreatedAt) {
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
+			errs.KindValidationFailed,
+			"Release Group removal requires its captured accepted Task",
+		)
 	}
 	if err := groupstore.ValidatePreparedRemoval(prepared, input); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	if environment.Record.ID != input.Scope.EnvironmentID || project.Record.ID != environment.Record.ProjectID ||
 		project.Record.ID != input.Scope.ProjectID || project.Record.TenantID != input.Scope.TenantID {
-		return IdempotencyTransactionResult{}, errs.New(
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
 			errs.KindScopeUnauthorized,
 			"Release Group removal hierarchy changed",
 		)
 	}
-	task, item, err := input.Work()
+	_, item, err := input.Work()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
-	work, err := workqueue.PrepareSingleTask(task, item, marker)
+	if item.Deadline.After(task.Deadline) {
+		item.Deadline = task.Deadline
+	}
+	if err := input.Match(task, item); err != nil {
+		return workqueue.Change{}, workexecution.Item{}, err
+	}
+	evidence, err := (&IdempotencyRepository{store: repository.store}).Read(ctx, locator)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
-	defer etcdstore.ClearMutationValues(work.Mutations)
+	if evidence == nil || evidence.marker.TaskID != task.ID ||
+		evidence.marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		evidence.marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		!evidence.marker.CreatedAt.Equal(task.CreatedAt) {
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
+			errs.KindStateConflict,
+			"Release Group accepted request is unavailable",
+		)
+	}
+	marker := evidence.marker
+	defer clear(marker.Intent.Ciphertext)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(locator)
+	if err != nil {
+		return workqueue.Change{}, workexecution.Item{}, err
+	}
 	value, err := groupstore.EncodeRemovalInput(input)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	defer clear(value)
 	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(deletionrecord.DeletionTombstoneRecord{
@@ -101,26 +133,30 @@ func (repository *TaskRepository) PublishReleaseGroupRemoval(
 		TargetRevision: input.GroupRevision, TaskID: input.TaskID,
 		Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: input.CreatedAt, UpdatedAt: input.CreatedAt})
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	defer clear(tombstoneValue)
 	authoring, err := groupstore.PrepareDesiredAuthoring(ctx, repository.store, prepared)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
-	desired, err := prepareDirectDesiredProjectionPublication(
+	publication, err := desiredauthoring.PrepareAccepted(
 		ctx,
 		repository.store,
-		input.Scope.EnvironmentID,
+		task,
+		acceptedRevision,
 		marker,
+		input.CreatedAt,
 		authoring.Apply,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
-	defer clearDesiredMutationFragment(desired)
-	conditions := append(work.Conditions, prepared.Conditions()...)
-	mutations := append(work.Mutations, prepared.Mutations()...)
+	defer etcdstore.ClearMutationValues(publication.Mutations)
+	desired := desiredMutationFragment{conditions: publication.Conditions, mutations: publication.Mutations}
+	conditions := prepared.Conditions()
+	conditions = append(conditions, etcdstore.Condition{Key: markerKey, ModRevision: evidence.modRevision})
+	mutations := prepared.Mutations()
 	defer etcdstore.ClearMutationValues(mutations)
 	conditions = append(conditions, etcdstore.Condition{Key: groupstore.RemovalInputKey(input.WorkItemID)})
 	mutations = append(
@@ -138,31 +174,24 @@ func (repository *TaskRepository) PublishReleaseGroupRemoval(
 	)
 	tenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	initiation, err := newEnvironmentTaskInitiation(tenant, project, environment, taskjournal.TaskActorOperator)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	conditions, mutations, classify, err := desired.bindDirectDesired(conditions, mutations,
 		func(_ int64, _ []*etcdstore.KeyValue) error {
 			return errs.New(errs.KindStateConflict, "Release Group removal publication changed")
 		})
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(
-		idempotencyrecord.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		classify,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return (&IdempotencyRepository{store: repository.store}).Apply(ctx, marker, plan)
+	_ = classify
+
+	return workqueue.Change{Conditions: conditions, Mutations: etcdstore.CloneMutations(mutations)}, item, nil
 }

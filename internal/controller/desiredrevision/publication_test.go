@@ -11,7 +11,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -106,44 +105,16 @@ func (repository *boundaryRepository) StageEnvironmentBlueprintRevision(
 	}, nil
 }
 
-func (repository *boundaryRepository) PublishEnvironmentBlueprintAuthoredRevision(
+func (repository *boundaryRepository) PrepareEnvironmentBlueprintAuthoredRevision(
 	_ context.Context, publication etcd.BlueprintAuthoredPublication,
-) (testkeyvalue.TransactionResult, error) {
+) (etcd.BlueprintAuthoredCapture, error) {
 	repository.publications++
 	repository.publishedClaimTaskID, repository.publishedTaskID = publication.Claim.TaskID, publication.Parent.ID
 	if repository.publicationStarted != nil {
 		close(repository.publicationStarted)
 		<-repository.publicationRelease
 	}
-	return testkeyvalue.TransactionResult{
-		Succeeded: repository.publicationErr == nil && !repository.comparisonFailed,
-	}, repository.publicationErr
-}
-
-type boundaryPublicationIdempotency struct {
-	known         idempotentintent.Resolution
-	knownErr      error
-	unknown       idempotentintent.Resolution
-	unknownErr    error
-	existingCalls int
-	unknownCalls  int
-}
-
-func (idempotency *boundaryPublicationIdempotency) ResolveExisting(
-	_ context.Context, _ testidempotency.IdempotencyLocator, _ Evidence,
-) (idempotentintent.Resolution, bool, error) {
-	idempotency.existingCalls++
-	return idempotency.known, idempotency.known.Kind != 0, idempotency.knownErr
-}
-
-func (idempotency *boundaryPublicationIdempotency) ResolveUnknown(
-	_ context.Context,
-	_ testidempotency.IdempotencyLocator,
-	_ Evidence,
-	_ error,
-) (idempotentintent.Resolution, error) {
-	idempotency.unknownCalls++
-	return idempotency.unknown, idempotency.unknownErr
+	return etcd.BlueprintAuthoredCapture{}, repository.publicationErr
 }
 
 func TestPreflightAndClaimEnforcesExactNormalizedProjectionBoundary(t *testing.T) {
@@ -301,11 +272,11 @@ func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *tes
 		staged.state.seal.DependencyDigest != boundaryAuthoredDigest(t, recoveredProjection) {
 		t.Fatalf("staged authority = %q/%x", staged.TaskID(), staged.state.seal.DependencyDigest)
 	}
-	if _, err := PublishAuthored(ctx, repository, &boundaryPublicationIdempotency{}, PublishAuthoredInput{
+	if _, err := PrepareAuthored(ctx, repository, PublishAuthoredInput{
 		Environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{Record: testhierarchy.EnvironmentRecord{ID: environmentID}},
 		Staged:      staged, Locator: recovered.Locator, Parent: workexecution.Task{ID: recovered.TaskID},
 	}); err != nil {
-		t.Fatalf("PublishAuthored(recovered) error=%v", err)
+		t.Fatalf("PrepareAuthored(recovered) error=%v", err)
 	}
 
 	if repository.claims != 2 || repository.stages != 1 || repository.publications != 1 ||
@@ -321,107 +292,70 @@ func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *tes
 	}
 }
 
-func TestPublishRejectsLocatorMismatchAndAbandonsExactStagedClaim(t *testing.T) {
+func TestPrepareRejectsLocatorMismatchAndAbandonsExactStagedClaim(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
-	repository, claim, input := boundaryStagedPublication(t, now, 31)
+	repository, claim, input := boundaryStagedPublication(t, time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC), 31)
 	input.Locator.Key += "-mismatch"
-	idempotency := &boundaryPublicationIdempotency{}
-
-	if _, err := PublishAuthored(context.Background(), repository, idempotency, input); err == nil {
-		t.Fatal("Publish(locator mismatch) error = nil")
+	if _, err := PrepareAuthored(context.Background(), repository, input); err == nil {
+		t.Fatal("mismatched locator was accepted")
 	}
-	if repository.publications != 0 || repository.abandonments != 1 ||
-		repository.abandonedLocator != claim.Locator || idempotency.existingCalls != 0 || idempotency.unknownCalls != 0 {
-		t.Fatalf(
-			"locator mismatch = publications:%d abandonments:%d locator:%#v resolutions:%d/%d",
-			repository.publications, repository.abandonments, repository.abandonedLocator,
-			idempotency.existingCalls, idempotency.unknownCalls,
-		)
+	if repository.publications != 0 || repository.abandonments != 1 || repository.abandonedLocator != claim.Locator {
+		t.Fatal("mismatched capture did not abandon its exact claim")
 	}
 	input.Locator = claim.Locator
-	if _, err := PublishAuthored(context.Background(), repository, idempotency, input); !errors.Is(
-		err, errs.New(errs.KindStateConflict, ""),
+	if _, err := PrepareAuthored(context.Background(), repository, input); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
 	) {
-		t.Fatalf("Publish(consumed locator) error = %v", err)
-	}
-	if repository.publications != 0 || repository.abandonments != 1 {
-		t.Fatalf("repeated locator publication = %d/%d", repository.publications, repository.abandonments)
+		t.Fatalf("consumed capture: %v", err)
 	}
 }
 
-func TestPublishConsumesCopiedStagedTokenExactlyOnceConcurrently(t *testing.T) {
+func TestPrepareConsumesCopiedStagedTokenExactlyOnceConcurrently(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, 9, 2, 8, 15, 0, 0, time.UTC)
-	repository, _, input := boundaryStagedPublication(t, now, 32)
+	repository, _, input := boundaryStagedPublication(t, time.Date(2026, 9, 2, 8, 15, 0, 0, time.UTC), 32)
 	repository.publicationStarted = make(chan struct{})
 	repository.publicationRelease = make(chan struct{})
-	idempotency := &boundaryPublicationIdempotency{known: idempotentintent.Resolution{
-		Kind: idempotentintent.ResolutionApplied,
-	}}
 	copied := input
-	firstResult := make(chan error, 1)
-	go func() {
-		_, err := PublishAuthored(context.Background(), repository, idempotency, input)
-		firstResult <- err
-	}()
+	first := make(chan error, 1)
+	go func() { _, err := PrepareAuthored(context.Background(), repository, input); first <- err }()
 	<-repository.publicationStarted
-	if _, err := PublishAuthored(context.Background(), repository, idempotency, copied); !errors.Is(
-		err, errs.New(errs.KindStateConflict, ""),
+	if _, err := PrepareAuthored(context.Background(), repository, copied); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
 	) {
-		t.Fatalf("Publish(concurrent copy) error = %v", err)
+		t.Fatalf("copied capture: %v", err)
 	}
 	close(repository.publicationRelease)
-	if err := <-firstResult; err != nil {
-		t.Fatalf("Publish(first) error = %v", err)
+	if err := <-first; err != nil {
+		t.Fatal(err)
 	}
-	if repository.publications != 1 || repository.abandonments != 0 || idempotency.existingCalls != 0 {
-		t.Fatalf(
-			"copied publication = publications:%d abandonments:%d resolutions:%d",
-			repository.publications, repository.abandonments, idempotency.existingCalls,
-		)
+	if repository.publications != 1 || repository.abandonments != 0 {
+		t.Fatal("capture was prepared twice or abandoned early")
 	}
 }
 
-func TestPublishKnownConflictAbandonsButUnresolvedUnknownCannotRetry(t *testing.T) {
+func TestPrepareDefersAbandonmentUntilPromotionOutcome(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, 9, 2, 8, 30, 0, 0, time.UTC)
-	knownRepository, knownClaim, knownInput := boundaryStagedPublication(t, now, 33)
-	knownRepository.comparisonFailed = true
-	if _, err := PublishAuthored(
-		context.Background(), knownRepository, &boundaryPublicationIdempotency{}, knownInput,
-	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-		t.Fatalf("Publish(known conflict) error = %v", err)
-	}
-	if knownRepository.publications != 1 || knownRepository.abandonments != 1 ||
-		knownRepository.abandonedLocator != knownClaim.Locator {
-		t.Fatalf(
-			"known conflict = publications:%d abandonments:%d locator:%#v",
-			knownRepository.publications, knownRepository.abandonments, knownRepository.abandonedLocator,
-		)
-	}
-
-	unknownRepository, _, unknownInput := boundaryStagedPublication(t, now.Add(time.Minute), 34)
-	unknownRepository.publicationErr = context.DeadlineExceeded
-	unresolved := errors.New("publication outcome remains unknown")
-	unknownIdempotency := &boundaryPublicationIdempotency{unknownErr: unresolved}
-	if _, err := PublishAuthored(context.Background(), unknownRepository, unknownIdempotency, unknownInput); !errors.Is(
-		err,
-		unresolved,
-	) {
-		t.Fatalf("Publish(unresolved unknown) error = %v", err)
-	}
-	if _, err := PublishAuthored(context.Background(), unknownRepository, unknownIdempotency, unknownInput); !errors.Is(
-		err, errs.New(errs.KindStateConflict, ""),
-	) {
-		t.Fatalf("Publish(unresolved retry) error = %v", err)
-	}
-	if unknownRepository.publications != 1 || unknownRepository.abandonments != 0 ||
-		unknownIdempotency.unknownCalls != 1 {
-		t.Fatalf(
-			"unknown outcome = publications:%d abandonments:%d resolutions:%d",
-			unknownRepository.publications, unknownRepository.abandonments, unknownIdempotency.unknownCalls,
-		)
+	for _, committed := range []bool{false, true} {
+		repository, claim, input := boundaryStagedPublication(t, time.Date(2026, 9, 2, 8, 30, 0, 0, time.UTC), 33)
+		prepared, err := PrepareAuthored(context.Background(), repository, input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if repository.abandonments != 0 {
+			t.Fatal("capture was abandoned before promotion")
+		}
+		if err := prepared.Finalize(context.Background(), committed); err != nil {
+			t.Fatal(err)
+		}
+		want := 0
+		if !committed {
+			want = 1
+		}
+		if repository.abandonments != want || want == 1 && repository.abandonedLocator != claim.Locator {
+			t.Fatal("promotion outcome did not retain or abandon the exact capture")
+		}
 	}
 }
 

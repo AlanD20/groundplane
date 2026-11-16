@@ -51,8 +51,6 @@ export default function BackingServiceDetailPage() {
   const [pendingAction, setPendingAction] = useState<
     "start" | "stop" | "destroy" | null
   >(null);
-  const [actionError, setActionError] = useState("");
-  const [destroyOpen, setDestroyOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const needsHookShutdown =
     !!svc?.hooks?.before_stop && svc.runtimeIntent !== "absent";
@@ -79,7 +77,6 @@ export default function BackingServiceDetailPage() {
     );
   }
 
-  const running = svc.runtimeIntent === "running";
   const adapter = store.adapters.find((a) => a.key === svc.adapter);
   const observation = currentServiceObservation(
     svc.observation,
@@ -91,21 +88,6 @@ export default function BackingServiceDetailPage() {
       : adapter?.urlScheme === "pgsql"
         ? 5432
         : undefined;
-  const runLifecycle = async (action: "start" | "stop" | "destroy") => {
-    setPendingAction(action);
-    setActionError("");
-    try {
-      await store.runBackingRuntimeAction(g.id, action);
-    } catch (error) {
-      setActionError(
-        error instanceof Error
-          ? error.message
-          : "Backing-service lifecycle request failed",
-      );
-    } finally {
-      setPendingAction(null);
-    }
-  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -130,22 +112,19 @@ export default function BackingServiceDetailPage() {
             <Button variant="outline" onClick={() => setEditingName(true)}>
               Edit name
             </Button>
-            {running ? (
-              <Button
-                variant="outline"
-                disabled={pendingAction !== null}
-                onClick={() => void runLifecycle("stop")}
-              >
-                <PowerOff className="size-4" /> Stop
-              </Button>
-            ) : (
-              <Button
-                disabled={pendingAction !== null}
-                onClick={() => void runLifecycle("start")}
-              >
-                <Power className="size-4" /> Start
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              disabled={pendingAction !== null}
+              onClick={() => setPendingAction("stop")}
+            >
+              <PowerOff className="size-4" /> Stop
+            </Button>
+            <Button
+              disabled={pendingAction !== null}
+              onClick={() => setPendingAction("start")}
+            >
+              <Power className="size-4" /> Start
+            </Button>
           </>
         }
       />
@@ -158,11 +137,6 @@ export default function BackingServiceDetailPage() {
         resourceId={g.id}
         idLabel="Backing Service ID"
       />
-      {actionError && (
-        <p role="alert" className="text-sm text-destructive">
-          {actionError}
-        </p>
-      )}
       {observationRefresh.refreshError && (
         <p role="alert" className="text-sm text-destructive">
           Runtime refresh failed; evidence will expire locally.{" "}
@@ -316,10 +290,8 @@ export default function BackingServiceDetailPage() {
               </p>
               <Button
                 variant="destructive"
-                disabled={
-                  pendingAction !== null || svc.runtimeIntent === "absent"
-                }
-                onClick={() => setDestroyOpen(true)}
+                disabled={pendingAction !== null}
+                onClick={() => setPendingAction("destroy")}
               >
                 <Trash2 /> Remove containers
               </Button>
@@ -387,17 +359,53 @@ export default function BackingServiceDetailPage() {
           </div>
         )}
       </div>
-      {destroyOpen && (
+      {pendingAction && (
         <TaskRunnerDialog
           open
-          onOpenChange={setDestroyOpen}
-          title={`Remove containers · ${g.name}`}
-          description="Remove this Backing Service's containers. Configuration, connections and persistent Volumes are kept; Start recreates the containers. Files stored only inside the containers are lost."
-          type="destroy"
-          target={svc.name}
+          runAfter
+          onOpenChange={(open) => !open && setPendingAction(null)}
+          title={`${pendingAction === "destroy" ? "Remove containers" : pendingAction === "start" ? "Start" : "Stop"} · ${g.name}`}
+          description={
+            pendingAction === "destroy"
+              ? "Remove this Backing Service's containers. Configuration, connections and persistent Volumes are kept; Start recreates the containers. Files stored only inside the containers are lost."
+              : pendingAction === "stop"
+                ? "Stop this shared instance. Connected applications lose access until it starts again."
+                : "Start this shared instance using its last acknowledged configuration."
+          }
+          type={pendingAction}
+          target={svc.id}
           workspace="platform"
-          startLabel="Remove containers"
-          onDispatch={() => store.runBackingRuntimeAction(g.id, "destroy")}
+          destructive={pendingAction === "destroy"}
+          startDisabled={(after) =>
+            after.length === 0 &&
+            ((pendingAction === "start" && svc.runtimeIntent === "running") ||
+              (pendingAction === "stop" && svc.runtimeIntent === "stopped") ||
+              (pendingAction === "destroy" && svc.runtimeIntent === "absent"))
+          }
+          review={(after) =>
+            after.length === 0 &&
+            ((pendingAction === "start" && svc.runtimeIntent === "running") ||
+              (pendingAction === "stop" && svc.runtimeIntent === "stopped") ||
+              (pendingAction === "destroy" &&
+                svc.runtimeIntent === "absent")) ? (
+              <p className="text-sm text-muted-foreground">
+                This instance already has this runtime state. Choose a
+                prerequisite to run the action after another Task changes it.
+              </p>
+            ) : null
+          }
+          startLabel={
+            pendingAction === "destroy"
+              ? "Remove containers"
+              : pendingAction === "start"
+                ? "Start instance"
+                : "Stop instance"
+          }
+          onDispatch={(after) => {
+            if (!pendingAction) throw new Error("Choose a runtime action");
+            return store.runBackingRuntimeAction(g.id, pendingAction, after);
+          }}
+          onSettled={() => store.refreshEnvironmentServices(env.id)}
         />
       )}
       {deleteOpen && (
@@ -412,7 +420,8 @@ export default function BackingServiceDetailPage() {
           destructive
           confirmText={g.slug}
           startLabel="Delete instance and data"
-          onDispatch={() => store.deleteBackingService(g.id)}
+          runAfter
+          onDispatch={(after) => store.deleteBackingService(g.id, after)}
           onCommit={() => window.location.assign("/platform/backing-services")}
         />
       )}

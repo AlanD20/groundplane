@@ -2,10 +2,8 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -42,7 +40,14 @@ type volumeImpactReader interface {
 type VolumeMutator interface {
 	CreateVolume(context.Context, apiTypes.VolumeCreate, string) (idempotencyrecord.IdempotencyResponse, error)
 	EditVolume(context.Context, string, apiTypes.VolumeEdit, string) (idempotencyrecord.IdempotencyResponse, error)
-	RemoveVolume(context.Context, string, string, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveVolume(
+		context.Context,
+		string,
+		string,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type volumeListInput struct {
@@ -73,10 +78,11 @@ type volumeImpactInput struct {
 }
 
 type volumeRemoveInput struct {
-	ID             string `path:"id" pattern:"^vol_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
-	ImpactToken    string `query:"impact_token" required:"true" pattern:"^[a-f0-9]{64}$"`
-	ConfirmKey     string `query:"confirm_key" required:"true" minLength:"1" maxLength:"255"`
+	ID             string                        `path:"id" pattern:"^vol_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ImpactToken    string                        `query:"impact_token" required:"true" pattern:"^[a-f0-9]{64}$"`
+	ConfirmKey     string                        `query:"confirm_key" required:"true" minLength:"1" maxLength:"255"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type volumePageOutput struct {
@@ -98,9 +104,10 @@ type volumeMutationOutput struct {
 }
 
 func (s *Server) registerVolumes() {
-	mutationSchema := volumeMutationResponseSchema()
+	mutationSchema := taskAcceptedResponseSchema()
 	taskAcceptedSchema := taskAcceptedResponseSchema()
 
+	s.setRoutePolicy("DELETE /api/v1/volumes/{id}", routePolicy{body: jsonBody})
 	huma.Register(s.API, huma.Operation{
 		OperationID: "volume.list", Method: http.MethodGet, Path: "/volumes",
 		Summary: "List Environment volumes", Tags: []string{"Volume"},
@@ -111,18 +118,18 @@ func (s *Server) registerVolumes() {
 	}, s.showVolume)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "volume.create", Method: http.MethodPost, Path: "/volumes",
-		Summary: "Add an Environment volume", Tags: []string{"Volume"}, DefaultStatus: http.StatusCreated,
+		Summary: "Add an Environment volume", Tags: []string{"Volume"}, DefaultStatus: http.StatusAccepted,
 		Responses: map[string]*huma.Response{
-			"201": {Description: http.StatusText(http.StatusCreated), Content: map[string]*huma.MediaType{
+			"202": {Description: http.StatusText(http.StatusAccepted), Content: map[string]*huma.MediaType{
 				"application/json": {Schema: mutationSchema},
 			}},
 		},
 	}, s.createVolume)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "volume.edit", Method: http.MethodPatch, Path: "/volumes/{id}",
-		Summary: "Edit a volume slug", Tags: []string{"Volume"}, DefaultStatus: http.StatusOK,
+		Summary: "Edit a volume slug", Tags: []string{"Volume"}, DefaultStatus: http.StatusAccepted,
 		Responses: map[string]*huma.Response{
-			"200": {Description: http.StatusText(http.StatusOK), Content: map[string]*huma.MediaType{
+			"202": {Description: http.StatusText(http.StatusAccepted), Content: map[string]*huma.MediaType{
 				"application/json": {Schema: mutationSchema},
 			}},
 		},
@@ -134,23 +141,11 @@ func (s *Server) registerVolumes() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "volume.remove", Method: http.MethodDelete, Path: "/volumes/{id}",
 		Summary: "Remove an Environment volume", Tags: []string{"Volume"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectVolumeDeleteBody, s.validateVolumeDeleteQuery},
+		Middlewares: huma.Middlewares{s.validateVolumeDeleteQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.removeVolume)
 	s.setRoutePolicy("POST /api/v1/volumes", routePolicy{body: jsonBody})
 	s.setRoutePolicy("PATCH /api/v1/volumes/{id}", routePolicy{body: jsonBody})
-}
-
-func volumeMutationResponseSchema() *huma.Schema {
-	return &huma.Schema{
-		Type: "object",
-		Properties: map[string]*huma.Schema{
-			"volume":  {Ref: "#/components/schemas/Volume"},
-			"task_id": {Type: "string"},
-		},
-		Required:             []string{"volume", "task_id"},
-		AdditionalProperties: false,
-	}
 }
 
 func taskAcceptedResponseSchema() *huma.Schema {
@@ -252,7 +247,7 @@ func (s *Server) removeVolume(ctx context.Context, request *volumeRemoveInput) (
 		return nil, errs.New(errs.KindInternal, "volume mutator is not configured")
 	}
 	response, err := s.volumeMutations.RemoveVolume(
-		ctx, request.ID, request.ImpactToken, request.ConfirmKey, request.IdempotencyKey,
+		ctx, request.ID, request.ImpactToken, request.ConfirmKey, taskRunAfter(request.Body), request.IdempotencyKey,
 	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
@@ -277,19 +272,6 @@ func (s *Server) volumeMutationResponse(
 			}
 		},
 	}
-}
-
-func (s *Server) rejectVolumeDeleteBody(ctx huma.Context, next func(huma.Context)) {
-	var probe [1]byte
-	count, err := ctx.BodyReader().Read(probe[:])
-	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		if writeErr := huma.WriteErr(s.API, ctx, http.StatusBadRequest, "Volume deletion body is not allowed"); writeErr != nil &&
-			s.Logger != nil {
-			s.Logger.Error("controller: write Volume deletion problem", slog.Any("error", writeErr))
-		}
-		return
-	}
-	next(ctx)
 }
 
 func (s *Server) validateVolumeDeleteQuery(ctx huma.Context, next func(huma.Context)) {

@@ -237,7 +237,7 @@ func (repository *HierarchyDeletionRepository) readEnvironmentParentsAtRevision(
 }
 
 func prepareHierarchyDeletionPublication(
-	begin HierarchyDeletionBegin,
+	begin HierarchyDeletionCapture,
 	root hierarchyDeletionRoot,
 	snapshotRevision int64,
 ) (hierarchydeletion.HierarchyDeletionOperation, []etcdstore.Condition, []etcdstore.Mutation, error) {
@@ -305,9 +305,7 @@ func prepareHierarchyDeletionPublication(
 		Schema: 1, ParentOperationID: begin.OperationID, OperationKind: begin.OperationKind,
 		TargetKind: begin.TargetKind, TargetID: begin.TargetID, DeletionEpoch: deletionEpoch,
 		RootTaskID: begin.TaskID, CurrentTaskID: begin.TaskID,
-		ResponseDigest: hierarchydeletion.HierarchyDeletionDigest(
-			begin.Marker.Response.Body,
-		), TombstoneKey: tombstoneKey,
+		ResponseDigest: hierarchyDeletionResponseDigest(begin.TaskID), TombstoneKey: tombstoneKey,
 	}
 	fence := hierarchydeletion.HierarchyDeletionCleanupFence{
 		Schema: 1, ParentOperationID: begin.OperationID, DeletionEpoch: deletionEpoch,

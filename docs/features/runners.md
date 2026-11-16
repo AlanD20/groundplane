@@ -100,10 +100,13 @@ reviewed GP image/tooling update.
 ## Tokens and Retry
 
 The registration token is transient. GP does not save it in Tasks, logs, replay
-records or durable runtime configuration. If the Controller exits before
-registration is proved, recovery cannot reconstruct the token.
+records or durable runtime configuration. A queued Create does not allocate a
+Runner until its prerequisite Tasks succeed and settle. The transient token is
+held for at most one hour; queuing does not extend GitHub token validity. If the
+Controller restarts or the token expires before capture, preparation fails
+without creating a Runner. Submit a fresh Create with a fresh token.
 
-Failed creation retains the Runner and its allocations. Use Runner-specific
+A failure after creation has captured its native work retains the Runner and its allocations. Use Runner-specific
 Retry with a **fresh token**; generic Task Retry cannot retry Runner creation.
 Retry keeps the same Runner ID, quota claim, host slot and subnet. Replaying the
 original request does not replace the token in an existing attempt.
@@ -154,13 +157,14 @@ No external registry or public DNS configuration is required.
 The working implementation exposes **Host → Images → Fetch image** in the Console and
 `groundplane image fetch <reference>` in the CLI. Use an explicit tag or digest
 under `registry.groundplane.internal:5000` for Runner builds. Public images also
-use the [host image workflow](platform.md#images). Acceptance returns a Task and its
-selected immutable reference; it does not mean the image is available yet.
-The response's `config_digest` identifies the pinned OCI configuration; it is
-not Docker's store-specific local image ID.
-Wait for the Task to complete, then use that reference in ordinary Deploy.
-Task Retry keeps the original selection, even if the tag has moved. A new Fetch
-is a new selection. The CLI's `--idempotency-key` lets automation resolve uncertain
+use the [host image workflow](platform.md#images). Acceptance returns a Task ID;
+it does not resolve a tag or make the image available. After prerequisite Tasks
+succeed and settle, Fetch captures the selected immutable image.
+Wait for the Task to complete, then inspect Host Images for the resulting
+reference before ordinary Deploy. The image's `config_digest` identifies its OCI
+configuration, rather than Docker's store-specific local image ID.
+Once preparation succeeds, Task Retry keeps that captured selection even if the
+tag moves. A new Fetch makes a new selection. The CLI's `--idempotency-key` lets automation resolve uncertain
 acceptance without creating another operation. H75 covers the selected live
 delivery path; moved-tag and replay behavior has local, not live, proof.
 

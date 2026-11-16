@@ -53,7 +53,7 @@ func TestAgentRemoveDispatchesRemovalTask(t *testing.T) {
 		t,
 		http.MethodDelete,
 		"/api/v1/agents/agt_1",
-		"",
+		`{}`,
 		http.StatusAccepted,
 		`{"task_id":"task_2"}`,
 	)
@@ -176,13 +176,13 @@ func TestAgentJoinDispatchesCreationTaskWithoutToken(t *testing.T) {
 		t,
 		http.MethodPost,
 		"/api/v1/agents",
-		"",
+		`{"after":["task_01ARZ3NDEKTSV4RRFFQ69G5FAV"]}`,
 		http.StatusAccepted,
 		`{"task_id":"task_join"}`,
 	)
 	defer server.Close()
 
-	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "join")
+	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "join", "--after", "task_01ARZ3NDEKTSV4RRFFQ69G5FAV")
 	want := "{\n  \"task_id\": \"task_join\"\n}\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)

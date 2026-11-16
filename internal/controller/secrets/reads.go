@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/secretremoval"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"time"
 	"unicode/utf8"
 
@@ -195,15 +196,11 @@ func (repository *Repository) CreateSecretIdempotent(
 	return repository.secrets.CreateSecretIdempotent(ctx, owner, record, value, marker)
 }
 
-func (repository *Repository) PublishSecretRemoval(
-	ctx context.Context,
-	owner secretrecord.Owner,
-	current etcdstore.Versioned[secretrecord.Record],
-	input secretremoval.Input,
-	task workexecution.Task,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.secrets.PublishSecretRemoval(ctx, owner, current, input, task, marker)
+func (repository *Repository) PrepareSecretRemovalAuthority(
+	ctx context.Context, owner secretrecord.Owner, current etcdstore.Versioned[secretrecord.Record],
+	input secretremoval.Input, task workexecution.Task,
+) (workqueue.Change, error) {
+	return repository.secrets.PrepareSecretRemovalAuthority(ctx, owner, current, input, task)
 }
 
 func (repository *Repository) CaptureSecretRemoval(

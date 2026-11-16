@@ -48,9 +48,13 @@ func TestEnvironmentHierarchyDeletionFreezesProjectionZonesAndReleasesPool(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := operations.Begin(ctx, hierarchyDeletionCreationTestBegin(fixture.environment.Record.CreatedAt,
-		testhierarchydeletion.HierarchyDeletionTargetEnvironment, fixture.environment.Record.ID,
-		testhierarchydeletion.HierarchyDeletionOperationEnvironment, "7"))
+	created, err := captureHierarchyDeletionFixture(
+		ctx,
+		operations,
+		hierarchyDeletionCreationTestBegin(fixture.environment.Record.CreatedAt,
+			testhierarchydeletion.HierarchyDeletionTargetEnvironment, fixture.environment.Record.ID,
+			testhierarchydeletion.HierarchyDeletionOperationEnvironment, "7"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,21 +11,29 @@ import (
 )
 
 type RecoveryPointRemover interface {
-	RemoveRecoveryPoint(context.Context, string, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveRecoveryPoint(
+		context.Context,
+		string,
+		string,
+		string,
+		apiTypes.TaskRunAfterRequest,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type recoveryPointRemoveInput struct {
-	ID    string `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Point string `path:"point" pattern:"^rp_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Key   string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID    string                        `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Point string                        `path:"point" pattern:"^rp_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Key   string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body  *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 func (s *Server) registerRecoveryPointRemoval() {
+	s.setRoutePolicy("DELETE /api/v1/environments/{id}/recovery-points/{point}", routePolicy{body: jsonBody})
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backup.points.remove", Method: http.MethodDelete,
 		Path: "/environments/{id}/recovery-points/{point}", Summary: "Permanently delete one Recovery Point archive",
 		Tags: []string{"Backup"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectTaskMutationBody, s.rejectTaskMutationQuery},
+		Middlewares: huma.Middlewares{s.rejectTaskMutationQuery},
 		Responses: attachMutationResponses(
 			openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted"),
 		),
@@ -39,7 +47,13 @@ func (s *Server) removeRecoveryPoint(
 	if s.recoveryPointRemover == nil {
 		return nil, errs.New(errs.KindInternal, "recovery point removal is not configured")
 	}
-	response, err := s.recoveryPointRemover.RemoveRecoveryPoint(ctx, input.ID, input.Point, input.Key)
+	response, err := s.recoveryPointRemover.RemoveRecoveryPoint(
+		ctx,
+		input.ID,
+		input.Point,
+		input.Key,
+		taskRunAfter(input.Body),
+	)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}

@@ -133,6 +133,7 @@ export function RouterCard({ env }: { env: Environment }) {
 
   const operationView = operation && (
     <TaskRunnerDialog
+      runAfter
       key={operation.component.id + operation.action}
       open
       onOpenChange={(open) => {
@@ -349,11 +350,19 @@ export function RouterCard({ env }: { env: Environment }) {
           </div>
         ) : undefined
       }
-      onDispatch={() => {
+      onDispatch={(after) => {
         if (operation.action === "disable")
-          return store.setComponentEnabled(operation.component.id, false);
+          return store.setComponentEnabled(
+            operation.component.id,
+            false,
+            undefined,
+            after,
+          );
         if (operation.action === "update")
-          return store.reconcileEnvironmentComponent(operation.component.id);
+          return store.reconcileEnvironmentComponent(
+            operation.component.id,
+            after,
+          );
         const config =
           operation.component.kind !== "cloudflare-tunnel" &&
           routerImplementation === "caddy"
@@ -383,8 +392,13 @@ export function RouterCard({ env }: { env: Environment }) {
                         },
                 };
         return operation.action === "enable"
-          ? store.setComponentEnabled(operation.component.id, true, config)
-          : store.updateComponentConfig(operation.component.id, config);
+          ? store.setComponentEnabled(
+              operation.component.id,
+              true,
+              config,
+              after,
+            )
+          : store.updateComponentConfig(operation.component.id, config, after);
       }}
       onCommit={() => {
         void store.refreshEnvironmentComponents(env.id).catch(() => undefined);

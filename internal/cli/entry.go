@@ -76,26 +76,34 @@ func newEntryCmd() *cobra.Command {
 	cmd.AddCommand(newEntryEditCmd())
 	cmd.AddCommand(newEntryBulkEditCmd())
 
-	cmd.AddCommand(&cobra.Command{
+	var removeAfter []string
+	remove := &cobra.Command{
 		Use:     "remove <id>",
 		Aliases: []string{"delete"},
 		Short:   "Remove an entry (dispatches a task)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(removeAfter)
+			if err != nil {
+				return err
+			}
 			accepted, err := fromContext(cmd).Client.RemoveEntry(
-				cmd.Context(), target(fromContext(cmd), args[0]),
+				cmd.Context(), target(fromContext(cmd), args[0]), after,
 			)
 			if err != nil {
 				return err
 			}
 			return renderTaskAccepted(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &removeAfter)
+	cmd.AddCommand(remove)
 
 	return cmd
 }
 
 func newEntryBulkEditCmd() *cobra.Command {
+	var runAfter []string
 	var (
 		path     string
 		services []string
@@ -108,6 +116,10 @@ func newEntryBulkEditCmd() *cobra.Command {
 		Short: "Upsert literal environment variables from KEY=value lines",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			if plain == secret {
 				return fmt.Errorf("exactly one of --plain or --secret is required")
 			}
@@ -126,15 +138,15 @@ func newEntryBulkEditCmd() *cobra.Command {
 				return err
 			}
 			response, err := fromContext(cmd).Client.BulkUpsertEntries(cmd.Context(), apiTypes.EntryBulkUpsertRequest{
-				EnvironmentID: environmentID,
-				Entries:       entries,
-				Exposure:      entryExposure(services, all),
-				Secret:        secret,
+				After: after, EnvironmentID: environmentID,
+				Entries:  entries,
+				Exposure: entryExposure(services, all),
+				Secret:   secret,
 			})
 			if err != nil {
 				return err
 			}
-			return renderTaskAccepted(cmd, apiTypes.TaskAccepted{TaskID: response.TaskID})
+			return renderTaskAccepted(cmd, response)
 		},
 	}
 	cmd.Flags().StringVar(&path, "file", "-", "read KEY=value lines from PATH, or - for stdin")
@@ -142,6 +154,7 @@ func newEntryBulkEditCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&all, "all", true, "expose every supplied Entry to all services")
 	cmd.Flags().BoolVar(&plain, "plain", false, "store every supplied value in desired state")
 	cmd.Flags().BoolVar(&secret, "secret", false, "store every supplied value encrypted")
+	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
 
@@ -179,6 +192,7 @@ func parseBulkEntryLines(content string) ([]apiTypes.EntryBulkItem, error) {
 }
 
 func newEntryAddCmd() *cobra.Command {
+	var runAfter []string
 	var (
 		entryType           string
 		key, path           string
@@ -197,6 +211,10 @@ func newEntryAddCmd() *cobra.Command {
 		Short: "Add an entry",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			literalSet := cmd.Flags().Changed("literal")
 			valueFileSet := cmd.Flags().Changed("value-file")
@@ -244,13 +262,13 @@ func newEntryAddCmd() *cobra.Command {
 				return err
 			}
 			entry, err := app.Client.CreateEntry(cmd.Context(), apiTypes.EntryCreateRequest{
-				EnvironmentID: environmentID, Type: entryType, Key: key, Path: path,
+				After: after, EnvironmentID: environmentID, Type: entryType, Key: key, Path: path,
 				UID: uidValue, GID: gidValue, Source: source, Exposure: exposure, Secret: secret,
 			})
 			if err != nil {
 				return err
 			}
-			return renderEntry(cmd, entry)
+			return renderTaskAccepted(cmd, entry)
 		},
 	}
 
@@ -278,10 +296,12 @@ func newEntryAddCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&secret, "secret", false, "store in the encrypted secret store instead of desired state")
 	cmd.Flags().Uint32Var(&uid, "uid", 0, "numeric owner for a file Entry (required with --type file)")
 	cmd.Flags().Uint32Var(&gid, "gid", 0, "numeric group for a file Entry (required with --type file)")
+	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
 
 func newEntryEditCmd() *cobra.Command {
+	var runAfter []string
 	var (
 		literal, valueFile  string
 		secretRef           string
@@ -296,6 +316,10 @@ func newEntryEditCmd() *cobra.Command {
 		Short: "Edit an entry",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			entry, err := app.Client.ShowEntry(cmd.Context(), target(app, args[0]))
 			if err != nil {
@@ -334,12 +358,12 @@ func newEntryEditCmd() *cobra.Command {
 				return errs.New(errs.KindValidationFailed, "exactly one of --all or --service is required")
 			}
 			updated, err := app.Client.EditEntry(cmd.Context(), entry.ID, apiTypes.EntryEditRequest{
-				Source: source, Exposure: exposure,
+				After: after, Source: source, Exposure: exposure,
 			})
 			if err != nil {
 				return err
 			}
-			return renderEntry(cmd, updated)
+			return renderTaskAccepted(cmd, updated)
 		},
 	}
 
@@ -359,6 +383,7 @@ func newEntryEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&factKey, "fact-key", "", "replace the source with a live fact reference: fact key")
 	cmd.Flags().StringSliceVar(&services, "service", nil, "new exposure: specific service(s)")
 	cmd.Flags().BoolVar(&all, "all", false, "new exposure: all services")
+	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
 

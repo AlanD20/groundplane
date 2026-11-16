@@ -135,7 +135,7 @@ func taskFields(details apiTypes.TaskDetails) map[string]any {
 		}
 	}
 	return map[string]any{"id": task.ID, "action": task.Action, "target": task.TargetName,
-		"target_id": task.TargetID, "status": task.Status, "scope": task.Scope, "actor": task.Actor,
+		"target_id": task.TargetID, "status": task.Status, "after": task.After, "pending_preparation": task.PendingPreparation, "dependencies": task.Dependencies, "preparation_wait": task.PreparationWait, "scope": task.Scope, "actor": task.Actor,
 		"created_at": taskTimestamp(task.CreatedAt), "updated_at": taskTimestamp(task.UpdatedAt),
 		"deadline": taskTimestamp(task.Deadline), "finished_at": nullableTaskTimestamp(task.FinishedAt),
 		"counts": task.Counts, "cancel": task.Cancel, "history_expired": task.HistoryExpired,

@@ -2,6 +2,7 @@ package backingservices
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -23,6 +24,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -35,6 +37,7 @@ func (service *CreationService) backingCreationEntries(
 	spec adapters.CreationSpec,
 	allocator *desiredrevision.BlueprintIdentityAllocator,
 	createdAt time.Time,
+	seed []byte,
 ) ([]entryrecord.Record, []entryrecord.EntryValueGeneration, []secretrecord.Record, []secretrecord.EncryptedValue, map[string]string, error) {
 	bootstrapValues := make(map[string][]byte)
 	bootstrapSecrets := make(map[string]string)
@@ -47,10 +50,15 @@ func (service *CreationService) backingCreationEntries(
 		if _, exists := bootstrapValues[declaration.BootstrapKey]; exists {
 			continue
 		}
-		value, err := randomBackingCredential()
-		if err != nil {
-			return nil, nil, nil, nil, nil, err
+		if len(seed) < 32 {
+			return nil, nil, nil, nil, nil, errs.New(errs.KindInternal, "Backing bootstrap seed is missing")
 		}
+		mac := hmac.New(sha256.New, seed)
+		_, _ = mac.Write([]byte("groundplane/backing-bootstrap/" + declaration.BootstrapKey))
+		raw := mac.Sum(nil)
+		value := make([]byte, base64.RawURLEncoding.EncodedLen(len(raw)))
+		base64.RawURLEncoding.Encode(value, raw)
+		clear(raw)
 		bootstrapValues[declaration.BootstrapKey] = value
 		secretID := allocator.Named(ids.KindSecret, "bootstrap-secret-"+declaration.BootstrapKey)
 		secret, err := secretrecord.NewProjectRecord(
@@ -255,4 +263,32 @@ func backingEnvironmentMaterialization(
 		return materializationrecord.Record{}, nil, err
 	}
 	return record, file, nil
+}
+
+func (service *CreationService) openCreationSeed(
+	ctx context.Context,
+	stage etcd.BackingServiceCreationStage,
+) ([]byte, error) {
+	stored := stage.BootstrapSeed
+	envelope, err := secretvalue.Restore(
+		secretvalue.Metadata{Version: secretvalue.EnvelopeVersion(stored.EnvelopeVersion),
+			Cipher: secretvalue.CipherSuite(
+				stored.Cipher,
+			), Digest: secretvalue.Digest{Algorithm: secretvalue.DigestAlgorithm(stored.DigestAlgorithm), Value: stored.CiphertextSHA256}},
+		stored.Ciphertext,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var value []byte
+	err = service.protector.Open(
+		ctx,
+		envelope,
+		func(plaintext []byte) error { value = append([]byte(nil), plaintext...); return nil },
+	)
+	if err != nil {
+		clear(value)
+		return nil, err
+	}
+	return value, nil
 }

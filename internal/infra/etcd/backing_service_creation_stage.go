@@ -12,6 +12,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,8 +21,10 @@ const backingServiceCreationStagePrefix = "/v1/staging/backing-services/"
 
 // BackingServiceCreationStage owns the stable identities needed before a new
 // backing Environment can enter the normal desired-revision staging protocol.
-// It deliberately contains no bootstrap plaintext or encrypted value.
+// Its private encrypted seed is captured only after dependencies settle and
+// keeps generated bootstrap credentials stable across interrupted compilation.
 type BackingServiceCreationStage struct {
+	BootstrapSeed secrets.EncryptedValue               `json:"bootstrap_seed"`
 	Locator       idempotencyrecord.IdempotencyLocator `json:"locator"`
 	RequestSHA256 string                               `json:"request_sha256"`
 	ProjectID     string                               `json:"project_id"`
@@ -33,6 +37,7 @@ type BackingServiceCreationStage struct {
 func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 	ctx context.Context,
 	candidate BackingServiceCreationStage,
+	acceptedTaskRevision int64,
 ) (etcdstore.Versioned[BackingServiceCreationStage], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
@@ -49,12 +54,18 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	defer clear(value)
-	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(candidate.Locator)
-	if err != nil {
-		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
+	if acceptedTaskRevision <= 0 {
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, errs.New(
+			errs.KindValidationFailed,
+			"Backing creation requires accepted Task authority",
+		)
 	}
-	result, err := repository.store.Transact(ctx,
-		[]etcdstore.Condition{{Key: key}, {Key: markerKey}},
+	result, err := repository.store.Transact(
+		ctx,
+		[]etcdstore.Condition{
+			{Key: key},
+			{Key: workqueue.TaskKey(candidate.TaskID), ModRevision: acceptedTaskRevision},
+		},
 		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: value}},
 	)
 	if err != nil {
@@ -81,7 +92,10 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 	if err != nil {
 		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
-	if record.Locator != candidate.Locator || record.RequestSHA256 != candidate.RequestSHA256 {
+	if record.Locator != candidate.Locator || record.RequestSHA256 != candidate.RequestSHA256 ||
+		record.TaskID != candidate.TaskID ||
+		record.ProjectID != candidate.ProjectID ||
+		record.EnvironmentID != candidate.EnvironmentID {
 		return etcdstore.Versioned[BackingServiceCreationStage]{}, errs.New(
 			errs.KindIdempotencyMismatch,
 			"Idempotency-Key was already used with a different backing-service request",
@@ -115,6 +129,15 @@ func decodeBackingServiceCreationStage(value []byte) (BackingServiceCreationStag
 func validateBackingServiceCreationStage(record BackingServiceCreationStage) error {
 	if _, err := idempotencyrecord.IdempotencyMarkerKey(record.Locator); err != nil {
 		return err
+	}
+	if secrets.ValidateEncryptedValue(record.BootstrapSeed) != nil ||
+		record.BootstrapSeed.SecretID != ids.DeriveAt(
+			ids.KindSecret,
+			record.CreatedAt,
+			record.TaskID,
+			"backing-bootstrap-seed",
+		) {
+		return errs.New(errs.KindValidationFailed, "Backing creation encrypted bootstrap seed is invalid")
 	}
 	if record.Locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform || record.Locator.ScopeID != "-" {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation stage scope is invalid")

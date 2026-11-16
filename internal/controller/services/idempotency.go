@@ -6,7 +6,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"net/http"
 )
 
 type serviceMutationEvidence struct {
@@ -92,9 +91,6 @@ func (service *durableServiceMutationIdempotency) Prepare(
 		path = []requestidempotency.PathBinding{{Name: "id", Value: intent.serviceID}}
 	}
 	body := requestidempotency.JSONBody(intent.body)
-	if intent.method == http.MethodDelete {
-		body = requestidempotency.NoBody()
-	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: intent.method, Route: intent.route,
 		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: intent.environmentID},

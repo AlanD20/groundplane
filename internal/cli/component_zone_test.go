@@ -321,8 +321,9 @@ func TestPlatformComponentEnableRejectsInlineConfigBeforeMutation(t *testing.T) 
 	_, err := executeComponentForTest(t, server.URL, Scope{},
 		"enable", componentTestID, "--template-file", path,
 	)
-	if err == nil || !strings.Contains(err.Error(), "config set") || !strings.Contains(err.Error(), "bodyless enable") {
-		t.Fatalf("error = %v, want config-set then bodyless-enable guidance", err)
+	if err == nil || !strings.Contains(err.Error(), "config set") ||
+		!strings.Contains(err.Error(), "enable the Component") {
+		t.Fatalf("error = %v, want config-set then enable guidance", err)
 	}
 	if requests != 1 {
 		t.Fatalf("requests = %d, want show only", requests)

@@ -181,7 +181,8 @@ func (c *Client) runSession(
 	receiveNext(streamCtx, stream, received)
 	for {
 		// Reopen staging only after native workers have drained and joined.
-		if staging != nil && staging.reinspect.Load() && c.availableWorkCapacity() == int(runtimeConcurrency(config).Capacity()) {
+		if staging != nil && staging.reinspect.Load() &&
+			c.availableWorkCapacity() == int(runtimeConcurrency(config).Capacity()) {
 			return true, nil
 		}
 		event := nextSessionEvent(

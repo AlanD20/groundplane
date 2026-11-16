@@ -1,8 +1,9 @@
 package api
 
 type ReleaseGroupRollbackRequest struct {
-	Tag             *string `json:"tag,omitempty"`
-	PreviewRevision *string `json:"preview_revision,omitempty" pattern:"^[1-9][0-9]*$"`
+	After           []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true" doc:"Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs"`
+	Tag             *string  `json:"tag,omitempty"`
+	PreviewRevision *string  `json:"preview_revision,omitempty" pattern:"^[1-9][0-9]*$"`
 }
 
 type ReleaseGroupRollbackSource struct {

@@ -46,6 +46,7 @@ func TestNativeVolumeRemovalExcludesParentDeletion(t *testing.T) {
 						f.created.Volume.ID,
 						impact.ImpactToken,
 						"data",
+						api.TaskRunAfterRequest{},
 						"native-parent-racing-volume",
 					)
 					if err != nil {
@@ -55,6 +56,11 @@ func TestNativeVolumeRemovalExcludesParentDeletion(t *testing.T) {
 					if err := json.Unmarshal(response.Body, &task); err != nil || task.TaskID == "" {
 						t.Fatalf("Volume response: %v", err)
 					}
+					prepared := f.prepare(t, task.TaskID)
+					if prepared.FinishedAt != nil {
+						failure, _ := f.queue.ReadAcceptedPreparationFailure(t.Context(), task.TaskID, 0)
+						t.Fatalf("Volume removal preparation rejected: %+v", failure)
+					}
 				}
 				injected := false
 				if mode == "held" {
@@ -63,7 +69,10 @@ func TestNativeVolumeRemovalExcludesParentDeletion(t *testing.T) {
 				if mode == "late" {
 					f.store.beforeCommit = func(mutations []keyvalue.Mutation) {
 						for _, mutation := range mutations {
-							if mutation.Key != workqueue.TaskKey(begin.TaskID) {
+							if mutation.Key != hierarchydeletion.HierarchyDeletionTombstoneKey(
+								string(begin.TargetKind),
+								begin.TargetID,
+							) {
 								continue
 							}
 							f.store.beforeCommit = nil
@@ -77,7 +86,7 @@ func TestNativeVolumeRemovalExcludesParentDeletion(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				_, err = journal.Begin(t.Context(), begin)
+				err = commitNativeHierarchyCapture(t, f, journal, begin)
 				if mode == "idle" {
 					if err != nil {
 						t.Fatalf("idle parent deletion: %v", err)
@@ -94,7 +103,7 @@ func TestNativeVolumeRemovalExcludesParentDeletion(t *testing.T) {
 				if got, _ := errs.KindOf(err); got != want {
 					t.Fatalf("parent ignored native Volume removal: %v", err)
 				}
-				marker, err := idempotency.IdempotencyMarkerKey(begin.Marker.Locator)
+				marker, err := idempotency.IdempotencyMarkerKey(begin.Locator)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -143,7 +152,7 @@ func nativeVolumeParentDeletion(
 	t *testing.T,
 	scope workexecution.Scope,
 	kind hierarchydeletion.HierarchyDeletionTargetKind,
-) etcd.HierarchyDeletionBegin {
+) etcd.HierarchyDeletionCapture {
 	t.Helper()
 	id, operation := scope.EnvironmentID, hierarchydeletion.HierarchyDeletionOperationEnvironment
 	if kind == hierarchydeletion.HierarchyDeletionTargetProject {
@@ -180,15 +189,38 @@ func nativeVolumeParentDeletion(
 			Body:        []byte(`{"task_id":"` + taskID + `"}`),
 		},
 	}
-	return etcd.HierarchyDeletionBegin{
+	return etcd.HierarchyDeletionCapture{
 		OperationID:     "del_" + strings.Repeat("a", 32),
 		OperationKind:   operation,
 		TargetKind:      kind,
 		TargetID:        id,
 		TaskID:          taskID,
 		IdempotencyHash: hex.EncodeToString(keyDigest[:]),
-		Marker:          marker,
-		CreatedAt:       at,
-		DeadlineAt:      at.Add(hierarchydeletion.AttemptTimeout),
+		Locator:         marker.Locator, TaskCreatedAt: at,
+		CreatedAt:  at,
+		DeadlineAt: at.Add(hierarchydeletion.AttemptTimeout),
 	}
+}
+
+func commitNativeHierarchyCapture(
+	t *testing.T,
+	f *nativeVolumeFixture,
+	journal *etcd.HierarchyDeletionRepository,
+	input etcd.HierarchyDeletionCapture,
+) error {
+	t.Helper()
+	captured, err := journal.PrepareCapture(t.Context(), input)
+	if err != nil {
+		return err
+	}
+	defer keyvalue.ClearMutationValues(captured.Authority.Mutations)
+	committed, err := f.store.Transact(t.Context(), captured.Authority.Conditions, captured.Authority.Mutations)
+	if err != nil {
+		return err
+	}
+	keyvalue.ClearValues(committed.FailureReads)
+	if !committed.Succeeded {
+		return errs.New(errs.KindStateConflict, "native hierarchy capture changed")
+	}
+	return nil
 }

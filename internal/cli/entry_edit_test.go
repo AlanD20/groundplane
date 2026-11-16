@@ -48,10 +48,8 @@ func TestEntryEditUsesGeneratedClientAndValueFileForSecret(t *testing.T) {
 					len(body.Exposure) != 1 || body.Exposure[0] != "api" {
 					t.Errorf("Entry edit request = %#v", body)
 				}
-				_, _ = io.WriteString(
-					writer,
-					`{"id":"`+entryID+`","type":"env","key":"TOKEN","source":{"kind":"literal"},"exposure":["api"],"secret":true}`,
-				)
+				writer.WriteHeader(http.StatusAccepted)
+				_, _ = io.WriteString(writer, `{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`)
 			default:
 				t.Errorf("method = %q", request.Method)
 				writer.WriteHeader(http.StatusMethodNotAllowed)
@@ -74,7 +72,7 @@ func TestEntryEditUsesGeneratedClientAndValueFileForSecret(t *testing.T) {
 		"api",
 	)
 	if strings.Contains(output, "private-token") ||
-		!strings.Contains(output, `"id": "`+entryID+`"`) {
+		!strings.Contains(output, `"task_id": "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"`) {
 		t.Fatalf("Entry edit output = %q", output)
 	}
 }

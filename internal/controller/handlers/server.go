@@ -314,6 +314,9 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	s.registerImageFetch()
 	s.registerComponents()
 	s.registerEnvironments()
+	for _, path := range []string{"DELETE /api/v1/tenants/{id}", "DELETE /api/v1/projects/{id}", "DELETE /api/v1/environments/{id}"} {
+		s.setRoutePolicy(path, routePolicy{body: jsonBody})
+	}
 	registerHierarchyDeletionRoutes(s.API, s.hierarchyDeletions, s.Logger)
 	s.registerEnvironmentBlueprints()
 	s.registerServices()

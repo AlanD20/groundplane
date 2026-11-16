@@ -83,9 +83,10 @@ type Environment struct {
 	NetworkCapacity   EnvironmentNetworkCapacity   `json:"network_capacity"`
 }
 type EnvironmentCreate struct {
-	ProjectID   string `json:"project_id"`
-	Name        string `json:"name"`
-	NetworkPool string `json:"network_pool"`
+	After       []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	ProjectID   string   `json:"project_id"`
+	Name        string   `json:"name"`
+	NetworkPool string   `json:"network_pool"`
 }
 type EnvironmentEdit struct {
 	NetworkPool string `json:"network_pool"`

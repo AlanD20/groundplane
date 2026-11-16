@@ -2,6 +2,7 @@ package attachments
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -17,7 +18,7 @@ type attachMutationEvidence struct {
 
 type attachMutationIdempotency interface {
 	PrepareCreate(context.Context, string, apiTypes.AttachRequest) (attachMutationEvidence, error)
-	PrepareDetach(context.Context, string, string) (attachMutationEvidence, error)
+	PrepareDetach(context.Context, string, string, apiTypes.TaskRunAfterRequest) (attachMutationEvidence, error)
 	PrepareRename(context.Context, string, string, apiTypes.AttachRenameRequest) (attachMutationEvidence, error)
 	ResolveExisting(
 		context.Context,
@@ -73,6 +74,7 @@ func (service *durableAttachMutationIdempotency) PrepareCreate(
 		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
 		Query: requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(request.After)},
 			requestidempotency.Field{
 				Name:  "backing_service_id",
 				Value: requestidempotency.String(request.BackingServiceID),
@@ -101,12 +103,14 @@ func (service *durableAttachMutationIdempotency) PrepareDetach(
 	ctx context.Context,
 	environmentID string,
 	attachID string,
+	request apiTypes.TaskRunAfterRequest,
 ) (attachMutationEvidence, error) {
 	return service.protect(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: attachDeletionRoute,
 		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: attachID}},
-		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
+		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(request.After)})),
 	})
 }
 

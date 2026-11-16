@@ -19,49 +19,46 @@ import (
 )
 
 type EntryMetadataPublication struct {
-	Source  EntryMutationSource
-	Records []entries.Record
-	Changed []string
-	Task    workexecution.Task
-	Item    workexecution.Item
-	Marker  idempotency.IdempotencyMarker
-	At      time.Time
+	Source   EntryMutationSource
+	Records  []entries.Record
+	Changed  []string
+	Accepted workqueue.TaskSnapshot
+	Task     workexecution.Task
+	Item     workexecution.Item
+	Marker   idempotency.IdempotencyMarker
+	At       time.Time
 }
 
-// PublishUnrenderedEntryWork accepts metadata only after proving that it has no
+// PrepareUnrenderedEntryWork accepts metadata only after proving that it has no
 // acknowledged workload. An edit retains older configuration until the next
 // Deploy; a removal additionally requires no affected file. The desired head and epoch fence every fact
 // used by that proof. It never publishes a made-up runtime projection.
-func (repository *EnvironmentBlueprintRepository) PublishUnrenderedEntryWork(
+func (repository *EnvironmentBlueprintRepository) PrepareUnrenderedEntryWork(
 	ctx context.Context, request EntryMetadataPublication,
-) (IdempotencyTransactionResult, error) {
+) (EntryWorkCapture, error) {
 	source, task := request.Source, request.Task
 	if source.Runtime != nil || source.Desired.ReadRevision <= 0 || task.Validate() != nil ||
 		request.Item.Validate() != nil || request.Item.Placement.Executor != workexecution.Controller ||
 		task.Scope.EnvironmentID != source.Desired.Record.EnvironmentID || request.Item.TaskID != task.ID ||
 		request.Marker.TaskID != task.ID || task.Intent.SHA256 != request.Marker.Intent.CiphertextDigest ||
-		request.At.IsZero() || !request.At.Equal(task.CreatedAt) || len(request.Changed) == 0 ||
+		request.At.IsZero() || request.At.Before(task.CreatedAt) || len(request.Changed) == 0 ||
 		(task.TargetID != task.Scope.EnvironmentID && (len(request.Changed) != 1 || request.Changed[0] != task.TargetID)) {
-		return IdempotencyTransactionResult{}, errs.New(
+		return EntryWorkCapture{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry metadata publication has invalid authority",
 		)
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
-		found {
-		return existing, err
-	}
 	authority, err := repository.readEntryMutationSourceAt(ctx, task.Scope.EnvironmentID, source.Desired.ReadRevision)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return EntryWorkCapture{}, err
 	}
 	if authority.Runtime != nil || authority.Desired.Revision != source.Desired.Revision ||
 		authority.Desired.Record.RevisionID != source.Desired.Record.RevisionID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Entry metadata source changed")
+		return EntryWorkCapture{}, errs.New(errs.KindStateConflict, "Entry metadata source changed")
 	}
 	source, request.Source = authority, authority
 	if err := repository.validateEntryMetadataRecords(ctx, request); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return EntryWorkCapture{}, err
 	}
 	fence, err := environmentfence.LoadOrdinary(
 		ctx,
@@ -70,29 +67,29 @@ func (repository *EnvironmentBlueprintRepository) PublishUnrenderedEntryWork(
 		source.Desired.ReadRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return EntryWorkCapture{}, err
 	}
 	configuration, runtimeGuards, err := repository.entryMetadataHostProof(ctx, source, request.Changed, task.Action)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return EntryWorkCapture{}, err
 	}
 	publication, err := desiredauthoring.PrepareUnrenderedEntries(ctx, repository.store,
 		task.Scope.EnvironmentID, request.Marker, source.Desired.Revision, request.Records)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return EntryWorkCapture{}, err
 	}
 	defer keyvalue.ClearMutationValues(publication.Mutations)
-	change, err := entrywork.PrepareMetadataPublication(task, request.Item, configuration,
-		request.Marker, request.At)
+	ready, change, err := entrywork.PrepareMetadataPublication(task, request.Item, configuration,
+		request.At)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return EntryWorkCapture{}, err
 	}
 	defer keyvalue.ClearMutationValues(change.Mutations)
 	change.Conditions = append(change.Conditions, publication.Conditions...)
 	change.Conditions = append(change.Conditions, runtimeGuards...)
 	change.Conditions, err = environmentfence.AppendConditions(change.Conditions, fence)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return EntryWorkCapture{}, err
 	}
 	change.Conditions = append(change.Conditions, keyvalue.Condition{
 		Key: runtimeconfiguration.HeadKey(task.Scope.EnvironmentID), ModRevision: configuration,
@@ -101,45 +98,30 @@ func (repository *EnvironmentBlueprintRepository) PublishUnrenderedEntryWork(
 		mutation.Value = append([]byte(nil), mutation.Value...)
 		change.Mutations = append(change.Mutations, mutation)
 	}
-	markerConditions, markerMutations, err := idempotency.PreparePublication(request.Marker)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
+	if request.Accepted.Revision <= 0 || !request.Accepted.Task.PendingPreparation() ||
+		request.Accepted.Task.ID != task.ID {
+		return EntryWorkCapture{}, errs.New(errs.KindStateConflict, "Entry metadata lost its accepted Task")
 	}
-	change.Conditions = append(change.Conditions, markerConditions...)
-	change.Mutations = append(change.Mutations, markerMutations...)
+	change.Conditions = append(
+		change.Conditions,
+		keyvalue.Condition{Key: workqueue.TaskKey(task.ID), ModRevision: request.Accepted.Revision},
+	)
 	if task.Action == workexecution.ActionRemove {
 		removal, err := repository.prepareEntryMetadataRemoval(ctx, request)
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return EntryWorkCapture{}, err
 		}
 		change.Conditions = append(change.Conditions, removal.Conditions...)
 		change.Mutations = append(change.Mutations, removal.Mutations...)
 	}
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return EntryWorkCapture{}, err
 	}
 	change.Mutations = append(change.Mutations, epoch)
-	queue, err := workqueue.NewRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	result, err := queue.Commit(ctx, change)
-	keyvalue.ClearValues(result.FailureReads)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if result.Succeeded {
-		return IdempotencyTransactionResult{kind: idempotencyTransactionApplied, revision: result.Revision}, nil
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
-		found {
-		return existing, err
-	}
-	return IdempotencyTransactionResult{}, errs.New(
-		errs.KindStateConflict,
-		"Entry metadata changed before atomic acceptance",
-	)
+	change.Mutations = keyvalue.CloneMutations(change.Mutations)
+	decision := *ready.Result
+	return EntryWorkCapture{Task: task, Item: request.Item, Decision: &decision, Change: change}, nil
 }
 
 func (repository *EnvironmentBlueprintRepository) entryMetadataHostProof(ctx context.Context,

@@ -144,23 +144,30 @@ func newProjectCmd() *cobra.Command {
 	_ = rename.MarkFlagRequired("slug")
 	cmd.AddCommand(rename)
 
-	cmd.AddCommand(&cobra.Command{
+	var deleteAfter []string
+	remove := &cobra.Command{
 		Use:     "delete <slug>",
 		Aliases: []string{"remove"},
 		Short:   "Delete a project (destructive — dispatches a task)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(deleteAfter)
+			if err != nil {
+				return err
+			}
 			id, err := resolveProjectTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.DeleteProject(cmd.Context(), id)
+			accepted, err := fromContext(cmd).Client.DeleteProject(cmd.Context(), id, after)
 			if err != nil {
 				return err
 			}
 			return renderDispatchedTask(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &deleteAfter)
+	cmd.AddCommand(remove)
 
 	return cmd
 }

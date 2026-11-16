@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -22,6 +23,8 @@ const (
 
 // BackupRunService coordinates the exact bodyless manual backup intent.
 type BackupRunService struct {
+	accepted    *acceptedaction.Submitter
+	coordinator *requestidempotency.Coordinator
 	repository  BackupRunRepository
 	idempotency backupRunIdempotency
 	now         func() time.Time
@@ -33,26 +36,13 @@ type BackupRunService struct {
 func NewBackupRunService(
 	repository BackupRunRepository,
 	idempotency backupRunIdempotency,
+	accepted *acceptedaction.Submitter, coordinator *requestidempotency.Coordinator,
 ) *BackupRunService {
 	return &BackupRunService{
-		repository:  repository,
+		repository: repository, accepted: accepted, coordinator: coordinator,
 		idempotency: idempotency,
 		now:         time.Now,
 	}
-}
-
-// RunBackup publishes one operator/manual backup. An optional fixed revision
-// is accepted for callers that already selected a read revision; zero leaves
-// revision selection to the repository after replay resolution.
-func (service *BackupRunService) RunBackup(
-	ctx context.Context,
-	environmentID, idempotencyKey string,
-	fixedRevision ...int64,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.runBackup(
-		ctx, environmentID, idempotencyKey, backupRunRoute,
-		backupruntime.BackupRunInitiatorOperator, nil, time.Time{}, fixedRevision...,
-	)
 }
 
 // RunScheduledBackup publishes one deterministic occurrence in a Controller-

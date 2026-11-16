@@ -41,6 +41,37 @@ func TestEnvironmentBlueprintGDR1RecordsAreDeterministicBinary(t *testing.T) {
 	}
 }
 
+func TestEnvironmentBlueprintAcceptedPublicAuthoritySurvivesDraftStorage(t *testing.T) {
+	t.Parallel()
+	descriptor := validEnvironmentBlueprintStageDescriptorForTest(t)
+	public := testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopePlatform,
+		ScopeID:   "-",
+		Method:    "POST",
+		Route:     "/backing-services",
+		Key:       descriptor.Claim.Locator.Key,
+	}
+	descriptor.Claim.TaskLocator = &public
+	encoded, err := EncodeEnvironmentBlueprintStageDescriptor(descriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeEnvironmentBlueprintStageDescriptor(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if EnvironmentBlueprintTaskLocator(decoded.Claim) != public || decoded.Claim.Locator != descriptor.Claim.Locator ||
+		!SameEnvironmentBlueprintStageClaim(decoded.Claim, descriptor.Claim) {
+		t.Fatal("public request authority and private Environment draft locator did not survive storage")
+	}
+	cloned := CloneEnvironmentBlueprintStageClaim(decoded.Claim)
+	cloned.TaskLocator.Key = "another-request"
+	if EnvironmentBlueprintTaskLocator(decoded.Claim) != public ||
+		SameEnvironmentBlueprintStageClaim(cloned, decoded.Claim) {
+		t.Fatal("cloned draft aliases or ignores public request authority")
+	}
+}
+
 func TestEnvironmentBlueprintAuditStreamIsDeterministicBinary(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)

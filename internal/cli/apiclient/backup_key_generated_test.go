@@ -35,6 +35,7 @@ func TestRotateBackupKeyUsesGeneratedOperation(t *testing.T) {
 	accepted, err := New(server.URL).RotateBackupKey(
 		context.Background(),
 		"env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("RotateBackupKey() error = %v", err)

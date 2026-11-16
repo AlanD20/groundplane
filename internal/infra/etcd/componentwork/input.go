@@ -62,14 +62,29 @@ func (repository *InputRepository) Stage(ctx context.Context, view workqueue.Vie
 	input *agentpb.ComponentWorkInput, capture Capture,
 ) (workexecution.Input, workqueue.Change, error) {
 	task, item := view.Task.Task, view.Item.Item
-	if task.Validate() != nil || item.Validate() != nil ||
-		!task.PublicationComplete || task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
-		item.TaskID != task.ID || item.Operation != workexecution.Component || item.Placement.Executor != workexecution.Agent ||
-		item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput || item.Input != nil ||
-		item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.ForwardRevoked ||
-		view.Task.Revision <= 0 || view.Item.Revision <= 0 || view.ReadRevision <= 0 ||
-		view.Task.Revision > view.ReadRevision || view.Item.Revision > view.ReadRevision ||
-		input.GetComponentId() != item.TargetID || input.GetEnvironmentId() != task.Scope.EnvironmentID {
+	if task.Validate() != nil ||
+		item.Validate() != nil ||
+		!task.PublicationComplete ||
+		task.Stop != nil ||
+		task.FinishedAt != nil ||
+		task.CollectionStartedAt != nil ||
+		item.TaskID != task.ID ||
+		item.Operation != workexecution.Component ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Waiting ||
+		item.Wait == nil ||
+		item.Wait.Reason != workexecution.WaitInput ||
+		item.Input != nil ||
+		item.AttemptNumber != 0 ||
+		item.ActiveAttemptID != "" ||
+		item.ForwardRevoked ||
+		view.Task.Revision <= 0 ||
+		view.Item.Revision <= 0 ||
+		view.ReadRevision <= 0 ||
+		view.Task.Revision > view.ReadRevision ||
+		view.Item.Revision > view.ReadRevision ||
+		input.GetComponentId() != item.TargetID ||
+		input.GetEnvironmentId() != task.Scope.EnvironmentID {
 		return workexecution.Input{}, workqueue.Change{}, conflict(
 			"Component input requires its captured admission owner",
 		)
@@ -85,19 +100,42 @@ func (repository *InputRepository) Stage(ctx context.Context, view workqueue.Vie
 func (repository *InputRepository) stageRoute(ctx context.Context, task workexecution.Task, item workexecution.Item,
 	inputID string, input *agentpb.ComponentWorkInput, capture Capture, guards []keyvalue.Condition,
 ) (workexecution.Input, workqueue.Change, error) {
-	if task.Validate() != nil || item.Validate() != nil || capture.Route == nil || task.Stop != nil ||
-		task.FinishedAt != nil || task.CollectionStartedAt != nil || item.TaskID != task.ID ||
-		item.Operation != workexecution.Component || item.Placement.Executor != workexecution.Agent ||
-		item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput ||
-		item.Input != nil || item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.ForwardRevoked || len(guards) == 0 {
+	if task.Validate() != nil ||
+		task.AcceptedIntent == nil ||
+		item.Validate() != nil ||
+		capture.Route == nil ||
+		task.Stop != nil ||
+		task.FinishedAt != nil ||
+		task.CollectionStartedAt != nil ||
+		item.TaskID != task.ID ||
+		item.Operation != workexecution.Component ||
+		item.Placement.Executor != workexecution.Agent ||
+		item.Phase != workexecution.Waiting ||
+		item.Wait == nil ||
+		item.Wait.Reason != workexecution.WaitInput ||
+		item.Input != nil ||
+		item.AttemptNumber != 0 ||
+		item.ActiveAttemptID != "" ||
+		item.ForwardRevoked ||
+		len(guards) == 0 {
 		return workexecution.Input{}, workqueue.Change{}, conflict(
 			"Route input requires its unpublished admission owner",
 		)
 	}
 	view := workqueue.View{Task: workqueue.TaskSnapshot{Task: task}, Item: workqueue.ItemSnapshot{Item: item},
 		ReadRevision: capture.Configuration.ReadRevision}
-	guards = append(append([]keyvalue.Condition(nil), guards...),
-		keyvalue.Condition{Key: workqueue.TaskKey(task.ID)}, keyvalue.Condition{Key: workqueue.ItemKey(item.ID)})
+	acceptedOwner := false
+	for _, guard := range guards {
+		if guard.Key == workqueue.TaskKey(task.ID) && !guard.Prefix && guard.ModRevision > 0 {
+			acceptedOwner = true
+		}
+	}
+	if !acceptedOwner {
+		return workexecution.Input{}, workqueue.Change{}, conflict(
+			"Route input requires its exact accepted Task revision",
+		)
+	}
+	guards = append(append([]keyvalue.Condition(nil), guards...), keyvalue.Condition{Key: workqueue.ItemKey(item.ID)})
 	return repository.stageCaptured(ctx, view, inputID, input, capture, guards)
 }
 

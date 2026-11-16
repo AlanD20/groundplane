@@ -15,14 +15,14 @@ import {
 export type VolumeActions = {
   addVolume: (
     envId: string,
-    input: { slug: string; key?: string },
-  ) => Promise<Volume>;
+    input: { slug: string; key?: string; after?: string[] },
+  ) => Promise<string>;
   getVolume: (volumeId: string) => Promise<Volume>;
   updateVolume: (
     envId: string,
     volumeId: string,
-    patch: Pick<Volume, "slug">,
-  ) => Promise<Volume>;
+    patch: Pick<Volume, "slug"> & { after?: string[] },
+  ) => Promise<string>;
   getVolumeDeletionImpact: (
     volumeId: string,
     cursor?: string,
@@ -33,6 +33,7 @@ export type VolumeActions = {
     volumeId: string,
     impactToken: string,
     confirmKey: string,
+    after?: string[],
   ) => Promise<string>;
 };
 export function createVolumeActions(
@@ -42,11 +43,7 @@ export function createVolumeActions(
   return {
     addVolume: async (envId, input) => {
       assertEnvironmentMutable(envId, "Volume mutation");
-      const created = await createVolume(controllerRequest, envId, input);
-      update((draft) => {
-        findEnvironment(draft, envId)?.volumes.push(created);
-      });
-      return created;
+      return createVolume(controllerRequest, envId, input);
     },
     getVolume: async (volumeId) => {
       const volume = await getVolume(controllerRequest, volumeId);
@@ -61,20 +58,19 @@ export function createVolumeActions(
     },
     updateVolume: async (envId, volumeId, patch) => {
       assertEnvironmentMutable(envId, "Volume mutation");
-      const edited = await editVolume(controllerRequest, volumeId, patch.slug);
-      update((draft) => {
-        const volume = findEnvironment(draft, envId)?.volumes.find(
-          (candidate) => candidate.id === volumeId,
-        );
-        if (volume) Object.assign(volume, edited);
-      });
-      return edited;
+      return editVolume(controllerRequest, volumeId, patch.slug, patch.after);
     },
     getVolumeDeletionImpact: (volumeId, cursor = "", limit = 40) =>
       getVolumeDeletionImpact(controllerRequest, volumeId, cursor, limit),
-    removeVolume: (envId, volumeId, impactToken, confirmKey) => {
+    removeVolume: (envId, volumeId, impactToken, confirmKey, after = []) => {
       assertEnvironmentMutable(envId, "Volume mutation");
-      return removeVolume(controllerRequest, volumeId, impactToken, confirmKey);
+      return removeVolume(
+        controllerRequest,
+        volumeId,
+        impactToken,
+        confirmKey,
+        after,
+      );
     },
   };
 }

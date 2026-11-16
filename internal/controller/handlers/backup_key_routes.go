@@ -15,7 +15,12 @@ import (
 )
 
 type BackupKeyMutator interface {
-	RotateBackupKey(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RotateBackupKey(
+		context.Context,
+		string,
+		string,
+		apiTypes.TaskRunAfterRequest,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type BackupKeyExporter interface {
@@ -23,8 +28,9 @@ type BackupKeyExporter interface {
 }
 
 type backupKeyRotateInput struct {
-	ID  string `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Key string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID   string                        `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Key  string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type backupKeyExportInput struct {
@@ -49,7 +55,7 @@ func (s *Server) registerBackupKeyRoutes() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backup.key.rotate", Method: http.MethodPost, Path: "/environments/{id}/rotate-key",
 		Summary: "Rotate the Environment backup age key", Tags: []string{"Backup"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectTaskMutationBody, s.rejectTaskMutationQuery},
+		Middlewares: huma.Middlewares{s.rejectTaskMutationQuery},
 		Responses:   attachMutationResponses(acceptedSchema),
 	}, s.rotateBackupKey)
 	huma.Register(s.API, huma.Operation{
@@ -62,7 +68,7 @@ func (s *Server) registerBackupKeyRoutes() {
 			), Content: map[string]*huma.MediaType{"text/plain": {Schema: &huma.Schema{Type: huma.TypeString}}},
 		}},
 	}, s.exportBackupKey)
-	s.setRoutePolicy("POST /api/v1/environments/{id}/rotate-key", routePolicy{body: bodyless})
+	s.setRoutePolicy("POST /api/v1/environments/{id}/rotate-key", routePolicy{body: jsonBody})
 	s.setRoutePolicy("POST /api/v1/environments/{id}/export-key", routePolicy{body: bodyless})
 }
 
@@ -70,7 +76,7 @@ func (s *Server) rotateBackupKey(ctx context.Context, request *backupKeyRotateIn
 	if s.backupKeyMutations == nil {
 		return nil, errs.New(errs.KindInternal, "backup key mutator is not configured")
 	}
-	response, err := s.backupKeyMutations.RotateBackupKey(ctx, request.ID, request.Key)
+	response, err := s.backupKeyMutations.RotateBackupKey(ctx, request.ID, request.Key, taskRunAfter(request.Body))
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}

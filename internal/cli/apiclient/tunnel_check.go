@@ -16,14 +16,18 @@ func (c *Client) CheckTunnelConnections(
 	connectorID, originServiceID string,
 	port uint16,
 	hostname, path string,
+	revision int64,
+	after []string,
 ) (apiTypes.TaskAccepted, error) {
 	connector, err := c.ShowComponent(ctx, connectorID)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	if connector.Kind != "cloudflare-tunnel" || connector.Owner != "environment" || connector.EnvironmentID == "" ||
-		connector.Revision <= 0 {
+	if connector.Kind != "cloudflare-tunnel" || connector.Owner != "environment" || connector.EnvironmentID == "" {
 		return apiTypes.TaskAccepted{}, errs.New(errs.KindValidationFailed, "select an Environment's Cloudflare Tunnel")
+	}
+	if revision < 0 {
+		return apiTypes.TaskAccepted{}, errs.New(errs.KindValidationFailed, "revision cannot be negative")
 	}
 	client, err := c.generatedHumanClient()
 	if err != nil {
@@ -32,7 +36,9 @@ func (c *Client) CheckTunnelConnections(
 	endpoint := "/api/v1/components/" + connectorID + "/tunnel-checks"
 	response, err := client.ComponentTunnelCheckWithResponse(ctx, connectorID, &generated.ComponentTunnelCheckParams{
 		Environment: connector.EnvironmentID, IdempotencyKey: ids.NewULID()}, generated.ComponentTunnelCheckJSONRequestBody{
-		Revision: connector.Revision, OriginServiceId: originServiceID, OriginPort: int32(port), Hostname: hostname, Path: path})
+		Revision: optionalTaskRevision(
+			revision,
+		), After: optionalServiceStrings(after), OriginServiceId: originServiceID, OriginPort: int32(port), Hostname: hostname, Path: path})
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, endpoint, err)
 	}

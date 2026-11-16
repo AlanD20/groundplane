@@ -180,7 +180,9 @@ func (fixture nativePruneFixture) start(t *testing.T) workqueue.ResumeView {
 			HostID:   fixture.item.Placement.HostID,
 			AgentID:  fixture.agentID,
 		},
-		ProcessGeneration: [16]byte{1}, Capacity: 1, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1, Operations: []workexecution.Operation{workexecution.BackupPrune}})
+		ProcessGeneration: [16]byte{
+			1,
+		}, Capacity: 1, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1, Operations: []workexecution.Operation{workexecution.BackupPrune}})
 	if err != nil {
 		t.Fatal(err)
 	}

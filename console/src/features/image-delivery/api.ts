@@ -1,23 +1,32 @@
-import type { operations } from '@/lib/api.generated'
-import { controllerRequest } from '@/lib/controller-json-request'
+import type { operations } from "@/lib/api.generated";
+import { controllerRequest } from "@/lib/controller-json-request";
 
-export type ImageInventory = operations['image.list']['responses'][200]['content']['application/json']
-export type HostImage = ImageInventory['images'][number]
+export type ImageInventory =
+  operations["image.list"]["responses"][200]["content"]["application/json"];
+export type HostImage = ImageInventory["images"][number];
 
 export function listImages(signal?: AbortSignal) {
-  return controllerRequest<ImageInventory>('/images', 200, { signal })
+  return controllerRequest<ImageInventory>("/images", 200, { signal });
 }
 
-export function removeImage(id: string, key: string) {
-  return controllerRequest<operations['image.remove']['responses'][202]['content']['application/json']>(`/images/${encodeURIComponent(id)}`, 202, { method: 'DELETE', idempotencyKey: key })
+export function removeImage(id: string, key: string, after: string[] = []) {
+  return controllerRequest<
+    operations["image.remove"]["responses"][202]["content"]["application/json"]
+  >(`/images/${encodeURIComponent(id)}`, 202, {
+    method: "DELETE",
+    idempotencyKey: key,
+    body: after.length ? { after } : {},
+  });
 }
 
 export function imageReferences(image: HostImage): string[] {
-  return [...new Set([...image.digests, ...image.tags])]
+  return [...new Set([...image.digests, ...image.tags])];
 }
 
 export function imageSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`
-  return bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GiB` : `${(bytes / 1024 ** 2).toFixed(1)} MiB`
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return bytes >= 1024 ** 3
+    ? `${(bytes / 1024 ** 3).toFixed(2)} GiB`
+    : `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
 }

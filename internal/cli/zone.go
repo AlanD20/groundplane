@@ -99,12 +99,17 @@ func newZoneCmd() *cobra.Command {
 		BoolVar(&allowGPDNS, "allow-gp-dns", false, "use shared CoreDNS from an internal Zone; requires --internal")
 	cmd.AddCommand(add)
 
-	cmd.AddCommand(&cobra.Command{
+	var runAfter []string
+	remove := &cobra.Command{
 		Use:     "remove <name>",
 		Aliases: []string{"delete"},
 		Short:   "Remove a zone (strips it from every service's membership — see mvp.md's zone-removal warning; dispatches a task)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			id, err := resolveZoneTarget(cmd, args[0])
 			if err != nil {
 				return err
@@ -113,13 +118,15 @@ func newZoneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.RemoveZone(cmd.Context(), id, impact.ImpactToken)
+			accepted, err := fromContext(cmd).Client.RemoveZone(cmd.Context(), id, impact.ImpactToken, after)
 			if err != nil {
 				return err
 			}
 			return renderTaskAccepted(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &runAfter)
+	cmd.AddCommand(remove)
 
 	return cmd
 }

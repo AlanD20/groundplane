@@ -26,7 +26,7 @@ func TestDeleteEnvironmentUsesGeneratedAcceptedTaskOperation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	accepted, err := New(server.URL).DeleteEnvironment(context.Background(), environmentID)
+	accepted, err := New(server.URL).DeleteEnvironment(context.Background(), environmentID, nil)
 	if err != nil {
 		t.Fatalf("DeleteEnvironment() error = %v", err)
 	}

@@ -25,10 +25,7 @@ func routeWorkResponse(
 			"Route acceptance does not match its staged action",
 		)
 	}
-	body, err := json.Marshal(api.RouteTaskAccepted{Route: routeAPIResponse(record), TaskID: claim.TaskID})
-	if claim.Locator.Method == http.MethodDelete {
-		body, err = json.Marshal(api.TaskAccepted{TaskID: claim.TaskID})
-	}
+	body, err := json.Marshal(api.TaskAccepted{TaskID: claim.TaskID})
 	if err != nil {
 		return idempotency.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
 	}

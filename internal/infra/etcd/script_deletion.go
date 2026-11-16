@@ -2,7 +2,9 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredauthoring"
 	"net/http"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
@@ -20,10 +22,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PublishScriptRemoval atomically fences one Script and publishes the
-// Controller Task that owns finalization. The Script remains visible until
-// successful acknowledgement.
-func (repository *ScriptRepository) PublishScriptRemoval(
+// PrepareScriptRemovalAuthority captures guarded native removal authority after
+// prerequisites settle. Its fragment joins promotion of the original Task.
+func (repository *ScriptRepository) PrepareScriptRemovalAuthority(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -31,16 +32,16 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 	current etcdstore.Versioned[scriptrecord.Record],
 	input scriptremoval.Input,
 	task workexecution.Task,
-	marker idempotencyrecord.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+	acceptedRevision int64, locator idempotencyrecord.IdempotencyLocator,
+) (workqueue.Change, workexecution.Item, error) {
 	if err := scriptmutations.ValidateScriptHierarchy(ctx, environment, project, target, current.Record); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	if err := scriptmutations.ValidateScriptVersion(current); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	if current.Record.ActiveReferences != 0 {
-		return IdempotencyTransactionResult{}, errs.New(
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
 			errs.KindResourceInUse, "active Script executions fence deletion",
 		)
 	}
@@ -52,19 +53,21 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 		current.ReadRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	if active.Record.GenerationID != current.Record.ScriptSetGeneration {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Script-set generation changed")
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
+			errs.KindStateConflict,
+			"Script-set generation changed",
+		)
 	}
 	ref, err := input.Reference()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	if task.Validate() != nil || task.Action != workexecution.ActionRemove ||
 		task.Actor != workexecution.OperatorActor ||
 		task.TargetID != scriptID ||
-		task.TargetName != current.Record.Desired.Slug ||
 		task.ExpectedItems != 1 ||
 		task.Scope != (workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID}) ||
 		input.TaskID != task.ID ||
@@ -76,8 +79,8 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 		input.ServiceID != target.Record.Desired.ID ||
 		input.ScriptSetGeneration != current.Record.ScriptSetGeneration ||
 		task.Intent != ref ||
-		!task.CreatedAt.Equal(input.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
+		input.CreatedAt.Before(task.CreatedAt) || !task.UpdatedAt.Equal(input.CreatedAt) {
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
 			errs.KindValidationFailed,
 			"Script removal differs from its captured input",
 		)
@@ -85,6 +88,22 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 	tombstone := deletionrecord.DeletionTombstoneRecord{
 		TargetKind: deletionrecord.DeletionTargetScript, TargetID: scriptID, TargetRevision: current.Revision,
 		TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt}
+	evidence, err := (&IdempotencyRepository{store: repository.store}).Read(ctx, locator)
+	if err != nil {
+		return workqueue.Change{}, workexecution.Item{}, err
+	}
+	if evidence == nil || evidence.marker.TaskID != task.ID {
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
+			errs.KindStateConflict,
+			"Accepted Script removal is unavailable",
+		)
+	}
+	marker := evidence.marker
+	defer clear(marker.Intent.Ciphertext)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(locator)
+	if err != nil {
+		return workqueue.Change{}, workexecution.Item{}, err
+	}
 	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{
 		Kind: idempotencyrecord.IdempotencyReplayTargetScript,
 		ID:   scriptID,
@@ -99,14 +118,11 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 		*marker.ReplayTarget != wantReplayTarget ||
 		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
 			errs.KindValidationFailed, "Script deletion marker does not match its Task",
 		)
 	}
 
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
-		return existing, err
-	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			scriptrecord.ScriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
@@ -119,7 +135,7 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 		Revision: current.ReadRevision,
 	})
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	if indexes != nil {
 		defer etcdstore.ClearValues(indexes.Values)
@@ -129,39 +145,46 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 		indexes.Values[1] == nil ||
 		string(indexes.Values[0].Value) != scriptID ||
 		string(indexes.Values[1].Value) != scriptID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Script deletion indexes are corrupt")
+		return workqueue.Change{}, workexecution.Item{}, errs.New(
+			errs.KindInternal,
+			"Script deletion indexes are corrupt",
+		)
 	}
 
 	item := workexecution.Item{ID: input.WorkItemID, TaskID: task.ID, Operation: workexecution.ScriptRemoval,
 		TargetID: scriptID, Placement: workexecution.Placement{Executor: workexecution.Controller},
 		Claims: []workexecution.Claim{{ScopeID: scriptID}}, Input: &ref, Phase: workexecution.Ready,
-		Cleanup: workexecution.CleanupNone, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
-	work, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		Cleanup: workexecution.CleanupNone, CreatedAt: input.CreatedAt, UpdatedAt: input.CreatedAt, Deadline: input.CreatedAt.Add(30 * time.Second)}
+	if item.Deadline.After(task.Deadline) {
+		item.Deadline = task.Deadline
 	}
-	defer etcdstore.ClearMutationValues(work.Mutations)
 	captureConditions, captureWrites, err := scriptremoval.PreparePublication(input)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	defer etcdstore.ClearMutationValues(captureWrites)
-	publication, err := prepareDirectDesiredProjectionPublication(
-		ctx, repository.store, current.Record.EnvironmentID, marker,
+	authored, err := desiredauthoring.PrepareAccepted(
+		ctx,
+		repository.store,
+		task,
+		acceptedRevision,
+		marker,
+		input.CreatedAt,
 		scriptauthoring.Remove(current.Record),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
+	publication := desiredMutationFragment{conditions: authored.Conditions, mutations: authored.Mutations}
 	defer clearDesiredMutationFragment(publication)
 	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	defer clear(tombstoneValue)
 	activeValue, err := scriptrecord.EncodeScriptSetGeneration(active.Record)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	defer clear(activeValue)
 
@@ -215,41 +238,27 @@ func (repository *ScriptRepository) PublishScriptRemoval(
 			Value: activeValue,
 		},
 	}
-	conditions = append(conditions, work.Conditions...)
+	conditions = append(conditions, etcdstore.Condition{Key: markerKey, ModRevision: evidence.modRevision})
 	conditions = append(conditions, captureConditions...)
-	mutations = append(mutations, work.Mutations...)
 	mutations = append(mutations, captureWrites...)
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*etcdstore.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "Script removal input or Environment changed; refresh before removing")
 	})
 	conditions, mutations, classify, err = publication.bindDirectDesired(conditions, mutations, classify)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, taskjournal.TaskActorOperator)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
 	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, workexecution.Item{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(
-		idempotencyrecord.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		classify,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
+	return workqueue.Change{Conditions: conditions, Mutations: etcdstore.CloneMutations(mutations)}, item, nil
 }

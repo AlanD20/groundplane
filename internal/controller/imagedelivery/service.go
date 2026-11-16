@@ -4,14 +4,17 @@ package imagedelivery
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,18 +31,10 @@ type Registry interface {
 	Remove(context.Context, string) error
 }
 
-type TaskStore interface {
-	CreateImageOperation(
-		context.Context,
-		imageoperations.Input,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-}
-
 type Service struct {
 	registry    Registry
-	tasks       TaskStore
-	evidence    requestidempotency.EvidenceRepository
+	evidence    *etcd.IdempotencyRepository
+	submitter   *acceptedaction.Submitter
 	intents     *requestidempotency.Coordinator
 	store       ImageStore
 	operations  *imageoperations.Repository
@@ -50,13 +45,13 @@ type Service struct {
 func New(
 	registry Registry,
 	store ImageStore,
-	tasks TaskStore,
-	evidence requestidempotency.EvidenceRepository,
+	evidence *etcd.IdempotencyRepository,
 	intents *requestidempotency.Coordinator,
 	diagnostics *executiondiagnostics.Repository,
 	releases *etcd.ReleaseLedger,
+	submitter *acceptedaction.Submitter,
 ) (*Service, error) {
-	if registry == nil || store == nil || tasks == nil || evidence == nil || intents == nil || diagnostics == nil ||
+	if registry == nil || store == nil || submitter == nil || evidence == nil || intents == nil || diagnostics == nil ||
 		releases == nil {
 		return nil, errs.New(errs.KindInternal, "image delivery dependencies are incomplete")
 	}
@@ -67,7 +62,7 @@ func New(
 	return &Service{
 		registry:    registry,
 		store:       store,
-		tasks:       tasks,
+		submitter:   submitter,
 		evidence:    evidence,
 		intents:     intents,
 		operations:  operations,
@@ -79,40 +74,57 @@ func New(
 func (service *Service) FetchImage(
 	ctx context.Context,
 	requested, key string,
+	after []string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if _, err := imagefetch.ParseRequested(requested); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.accept(ctx, requested, key, false)
+	return service.accept(ctx, requested, key, false, after)
 }
 
 func (service *Service) RemoveImage(
 	ctx context.Context,
 	imageID, key string,
+	after []string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if _, err := imagefetch.RemovalHash(imageID); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.accept(ctx, imageID, key, true)
+	return service.accept(ctx, imageID, key, true, after)
 }
 
 func (service *Service) accept(
 	ctx context.Context,
 	requested, key string,
 	remove bool,
+	after []string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
+	if len(after) != 0 {
+		if err := workexecution.ValidateTaskDependencies(ids.New(ids.KindTask), after); err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+	}
+	afterValues := make([]requestidempotency.Value, len(after))
+	for i, id := range after {
+		afterValues[i] = requestidempotency.String(id)
+	}
 	method, route := http.MethodPost, FetchRoute
 	intentInput := requestidempotency.CanonicalIntentV1{
 		Method: method, Route: route, Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
 		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(
 			requestidempotency.Field{Name: "image", Value: requestidempotency.String(requested)},
+			requestidempotency.Field{Name: "after", Value: requestidempotency.List(afterValues...)},
 		)),
 	}
 	if remove {
 		method, route = http.MethodDelete, RemoveRoute
 		intentInput.Method, intentInput.Route = method, route
 		intentInput.Path = []requestidempotency.PathBinding{{Name: "id", Value: requested}}
-		intentInput.Body = requestidempotency.NoBody()
+		intentInput.Body = requestidempotency.JSONBody(
+			requestidempotency.Object(
+				requestidempotency.Field{Name: "after", Value: requestidempotency.List(afterValues...)},
+			),
+		)
 	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, intentInput)
 	if err != nil {
@@ -136,46 +148,33 @@ func (service *Service) accept(
 	if found {
 		return replay(existing)
 	}
-	// Resolution precedes publication but follows replay lookup. The atomic
-	// marker selects one winning plan when requests race; no pull happens here.
+	host, err := hostbindings.ReadLocalIdentity(ctx, service.store, 0)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	if host.Revision == 0 {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Enroll an Agent before requesting host image work",
+		)
+	}
 	now := time.Now().UTC()
-	input, raw, err := service.prepareOperation(ctx, requested, now, remove)
+	task := workexecution.Task{ID: ids.New(ids.KindTask), Actor: workexecution.OperatorActor,
+		Action: workexecution.ActionFetch, TargetID: host.Record, TargetName: requested,
+		After: append([]string(nil), after...), CreatedAt: now, UpdatedAt: now,
+		Deadline: now.Add(acceptedaction.QueueTimeout)}
+	kind := "image-fetch"
+	if remove {
+		task.Action, task.TargetID, kind = workexecution.ActionRemove, requested, "image-remove"
+	}
+	durable, err := evidence.DurableRecord()
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	defer clear(raw)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status:      http.StatusAccepted,
-		ContentKind: "application/json",
-		Body:        raw,
-	}
-	intent, err := evidence.DurableRecord()
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(intent.Ciphertext)
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, Intent: intent, Response: response, TaskID: input.TaskID, CreatedAt: now, UpdatedAt: now,
-	}
-	result, publicationErr := service.tasks.CreateImageOperation(ctx, input, marker)
-	var resolution requestidempotency.Resolution
-	if publicationErr != nil {
-		if !errors.Is(publicationErr, context.DeadlineExceeded) &&
-			!errors.Is(publicationErr, errs.New(errs.KindStorageUnavailable, "")) {
-			return idempotencyrecord.IdempotencyResponse{}, publicationErr
-		}
-		resolution, err = service.intents.ResolveUnknown(ctx, service.evidence, locator, evidence, publicationErr)
-	} else {
-		resolution, err = service.intents.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if resolution.Kind == requestidempotency.ResolutionApplied {
-		return requestidempotency.CloneResponse(response), nil
-	}
-	return replay(resolution)
+	defer clear(durable.Ciphertext)
+	return acceptedaction.Submit(ctx, service.submitter,
+		acceptedaction.Submission{Task: task, Kind: kind, Locator: locator, Intent: durable, Evidence: evidence},
+		imageRequest{Requested: requested, HostID: host.Record})
 }
 
 func replay(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {

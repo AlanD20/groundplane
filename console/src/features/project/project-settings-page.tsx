@@ -284,7 +284,8 @@ export default function ProjectSettingsPage() {
         destructive
         confirmText={project.slug}
         startLabel="Delete project"
-        onDispatch={() => store.deleteProject(project.id)}
+        runAfter
+        onDispatch={(after) => store.deleteProject(project.id, after)}
         onCommit={() => window.location.assign(`/t/${tenant.slug}`)}
       />
     </div>

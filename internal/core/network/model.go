@@ -82,6 +82,7 @@ const (
 
 // CreateRouteRequest contains the complete immutable Route match and target.
 type CreateRouteRequest struct {
+	After           []string
 	EnvironmentID   string
 	Host            string
 	Path            string
@@ -92,6 +93,7 @@ type CreateRouteRequest struct {
 
 // EditRouteRequest changes only the mutable exposure policy.
 type EditRouteRequest struct {
+	After    []string
 	Exposure RouteExposure
 }
 

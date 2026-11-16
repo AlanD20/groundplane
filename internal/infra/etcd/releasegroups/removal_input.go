@@ -87,12 +87,14 @@ func (input RemovalInput) Match(task workexecution.Task, item workexecution.Item
 		return err
 	}
 	if task.ID != input.TaskID || task.Action != expectedTask.Action || task.Scope != input.Scope ||
-		task.TargetID != input.GroupID || task.TargetName != input.GroupName || task.Intent != expectedTask.Intent ||
-		task.ExpectedItems != 1 || !task.CreatedAt.Equal(input.CreatedAt) || !task.Deadline.Equal(expectedTask.Deadline) ||
+		task.TargetID != input.GroupID || task.Intent != expectedTask.Intent ||
+		task.ExpectedItems != 1 || task.CreatedAt.After(input.CreatedAt) || task.UpdatedAt.Before(input.CreatedAt) || task.Deadline.Before(item.Deadline) ||
 		item.ID != input.WorkItemID || item.TaskID != input.TaskID || item.Operation != expectedItem.Operation ||
 		item.TargetID != input.GroupID || item.Placement != expectedItem.Placement || item.Input == nil ||
 		*item.Input != expectedTask.Intent || len(item.Dependencies) != 0 || len(item.Claims) != 1 || item.Claims[0] != expectedItem.Claims[0] ||
-		!item.CreatedAt.Equal(input.CreatedAt) || !item.Deadline.Equal(expectedItem.Deadline) {
+		!item.CreatedAt.Equal(
+			input.CreatedAt,
+		) || item.Deadline.After(expectedItem.Deadline) || !item.Deadline.After(input.CreatedAt) {
 		return errs.New(errs.KindStateConflict, "Release Group removal differs from its captured input")
 	}
 	return nil

@@ -18,6 +18,7 @@ import (
 )
 
 type creationCapture struct {
+	Deadline    time.Time
 	PlanID      string
 	Environment hierarchy.EnvironmentRecord
 	Service     core.Service
@@ -94,7 +95,11 @@ func (service *CreationService) captureCreation(
 			defer clear(envelope.Ciphertext)
 		}
 	}
-	procedure.Deadline = timestamppb.New(environment.CreatedAt.Add(budget))
+	deadline := environment.CreatedAt.Add(budget)
+	if !capture.Deadline.IsZero() && capture.Deadline.Before(deadline) {
+		deadline = capture.Deadline
+	}
+	procedure.Deadline = timestamppb.New(deadline)
 	targetName := capture.Service.Label
 	if targetName == "" {
 		targetName = capture.Service.Name

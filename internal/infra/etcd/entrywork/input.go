@@ -111,7 +111,20 @@ func (repository *InputRepository) Stage(
 			}
 		}
 	} else {
-		guards = append(guards, keyvalue.Condition{Key: workqueue.TaskKey(taskID)}, keyvalue.Condition{Key: workqueue.ItemKey(workID)})
+		if task.AcceptedIntent != nil {
+			fenced := false
+			for _, guard := range guards {
+				if guard.Key == workqueue.TaskKey(taskID) && guard.ModRevision > 0 && !guard.Prefix {
+					fenced = true
+				}
+			}
+			if !fenced {
+				return workexecution.Input{}, workqueue.Change{}, conflict("Entry staging lost its accepted Task comparison")
+			}
+		} else {
+			guards = append(guards, keyvalue.Condition{Key: workqueue.TaskKey(taskID)})
+		}
+		guards = append(guards, keyvalue.Condition{Key: workqueue.ItemKey(workID)})
 	}
 
 	_, wire, reference, err := executionplan.CaptureEntryConfigurationWorkInput(inputID, input)

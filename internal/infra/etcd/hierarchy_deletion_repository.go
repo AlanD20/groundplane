@@ -91,6 +91,8 @@ func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
 }
 
 type HierarchyDeletionTargetResolution struct {
+	TaskScope  workexecution.Scope
+	TargetName string
 	TargetKind hierarchydeletion.HierarchyDeletionTargetKind
 	ScopeKind  idempotencyrecord.IdempotencyScopeKind
 	ScopeID    string
@@ -109,10 +111,24 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		if err := recordcodec.ValidateID(ids.KindTenant, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
+		tenant, err := recordquery.Get(
+			ctx,
+			repository.store,
+			hierarchyrecord.TenantKey(targetID),
+			targetID,
+			errs.KindTenantNotFound,
+			hierarchyrecord.DecodeTenant,
+			func(record hierarchyrecord.TenantRecord) string { return record.ID },
+		)
+		if err != nil {
+			return HierarchyDeletionTargetResolution{}, err
+		}
 		return HierarchyDeletionTargetResolution{
 			TargetKind: requested,
 			ScopeKind:  idempotencyrecord.IdempotencyScopeTenant,
 			ScopeID:    targetID,
+			TaskScope:  workexecution.Scope{TenantID: targetID},
+			TargetName: tenant.Record.Slug,
 		}, nil
 	case hierarchydeletion.HierarchyDeletionTargetProject:
 		project, err := recordquery.Get(
@@ -143,6 +159,10 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			TargetKind: requested,
 			ScopeKind:  idempotencyrecord.IdempotencyScopeTenant,
 			ScopeID:    project.Record.TenantID,
+			TaskScope: workexecution.Scope{
+				TenantID:  project.Record.TenantID,
+				ProjectID: project.Record.ID,
+			}, TargetName: project.Record.Slug,
 		}, nil
 	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		if err := recordcodec.ValidateID(ids.KindProject, targetID); err != nil {
@@ -170,6 +190,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			TargetKind: requested,
 			ScopeKind:  idempotencyrecord.IdempotencyScopePlatform,
 			ScopeID:    "-",
+			TaskScope:  workexecution.Scope{ProjectID: project.Record.ID}, TargetName: project.Record.Slug,
 		}, nil
 	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		if err := recordcodec.ValidateID(ids.KindEnvironment, targetID); err != nil {
@@ -190,10 +211,35 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		if err := recordcodec.ValidateID(ids.KindProject, environment.Record.ProjectID); err != nil {
 			return HierarchyDeletionTargetResolution{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
+		parent, err := repository.store.GetMany(
+			ctx,
+			etcdstore.GetManyRequest{
+				Keys:     []string{hierarchyrecord.ProjectKey(environment.Record.ProjectID)},
+				Revision: environment.ReadRevision,
+			},
+		)
+		if err != nil {
+			return HierarchyDeletionTargetResolution{}, err
+		}
+		if parent == nil || parent.ReadRevision != environment.ReadRevision || len(parent.Values) != 1 ||
+			parent.Values[0] == nil {
+			return HierarchyDeletionTargetResolution{}, hierarchydeletion.CorruptHierarchyDeletion()
+		}
+		defer etcdstore.ClearValues(parent.Values)
+		project, err := hierarchyrecord.DecodeProject(parent.Values[0].Value)
+		if err != nil || project.ID != environment.Record.ProjectID {
+			return HierarchyDeletionTargetResolution{}, hierarchydeletion.CorruptHierarchyDeletion()
+		}
 		return HierarchyDeletionTargetResolution{
 			TargetKind: requested,
 			ScopeKind:  idempotencyrecord.IdempotencyScopeProject,
-			ScopeID:    environment.Record.ProjectID,
+			ScopeID:    project.ID,
+			TargetName: environment.Record.Name,
+			TaskScope: workexecution.Scope{
+				TenantID:      project.TenantID,
+				ProjectID:     project.ID,
+				EnvironmentID: environment.Record.ID,
+			},
 		}, nil
 	default:
 		return HierarchyDeletionTargetResolution{}, errs.New(
@@ -203,22 +249,23 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 	}
 }
 
-type HierarchyDeletionBegin struct {
+type HierarchyDeletionCapture struct {
 	OperationID     string
 	OperationKind   hierarchydeletion.HierarchyDeletionOperationKind
 	TargetKind      hierarchydeletion.HierarchyDeletionTargetKind
 	TargetID        string
 	TaskID          string
+	TaskCreatedAt   time.Time
 	IdempotencyHash string
-	Marker          idempotencyrecord.IdempotencyMarker
+	Locator         idempotencyrecord.IdempotencyLocator
 	CreatedAt       time.Time
 	DeadlineAt      time.Time
 }
-
-type HierarchyDeletionBeginResult struct {
-	Operation   hierarchydeletion.HierarchyDeletionOperation
-	Idempotency IdempotencyTransactionResult
-	Existing    bool
+type HierarchyDeletionCaptureResult struct {
+	Intent     workexecution.Input
+	Scope      workexecution.Scope
+	TargetName string
+	Authority  workqueue.Change
 }
 
 type hierarchyDeletionRoot struct {
@@ -233,123 +280,10 @@ type hierarchyDeletionRoot struct {
 	coordinationKeys               []string
 }
 
-func (repository *HierarchyDeletionRepository) Begin(
+func (repository *HierarchyDeletionRepository) PrepareCapture(
 	ctx context.Context,
-	begin HierarchyDeletionBegin,
-) (HierarchyDeletionBeginResult, error) {
-	if err := validateHierarchyDeletionBegin(begin); err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	known, found, err := existingIdempotencyTransaction(ctx, repository.store, begin.Marker)
-	if err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	if found {
-		outcome, marker, conflict, classifyErr := known.Classify()
-		if classifyErr != nil {
-			return HierarchyDeletionBeginResult{}, classifyErr
-		}
-		if conflict != nil {
-			return HierarchyDeletionBeginResult{}, conflict
-		}
-		if outcome != IdempotencyKnownExisting || marker.TaskID == "" {
-			return HierarchyDeletionBeginResult{}, hierarchydeletion.CorruptHierarchyDeletion()
-		}
-		existing, readErr := repository.OperationByTask(ctx, marker.TaskID)
-		return HierarchyDeletionBeginResult{Operation: existing, Idempotency: known, Existing: true}, readErr
-	}
-	root, snapshotRevision, err := repository.readDeletionRoot(ctx, begin.TargetKind, begin.TargetID)
-	if err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	defer clear(root.targetValue)
-
-	operation, conditions, mutations, err := prepareHierarchyDeletionPublication(
-		begin,
-		root,
-		snapshotRevision,
-	)
-	if err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	defer etcdstore.ClearMutationValues(mutations)
-	defer hierarchydeletion.ClearHierarchyDeletionOperation(operation)
-
-	task, err := hierarchyDeletionTask(begin, root.scope, operation.Intent)
-	if err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	work, err := workqueue.PrepareTask(task, begin.Marker)
-	if err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	defer etcdstore.ClearMutationValues(work.Mutations)
-	hostID, hostConditions, err := repository.captureDeletionHost(ctx, snapshotRevision)
-	if err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	conditions = append(conditions, hostConditions...)
-	binding, err := hierarchydeletion.EncodeTaskBinding(
-		hierarchydeletion.TaskBinding{
-			TaskID:      task.ID,
-			OperationID: begin.OperationID,
-			Marker:      begin.Marker.Locator,
-			HostID:      hostID,
-		},
-	)
-	if err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	defer clear(binding)
-	conditions = append(conditions, etcdstore.Condition{Key: hierarchydeletion.TaskBindingKey(task.ID)})
-	mutations = append(
-		mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchydeletion.TaskBindingKey(task.ID), Value: binding},
-	)
-	conditions = append(conditions, work.Conditions...)
-	mutations = append(mutations, work.Mutations...)
-	plan, err := newIdempotencyMutationPlanForMarker(
-		idempotencyrecord.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		classifyHierarchyDeletionBegin(begin),
-	)
-	if err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	if err := plan.enforceTransactionBounds(func(finalConditions []etcdstore.Condition, finalMutations []etcdstore.Mutation) error {
-		return hierarchydeletion.ValidateHierarchyDeletionTransaction(finalConditions, finalMutations, 64)
-	}); err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	idempotency, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	result, err := idempotency.Apply(ctx, begin.Marker, plan)
-	if err != nil {
-		return HierarchyDeletionBeginResult{}, err
-	}
-	outcome, _, conflict, classifyErr := result.Classify()
-	if classifyErr != nil {
-		return HierarchyDeletionBeginResult{}, classifyErr
-	}
-	if conflict != nil {
-		return HierarchyDeletionBeginResult{}, conflict
-	}
-	if outcome == IdempotencyKnownExisting {
-		_, marker, _, _ := result.Classify()
-		existing, readErr := repository.OperationByTask(ctx, marker.TaskID)
-		return HierarchyDeletionBeginResult{Operation: existing, Idempotency: result, Existing: true}, readErr
-	}
-	created := hierarchydeletion.CloneHierarchyDeletionOperation(operation)
-	created.TombstoneRevision = result.revision
-	created.FenceRevision = result.revision
-	created.IntentRevision = result.revision
-	return HierarchyDeletionBeginResult{Operation: created, Idempotency: result}, nil
-}
-
-func validateHierarchyDeletionBegin(begin HierarchyDeletionBegin) error {
+	begin HierarchyDeletionCapture,
+) (HierarchyDeletionCaptureResult, error) {
 	if !hierarchydeletion.ValidHierarchyDeletionPrivateID(begin.OperationID, "del") ||
 		!hierarchydeletion.ValidHierarchyDeletionOperation(begin.OperationKind, begin.TargetKind) ||
 		!hierarchydeletion.ValidHierarchyDeletionTarget(begin.TargetKind, begin.TargetID) ||
@@ -357,58 +291,75 @@ func validateHierarchyDeletionBegin(begin HierarchyDeletionBegin) error {
 			ids.KindTask,
 			begin.TaskID,
 		) != nil || !hierarchydeletion.ValidHierarchyDeletionDigest(begin.IdempotencyHash) ||
-		!hierarchydeletion.ValidHierarchyDeletionTimestamp(
-			begin.CreatedAt,
-		) || !hierarchydeletion.ValidHierarchyDeletionTimestamp(begin.DeadlineAt) ||
-		!begin.DeadlineAt.Equal(begin.CreatedAt.Add(hierarchydeletion.AttemptTimeout)) {
-		return errs.New(errs.KindValidationFailed, "hierarchy deletion publication is invalid")
+		!hierarchydeletion.ValidHierarchyDeletionTimestamp(begin.CreatedAt) ||
+		!hierarchydeletion.ValidHierarchyDeletionTimestamp(begin.TaskCreatedAt) ||
+		begin.CreatedAt.Before(begin.TaskCreatedAt) || !begin.DeadlineAt.After(begin.CreatedAt) ||
+		begin.DeadlineAt.After(begin.CreatedAt.Add(hierarchydeletion.AttemptTimeout)) ||
+		idempotencyrecord.ValidateIdempotencyLocator(begin.Locator) != nil {
+		return HierarchyDeletionCaptureResult{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy capture identity or deadline is invalid",
+		)
 	}
-	if begin.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
-		begin.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		begin.Marker.TaskID != begin.TaskID ||
-		!begin.Marker.CreatedAt.Equal(begin.CreatedAt) ||
-		!begin.Marker.UpdatedAt.Equal(begin.CreatedAt) ||
-		idempotencyrecord.ValidateIdempotencyMarker(begin.Marker) != nil {
-		return errs.New(errs.KindValidationFailed, "hierarchy deletion idempotency evidence is invalid")
+	root, revision, err := repository.readDeletionRoot(ctx, begin.TargetKind, begin.TargetID)
+	if err != nil {
+		return HierarchyDeletionCaptureResult{}, err
 	}
-	return nil
-}
-
-func hierarchyDeletionTask(
-	begin HierarchyDeletionBegin,
-	scope workexecution.Scope,
-	intent hierarchydeletion.HierarchyDeletionIntent,
-) (workexecution.Task, error) {
-	intentValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
-		intent,
+	defer clear(root.targetValue)
+	operation, conditions, mutations, err := prepareHierarchyDeletionPublication(begin, root, revision)
+	if err != nil {
+		return HierarchyDeletionCaptureResult{}, err
+	}
+	defer etcdstore.ClearMutationValues(mutations)
+	defer hierarchydeletion.ClearHierarchyDeletionOperation(operation)
+	hostID, hostConditions, err := repository.captureDeletionHost(ctx, revision)
+	if err != nil {
+		return HierarchyDeletionCaptureResult{}, err
+	}
+	conditions = append(conditions, hostConditions...)
+	binding, err := hierarchydeletion.EncodeTaskBinding(
+		hierarchydeletion.TaskBinding{
+			TaskID:      begin.TaskID,
+			OperationID: begin.OperationID,
+			Marker:      begin.Locator,
+			HostID:      hostID,
+		},
+	)
+	if err != nil {
+		return HierarchyDeletionCaptureResult{}, err
+	}
+	defer clear(binding)
+	conditions = append(conditions, etcdstore.Condition{Key: hierarchydeletion.TaskBindingKey(begin.TaskID)})
+	mutations = append(
+		mutations,
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchydeletion.TaskBindingKey(begin.TaskID),
+			Value: binding,
+		},
+	)
+	value, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		operation.Intent,
 		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
 	)
 	if err != nil {
-		return workexecution.Task{}, err
+		return HierarchyDeletionCaptureResult{}, err
 	}
-	defer clear(intentValue)
-	task := workexecution.Task{
-		ID: begin.TaskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionRemove,
-		Scope:    scope,
-		TargetID: begin.TargetID, TargetName: intent.RootSlug,
+	defer clear(value)
+	if err := hierarchydeletion.ValidateHierarchyDeletionTransaction(conditions, mutations, 64); err != nil {
+		return HierarchyDeletionCaptureResult{}, err
+	}
+	owned := make([]etcdstore.Mutation, len(mutations))
+	for index, mutation := range mutations {
+		owned[index] = mutation
+		owned[index].Value = append([]byte(nil), mutation.Value...)
+	}
+	return HierarchyDeletionCaptureResult{Scope: root.scope, TargetName: root.rootSlug,
 		Intent: workexecution.Input{
-			ID:     ids.DeriveAt(ids.KindPlan, begin.CreatedAt, begin.TaskID, "hierarchy-removal"),
-			SHA256: hierarchydeletion.HierarchyDeletionDigest(intentValue),
+			ID:     ids.DeriveAt(ids.KindPlan, begin.TaskCreatedAt, begin.TaskID, "hierarchy-removal"),
+			SHA256: hierarchydeletion.HierarchyDeletionDigest(value),
 		},
-		CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt, Deadline: begin.DeadlineAt,
-	}
-	return task, task.Validate()
-}
-
-func classifyHierarchyDeletionBegin(begin HierarchyDeletionBegin) idempotencyPlanClassifier {
-	return func(_ int64, values []*etcdstore.KeyValue) error {
-		for _, value := range values {
-			if value != nil {
-				return errs.New(errs.KindStateConflict, "hierarchy deletion publication evidence changed")
-			}
-		}
-		return errs.Newf(errs.KindInternal, "hierarchy deletion %s compare failure is unclassified", begin.OperationID)
-	}
+		Authority: workqueue.Change{Conditions: conditions, Mutations: owned}}, nil
 }
 
 func hierarchyDeletionResponseDigest(taskID string) string {

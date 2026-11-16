@@ -42,7 +42,7 @@ export function ReusableSecretOwnerList({
   emptyTitle: string;
   emptyDescription?: string;
   scopeLabel: string;
-  onRemove?: (secret: ReusableSecret) => Promise<{ task_id: string }>;
+  onRemove?: (secret: ReusableSecret, after: string[]) => Promise<{ task_id: string }>;
   onRefresh?: () => Promise<void>;
   onReveal: (secret: ReusableSecret) => Promise<string>;
   editable?: boolean;
@@ -214,6 +214,7 @@ export function ReusableSecretOwnerList({
       )}
       {confirmation && onRemove && (
         <TaskRunnerDialog
+          runAfter
           open
           onOpenChange={(open) => {
             if (!open) setConfirmation(null);
@@ -225,7 +226,7 @@ export function ReusableSecretOwnerList({
           workspace={confirmation.scope === "platform" ? "Platform" : "Project"}
           startLabel="Delete Secret"
           destructive
-          onDispatch={async () => (await onRemove(confirmation)).task_id}
+          onDispatch={async (after) => (await onRemove(confirmation, after)).task_id}
           onCommit={() => {
             void onRefresh?.().catch(() => undefined);
           }}

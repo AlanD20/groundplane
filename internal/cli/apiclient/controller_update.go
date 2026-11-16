@@ -9,7 +9,7 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-func (c *Client) UpdateController(ctx context.Context, release string) (apiTypes.TaskAccepted, error) {
+func (c *Client) UpdateController(ctx context.Context, release string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -17,7 +17,7 @@ func (c *Client) UpdateController(ctx context.Context, release string) (apiTypes
 	const path = "/api/v1/controller/update"
 	response, err := client.ControllerUpdateWithResponse(ctx,
 		&generated.ControllerUpdateParams{IdempotencyKey: ids.NewULID()},
-		generated.ControllerUpdateJSONRequestBody{Release: release})
+		generated.ControllerUpdateJSONRequestBody{Release: release, After: optionalServiceStrings(after)})
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
 	}

@@ -10,7 +10,6 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -33,10 +32,10 @@ type PublicationRepository interface {
 		context.Context,
 		blueprints.EnvironmentBlueprintStageRequest,
 	) (blueprints.EnvironmentBlueprintSeal, error)
-	PublishEnvironmentBlueprintAuthoredRevision(
+	PrepareEnvironmentBlueprintAuthoredRevision(
 		context.Context,
 		etcd.BlueprintAuthoredPublication,
-	) (etcdstore.TransactionResult, error)
+	) (etcd.BlueprintAuthoredCapture, error)
 }
 
 // Repository stages captured desired input for resource-owned publication.
@@ -49,6 +48,8 @@ type Repository interface {
 }
 
 type ClaimInput struct {
+	AcceptedTaskRevision int64
+	TaskLocator          *idempotencyrecord.IdempotencyLocator
 	EnvironmentID        string
 	CandidateTaskID      string
 	Locator              idempotencyrecord.IdempotencyLocator
@@ -73,6 +74,8 @@ func Claim(
 		)
 	}
 	claim, err := repository.ClaimEnvironmentBlueprintStage(ctx, blueprints.EnvironmentBlueprintStageClaimRequest{
+		AcceptedTaskRevision: input.AcceptedTaskRevision,
+		TaskLocator:          input.TaskLocator,
 		EnvironmentID:        input.EnvironmentID,
 		CandidateRevisionID:  input.CandidateTaskID,
 		CandidateTaskID:      input.CandidateTaskID,
@@ -112,6 +115,8 @@ func Claim(
 		}
 	}
 	if claim.EnvironmentID != input.EnvironmentID || claim.Locator != input.Locator ||
+		(claim.TaskLocator == nil) != (input.TaskLocator == nil) ||
+		input.TaskLocator != nil && blueprints.EnvironmentBlueprintTaskLocator(claim) != *input.TaskLocator ||
 		claim.BaselineHeadRevision != input.BaselineHeadRevision ||
 		claim.RenderGeneration != input.RenderGeneration ||
 		claim.SourceKind != input.SourceKind ||

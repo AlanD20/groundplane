@@ -3,11 +3,15 @@ package network
 import (
 	"context"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/common/networkexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"net/http"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -17,37 +21,52 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *zoneDeletionService) publishZoneRemovalWork(
+func (service *zoneDeletionService) prepareZoneRemovalWork(
 	ctx context.Context,
 	request etcd.NetworkWorkPublication,
 	projectionEvidence controllerrevision.ProjectionEvidence,
 	affected []string,
-	evidence zoneDeletionEvidence,
+	accepted workqueue.TaskSnapshot,
+	at time.Time,
 	impactToken string,
-) (idempotency.IdempotencyResponse, error) {
+	detachIDs *[]string,
+) (taskdependencies.Prepared, error) {
 	placement, err := service.repository.ResolveResourceHost(ctx)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	scope := workexecution.Scope{TenantID: request.Project.Record.TenantID,
 		ProjectID: request.Project.Record.ID, EnvironmentID: request.Environment.Record.ID}
 	request.Task, request.Item, request.Input, err = buildZoneRemovalWork(scope, placement, request.Claim,
 		request.Zone.Record.Desired.ID, request.Zone.Record.Desired.Name, request.Zone.Record.Desired.Subnet, affected)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
+	request.Task.TargetName = accepted.Task.TargetName
+	request.Task.AcceptedIntent = accepted.Task.AcceptedIntent
+	request.Task.After = append([]string(nil), accepted.Task.After...)
+	request.Task.CreatedAt, request.Task.Deadline, request.Task.UpdatedAt = accepted.Task.CreatedAt, accepted.Task.Deadline, at
+	budget, err := networkexecution.ExecutionBudget(request.Input.Action)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	request.Item.CreatedAt, request.Item.UpdatedAt = at, at
+	request.Item.Deadline = acceptedaction.ExecutionDeadline(request.Task, at, budget)
 	var cascade capturedBackingZoneWork
 	defer cascade.Clear()
 	if request.Project.Record.Kind == hierarchy.ProjectKindBacking {
 		snapshots, err := service.repository.CaptureBackingZoneDetaches(ctx, request.Project.Record.ID,
 			request.Zone.Record.Desired.ID, request.Zone.ReadRevision)
 		if err != nil {
-			return idempotency.IdempotencyResponse{}, err
+			return taskdependencies.Prepared{}, err
 		}
 		cascade, err = captureBackingZoneWork(ctx, service.repository, request.Task, request.Item,
 			request.Zone.ReadRevision, impactToken, snapshots)
 		if err != nil {
-			return idempotency.IdempotencyResponse{}, err
+			return taskdependencies.Prepared{}, err
+		}
+		for _, item := range cascade.Graph.Items[:len(cascade.Graph.Items)-1] {
+			*detachIDs = append(*detachIDs, item.ID)
 		}
 		request.Task = cascade.Graph.Task
 		request.Item = cascade.Graph.Items[len(cascade.Graph.Items)-1]
@@ -58,7 +77,7 @@ func (service *zoneDeletionService) publishZoneRemovalWork(
 		request.Environment.Record.ID, request.Authorities.Desired.Record.RevisionID, request.Projection,
 		request.Environment.Record.NetworkPool, func(*core.BlueprintDesiredInput) error { return nil })
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: request.Claim, Mutation: &blueprints.EnvironmentDesiredMutationAudit{Zone: &blueprints.EnvironmentZoneMutationAudit{
@@ -66,11 +85,11 @@ func (service *zoneDeletionService) publishZoneRemovalWork(
 			ZoneID: request.Zone.Record.Desired.ID,
 		}}, DesiredInput: desired, DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: request.Task.ID})
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return taskdependencies.Prepared{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(body)
 	response := idempotency.IdempotencyResponse{
@@ -87,28 +106,14 @@ func (service *zoneDeletionService) publishZoneRemovalWork(
 		},
 		Response: response, CreatedAt: request.Task.CreatedAt, UpdatedAt: request.Task.CreatedAt,
 	}
-	result, publicationErr := service.repository.PublishNetworkWork(ctx, request)
-	var resolution requestidempotency.Resolution
-	if publicationErr != nil {
-		if !isUnknownZoneDeletionOutcome(publicationErr) {
-			return idempotency.IdempotencyResponse{}, publicationErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, request.Claim.Locator, evidence, publicationErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
+	authority, err := service.repository.PrepareNetworkWork(ctx, request)
 	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return cloneIdempotencyResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		return cloneIdempotencyResponse(resolution.Response), nil
-	default:
-		return idempotency.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Zone removal publication has no durable outcome",
-		)
+	graph := []workexecution.Item{request.Item}
+	staged := request.Cascade != nil
+	if staged {
+		graph = request.Cascade.Items
 	}
+	return taskdependencies.Prepared{Task: request.Task, Graph: graph, Authority: authority, Staged: staged}, nil
 }

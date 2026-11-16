@@ -192,9 +192,9 @@ func TestConnectorDeletionRejectsHeldEnvironmentLockWithoutWrites(t *testing.T) 
 		fixture.environment.Record.ID,
 		environmentMutationFenceTestOwner(serviceRecordTestTime(), 13051),
 	)
-	if _, err := fixture.repository.PublishConnectorRemoval(
+	if _, _, err := fixture.repository.PrepareConnectorRemovalAuthority(
 		context.Background(), fixture.environment, fixture.project, fixture.current,
-		fixture.input, fixture.task, fixture.marker,
+		fixture.input, fixture.task,
 	); !isKind(err, errs.KindResourceInUse) {
 		t.Fatalf("PublishConnectorRemoval(held lock) error = %v", err)
 	}

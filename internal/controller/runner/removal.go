@@ -2,7 +2,6 @@ package runner
 
 import (
 	"context"
-	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
@@ -11,9 +10,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -33,17 +33,18 @@ type removalRepository interface {
 		string,
 		time.Time,
 	) (etcd.RunnerRemovalSource, error)
-	PublishRunnerRemoval(
+	PrepareRunnerRemovalCapture(
 		context.Context,
 		etcd.RunnerRemovalSource,
 		workexecution.Task,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+		workexecution.Item,
+	) (workqueue.Change, error)
 }
 
 // RemovalService fences one managed Runner and publishes its native cleanup
 // Task. Durable allocation remains owned until exact host absence is proven.
 type RemovalService struct {
+	submitter   *acceptedaction.Submitter
 	repository  removalRepository
 	idempotency *etcd.IdempotencyRepository
 	coordinator *requestidempotency.Coordinator
@@ -54,18 +55,20 @@ func NewRemovalService(
 	repository removalRepository,
 	idempotency *etcd.IdempotencyRepository,
 	coordinator *requestidempotency.Coordinator,
+	submitter *acceptedaction.Submitter,
 ) (*RemovalService, error) {
-	if repository == nil || idempotency == nil || coordinator == nil {
+	if repository == nil || idempotency == nil || coordinator == nil || submitter == nil {
 		return nil, errs.New(errs.KindInternal, "Runner removal service is not configured")
 	}
 	return &RemovalService{
-		repository: repository, idempotency: idempotency, coordinator: coordinator, now: time.Now,
+		repository: repository, submitter: submitter, idempotency: idempotency, coordinator: coordinator, now: time.Now,
 	}, nil
 }
 
 func (service *RemovalService) RemoveRunner(
 	ctx context.Context,
 	runnerID string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
@@ -88,20 +91,14 @@ func (service *RemovalService) RemoveRunner(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
-		return service.replay(ctx, locator, runnerID)
+		return service.replay(ctx, locator, runnerID, input.After)
 	}
 	current, err := service.repository.GetRunner(ctx, runnerID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if current.Record.ProvisioningState == runnerrecord.RunnerProvisioningProvisioning {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"Runner provisioning must finish before removal",
-		)
-	}
 	locator = runnerRemovalLocator(current.Record.Desired, idempotencyKey)
-	evidence, err := service.protectIntent(ctx, locator, runnerID)
+	evidence, err := service.protectIntent(ctx, locator, runnerID, input.After)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -122,87 +119,22 @@ func (service *RemovalService) RemoveRunner(
 		return cloneResponse(resolution.Response), nil
 	}
 
-	now := service.now().UTC()
-	source, err := service.repository.PrepareRunnerRemoval(
-		ctx,
-		current,
-		ids.New(ids.KindTask),
-		ids.New(ids.KindWorkItem),
-		ids.New(ids.KindPlan),
-		now,
+	task := newRunnerAcceptedTask(
+		current.Record.Desired,
+		workexecution.OperatorActor,
+		workexecution.ActionRemove,
+		input.After,
+		service.now().UTC(),
 	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	input := source.Input()
-	if err := corerunner.ValidatePlan(input.Plan); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	ref, err := input.Reference()
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task := workexecution.Task{ID: input.TaskID, Actor: workexecution.OperatorActor,
-		Scope: workexecution.Scope{
-			TenantID:      input.Desired.TenantID,
-			ProjectID:     input.Desired.ProjectID(),
-			EnvironmentID: input.Desired.EnvironmentID(),
-		},
-		Action: workexecution.ActionRemove, TargetID: runnerID, TargetName: input.Desired.Slug, Intent: ref, ExpectedItems: 1,
-		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(runnerRemoveTimeoutSeconds) * time.Second)}
-	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(body)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...),
-	}
-	durable, err := evidence.DurableRecord()
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(durable.Ciphertext)
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, ReplayTarget: &target, Intent: durable, Response: response,
-		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.PublishRunnerRemoval(ctx, source, task, marker)
-	if mutationErr != nil {
-		if !unknownMutationOutcome(mutationErr) {
-			return idempotencyrecord.IdempotencyResponse{}, mutationErr
-		}
-		resolution, err = service.coordinator.ResolveUnknown(
-			ctx, service.idempotency, locator, evidence, mutationErr,
-		)
-	} else {
-		resolution, err = service.coordinator.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return cloneResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		return cloneResponse(resolution.Response), nil
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Runner removal resolution is invalid",
-		)
-	}
+	return submitRunnerAction(ctx, service.submitter, task, "runner-remove", locator, evidence, input)
 }
 
 func (service *RemovalService) replay(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
-	runnerID string,
+	runnerID string, after []string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	evidence, err := service.protectIntent(ctx, locator, runnerID)
+	evidence, err := service.protectIntent(ctx, locator, runnerID, after)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -225,13 +157,13 @@ func (service *RemovalService) replay(
 func (service *RemovalService) protectIntent(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
-	runnerID string,
+	runnerID string, after []string,
 ) (requestidempotency.ProtectedEvidence, error) {
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: runnerRemoveRoute,
 		Scope: runnerIntentScope(locator),
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: runnerID}},
-		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
+		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(after)})),
 	})
 	if err != nil {
 		return requestidempotency.ProtectedEvidence{}, err

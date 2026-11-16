@@ -17,6 +17,7 @@ import (
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	servicecontroller "github.com/AlanD20/groundplane/internal/controller/services"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	networkmodel "github.com/AlanD20/groundplane/internal/core/network"
@@ -53,8 +54,9 @@ func TestNativeRouteDefinitionMutationAndRemovalReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var accepted api.RouteTaskAccepted
-	if err := json.Unmarshal(created.Body, &accepted); err != nil || accepted.TaskID == "" || accepted.Route.ID == "" {
+	var accepted nativeRouteAccepted
+	if err := f.prepareRouteResponse(t, created.Body, &accepted); err != nil || accepted.TaskID == "" ||
+		accepted.Route.ID == "" {
 		t.Fatalf("create Route: %v", err)
 	}
 	if created.Status != http.StatusAccepted || accepted.Route.EnvironmentID != request.EnvironmentID ||
@@ -79,8 +81,8 @@ func TestNativeRouteDefinitionMutationAndRemovalReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var edit api.RouteTaskAccepted
-	if err := json.Unmarshal(edited.Body, &edit); err != nil || edit.Route.ID != accepted.Route.ID ||
+	var edit nativeRouteAccepted
+	if err := f.prepareRouteResponse(t, edited.Body, &edit); err != nil || edit.Route.ID != accepted.Route.ID ||
 		edit.Route.Exposure != "internal" ||
 		edit.Route.Host != request.Host ||
 		edit.Route.Path != request.Path ||
@@ -88,7 +90,12 @@ func TestNativeRouteDefinitionMutationAndRemovalReplay(t *testing.T) {
 		t.Fatalf("Route edit lost stable match: %v", err)
 	}
 	f.checkDefinition(t, edit.TaskID, accepted.Route.ID, true)
-	removed, err := f.network.RemoveRoute(t.Context(), accepted.Route.ID, "native-route-remove-identity")
+	removed, err := f.network.RemoveRoute(
+		t.Context(),
+		accepted.Route.ID,
+		api.TaskRunAfterRequest{},
+		"native-route-remove-identity",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,6 +103,7 @@ func TestNativeRouteDefinitionMutationAndRemovalReplay(t *testing.T) {
 	if err := json.Unmarshal(removed.Body, &removal); err != nil || removal.TaskID == "" {
 		t.Fatalf("remove Route: %v", err)
 	}
+	f.prepare(t, removal.TaskID)
 	f.checkDefinition(t, removal.TaskID, accepted.Route.ID, false)
 	if _, err := f.network.GetRoute(t.Context(), accepted.Route.ID); !errors.Is(
 		err,
@@ -104,23 +112,28 @@ func TestNativeRouteDefinitionMutationAndRemovalReplay(t *testing.T) {
 		t.Fatalf("removed Route still readable: %v", err)
 	}
 	revision = f.base.store.revision
-	replayed, err = f.network.RemoveRoute(t.Context(), accepted.Route.ID, "native-route-remove-identity")
+	replayed, err = f.network.RemoveRoute(
+		t.Context(),
+		accepted.Route.ID,
+		api.TaskRunAfterRequest{},
+		"native-route-remove-identity",
+	)
 	if err != nil || !reflect.DeepEqual(replayed, removed) || f.base.store.revision != revision {
 		t.Fatalf("removed Route replay lost target authority: %v", err)
 	}
 }
 
-// TASK-81: path injection and UDP-only exposure must fail before staging or
-// acceptance, not become apparently successful but unusable Route work.
+// Invalid syntax is rejected at acceptance; current Service port eligibility is
+// evaluated after the dependency gate and fails the original Task visibly.
 func TestNativeRouteRejectsInvalidTargetBeforePublication(t *testing.T) {
-	f := newNativeRouteFixture(t)
 	for _, scenario := range []string{"unsafe path", "unexposed port", "UDP-only port"} {
 		t.Run(scenario, func(t *testing.T) {
+			f := newNativeRouteFixture(t)
 			request := networkmodel.CreateRouteRequest{
 				EnvironmentID:   f.base.environmentID,
 				Host:            "app.example.test",
 				Path:            "/api/*",
-				Exposure:        networkmodel.RouteExposure("public"),
+				Exposure:        "public",
 				TargetServiceID: f.target.ID,
 				TargetPort:      8080,
 			}
@@ -133,14 +146,34 @@ func TestNativeRouteRejectsInvalidTargetBeforePublication(t *testing.T) {
 				request.TargetPort = 5353
 			}
 			revision := f.base.store.revision
-			if _, err := f.network.CreateRoute(t.Context(), request, "native-route-reject-input"); !errors.Is(
-				err,
-				errs.New(errs.KindValidationFailed, ""),
-			) {
-				t.Fatalf("unsafe Route accepted: %v", err)
+			response, err := f.network.CreateRoute(t.Context(), request, "native-route-reject-input")
+			if scenario == "unsafe path" {
+				if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) || f.base.store.revision != revision {
+					t.Fatalf("unsafe syntax changed state: %v", err)
+				}
+				return
 			}
-			if f.base.store.revision != revision {
-				t.Fatal("rejected Route changed durable state")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var accepted api.TaskAccepted
+			if err := json.Unmarshal(response.Body, &accepted); err != nil {
+				t.Fatal(err)
+			}
+			f.prepare(t, accepted.TaskID)
+			task, _, err := f.base.queue.ReadTask(t.Context(), accepted.TaskID, 0)
+			if err != nil || task.Task.Outcome != workexecution.Failed || task.Task.FirstFailure == nil {
+				t.Fatalf("invalid target did not fail visibly: %v", err)
+			}
+			page, err := f.base.queue.ListWork(t.Context(), accepted.TaskID, "", 10, 0)
+			if err != nil || len(page.Items) != 0 {
+				t.Fatalf("invalid target published execution: %v", err)
+			}
+			if _, err := f.network.GetRoute(t.Context(), task.Task.TargetID); !errors.Is(
+				err,
+				errs.New(errs.KindRouteNotFound, ""),
+			) {
+				t.Fatalf("invalid target created Route: %v", err)
 			}
 		})
 	}
@@ -163,8 +196,8 @@ func TestNativeRouteCompletionFencesItsExactDecision(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				var accepted api.RouteTaskAccepted
-				if err := json.Unmarshal(response.Body, &accepted); err != nil {
+				var accepted nativeRouteAccepted
+				if err := f.prepareRouteResponse(t, response.Body, &accepted); err != nil {
 					t.Fatal(err)
 				}
 				finished, err := f.base.queue.ReadFinishedWork(t.Context(), accepted.TaskID)
@@ -208,87 +241,93 @@ func TestNativeRouteCompletionFencesItsExactDecision(t *testing.T) {
 	}
 }
 
-// TASK-84: conflict retries must obtain fresh Environment authority and stop
-// after three commits, not loop or turn failed publication into accepted work.
-func TestNativeRouteRemovalRetriesOnlyBoundedPublicationConflicts(t *testing.T) {
-	for _, conflicts := range []int{2, 3} {
-		t.Run(map[int]string{2: "third attempt wins", 3: "retry bound exhausted"}[conflicts], func(t *testing.T) {
-			f := newNativeRouteFixture(t)
-			response, err := f.network.CreateRoute(
-				t.Context(),
-				networkmodel.CreateRouteRequest{EnvironmentID: f.base.environmentID,
-					Host: "retry.example.test", Path: "/", Exposure: networkmodel.RouteExposure("public"), TargetServiceID: f.target.ID, TargetPort: 8080},
-				"native-route-retry-source",
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var created api.RouteTaskAccepted
-			if err := json.Unmarshal(response.Body, &created); err != nil {
-				t.Fatal(err)
-			}
-			f.checkDefinition(t, created.TaskID, created.Route.ID, true)
-			attempts := 0
-			f.base.store.beforeCommit = func(mutations []keyvalue.Mutation) {
-				for _, mutation := range mutations {
-					task, err := workqueue.DecodeTask(mutation.Value)
-					if err != nil || task.Action != workexecution.ActionRemove || task.TargetID != created.Route.ID {
-						continue
-					}
-					attempts++
-					if attempts > conflicts {
-						f.base.store.beforeCommit = nil
-						return
-					}
-					key := hierarchy.EnvironmentMutationEpochKey(f.base.environmentID)
-					current, err := f.base.store.Get(t.Context(), key)
-					if err != nil || current.Entry == nil {
-						t.Fatalf("race epoch: %v", err)
-					}
-					if _, err := f.base.store.Put(t.Context(), key, current.Entry.Value); err != nil {
-						t.Fatal(err)
-					}
-					return
-				}
-			}
-			removed, err := f.network.RemoveRoute(t.Context(), created.Route.ID, "native-route-publication-retry")
-			f.base.store.beforeCommit = nil
-			if attempts != 3 {
-				t.Fatalf("publication attempts=%d, want bounded three", attempts)
-			}
-			if conflicts == 3 {
-				if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-					t.Fatalf("exhausted retry: %v", err)
-				}
-				if _, err := f.network.GetRoute(t.Context(), created.Route.ID); err != nil {
-					t.Fatalf("failed publication removed its Route: %v", err)
-				}
-				removed, err = f.network.RemoveRoute(t.Context(), created.Route.ID, "native-route-publication-retry")
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			var accepted api.TaskAccepted
-			if err := json.Unmarshal(removed.Body, &accepted); err != nil || accepted.TaskID == "" {
-				t.Fatalf("retried removal: %v", err)
-			}
-			f.checkDefinition(t, accepted.TaskID, created.Route.ID, false)
-		})
+// A competing desired-state write loses only the captured promotion. The pure
+// accepted action remains the same Task and can compile again on a later tick.
+func TestNativeRouteRemovalRetriesItsOriginalAcceptedTask(t *testing.T) {
+	f := newNativeRouteFixture(t)
+	response, err := f.network.CreateRoute(
+		t.Context(),
+		networkmodel.CreateRouteRequest{
+			EnvironmentID:   f.base.environmentID,
+			Host:            "retry.example.test",
+			Path:            "/",
+			Exposure:        "public",
+			TargetServiceID: f.target.ID,
+			TargetPort:      8080,
+		},
+		"native-route-retry-source",
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
+	var created nativeRouteAccepted
+	if err := f.prepareRouteResponse(t, response.Body, &created); err != nil {
+		t.Fatal(err)
+	}
+	f.checkDefinition(t, created.TaskID, created.Route.ID, true)
+	response, err = f.network.RemoveRoute(
+		t.Context(),
+		created.Route.ID,
+		api.TaskRunAfterRequest{},
+		"native-route-publication-retry",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var accepted api.TaskAccepted
+	if err := json.Unmarshal(response.Body, &accepted); err != nil {
+		t.Fatal(err)
+	}
+	conflicted := false
+	f.base.store.beforeCommit = func(mutations []keyvalue.Mutation) {
+		for _, mutation := range mutations {
+			task, err := workqueue.DecodeTask(mutation.Value)
+			if err != nil || task.ID != accepted.TaskID || task.ExpectedItems != 1 {
+				continue
+			}
+			f.base.store.beforeCommit = nil
+			conflicted = true
+			key := hierarchy.EnvironmentMutationEpochKey(f.base.environmentID)
+			current, err := f.base.store.Get(t.Context(), key)
+			if err != nil || current.Entry == nil {
+				t.Fatalf("race epoch: %v", err)
+			}
+			if _, err = f.base.store.Put(t.Context(), key, current.Entry.Value); err != nil {
+				t.Fatal(err)
+			}
+			return
+		}
+	}
+	changed, err := f.preparations.Advance(t.Context(), accepted.TaskID, time.Now().UTC())
+	if err != nil || changed || !conflicted {
+		t.Fatalf("capture race: changed=%t conflicted=%t err=%v", changed, conflicted, err)
+	}
+	task, _, err := f.base.queue.ReadTask(t.Context(), accepted.TaskID, 0)
+	if err != nil || !task.Task.PendingPreparation() {
+		t.Fatalf("capture conflict lost original pure Task: %v", err)
+	}
+	if _, err = f.network.GetRoute(t.Context(), created.Route.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.prepare(t, accepted.TaskID)
+	f.checkDefinition(t, accepted.TaskID, created.Route.ID, false)
 }
 
 type nativeRouteFixture struct {
-	base        *nativeVolumeFixture
-	network     *networkcontroller.Service
-	target      api.Service
-	completions *workdispatch.Completions
+	base         *nativeVolumeFixture
+	network      *networkcontroller.Service
+	target       api.Service
+	completions  *workdispatch.Completions
+	preparations *taskdependencies.Preparations
 }
 
 func (f *nativeRouteFixture) checkDefinition(t *testing.T, taskID, routeID string, present bool) {
 	t.Helper()
 	page, err := f.base.queue.ListWork(t.Context(), taskID, "", 10, 0)
 	if err != nil || len(page.Items) != 1 {
-		t.Fatalf("Route work: %v", err)
+		task, _, _ := f.base.queue.ReadTask(t.Context(), taskID, 0)
+		failure, _ := f.base.queue.ReadAcceptedPreparationFailure(t.Context(), taskID, 0)
+		t.Fatalf("Route work: %v task=%+v failure=%+v", err, task.Task, failure)
 	}
 	item := page.Items[0].Item
 	if item.Placement.Executor != workexecution.Controller || item.Phase != workexecution.Settled ||
@@ -382,7 +421,11 @@ func newNativeRouteFixture(t *testing.T) *nativeRouteFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mutations, err := servicecontroller.NewMutationService(serviceRepository, serviceIdempotency, nil)
+	submitter, err := newAcceptedActions(store, protector, f.base.queue, replay, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations, err := servicecontroller.NewMutationService(serviceRepository, serviceIdempotency, nil, submitter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +497,11 @@ func newNativeRouteFixture(t *testing.T) *nativeRouteFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.network, err = networkcontroller.NewEtcdService(repository, coordinator, publisher)
+	f.network, err = networkcontroller.NewEtcdService(repository, coordinator, publisher, submitter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.preparations, err = taskdependencies.NewPreparations(f.base.queue, f.network.AcceptedPreparations())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -491,4 +538,64 @@ func (nativeRouteNoBackingFacts) SealBackingHookInputsAtRevision(
 	int64,
 ) (*taskconfiguration.BackingHookEncryptedInputs, error) {
 	return nil, errs.New(errs.KindInternal, "Route fixture unexpectedly requested backing hooks")
+}
+
+type nativeRouteAccepted struct {
+	api.TaskAccepted
+	Route api.Route
+}
+
+func (f *nativeRouteFixture) prepareRouteResponse(t *testing.T, body []byte, result *nativeRouteAccepted) error {
+	t.Helper()
+	if err := json.Unmarshal(body, &result.TaskAccepted); err != nil {
+		return err
+	}
+	f.prepare(t, result.TaskID)
+	task, _, err := f.base.queue.ReadTask(t.Context(), result.TaskID, 0)
+	if err != nil {
+		return err
+	}
+	route, err := f.network.GetRoute(t.Context(), task.Task.TargetID)
+	if err != nil {
+		return err
+	}
+	result.Route = api.Route{
+		ID:              route.ID,
+		EnvironmentID:   route.EnvironmentID,
+		Host:            route.Host,
+		Path:            route.Path,
+		Exposure:        string(route.Exposure),
+		TargetServiceID: route.TargetServiceID,
+		TargetPort:      route.TargetPort,
+		Status:          string(route.Status),
+	}
+	return nil
+}
+func (f *nativeRouteFixture) prepare(t *testing.T, taskID string) {
+	t.Helper()
+	before, err := f.base.queue.ListWork(t.Context(), taskID, "", 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, _, err := f.base.queue.ReadTask(t.Context(), taskID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Task.PendingPreparation() && len(before.Items) != 0 {
+		t.Fatal("pure Route acceptance captured work")
+	}
+	for range 4 {
+		task, _, err = f.base.queue.ReadTask(t.Context(), taskID, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !task.Task.PendingPreparation() {
+			return
+		}
+		changed, err := f.preparations.Advance(t.Context(), taskID, time.Now().UTC())
+		if err != nil || !changed {
+			t.Fatalf("Route preparation: changed=%t error=%v", changed, err)
+		}
+	}
+	t.Fatal("Route preparation did not finish")
 }

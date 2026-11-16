@@ -12,10 +12,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// PrepareCascadePublication publishes only the Task and captured graph root.
+// PrepareCascadePublication prepares the captured graph root for the accepted Task.
 // Work stays behind PublicationComplete until the publisher stages every exact
 // item. The caller joins consumer capture authority, the Zone fence and authored
-// omission in the same acceptance transaction as this change.
+// omission in the same promotion transaction as this change.
 func (repository *InputRepository) PrepareCascadePublication(ctx context.Context, task workexecution.Task,
 	graph []workexecution.Item, input *agentpb.NetworkWorkInput, marker idempotency.IdempotencyMarker,
 	admission []keyvalue.Condition, desiredRevision string, snapshotRevision int64,
@@ -32,10 +32,7 @@ func (repository *InputRepository) PrepareCascadePublication(ctx context.Context
 	}
 	admission = append(append([]keyvalue.Condition(nil), admission...), creation)
 	bridge := graph[len(graph)-1]
-	change, err := workqueue.PrepareTask(task, marker)
-	if err != nil {
-		return workqueue.Change{}, err
-	}
+	change := workqueue.Change{}
 	defer func() {
 		if resultErr != nil {
 			keyvalue.ClearMutationValues(change.Mutations)

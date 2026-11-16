@@ -722,9 +722,11 @@ func (repository *fakeRepository) UpdateConfig(
 	}
 	repository.record.Record.Config = cloneConfig(config)
 	return ConfigUpdateResult{
-		Applied:      true,
-		Stored:       cloneStored(repository.record),
-		ResponseBody: []byte(`{"pull_interval_seconds":1,"max_concurrent_tasks":1,"max_parallel_operations_per_task":1,"labels":{}}`),
+		Applied: true,
+		Stored:  cloneStored(repository.record),
+		ResponseBody: []byte(
+			`{"pull_interval_seconds":1,"max_concurrent_tasks":1,"max_parallel_operations_per_task":1,"labels":{}}`,
+		),
 	}, nil
 }
 

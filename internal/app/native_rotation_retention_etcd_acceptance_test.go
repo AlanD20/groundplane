@@ -167,7 +167,7 @@ func newNativeRotationEtcdCollector(
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := backupkey.NewService(f.repository, keys, factory, coordinator, markers, protector)
+	service, err := backupkey.NewService(f.repository, keys, factory, coordinator, markers, protector, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

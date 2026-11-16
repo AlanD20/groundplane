@@ -114,11 +114,12 @@ type RecoveryPointPage struct {
 }
 
 type RestoreRequest struct {
-	VersionReviewSHA256          string `json:"version_review_sha256,omitempty" pattern:"^[a-f0-9]{64}$"`
-	AcknowledgeVersionDifference bool   `json:"acknowledge_version_difference,omitempty"`
-	SourceID                     string `json:"source_id" pattern:"^spt_[0-9A-HJKMNP-TV-Z]{26}$"`
-	RecoveryPointID              string `json:"recovery_point_id,omitempty" pattern:"^rp_[0-9A-HJKMNP-TV-Z]{26}$"` // empty = latest
-	AgeIdentity                  string `json:"age_identity,omitempty" maxLength:"4096" writeOnly:"true"`
+	After                        []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	VersionReviewSHA256          string   `json:"version_review_sha256,omitempty" pattern:"^[a-f0-9]{64}$"`
+	AcknowledgeVersionDifference bool     `json:"acknowledge_version_difference,omitempty"`
+	SourceID                     string   `json:"source_id" pattern:"^spt_[0-9A-HJKMNP-TV-Z]{26}$"`
+	RecoveryPointID              string   `json:"recovery_point_id,omitempty" pattern:"^rp_[0-9A-HJKMNP-TV-Z]{26}$"` // empty = latest
+	AgeIdentity                  string   `json:"age_identity,omitempty" maxLength:"4096" writeOnly:"true"`
 }
 
 type RestorePreview struct {

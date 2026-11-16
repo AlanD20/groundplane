@@ -10,7 +10,9 @@ import (
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	corenetwork "github.com/AlanD20/groundplane/internal/core/network"
 
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
@@ -46,8 +48,9 @@ func NewEtcdService(
 	repository *networketcd.Repository,
 	coordinator *requestidempotency.Coordinator,
 	routePublisher *RouteWorkPublisher,
+	accepted *acceptedaction.Submitter,
 ) (*Service, error) {
-	if repository == nil || coordinator == nil || routePublisher == nil {
+	if repository == nil || coordinator == nil || routePublisher == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "network capability dependencies are not configured")
 	}
 	zoneReads, err := newZoneReadService(repository)
@@ -66,7 +69,7 @@ func NewEtcdService(
 	if err != nil {
 		return nil, err
 	}
-	zoneDeletions, err := newZoneDeletionService(repository, zoneDeletionIdempotency)
+	zoneDeletions, err := newZoneDeletionService(repository, zoneDeletionIdempotency, accepted)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +89,7 @@ func NewEtcdService(
 	if err != nil {
 		return nil, err
 	}
-	routeMutations, err := newRouteMutationService(repository, routeMutationIdempotency, routePublisher)
+	routeMutations, err := newRouteMutationService(repository, routeMutationIdempotency, routePublisher, accepted)
 	if err != nil {
 		return nil, err
 	}
@@ -153,8 +156,9 @@ func (service *Service) RemoveZone(
 	ctx context.Context,
 	id string,
 	idempotencyKey string,
+	after []string,
 ) (corenetwork.MutationResponse, error) {
-	response, err := service.zoneMutations.RemoveZone(ctx, id, idempotencyKey)
+	response, err := service.zoneMutations.RemoveZone(ctx, id, idempotencyKey, after)
 	return projectMutationResponse(response), err
 }
 
@@ -163,8 +167,9 @@ func (service *Service) RemoveZoneWithImpact(
 	id string,
 	idempotencyKey string,
 	impactToken string,
+	after []string,
 ) (corenetwork.MutationResponse, error) {
-	response, err := service.zoneMutations.RemoveZoneWithImpact(ctx, id, idempotencyKey, impactToken)
+	response, err := service.zoneMutations.RemoveZoneWithImpact(ctx, id, idempotencyKey, impactToken, after)
 	return projectMutationResponse(response), err
 }
 
@@ -207,7 +212,7 @@ func (service *Service) CreateRoute(
 ) (corenetwork.MutationResponse, error) {
 	response, err := service.routeMutations.CreateRoute(ctx, apiTypes.RouteCreate{
 		EnvironmentID: input.EnvironmentID, Host: input.Host, Path: input.Path, Exposure: string(input.Exposure),
-		TargetServiceID: input.TargetServiceID, TargetPort: input.TargetPort,
+		TargetServiceID: input.TargetServiceID, TargetPort: input.TargetPort, After: input.After,
 	}, idempotencyKey)
 	return projectMutationResponse(response), err
 }
@@ -219,17 +224,17 @@ func (service *Service) EditRoute(
 	idempotencyKey string,
 ) (corenetwork.MutationResponse, error) {
 	response, err := service.routeMutations.EditRoute(
-		ctx, id, apiTypes.RouteEdit{Exposure: string(input.Exposure)}, idempotencyKey,
+		ctx, id, apiTypes.RouteEdit{Exposure: string(input.Exposure), After: input.After}, idempotencyKey,
 	)
 	return projectMutationResponse(response), err
 }
 
 func (service *Service) RemoveRoute(
 	ctx context.Context,
-	id string,
+	id string, input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (corenetwork.MutationResponse, error) {
-	response, err := service.routeMutations.RemoveRoute(ctx, id, idempotencyKey)
+	response, err := service.routeMutations.RemoveRoute(ctx, id, input, idempotencyKey)
 	return projectMutationResponse(response), err
 }
 
@@ -287,4 +292,10 @@ func projectZoneRemovalImpact(impact apiTypes.ZoneRemovalImpact) corenetwork.Zon
 func cloneIdempotencyResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {
 	response.Body = append([]byte(nil), response.Body...)
 	return response
+}
+
+func (service *Service) AcceptedPreparations() []taskdependencies.Registration {
+	return append(
+		service.zoneMutations.deletions.AcceptedPreparations(),
+		service.routeMutations.AcceptedPreparations()...)
 }

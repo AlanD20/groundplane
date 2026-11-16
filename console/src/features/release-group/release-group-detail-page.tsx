@@ -206,6 +206,7 @@ export default function ReleaseGroupDetailPage() {
         </div>
       </div>
       <TaskRunnerDialog
+        runAfter
         open={removing}
         onOpenChange={setRemoving}
         title={`Remove ${group.name}`}
@@ -215,7 +216,9 @@ export default function ReleaseGroupDetailPage() {
         workspace={params.tenant}
         destructive
         startLabel="Remove group"
-        onDispatch={() => store.removeReleaseGroup(environment.id, group.id)}
+        onDispatch={(after) =>
+          store.removeReleaseGroup(environment.id, group.id, after)
+        }
         onCommit={() => {
           void store
             .refreshEnvironmentReleases(environment.id)

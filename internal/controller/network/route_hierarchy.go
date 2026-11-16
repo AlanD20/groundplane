@@ -34,3 +34,15 @@ func (service *routeMutationService) routeHierarchy(
 	}
 	return environment, project, target, nil
 }
+
+func (service *routeMutationService) routeOwnership(
+	ctx context.Context,
+	environmentID string,
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
+	environment, err := service.repository.GetEnvironment(ctx, environmentID)
+	if err != nil {
+		return environment, etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
+	}
+	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
+	return environment, project, err
+}

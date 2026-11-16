@@ -27,8 +27,7 @@ export function ScriptsCard({ env }: { env: Environment }) {
   const [editing, setEditing] = useState<Script | null>(null);
   const [removing, setRemoving] = useState<Script | null>(null);
   const [query, setQuery] = useState("");
-  const [runError, setRunError] = useState<string>();
-  const [runningRequest, setRunningRequest] = useState<string>();
+  const [running, setRunning] = useState<Script | null>(null);
   const table = useTableView(
     env.scripts.filter((script) =>
       `${script.slug} ${script.service} ${script.when}`
@@ -115,11 +114,7 @@ export function ScriptsCard({ env }: { env: Environment }) {
               { value: "service", label: "Service" },
             ]}
           />
-          {runError && (
-            <p role="alert" className="text-xs text-destructive">
-              {runError}
-            </p>
-          )}
+
           {pinnedEditor && null}
           {visibleRows.map((script) => (
             <InlineEditorRegion key={script.id} editing={false}>
@@ -155,8 +150,8 @@ export function ScriptsCard({ env }: { env: Environment }) {
                   </span>
                   {!servingServices.has(script.service) && (
                     <span className="text-xs text-muted-foreground">
-                      Deploy {script.service} before running this Script
-                      manually.
+                      Deploy {script.service} first, or choose its pending
+                      Deploy Task as a prerequisite for a manual run.
                       {script.when === "pre-deploy" &&
                         " This hook runs automatically during Deploy."}
                     </span>
@@ -169,27 +164,9 @@ export function ScriptsCard({ env }: { env: Environment }) {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={
-                      !!runningRequest || !servingServices.has(script.service)
-                    }
-                    onClick={async () => {
-                      setRunError(undefined);
-                      setRunningRequest(script.id);
-                      try {
-                        await store.runScript(script.id);
-                      } catch (error) {
-                        setRunError(
-                          error instanceof Error
-                            ? error.message
-                            : "Unable to run Script",
-                        );
-                      } finally {
-                        setRunningRequest(undefined);
-                      }
-                    }}
+                    onClick={() => setRunning(script)}
                   >
-                    <Terminal className="size-3.5" />{" "}
-                    {runningRequest === script.id ? "Submitting…" : "Run"}
+                    <Terminal className="size-3.5" /> Run
                   </Button>
                   <Button
                     variant="ghost"
@@ -240,6 +217,29 @@ export function ScriptsCard({ env }: { env: Environment }) {
         </CardContent>
       </Card>
       <TaskRunnerDialog
+        runAfter
+        open={!!running}
+        onOpenChange={(open) => {
+          if (!open) setRunning(null);
+        }}
+        variant="inline"
+        title={`Run script · ${running?.slug ?? ""}`}
+        description="Run this Script once against the serving deployment selected after prerequisite Tasks settle."
+        type="script"
+        target={running?.id ?? env.id}
+        workspace={params.tenant}
+        startLabel="Run Script"
+        startDisabled={(after) =>
+          !running ||
+          (!servingServices.has(running.service) && after.length === 0)
+        }
+        onDispatch={async (after) => {
+          if (!running) throw new Error("No Script selected");
+          return store.runScript(running.id, after);
+        }}
+      />
+      <TaskRunnerDialog
+        runAfter
         open={!!removing}
         onOpenChange={(next) => !next && setRemoving(null)}
         title={`Remove script · ${removing?.slug ?? ""}`}
@@ -250,9 +250,9 @@ export function ScriptsCard({ env }: { env: Environment }) {
         destructive
         confirmText={removing?.slug ?? ""}
         startLabel="Remove script"
-        onDispatch={async () => {
+        onDispatch={async (after) => {
           if (!removing) throw new Error("No Script selected for removal");
-          return store.removeScript(env.id, removing.id);
+          return store.removeScript(env.id, removing.id, after);
         }}
       />
     </>

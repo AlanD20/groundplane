@@ -192,7 +192,7 @@ func (c *Client) ShowConnector(ctx context.Context, id string) (apiTypes.Connect
 	return connectorFromGenerated(*parsed), nil
 }
 
-func (c *Client) RemoveConnector(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RemoveConnector(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -202,6 +202,7 @@ func (c *Client) RemoveConnector(ctx context.Context, id string) (apiTypes.TaskA
 		ctx,
 		id,
 		&generated.ConnectorRemoveParams{IdempotencyKey: ids.NewULID()},
+		generated.ConnectorRemoveJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)

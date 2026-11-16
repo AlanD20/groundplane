@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -91,7 +91,7 @@ func TestHierarchyDeletionRejectsDescendantDeletionAuthority(t *testing.T) {
 				)
 			}
 			startChild := func() error {
-				_, childErr := journal.Begin(ctx, child)
+				_, childErr := captureHierarchyDeletionFixture(ctx, journal, child)
 				return childErr
 			}
 			raceStore := &descendantDeletionRaceStore{memoryHierarchyStore: store}
@@ -112,7 +112,7 @@ func TestHierarchyDeletionRejectsDescendantDeletionAuthority(t *testing.T) {
 				targetID = tenant.ID
 			}
 			begin := hierarchyDeletionCreationTestBegin(now.Add(time.Second), target.kind, targetID, target.op, "a")
-			_, err = parentJournal.Begin(ctx, begin)
+			_, err = captureHierarchyDeletionFixture(ctx, parentJournal, begin)
 			if target.available {
 				if err != nil {
 					t.Fatalf("Begin(available parent) error = %v", err)
@@ -126,7 +126,7 @@ func TestHierarchyDeletionRejectsDescendantDeletionAuthority(t *testing.T) {
 			} else if !isKind(err, errs.KindResourceInUse) {
 				t.Fatalf("Begin(%s deletion) error = %v, want resource.in_use", target.name, err)
 			}
-			for _, key := range []string{testhierarchydeletion.HierarchyDeletionTombstoneKey(string(target.kind), targetID), workqueue.TaskKey(begin.TaskID)} {
+			for _, key := range []string{testhierarchydeletion.HierarchyDeletionTombstoneKey(string(target.kind), targetID)} {
 				if result, getErr := store.Get(ctx, key); getErr != nil || result.Entry != nil {
 					t.Fatalf("blocked %s deletion wrote %s = %#v/%v", target.name, key, result, getErr)
 				}
@@ -146,7 +146,13 @@ type descendantDeletionRaceStore struct {
 func (store *descendantDeletionRaceStore) Transact(
 	ctx context.Context, conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
 ) (testkeyvalue.TransactionResult, error) {
-	if before := store.before; before != nil {
+	native := false
+	for _, mutation := range mutations {
+		if strings.Contains(mutation.Key, "/deletions/") {
+			native = true
+		}
+	}
+	if before := store.before; before != nil && native {
 		store.before = nil
 		if err := before(); err != nil {
 			return testkeyvalue.TransactionResult{}, err

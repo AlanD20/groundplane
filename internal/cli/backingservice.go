@@ -4,8 +4,6 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
-	"net/http"
-	"net/url"
 )
 
 // backing-service (bs): list | show | create | start | stop | destroy | delete.
@@ -84,11 +82,16 @@ func newBackingServiceCmd() *cobra.Command {
 	var zoneInternal bool
 	var memory, volumeSlug, mountPath string
 	var cpus float64
+	var createAfter []string
 	create := &cobra.Command{
 		Use:   "create <slug>",
 		Short: "Create a backing service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(createAfter)
+			if err != nil {
+				return err
+			}
 			if adapter == "custom" && image == "" {
 				return errs.New(errs.KindValidationFailed, "--image is required for custom")
 			}
@@ -118,7 +121,7 @@ func newBackingServiceCmd() *cobra.Command {
 				}
 			}
 			created, err := fromContext(cmd).Client.CreateBackingService(cmd.Context(), apiTypes.BackingServiceCreate{
-				Slug: args[0], Name: name, Description: description, Adapter: adapter, Image: image,
+				After: after, Slug: args[0], Name: name, Description: description, Adapter: adapter, Image: image,
 				AdapterVersion: adapterVersion,
 				Authentication: authentication,
 				Hooks:          hooks,
@@ -133,10 +136,7 @@ func newBackingServiceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fields := backingServiceFields(created.BackingService)
-			fields["task_id"] = created.TaskID
-			headers, values := fieldsOfVia(fields)
-			return fromContext(cmd).Out.RenderOne(headers, values, created)
+			return renderTaskAccepted(cmd, created)
 		},
 	}
 	create.Flags().
@@ -168,44 +168,56 @@ func newBackingServiceCmd() *cobra.Command {
 	_ = create.MarkFlagRequired("network-pool")
 	_ = create.MarkFlagRequired("zone-name")
 	_ = create.MarkFlagRequired("zone-subnet")
+	addTaskAfterFlag(create, &createAfter)
 	cmd.AddCommand(create)
 
-	cmd.AddCommand(&cobra.Command{
-		Use:   "start <slug>",
-		Short: "Start a backing service",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBackingServiceAction(cmd, args[0], backingServiceActionStart)
-		},
-	})
-	cmd.AddCommand(&cobra.Command{
-		Use:   "stop <slug>",
-		Short: "Stop a backing service",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBackingServiceAction(cmd, args[0], backingServiceActionStop)
-		},
-	})
-	cmd.AddCommand(&cobra.Command{
-		Use:   "destroy <slug>",
-		Short: "Remove backing-service runtime while retaining durable data",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBackingServiceAction(cmd, args[0], backingServiceActionDestroy)
-		},
-	})
+	for _, action := range []struct {
+		name, description string
+		kind              backingServiceAction
+	}{
+		{"start", "Start a backing service", backingServiceActionStart},
+		{"stop", "Stop a backing service", backingServiceActionStop},
+		{"destroy", "Remove backing-service runtime while retaining durable data", backingServiceActionDestroy},
+	} {
+		var runAfter []string
+		command := &cobra.Command{
+			Use:   action.name + " <slug>",
+			Short: action.description,
+			Args:  cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				after, err := validatedTaskAfter(runAfter)
+				if err != nil {
+					return err
+				}
+				return runBackingServiceAction(cmd, args[0], action.kind, after)
+			},
+		}
+		addTaskAfterFlag(command, &runAfter)
+		cmd.AddCommand(command)
+	}
 
-	cmd.AddCommand(&cobra.Command{
+	var deleteAfter []string
+	remove := &cobra.Command{
 		Use: "delete <slug>", Short: "Permanently delete an unused Backing Service and its persistent data",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(deleteAfter)
+			if err != nil {
+				return err
+			}
 			projectID, err := resolveBackingProjectTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			return runActionMethod(cmd, http.MethodDelete, "/api/v1/backing-services/"+url.PathEscape(projectID), nil)
+			accepted, err := fromContext(cmd).Client.RemoveBackingService(cmd.Context(), projectID, after)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &deleteAfter)
+	cmd.AddCommand(remove)
 	return cmd
 }
 
@@ -256,7 +268,7 @@ const (
 	backingServiceActionDestroy
 )
 
-func runBackingServiceAction(cmd *cobra.Command, argument string, action backingServiceAction) error {
+func runBackingServiceAction(cmd *cobra.Command, argument string, action backingServiceAction, after []string) error {
 	projectID, err := resolveBackingProjectTarget(cmd, argument)
 	if err != nil {
 		return err
@@ -265,11 +277,11 @@ func runBackingServiceAction(cmd *cobra.Command, argument string, action backing
 	var accepted apiTypes.TaskAccepted
 	switch action {
 	case backingServiceActionStart:
-		accepted, err = app.Client.StartBackingService(cmd.Context(), projectID)
+		accepted, err = app.Client.StartBackingService(cmd.Context(), projectID, after)
 	case backingServiceActionStop:
-		accepted, err = app.Client.StopBackingService(cmd.Context(), projectID)
+		accepted, err = app.Client.StopBackingService(cmd.Context(), projectID, after)
 	case backingServiceActionDestroy:
-		accepted, err = app.Client.DestroyBackingService(cmd.Context(), projectID)
+		accepted, err = app.Client.DestroyBackingService(cmd.Context(), projectID, after)
 	default:
 		return errs.New(errs.KindInternal, "Backing-service action is invalid")
 	}

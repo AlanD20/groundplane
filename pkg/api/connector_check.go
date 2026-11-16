@@ -5,6 +5,7 @@ import "github.com/AlanD20/groundplane/internal/common/s3connector"
 // ConnectorCheckRequest checks either an unsaved draft or one saved Connector
 // revision with optional unsaved edits. Neither mode saves those settings.
 type ConnectorCheckRequest struct {
+	After       []string                `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 	ConnectorID string                  `json:"connector_id,omitempty"`
 	Revision    int64                   `json:"revision,omitempty"`
 	Draft       *ConnectorCreateRequest `json:"draft,omitempty"`

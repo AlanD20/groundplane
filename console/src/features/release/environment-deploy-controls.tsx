@@ -139,6 +139,7 @@ export function DeployDialog({
 
   return (
     <TaskRunnerDialog
+      runAfter
       open={open}
       onOpenChange={onOpenChange}
       variant="inline"
@@ -201,13 +202,14 @@ export function DeployDialog({
         </div>
       }
       startDisabled={!image.trim() || !!readinessError}
-      onDispatch={() =>
+      onDispatch={(after) =>
         store.commitDeploy(
           env.id,
           svc.name,
           image.trim(),
           strategy,
           "switch_back",
+          after,
         )
       }
       onSettled={async () => {
@@ -256,6 +258,7 @@ export function RollbackDialog({
 
   return (
     <TaskRunnerDialog
+      runAfter
       open={open}
       onOpenChange={onOpenChange}
       variant="inline"
@@ -320,7 +323,7 @@ export function RollbackDialog({
           </p>
         </div>
       }
-      onDispatch={() => store.commitRollback(env.id, svc.name, tag)}
+      onDispatch={(after) => store.commitRollback(env.id, svc.name, tag, after)}
       onSettled={async () => {
         await Promise.all([
           store.refreshEnvironmentReleases(env.id),

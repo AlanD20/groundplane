@@ -62,7 +62,8 @@ func componentConfigMutationRequestSchema(registry huma.Registry) *huma.Schema {
 	schema.AdditionalProperties = false
 	schema.Required = []string{"config"}
 	schema.MinProperties = &one
-	schema.MaxProperties = &one
+	two := 2
+	schema.MaxProperties = &two
 	schema.Properties["config"] = &huma.Schema{OneOf: []*huma.Schema{
 		caddyComponentConfigSchema(),
 		envoyComponentConfigSchema(),
@@ -81,9 +82,9 @@ func componentEnableRequestSchema(registry huma.Registry) *huma.Schema {
 	}
 	schema.AdditionalProperties = false
 	schema.Required = nil
-	schema.Properties = map[string]*huma.Schema{"config": {OneOf: []*huma.Schema{
+	schema.Properties["config"] = &huma.Schema{OneOf: []*huma.Schema{
 		caddyComponentConfigSchema(), envoyComponentConfigSchema(), cloudflareTunnelComponentConfigSchema(),
-	}}}
+	}}
 	schema.PrecomputeMessages()
 	return reference
 }

@@ -22,6 +22,10 @@ func (repository *EnvironmentBlueprintRepository) stageBlueprintAcceptanceRecord
 	ctx context.Context, input BlueprintAuthoredPublication, change workqueue.Change,
 ) (workqueue.Change, error) {
 	claim := input.Claim
+	taskGuard, err := blueprintStagingTaskCondition(ctx, repository.store, input.Parent)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
 	keys := []string{
 		blueprints.EnvironmentBlueprintOwnedIdentitiesKey(claim.EnvironmentID, claim.RevisionID),
 		blueprintPrerequisiteAuthorityKey(claim.EnvironmentID, claim.RevisionID),
@@ -35,7 +39,7 @@ func (repository *EnvironmentBlueprintRepository) stageBlueprintAcceptanceRecord
 		{Key: blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID)},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(claim.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
 		{Key: blueprintunits.EpochKey(claim.EnvironmentID), ModRevision: input.Baseline.EpochRevision},
-		{Key: workqueue.TaskKey(claim.TaskID)},
+		taskGuard,
 	}
 	var captures []keyvalue.Mutation
 	for _, key := range keys {

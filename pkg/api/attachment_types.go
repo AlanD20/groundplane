@@ -48,6 +48,7 @@ type Attach struct {
 }
 
 type AttachRequest struct {
+	After            []string         `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 	ServiceID        string           `json:"service_id"`
 	BackingServiceID string           `json:"backing_service_id"`
 	Name             string           `json:"name,omitempty"` // omitted => Controller-suggested, made unique within the environment

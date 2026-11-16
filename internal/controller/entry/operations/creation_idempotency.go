@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net/http"
 
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -19,7 +20,7 @@ type entryCreationEvidence struct {
 }
 
 type entryCreationIdempotency interface {
-	Prepare(context.Context, string, core.EnvEntry) (entryCreationEvidence, error)
+	Prepare(context.Context, string, core.EnvEntry, []string) (entryCreationEvidence, error)
 	MatchesStaged(context.Context, entryCreationEvidence, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 	ResolveExisting(
 		context.Context,
@@ -58,6 +59,7 @@ func (service *durableEntryCreationIdempotency) Prepare(
 	ctx context.Context,
 	environmentID string,
 	entry core.EnvEntry,
+	after []string,
 ) (entryCreationEvidence, error) {
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost,
@@ -65,6 +67,7 @@ func (service *durableEntryCreationIdempotency) Prepare(
 		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
 		Query:  requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(after)},
 			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(environmentID)},
 			requestidempotency.Field{Name: "exposure", Value: canonicalEntryExposure(entry.Exposure)},
 			requestidempotency.Field{Name: "gid", Value: canonicalEntryNumericID(entry.GID)},

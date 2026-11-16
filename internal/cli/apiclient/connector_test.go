@@ -84,7 +84,7 @@ func TestConnectorClientUsesTypedGeneratedOperations(t *testing.T) {
 			t.Fatalf("Connector projection = %#v, want %#v", got, want)
 		}
 	}
-	accepted, err := client.RemoveConnector(context.Background(), connectorID)
+	accepted, err := client.RemoveConnector(context.Background(), connectorID, nil)
 	if err != nil || accepted.TaskID != "task_01K3D7R40G0000000000000002" || requests != 4 {
 		t.Fatalf("RemoveConnector() = %#v, %v; requests = %d", accepted, err, requests)
 	}

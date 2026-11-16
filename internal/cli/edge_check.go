@@ -8,18 +8,24 @@ import (
 
 func newRouteCheckCmd() *cobra.Command {
 	var connector, path string
+	var runAfter []string
+	var revision int64
 	cmd := &cobra.Command{
 		Use:   "check <route-id>",
 		Short: "Check Tunnel readiness, origin and public DNS/TLS/HTTP",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			accepted, err := fromContext(
 				cmd,
 			).Client.CheckRouteConnections(
 				cmd.Context(),
 				target(fromContext(cmd), args[0]),
 				connector,
-				path,
+				path, revision, after,
 			)
 			if err != nil {
 				return err
@@ -30,6 +36,9 @@ func newRouteCheckCmd() *cobra.Command {
 	cmd.Flags().StringVar(&connector, "connector", "", "enabled Tunnel Component id in the Route's Environment")
 	cmd.Flags().StringVar(&path, "path", "", "concrete path matching this Route; required for a wildcard Route")
 	_ = cmd.MarkFlagRequired("connector")
+	cmd.Flags().
+		Int64Var(&revision, "revision", 0, "optional exact Route revision; omitted resolves after prerequisites")
+	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
 

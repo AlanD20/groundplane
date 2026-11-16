@@ -7,6 +7,8 @@ import (
 
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -19,10 +21,27 @@ type Evidence struct {
 }
 
 type IntentAddress struct {
-	Method string
-	Route  string
-	Scope  requestidempotency.Scope
-	Path   []requestidempotency.PathBinding
+	Method           string
+	Route            string
+	Scope            requestidempotency.Scope
+	Path             []requestidempotency.PathBinding
+	After            []string
+	ExpectedRevision string
+	PreserveRoutes   bool
+}
+
+func (evidence Evidence) Submission(
+	task workexecution.Task,
+	kind string,
+	locator idempotencyrecord.IdempotencyLocator,
+) acceptedaction.Submission {
+	return acceptedaction.Submission{
+		Task:     task,
+		Kind:     kind,
+		Locator:  locator,
+		Intent:   evidence.Durable,
+		Evidence: evidence.candidate,
+	}
 }
 
 type Idempotency struct {
@@ -62,8 +81,15 @@ func (service *Idempotency) Prepare(
 		Route:  address.Route,
 		Scope:  address.Scope,
 		Path:   append([]requestidempotency.PathBinding(nil), address.Path...),
-		Query:  requestidempotency.Object(),
-		Body:   requestidempotency.BlueprintBody(manifest),
+		Query: requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: afterIntent(address.After)},
+			requestidempotency.Field{
+				Name:  "expected_revision",
+				Value: requestidempotency.String(address.ExpectedRevision),
+			},
+			requestidempotency.Field{Name: "preserve_routes", Value: requestidempotency.Bool(address.PreserveRoutes)},
+		),
+		Body: requestidempotency.BlueprintBody(manifest),
 	})
 	if err != nil {
 		return Evidence{}, err
@@ -144,4 +170,12 @@ func leftPadPart(value int) string {
 		value /= 10
 	}
 	return string(digits)
+}
+
+func afterIntent(after []string) requestidempotency.Value {
+	values := make([]requestidempotency.Value, len(after))
+	for index, id := range after {
+		values[index] = requestidempotency.String(id)
+	}
+	return requestidempotency.List(values...)
 }

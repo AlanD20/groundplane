@@ -2,12 +2,10 @@ package etcd
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/secretmutations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/secretremoval"
@@ -18,27 +16,25 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PublishSecretRemoval atomically hides one Secret and publishes the
-// Controller Task that owns finalization. Metadata, indexes, and ciphertext
-// remain durable until the Task reaches a terminal state.
-func (repository *SecretRepository) PublishSecretRemoval(
+// PrepareSecretRemovalAuthority captures guarded native deletion authority for
+// promotion of an already accepted Task. It does not publish a new Task.
+func (repository *SecretRepository) PrepareSecretRemovalAuthority(
 	ctx context.Context,
 	owner secretrecord.Owner,
 	current etcdstore.Versioned[secretrecord.Record],
 	input secretremoval.Input,
 	task workexecution.Task,
-	marker idempotencyrecord.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+) (workqueue.Change, error) {
 	if err := secretrecord.ValidateSecretOwnership(ctx, owner, current.Record); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	if err := secretrecord.ValidateSecretVersion(current); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	secretID := current.Record.Secret.ID
 	ref, err := input.Reference()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	scope := workexecution.Scope{}
 	if owner.Project != nil {
@@ -56,39 +52,15 @@ func (repository *SecretRepository) PublishSecretRemoval(
 		input.ProjectID != scope.ProjectID ||
 		input.TenantID != scope.TenantID ||
 		task.Intent != ref ||
-		!input.CreatedAt.Equal(task.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
+		input.CreatedAt.Before(task.CreatedAt) || !input.CreatedAt.Before(task.Deadline) {
+		return workqueue.Change{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret removal differs from its captured input",
 		)
 	}
 	tombstone := deletionrecord.DeletionTombstoneRecord{
 		TargetKind: deletionrecord.DeletionTargetSecret, TargetID: secretID, TargetRevision: current.Revision,
-		TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt}
-	expectedScope, expectedScopeID := secretIdempotencyScope(owner)
-	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{
-		Kind: idempotencyrecord.IdempotencyReplayTargetSecret,
-		ID:   secretID,
-	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
-		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.Method != http.MethodDelete || marker.Locator.Route != "/secrets/{id}" ||
-		!idempotencyrecord.ValidTaskResponse(marker.Response, task.ID) ||
-		marker.Locator.ScopeKind != expectedScope ||
-		marker.Locator.ScopeID != expectedScopeID ||
-		marker.ReplayTarget == nil ||
-		*marker.ReplayTarget != wantReplayTarget ||
-		!marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"Secret deletion marker does not match its Task",
-		)
-	}
-
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
-		return existing, err
-	}
+		TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: input.CreatedAt, UpdatedAt: input.CreatedAt}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			secretrecord.SecretOwnerKey(current.Record.Secret),
@@ -98,7 +70,7 @@ func (repository *SecretRepository) PublishSecretRemoval(
 		Revision: current.ReadRevision,
 	})
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	if dependencies != nil {
 		defer etcdstore.ClearValues(dependencies.Values)
@@ -112,7 +84,7 @@ func (repository *SecretRepository) PublishSecretRemoval(
 			dependencies.Values[0].Value,
 		) != secretID ||
 		string(dependencies.Values[1].Value) != secretID {
-		return IdempotencyTransactionResult{}, errs.New(
+		return workqueue.Change{}, errs.New(
 			errs.KindInternal,
 			"Secret deletion indexes or encrypted value are corrupt",
 		)
@@ -120,29 +92,29 @@ func (repository *SecretRepository) PublishSecretRemoval(
 	encrypted, err := secretrecord.DecodeEncryptedValue(dependencies.Values[2].Value)
 	if err != nil || encrypted.SecretID != secretID {
 		clear(encrypted.Ciphertext)
-		return IdempotencyTransactionResult{}, secretrecord.CorruptRecord()
+		return workqueue.Change{}, secretrecord.CorruptRecord()
 	}
 	clear(encrypted.Ciphertext)
 
-	item := workexecution.Item{ID: input.WorkItemID, TaskID: task.ID, Operation: workexecution.SecretRemoval,
-		TargetID: secretID, Placement: workexecution.Placement{Executor: workexecution.Controller},
-		Claims: []workexecution.Claim{{ScopeID: secretID}}, Input: &ref, Phase: workexecution.Ready,
-		Cleanup: workexecution.CleanupNone, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt, Deadline: task.Deadline}
-	work, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer etcdstore.ClearMutationValues(work.Mutations)
 	captureConditions, captureWrites, err := secretremoval.PreparePublication(input)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	defer etcdstore.ClearMutationValues(captureWrites)
+	keep := false
+	defer func() {
+		if !keep {
+			etcdstore.ClearMutationValues(captureWrites)
+		}
+	}()
 	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	defer clear(tombstoneValue)
+	defer func() {
+		if !keep {
+			clear(tombstoneValue)
+		}
+	}()
 	conditions := []etcdstore.Condition{
 		{Key: secretrecord.RecordKey(secretID), ModRevision: current.Revision},
 		{
@@ -178,7 +150,7 @@ func (repository *SecretRepository) PublishSecretRemoval(
 	}
 	references, err := secretmutations.PrepareSecretRemovalAbsence(ctx, repository.store, secretID)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	conditions = append(conditions, references...)
 	mutations := []etcdstore.Mutation{
@@ -193,16 +165,14 @@ func (repository *SecretRepository) PublishSecretRemoval(
 	} else {
 		taskTenant, tenantErr := loadTaskInitiationTenant(ctx, repository.store, *owner.Project)
 		if tenantErr != nil {
-			return IdempotencyTransactionResult{}, tenantErr
+			return workqueue.Change{}, tenantErr
 		}
 		initiation, err = newProjectTaskInitiation(taskTenant, *owner.Project, taskjournal.TaskActorOperator)
 	}
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	conditions = append(conditions, work.Conditions...)
 	conditions = append(conditions, captureConditions...)
-	mutations = append(mutations, work.Mutations...)
 	mutations = append(mutations, captureWrites...)
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*etcdstore.KeyValue) error {
 		return errs.New(
@@ -212,27 +182,8 @@ func (repository *SecretRepository) PublishSecretRemoval(
 	})
 	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(
-		idempotencyrecord.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		classify,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
-}
-
-func secretIdempotencyScope(owner secretrecord.Owner) (idempotencyrecord.IdempotencyScopeKind, string) {
-	if owner.Project == nil {
-		return idempotencyrecord.IdempotencyScopePlatform, "-"
-	}
-	return idempotencyrecord.IdempotencyScopeProject, owner.Project.Record.ID
+	keep = true
+	return workqueue.Change{Conditions: conditions, Mutations: mutations}, nil
 }

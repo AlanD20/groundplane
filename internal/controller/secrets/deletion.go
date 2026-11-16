@@ -2,15 +2,17 @@ package secrets
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/secretremoval"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -39,14 +41,9 @@ type secretDeletionRepository interface {
 		string,
 		time.Time,
 	) (secretremoval.Input, error)
-	PublishSecretRemoval(
-		context.Context,
-		secretrecord.Owner,
-		etcdstore.Versioned[secretrecord.Record],
-		secretremoval.Input,
-		workexecution.Task,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	PrepareSecretRemovalAuthority(context.Context, secretrecord.Owner,
+		etcdstore.Versioned[secretrecord.Record], secretremoval.Input, workexecution.Task,
+	) (workqueue.Change, error)
 }
 
 type secretDeletionEvidence struct {
@@ -62,23 +59,12 @@ type secretDeletionIdempotency interface {
 		string,
 		string,
 	) (idempotencyrecord.IdempotencyLocator, bool, error)
-	Prepare(context.Context, idempotencyrecord.IdempotencyLocator, string) (secretDeletionEvidence, error)
+	Prepare(context.Context, idempotencyrecord.IdempotencyLocator, string, []string) (secretDeletionEvidence, error)
 	ResolveExisting(
 		context.Context,
 		idempotencyrecord.IdempotencyLocator,
 		secretDeletionEvidence,
 	) (requestidempotency.Resolution, bool, error)
-	ResolveKnown(
-		context.Context,
-		secretDeletionEvidence,
-		etcd.IdempotencyTransactionResult,
-	) (requestidempotency.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		secretDeletionEvidence,
-		error,
-	) (requestidempotency.Resolution, error)
 }
 
 type durableSecretDeletionIdempotency struct {
@@ -110,6 +96,7 @@ func (service *durableSecretDeletionIdempotency) Prepare(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
 	secretID string,
+	after []string,
 ) (secretDeletionEvidence, error) {
 	scope := requestidempotency.Scope{Kind: requestidempotency.ScopePlatform}
 	if locator.ScopeKind == idempotencyrecord.IdempotencyScopeProject {
@@ -120,7 +107,7 @@ func (service *durableSecretDeletionIdempotency) Prepare(
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: secretDeletionRoute, Scope: scope,
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: secretID}},
-		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
+		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(requestidempotency.Field{Name: "after", Value: secretDeletionAfter(after)})),
 	})
 	if err != nil {
 		return secretDeletionEvidence{}, err
@@ -145,42 +132,57 @@ func (service *durableSecretDeletionIdempotency) ResolveExisting(
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
-func (service *durableSecretDeletionIdempotency) ResolveKnown(
-	ctx context.Context,
-	evidence secretDeletionEvidence,
-	result etcd.IdempotencyTransactionResult,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
+type secretDeletionRequest struct {
+	SecretID string   `json:"secret_id"`
+	After    []string `json:"after,omitempty"`
 }
 
-func (service *durableSecretDeletionIdempotency) ResolveUnknown(
+type secretDeletionAcceptance interface {
+	SubmitSecretDeletion(
+		context.Context,
+		acceptedaction.Submission,
+		secretDeletionRequest,
+	) (idempotencyrecord.IdempotencyResponse, error)
+}
+type sharedSecretDeletionAcceptance struct{ submitter *acceptedaction.Submitter }
+
+func (acceptance sharedSecretDeletionAcceptance) SubmitSecretDeletion(
 	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence secretDeletionEvidence,
-	original error,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
+	submission acceptedaction.Submission,
+	request secretDeletionRequest,
+) (idempotencyrecord.IdempotencyResponse, error) {
+	return acceptedaction.Submit(ctx, acceptance.submitter, submission, request)
 }
 
 type secretDeletionService struct {
-	repository  secretDeletionRepository
-	idempotency secretDeletionIdempotency
-	now         func() time.Time
+	repository      secretDeletionRepository
+	idempotency     secretDeletionIdempotency
+	acceptedActions *acceptedaction.Submitter
+	acceptance      secretDeletionAcceptance
+	now             func() time.Time
 }
 
 func NewDeletionService(
 	repository secretDeletionRepository,
 	idempotency secretDeletionIdempotency,
+	accepted *acceptedaction.Submitter,
 ) (*secretDeletionService, error) {
-	if repository == nil || idempotency == nil {
+	if repository == nil || idempotency == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Secret deletion service is not configured")
 	}
-	return &secretDeletionService{repository: repository, idempotency: idempotency, now: time.Now}, nil
+	return &secretDeletionService{
+		repository:      repository,
+		idempotency:     idempotency,
+		acceptedActions: accepted,
+		acceptance:      sharedSecretDeletionAcceptance{accepted},
+		now:             time.Now,
+	}, nil
 }
 
 func (service *secretDeletionService) DeleteSecret(
 	ctx context.Context,
 	secretID string,
+	request apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
@@ -193,7 +195,7 @@ func (service *secretDeletionService) DeleteSecret(
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Secret id is invalid")
 	}
 	for attempt := 0; attempt < maximumSecretDeletionAttempts; attempt++ {
-		response, err := service.deleteSecretOnce(ctx, secretID, idempotencyKey)
+		response, err := service.deleteSecretOnce(ctx, secretID, request, idempotencyKey)
 		if err == nil {
 			return response, nil
 		}
@@ -211,6 +213,7 @@ func (service *secretDeletionService) DeleteSecret(
 func (service *secretDeletionService) deleteSecretOnce(
 	ctx context.Context,
 	secretID string,
+	request apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	target := idempotencyrecord.IdempotencyReplayTarget{
@@ -224,7 +227,7 @@ func (service *secretDeletionService) deleteSecretOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
-		evidence, err := service.idempotency.Prepare(ctx, locator, secretID)
+		evidence, err := service.idempotency.Prepare(ctx, locator, secretID, request.After)
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
@@ -260,7 +263,7 @@ func (service *secretDeletionService) deleteSecretOnce(
 		locator.ScopeKind = idempotencyrecord.IdempotencyScopeProject
 		locator.ScopeID = project.Record.ID
 	}
-	evidence, err := service.idempotency.Prepare(ctx, locator, secretID)
+	evidence, err := service.idempotency.Prepare(ctx, locator, secretID, request.After)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -279,65 +282,119 @@ func (service *secretDeletionService) deleteSecretOnce(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 
-	now := service.now().UTC()
-	input, err := service.repository.CaptureSecretRemoval(ctx, owner, current,
-		ids.New(ids.KindTask), ids.New(ids.KindWorkItem), ids.New(ids.KindPlan), now)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	at := service.now().UTC()
+	task := workexecution.Task{
+		ID:         ids.New(ids.KindTask),
+		Action:     workexecution.ActionRemove,
+		Actor:      workexecution.OperatorActor,
+		Scope:      workexecution.Scope{},
+		TargetID:   secretID,
+		TargetName: current.Record.Secret.Key,
+		After:      append([]string(nil), request.After...),
+		CreatedAt:  at,
+		UpdatedAt:  at,
+		Deadline:   at.Add(acceptedaction.QueueTimeout),
 	}
-	ref, err := input.Reference()
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	if owner.Project != nil {
+		task.Scope = workexecution.Scope{TenantID: owner.Project.Record.TenantID, ProjectID: owner.Project.Record.ID}
 	}
-	task := workexecution.Task{ID: input.TaskID, Action: workexecution.ActionRemove, Actor: workexecution.OperatorActor,
-		Scope:    workexecution.Scope{TenantID: input.TenantID, ProjectID: input.ProjectID},
-		TargetID: secretID, TargetName: current.Record.Secret.Key, Intent: ref, ExpectedItems: 1,
-		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(secretDeletionTimeoutSeconds) * time.Second)}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: append([]byte(nil), responseBody...),
-	}
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
-		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
-	}
-	result, deleteErr := service.repository.PublishSecretRemoval(
-		ctx, owner, current, input, task, marker,
+	return service.acceptance.SubmitSecretDeletion(
+		ctx,
+		acceptedaction.Submission{Task: task, Kind: "secret-delete", Locator: locator,
+			Intent: evidence.durable, Evidence: evidence.candidate, ReplayTarget: &target},
+		secretDeletionRequest{SecretID: secretID, After: append([]string(nil), request.After...)},
 	)
-	if deleteErr != nil {
-		if !isUnknownSecretDeletionOutcome(deleteErr) {
-			return idempotencyrecord.IdempotencyResponse{}, deleteErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, deleteErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
+}
+
+func secretDeletionAfter(after []string) requestidempotency.Value {
+	values := make([]requestidempotency.Value, len(after))
+	for index, id := range after {
+		values[index] = requestidempotency.String(id)
 	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return requestidempotency.CloneResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Secret deletion resolution is invalid",
-		)
+	return requestidempotency.List(values...)
+}
+
+func (service *secretDeletionService) AcceptedPreparations() []taskdependencies.Registration {
+	return []taskdependencies.Registration{
+		acceptedaction.Registration(
+			service.acceptedActions,
+			"secret-delete",
+			workexecution.ActionRemove,
+			ids.KindSecret,
+			service.prepareAcceptedDeletion,
+		),
 	}
 }
 
-func isUnknownSecretDeletionOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
+func (service *secretDeletionService) prepareAcceptedDeletion(
+	ctx context.Context,
+	snapshot workqueue.TaskSnapshot,
+	_ int64,
+	at time.Time,
+	request secretDeletionRequest,
+) (taskdependencies.Prepared, error) {
+	task := snapshot.Task
+	if request.SecretID != task.TargetID || !slices.Equal(request.After, task.After) {
+		return taskdependencies.Prepared{}, errs.New(
+			errs.KindInternal,
+			"Secret deletion accepted identity is inconsistent",
+		)
 	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
+	current, err := service.repository.GetSecret(ctx, request.SecretID)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	owner := secretrecord.PlatformOwner()
+	scope := workexecution.Scope{}
+	if current.Record.Secret.Scope == core.SecretScopeProject {
+		project, err := service.repository.GetProject(ctx, current.Record.Secret.ProjectID)
+		if err != nil {
+			return taskdependencies.Prepared{}, err
+		}
+		owner = secretrecord.ProjectOwner(project)
+		scope = workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID}
+	}
+	if scope != task.Scope || current.Record.Secret.Key != task.TargetName {
+		return taskdependencies.Prepared{}, errs.New(errs.KindStateConflict, "Secret deletion ownership changed")
+	}
+	input, err := service.repository.CaptureSecretRemoval(
+		ctx,
+		owner,
+		current,
+		task.ID,
+		ids.New(ids.KindWorkItem),
+		ids.New(ids.KindPlan),
+		at,
+	)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	reference, err := input.Reference()
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	task.Intent = reference
+	task.ExpectedItems = 1
+	task.UpdatedAt = at
+	authority, err := service.repository.PrepareSecretRemovalAuthority(ctx, owner, current, input, task)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	item := workexecution.Item{
+		ID:        input.WorkItemID,
+		TaskID:    task.ID,
+		Operation: workexecution.SecretRemoval,
+		TargetID:  request.SecretID,
+		Placement: workexecution.Placement{
+			Executor: workexecution.Controller,
+		},
+		Claims:    []workexecution.Claim{{ScopeID: request.SecretID}},
+		Input:     &reference,
+		Phase:     workexecution.Ready,
+		Cleanup:   workexecution.CleanupNone,
+		CreatedAt: at,
+		UpdatedAt: at,
+		Deadline:  acceptedaction.ExecutionDeadline(task, at, time.Duration(secretDeletionTimeoutSeconds)*time.Second),
+	}
+	return taskdependencies.Prepared{Task: task, Graph: []workexecution.Item{item}, Authority: authority}, nil
 }

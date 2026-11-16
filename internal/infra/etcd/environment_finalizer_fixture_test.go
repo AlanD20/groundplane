@@ -45,7 +45,7 @@ func newEnvironmentFinalizerFixture(t *testing.T) environmentFinalizerFixture {
 	}
 	begin := hierarchyDeletionCreationTestBegin(fixture.now, hierarchydeletion.HierarchyDeletionTargetEnvironment,
 		environment.Record.ID, hierarchydeletion.HierarchyDeletionOperationEnvironment, "6")
-	created, err := operations.Begin(t.Context(), begin)
+	created, err := captureHierarchyDeletionFixture(t.Context(), operations, begin)
 	if err != nil {
 		t.Fatal(err)
 	}

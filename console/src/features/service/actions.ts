@@ -1,4 +1,4 @@
-import type { Service, ServiceRuntimeIntent } from "@/lib/types";
+import type { Service } from "@/lib/types";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { requireTaskId } from "@/features/task/journal-model";
 import {
@@ -25,11 +25,16 @@ export type ServiceActions = {
     input: ServiceMutationInput,
   ) => Promise<Service>;
   getService: (serviceId: string) => Promise<Service>;
-  deleteService: (envId: string, serviceId: string) => Promise<string>;
+  deleteService: (
+    envId: string,
+    serviceId: string,
+    after?: string[],
+  ) => Promise<string>;
   runServiceRuntimeAction: (
     envId: string,
     serviceId: string,
     action: "start" | "stop" | "destroy",
+    after?: string[],
   ) => Promise<string>;
 };
 export function createServiceActions(
@@ -82,35 +87,23 @@ export function createServiceActions(
           { method: "GET" },
         ),
       ),
-    deleteService: (envId, serviceId) => (
+    deleteService: (envId, serviceId, after = []) => (
       assertEnvironmentMutable(envId, "Service mutation"),
       dispatchResourceRemoval({
         kind: "service",
         environmentId: envId,
         resourceId: serviceId,
+        after,
       })
     ),
-    runServiceRuntimeAction: async (envId, serviceId, action) => {
+    runServiceRuntimeAction: async (envId, serviceId, action, after = []) => {
       assertEnvironmentMutable(envId, "Service mutation");
       const accepted = await controllerRequest<ServiceRuntimeTaskAccepted>(
         `/services/${encodeURIComponent(serviceId)}/${action}`,
         202,
-        { method: "POST" },
+        { method: "POST", body: { after } },
       );
       const taskId = requireTaskId(accepted, `Service ${action}`);
-      const intent: ServiceRuntimeIntent =
-        action === "start"
-          ? "running"
-          : action === "stop"
-            ? "stopped"
-            : "absent";
-      update((d) => {
-        const service = findEnvironment(d, envId)?.services.find(
-          (candidate) => candidate.id === serviceId,
-        );
-        if (!service) return;
-        service.runtimeIntent = intent;
-      });
       return taskId;
     },
   };

@@ -191,10 +191,10 @@ type environmentBlueprintRepository interface {
 		blueprints.EnvironmentBlueprintStageRequest,
 	) (blueprints.EnvironmentBlueprintSeal, error)
 	AbandonEnvironmentBlueprintStage(context.Context, blueprints.EnvironmentBlueprintStageClaim) error
-	PublishEnvironmentBlueprintAuthoredRevision(
+	PrepareEnvironmentBlueprintAuthoredRevision(
 		context.Context,
 		etcd.BlueprintAuthoredPublication,
-	) (etcdstore.TransactionResult, error)
+	) (etcd.BlueprintAuthoredCapture, error)
 	SealEnvironmentBlueprintRuntimeProjection(
 		context.Context,
 		etcd.BlueprintRuntimeProjectionSeal,

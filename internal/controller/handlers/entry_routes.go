@@ -57,8 +57,9 @@ type entryBulkUpsertInput struct {
 }
 
 type entryRemoveInput struct {
-	ID             string `path:"id" pattern:"^ev_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID             string                        `path:"id" pattern:"^ev_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type entryListInput struct {
@@ -94,11 +95,7 @@ type entryRemoveOutput struct {
 }
 
 func (s *Server) registerEntries() {
-	entrySchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.Entry](),
-		true,
-		"Entry",
-	)
+	s.setRoutePolicy("DELETE /api/v1/entries/{id}", routePolicy{body: jsonBody})
 	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
 		reflect.TypeFor[apiTypes.TaskAccepted](),
 		true,
@@ -107,7 +104,7 @@ func (s *Server) registerEntries() {
 	operation := huma.Operation{
 		OperationID: "entry.create", Method: http.MethodPost, Path: "/entries",
 		Summary: "Create an environment Entry", Tags: []string{"Entry"},
-		DefaultStatus: http.StatusCreated, SkipValidateBody: true,
+		DefaultStatus: http.StatusAccepted, SkipValidateBody: true,
 		Middlewares: huma.Middlewares{s.rejectEntryQuery},
 	}
 	operation.RequestBody = &huma.RequestBody{
@@ -123,16 +120,16 @@ func (s *Server) registerEntries() {
 		},
 	}
 	operation.Responses = map[string]*huma.Response{
-		strconv.Itoa(http.StatusCreated): {
-			Description: http.StatusText(http.StatusCreated),
+		strconv.Itoa(http.StatusAccepted): {
+			Description: http.StatusText(http.StatusAccepted),
 			Content: map[string]*huma.MediaType{
-				"application/json": {Schema: entrySchema},
+				"application/json": {Schema: taskAcceptedSchema},
 			},
 		},
 	}
 	huma.Register(s.API, operation, s.createEntry)
 	bulkResponseSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.EntryBulkUpsertResult](), true, "EntryBulkUpsertResult",
+		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
 	)
 	bulkOperation := huma.Operation{
 		OperationID: "entry.bulk-upsert", Method: http.MethodPost, Path: "/entries/bulk",
@@ -162,7 +159,7 @@ func (s *Server) registerEntries() {
 	editOperation := huma.Operation{
 		OperationID: "entry.edit", Method: http.MethodPatch, Path: "/entries/{id}",
 		Summary: "Edit an environment Entry's source and exposure", Tags: []string{"Entry"},
-		DefaultStatus: http.StatusOK, SkipValidateBody: true,
+		DefaultStatus: http.StatusAccepted, SkipValidateBody: true,
 		Middlewares: huma.Middlewares{s.rejectEntryQuery},
 	}
 	editOperation.RequestBody = &huma.RequestBody{
@@ -176,10 +173,10 @@ func (s *Server) registerEntries() {
 		},
 	}
 	editOperation.Responses = map[string]*huma.Response{
-		strconv.Itoa(http.StatusOK): {
-			Description: http.StatusText(http.StatusOK),
+		strconv.Itoa(http.StatusAccepted): {
+			Description: http.StatusText(http.StatusAccepted),
 			Content: map[string]*huma.MediaType{
-				"application/json": {Schema: entrySchema},
+				"application/json": {Schema: taskAcceptedSchema},
 			},
 		},
 	}
@@ -188,7 +185,7 @@ func (s *Server) registerEntries() {
 		OperationID: "entry.remove", Method: http.MethodDelete, Path: "/entries/{id}",
 		Summary: "Remove an environment Entry", Tags: []string{"Entry"},
 		DefaultStatus: http.StatusAccepted,
-		Middlewares:   huma.Middlewares{s.rejectEntryDeleteBody, s.rejectEntryQuery},
+		Middlewares:   huma.Middlewares{s.rejectEntryQuery},
 		Responses:     attachMutationResponses(taskAcceptedSchema),
 	}, s.removeEntry)
 	huma.Register(s.API, huma.Operation{

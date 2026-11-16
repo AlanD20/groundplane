@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -30,23 +31,13 @@ type serviceLifecycleIdempotency interface {
 		string,
 		workexecution.Action,
 		string,
+		[]string,
 	) (serviceLifecycleEvidence, error)
 	ResolveExisting(
 		context.Context,
 		idempotencyrecord.IdempotencyLocator,
 		serviceLifecycleEvidence,
 	) (requestidempotency.Resolution, bool, error)
-	ResolveKnown(
-		context.Context,
-		serviceLifecycleEvidence,
-		etcd.IdempotencyTransactionResult,
-	) (requestidempotency.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		serviceLifecycleEvidence,
-		error,
-	) (requestidempotency.Resolution, error)
 }
 
 type durableServiceLifecycleIdempotency struct {
@@ -80,6 +71,7 @@ func (service *durableServiceLifecycleIdempotency) Prepare(
 	serviceID string,
 	taskType workexecution.Action,
 	route string,
+	after []string,
 ) (serviceLifecycleEvidence, error) {
 	if locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		ids.Validate(ids.KindEnvironment, locator.ScopeID) != nil {
@@ -91,7 +83,8 @@ func (service *durableServiceLifecycleIdempotency) Prepare(
 		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: locator.ScopeID},
 		Path:   []requestidempotency.PathBinding{{Name: "id", Value: serviceID}},
 		Query:  requestidempotency.Object(),
-		Body:   requestidempotency.NoBody(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(after)})),
 	})
 	if err != nil {
 		return serviceLifecycleEvidence{}, err
@@ -118,21 +111,4 @@ func (service *durableServiceLifecycleIdempotency) ResolveExisting(
 	evidence serviceLifecycleEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
-}
-
-func (service *durableServiceLifecycleIdempotency) ResolveKnown(
-	ctx context.Context,
-	evidence serviceLifecycleEvidence,
-	result etcd.IdempotencyTransactionResult,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
-}
-
-func (service *durableServiceLifecycleIdempotency) ResolveUnknown(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence serviceLifecycleEvidence,
-	original error,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }

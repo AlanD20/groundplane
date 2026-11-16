@@ -78,6 +78,7 @@ func TestNativeBackingZoneRemovalPublishesCapturedGraph(t *testing.T) {
 		zone.ID,
 		"native-backing-zone-remove",
 		impact.ImpactToken,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -86,6 +87,7 @@ func TestNativeBackingZoneRemovalPublishesCapturedGraph(t *testing.T) {
 	if err := json.Unmarshal(removed.Body, &accepted); err != nil || removed.Status != http.StatusAccepted {
 		t.Fatalf("Backing Zone response: %v", err)
 	}
+	f.prepare(t, accepted.TaskID)
 	inputs, err := networkwork.NewInputRepository(f.base.store)
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +126,7 @@ func TestNativeBackingZoneRemovalPublishesCapturedGraph(t *testing.T) {
 		t.Fatalf("published graph differs from captured bridge: %v", err)
 	}
 	revision = f.base.store.revision
-	_, err = f.network.RemoveZoneWithImpact(t.Context(), zone.ID, "native-backing-zone-remove", impact.ImpactToken)
+	_, err = f.network.RemoveZoneWithImpact(t.Context(), zone.ID, "native-backing-zone-remove", impact.ImpactToken, nil)
 	if !errors.Is(err, errs.New(errs.KindIdempotencyInProgress, "")) || f.base.store.revision != revision {
 		t.Fatalf("Backing Zone replay lost its accepted graph or changed state: %v", err)
 	}

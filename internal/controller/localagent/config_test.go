@@ -15,8 +15,10 @@ func TestUpdateConfigCommitsBeforeRuntimeMaterializationAndCopiesState(t *testin
 
 	record := configTestRecord()
 	repository := &configTestRepository{
-		stored:       StoredRecord{Record: record, Revision: 11},
-		responseBody: []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"labels":{"zone":"edge"}}`),
+		stored: StoredRecord{Record: record, Revision: 11},
+		responseBody: []byte(
+			`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"labels":{"zone":"edge"}}`,
+		),
 	}
 	runtime := &configTestRuntime{repository: repository}
 	manager, err := New(Dependencies{
@@ -30,7 +32,12 @@ func TestUpdateConfigCommitsBeforeRuntimeMaterializationAndCopiesState(t *testin
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	desired := Config{PullIntervalSeconds: 5, MaxConcurrentTasks: 2, MaxParallelOperationsPerTask: 1, Labels: map[string]string{"zone": "edge"}}
+	desired := Config{
+		PullIntervalSeconds:          5,
+		MaxConcurrentTasks:           2,
+		MaxParallelOperationsPerTask: 1,
+		Labels:                       map[string]string{"zone": "edge"},
+	}
 	response, err := manager.UpdateConfig(context.Background(), record.ID, desired, "agent-config-key-0001")
 	if err != nil {
 		t.Fatalf("UpdateConfig() error = %v", err)
@@ -60,7 +67,12 @@ func configTestRecord() Record {
 		Image:            "example.com/groundplane-agent@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 		Generation:       1,
 		Phase:            PhaseReady,
-		Config:           Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1, Labels: map[string]string{}},
+		Config: Config{
+			PullIntervalSeconds:          2,
+			MaxConcurrentTasks:           3,
+			MaxParallelOperationsPerTask: 1,
+			Labels:                       map[string]string{},
+		},
 		Credential: Credential{
 			EncryptedToken: []byte("ciphertext"),
 			Digest:         base64.RawURLEncoding.EncodeToString(make([]byte, 32)),

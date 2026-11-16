@@ -44,8 +44,8 @@ func TestNativeRouteRemovalPublishesOnlyItsEnabledRouter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var created api.RouteTaskAccepted
-	if err := json.Unmarshal(response.Body, &created); err != nil {
+	var created nativeRouteAccepted
+	if err := f.prepareRouteResponse(t, response.Body, &created); err != nil {
 		t.Fatal(err)
 	}
 	f.checkDefinition(t, created.TaskID, created.Route.ID, true)
@@ -64,14 +64,32 @@ func TestNativeRouteRemovalPublishesOnlyItsEnabledRouter(t *testing.T) {
 	changed := observed
 	changed.Desired.Enabled = false
 	nativeVolumePut(t, f.base.store, components.RecordKey(componentID), changed, components.EncodeRecord)
-	if _, err := f.network.RemoveRoute(t.Context(), created.Route.ID, "native-router-changed-definition"); !errors.Is(
-		err,
-		errs.New(errs.KindStateConflict, ""),
-	) {
-		t.Fatalf("changed router definition was not fenced: %v", err)
+	rejected, err := f.network.RemoveRoute(
+		t.Context(),
+		created.Route.ID,
+		api.TaskRunAfterRequest{},
+		"native-router-changed-definition",
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
+	var rejectedTask api.TaskAccepted
+	if err := json.Unmarshal(rejected.Body, &rejectedTask); err != nil {
+		t.Fatal(err)
+	}
+	f.prepare(t, rejectedTask.TaskID)
+	task, _, err := f.base.queue.ReadTask(t.Context(), rejectedTask.TaskID, 0)
+	if err != nil || task.Task.Outcome != workexecution.Failed {
+		t.Fatalf("changed router definition was not rejected: %v", err)
+	}
+
 	nativeVolumePut(t, f.base.store, components.RecordKey(componentID), observed, components.EncodeRecord)
-	removed, err := f.network.RemoveRoute(t.Context(), created.Route.ID, "native-router-removal")
+	removed, err := f.network.RemoveRoute(
+		t.Context(),
+		created.Route.ID,
+		api.TaskRunAfterRequest{},
+		"native-router-removal",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,9 +97,12 @@ func TestNativeRouteRemovalPublishesOnlyItsEnabledRouter(t *testing.T) {
 	if err := json.Unmarshal(removed.Body, &accepted); err != nil || removed.Status != http.StatusAccepted {
 		t.Fatalf("router removal response: %v", err)
 	}
+	f.prepare(t, accepted.TaskID)
 	page, err := f.base.queue.ListWork(t.Context(), accepted.TaskID, "", 10, 0)
 	if err != nil || len(page.Items) != 1 {
-		t.Fatalf("router removal work: %v", err)
+		task, _, _ := f.base.queue.ReadTask(t.Context(), accepted.TaskID, 0)
+		failure, _ := f.base.queue.ReadAcceptedPreparationFailure(t.Context(), accepted.TaskID, 0)
+		t.Fatalf("router removal work: %v task=%+v failure=%+v", err, task.Task, failure)
 	}
 	item := page.Items[0].Item
 	if item.Placement.Executor != workexecution.Agent || item.Operation != workexecution.Component ||
@@ -124,7 +145,7 @@ func TestNativeRouteRemovalPublishesOnlyItsEnabledRouter(t *testing.T) {
 		t.Fatalf("Route execution metadata retired before its Agent withdrawal: %v", err)
 	}
 	revision := f.base.store.revision
-	_, err = f.network.RemoveRoute(t.Context(), created.Route.ID, "native-router-removal")
+	_, err = f.network.RemoveRoute(t.Context(), created.Route.ID, api.TaskRunAfterRequest{}, "native-router-removal")
 	if !errors.Is(err, errs.New(errs.KindIdempotencyInProgress, "")) || f.base.store.revision != revision {
 		t.Fatalf("Agent Route replay lost removal authority or published more work: %v", err)
 	}

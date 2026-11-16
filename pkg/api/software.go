@@ -19,6 +19,7 @@ const (
 // Both source builds resolve one commit; Both releases select matching
 // controller/vX.Y.Z and agent/vX.Y.Z releases from the requested vX.Y.Z label.
 type SoftwarePreparationRequest struct {
+	After      []string           `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 	Selection  SoftwareSelection  `json:"selection" enum:"controller,agent,both"`
 	SourceKind SoftwareSourceKind `json:"source_kind" enum:"source_ref,release"`
 	Ref        string             `json:"ref" minLength:"1" maxLength:"256"`

@@ -7,16 +7,24 @@ import (
 )
 
 type ServiceDeployInput struct {
+	After     []string
 	Image     string
 	Tag       string
 	Strategy  Strategy
 	OnFailure OnFailure
 }
 
-type ServiceRollbackInput struct{ Tag string }
-type GroupDeployInput struct{ Tag string }
+type ServiceRollbackInput struct {
+	Tag   string
+	After []string
+}
+type GroupDeployInput struct {
+	Tag   string
+	After []string
+}
 
 type GroupRollbackInput struct {
+	After           []string
 	Tag             *string
 	PreviewRevision *int64
 }

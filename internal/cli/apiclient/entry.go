@@ -14,18 +14,18 @@ import (
 func (c *Client) CreateEntry(
 	ctx context.Context,
 	input apiTypes.EntryCreateRequest,
-) (apiTypes.Entry, error) {
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.Entry{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	exposure := append([]string(nil), input.Exposure...)
 	body := generated.EntryCreateRequest{
-		EnvironmentId: input.EnvironmentID,
-		Type:          input.Type,
-		Source:        entrySourceToGenerated(input.Source),
-		Exposure:      &exposure,
-		Secret:        input.Secret,
+		After: optionalServiceStrings(input.After), EnvironmentId: input.EnvironmentID,
+		Type:     input.Type,
+		Source:   entrySourceToGenerated(input.Source),
+		Exposure: &exposure,
+		Secret:   input.Secret,
 	}
 	if input.Key != "" {
 		body.Key = &input.Key
@@ -47,39 +47,27 @@ func (c *Client) CreateEntry(
 		body,
 	)
 	if err != nil {
-		return apiTypes.Entry{}, generatedCallError(ctx, http.MethodPost, "/api/v1/entries", err)
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, "/api/v1/entries", err)
 	}
 	if err := generatedResponseError(
 		http.MethodPost,
 		"/api/v1/entries",
 		response.HTTPResponse,
 		response.Body,
-		http.StatusCreated,
+		http.StatusAccepted,
 	); err != nil {
-		return apiTypes.Entry{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
-	parsed := response.JSON201
-	if parsed == nil {
-		parsed = &generated.Entry{}
-		if err := decodeSingleJSON(
-			http.MethodPost,
-			"/api/v1/entries",
-			bytes.NewReader(response.Body),
-			parsed,
-		); err != nil {
-			return apiTypes.Entry{}, err
-		}
-	}
-	return entryFromGenerated(*parsed)
+	return generatedTaskAccepted(http.MethodPost, "/api/v1/entries", response.Body, response.JSON202)
 }
 
 func (c *Client) BulkUpsertEntries(
 	ctx context.Context,
 	input apiTypes.EntryBulkUpsertRequest,
-) (apiTypes.EntryBulkUpsertResult, error) {
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.EntryBulkUpsertResult{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	entries := make([]generated.EntryBulkItem, len(input.Entries))
 	for index, entry := range input.Entries {
@@ -87,6 +75,7 @@ func (c *Client) BulkUpsertEntries(
 	}
 	exposure := append([]string(nil), input.Exposure...)
 	body := generated.EntryBulkUpsertRequest{
+		After:         optionalServiceStrings(input.After),
 		EnvironmentId: input.EnvironmentID,
 		Entries:       &entries,
 		Exposure:      &exposure,
@@ -98,7 +87,7 @@ func (c *Client) BulkUpsertEntries(
 		body,
 	)
 	if err != nil {
-		return apiTypes.EntryBulkUpsertResult{}, generatedCallError(
+		return apiTypes.TaskAccepted{}, generatedCallError(
 			ctx, http.MethodPost, "/api/v1/entries/bulk", err,
 		)
 	}
@@ -109,49 +98,23 @@ func (c *Client) BulkUpsertEntries(
 		response.Body,
 		http.StatusAccepted,
 	); err != nil {
-		return apiTypes.EntryBulkUpsertResult{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
-	parsed := response.JSON202
-	if parsed == nil {
-		parsed = &generated.EntryBulkUpsertResult{}
-		if err := decodeSingleJSON(
-			http.MethodPost,
-			"/api/v1/entries/bulk",
-			bytes.NewReader(response.Body),
-			parsed,
-		); err != nil {
-			return apiTypes.EntryBulkUpsertResult{}, err
-		}
-	}
-	result := apiTypes.EntryBulkUpsertResult{TaskID: parsed.TaskId}
-	if parsed.Entries == nil {
-		return apiTypes.EntryBulkUpsertResult{}, errs.New(
-			errs.KindInternal, "Entry bulk upsert response entries are missing",
-		)
-	}
-	result.Entries = make([]apiTypes.Entry, len(*parsed.Entries))
-	for index, entry := range *parsed.Entries {
-		converted, err := entryFromGenerated(entry)
-		if err != nil {
-			return apiTypes.EntryBulkUpsertResult{}, err
-		}
-		result.Entries[index] = converted
-	}
-	return result, nil
+	return generatedTaskAccepted(http.MethodPost, "/api/v1/entries/bulk", response.Body, response.JSON202)
 }
 
 func (c *Client) EditEntry(
 	ctx context.Context,
 	id string,
 	input apiTypes.EntryEditRequest,
-) (apiTypes.Entry, error) {
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.Entry{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	exposure := append([]string(nil), input.Exposure...)
 	body := generated.EntryEditRequest{
-		Source:   entrySourceToGenerated(input.Source),
+		After: optionalServiceStrings(input.After), Source: entrySourceToGenerated(input.Source),
 		Exposure: &exposure,
 	}
 	path := "/api/v1/entries/" + id
@@ -159,24 +122,17 @@ func (c *Client) EditEntry(
 		ctx, id, &generated.EntryEditParams{IdempotencyKey: ids.NewULID()}, body,
 	)
 	if err != nil {
-		return apiTypes.Entry{}, generatedCallError(ctx, http.MethodPatch, path, err)
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPatch, path, err)
 	}
 	if err := generatedResponseError(
-		http.MethodPatch, path, response.HTTPResponse, response.Body, http.StatusOK,
+		http.MethodPatch, path, response.HTTPResponse, response.Body, http.StatusAccepted,
 	); err != nil {
-		return apiTypes.Entry{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.Entry{}
-		if err := decodeSingleJSON(http.MethodPatch, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.Entry{}, err
-		}
-	}
-	return entryFromGenerated(*parsed)
+	return generatedTaskAccepted(http.MethodPatch, path, response.Body, response.JSON202)
 }
 
-func (c *Client) RemoveEntry(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RemoveEntry(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -186,6 +142,7 @@ func (c *Client) RemoveEntry(ctx context.Context, id string) (apiTypes.TaskAccep
 		ctx,
 		id,
 		&generated.EntryRemoveParams{IdempotencyKey: ids.NewULID()},
+		generated.EntryRemoveJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)

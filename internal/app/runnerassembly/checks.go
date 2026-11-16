@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	commandrunner "github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	dockerrunner "github.com/AlanD20/groundplane/internal/infra/docker/runner"
@@ -13,7 +14,7 @@ import (
 
 func newChecks(store etcd.EnvironmentBlueprintStore, runners *etcd.RunnerRepository,
 	evidence *etcd.IdempotencyRepository, coordinator *requestidempotency.Coordinator,
-	lifecycle *runnercapability.Executor, logger *slog.Logger,
+	lifecycle *runnercapability.Executor, logger *slog.Logger, accepted *acceptedaction.Submitter,
 ) (*runnercapability.ConnectionCheckService, *runnercapability.ConnectionCheckExecutor, error) {
 	records, err := runnerchecks.NewRepository(store)
 	if err != nil {
@@ -27,7 +28,7 @@ func newChecks(store etcd.EnvironmentBlueprintStore, runners *etcd.RunnerReposit
 	if err != nil {
 		return nil, nil, err
 	}
-	service, err := runnercapability.NewConnectionCheckService(runners, records, evidence, coordinator)
+	service, err := runnercapability.NewConnectionCheckService(runners, records, evidence, coordinator, accepted)
 	if err != nil {
 		return nil, nil, err
 	}

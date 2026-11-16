@@ -12,7 +12,9 @@ import (
 	entryexecution "github.com/AlanD20/groundplane/internal/controller/entrywork"
 	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/controller/operationretention"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
@@ -310,6 +312,22 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
+	acceptedPreparations, err := taskdependencies.NewPreparations(queue, dependencies.AcceptedPreparations)
+	if err != nil {
+		return nil, err
+	}
+	backingPublication, err := workqueue.NewBackingCreationPublisher(platform.dependencies.Store)
+	if err != nil {
+		return nil, err
+	}
+	acceptedPreparations.ConfigureBackingCreation(backingPublication)
+	publications.ConfigureAcceptedPreparations(acceptedPreparations)
+	retention.ConfigureAcceptedPreparations(acceptedPreparations)
+	backingDrafts, err := etcd.NewHierarchyRepository(platform.dependencies.Store)
+	if err != nil {
+		return nil, err
+	}
+	retention.ConfigureBackingCreationStages(backingDrafts)
 	serviceInputs, err := blueprint.NewServiceWorkPreparation(dependencies.Blueprints, owners.blueprintLedger, queue)
 	if err != nil {
 		return nil, err

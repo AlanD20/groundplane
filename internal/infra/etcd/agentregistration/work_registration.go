@@ -18,8 +18,13 @@ import (
 // start unavailable: registration never releases old slots or proves old effects
 // stopped. A receipt makes uncertain-response retry and reconnect idempotent,
 // while a retired process cannot become current again.
-func (repository *Repository) RegisterWorkProcess(ctx context.Context, agentID string,
-	credentialGeneration uint64, process [16]byte, limits workexecution.AgentConcurrency, operations []workexecution.Operation,
+func (repository *Repository) RegisterWorkProcess(
+	ctx context.Context,
+	agentID string,
+	credentialGeneration uint64,
+	process [16]byte,
+	limits workexecution.AgentConcurrency,
+	operations []workexecution.Operation,
 ) (workexecution.Identity, error) {
 	if credentialGeneration == 0 || process == [16]byte{} || limits.Validate() != nil {
 		return workexecution.Identity{}, agentCredentialNotFound()

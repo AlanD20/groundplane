@@ -45,6 +45,7 @@ export function DeployReleaseGroupDialog({
 
   return (
     <TaskRunnerDialog
+      runAfter
       open={open}
       onOpenChange={onOpenChange}
       variant="inline"
@@ -79,7 +80,9 @@ export function DeployReleaseGroupDialog({
           </div>
         </div>
       }
-      onDispatch={() => store.deployReleaseGroup(env.id, group.id, tag.trim())}
+      onDispatch={(after) =>
+        store.deployReleaseGroup(env.id, group.id, tag.trim(), after)
+      }
       onSettled={async () => {
         await store.refreshEnvironmentReleases(env.id);
       }}
@@ -185,6 +188,7 @@ export function RollbackReleaseGroupDialog({
 
   return (
     <TaskRunnerDialog
+      runAfter
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) invalidatePreview();
@@ -197,10 +201,11 @@ export function RollbackReleaseGroupDialog({
       target={group.id}
       workspace={params.tenant}
       startLabel="Roll back group"
-      startDisabled={
-        previewLoading || currentPreview === null || previewError !== ""
+      startDisabled={(after) =>
+        after.length === 0 &&
+        (previewLoading || currentPreview === null || previewError !== "")
       }
-      review={
+      review={(after) => (
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <Label htmlFor="release-group-rollback-tag">
@@ -229,7 +234,7 @@ export function RollbackReleaseGroupDialog({
               onClick={() => {
                 void loadPreview();
               }}
-              disabled={previewLoading}
+              disabled={previewLoading || after.length > 0}
             >
               Preview
             </Button>
@@ -241,15 +246,21 @@ export function RollbackReleaseGroupDialog({
               </span>{" "}
               {releaseGroupPolicyLabel(group.onFailure)}
             </p>
-            {previewLoading && (
+            {after.length > 0 && (
+              <p>
+                Rollback sources are selected after prerequisite Tasks succeed
+                and fully settle. The current preview is not used.
+              </p>
+            )}
+            {after.length === 0 && previewLoading && (
               <p role="status">Loading Controller-selected rollback sources…</p>
             )}
-            {previewError && (
+            {after.length === 0 && previewError && (
               <p role="alert" className="text-destructive">
                 {previewError}
               </p>
             )}
-            {sources.map((source) => (
+            {(after.length === 0 ? sources : []).map((source) => (
               <dl
                 key={source.service_id}
                 className="grid gap-2 border-t border-border pt-2 font-mono sm:grid-cols-3"
@@ -274,8 +285,16 @@ export function RollbackReleaseGroupDialog({
             ))}
           </div>
         </div>
-      }
-      onDispatch={async () => {
+      )}
+      onDispatch={async (after) => {
+        if (after.length > 0)
+          return store.rollbackReleaseGroup(
+            env.id,
+            group.id,
+            tag === "" ? undefined : tag,
+            undefined,
+            after,
+          );
         const dispatchScope = rollbackPreviewScope(
           env.id,
           group.id,

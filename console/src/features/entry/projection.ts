@@ -1,8 +1,9 @@
 import type { operations } from "@/lib/api.generated";
 import type { EnvironmentEntry } from "@/lib/entry-types";
 
-type EntryResponse =
-  operations["entry.edit"]["responses"][200]["content"]["application/json"];
+type EntryResponse = NonNullable<
+  operations["entry.list"]["responses"][200]["content"]["application/json"]["items"]
+>[number];
 
 export function entryFromAPI(entry: EntryResponse): EnvironmentEntry {
   if (entry.type !== "env" && entry.type !== "file") {

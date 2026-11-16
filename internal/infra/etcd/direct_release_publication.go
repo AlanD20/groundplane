@@ -5,7 +5,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -14,17 +13,15 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PublishDirectReleaseWithWork accepts one explicitly selected Service release.
-// The pending native item and all of its frozen preparation become visible in
-// the same transaction. Nothing is assignable until its complete executable
-// input is prepared; staging a Release is not acknowledgement of runtime.
-func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
+// PrepareDirectReleaseCapture returns immutable Service execution inputs and
+// their source comparisons. The caller joins them to promotion of the original
+// accepted Task; preparing this change grants no runtime execution authority.
+func (ledger *ReleaseLedger) PrepareDirectReleaseCapture(ctx context.Context,
 	task workexecution.Task, item workexecution.Item, request DirectReleasePreparation,
 	rollout releaserender.ServiceRolloutCapture, addresses networkreservations.ProxyAddresses,
-	marker idempotency.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+) (workqueue.Change, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	if ledger == nil || ledger.store == nil ||
 		task.Action != workexecution.ActionDeploy && task.Action != workexecution.ActionRollback ||
@@ -34,39 +31,24 @@ func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
 		item.Input != nil ||
 		item.Phase != workexecution.Waiting ||
 		item.Wait == nil ||
-		item.Wait.Reason != workexecution.WaitInput ||
-		marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != task.Scope.EnvironmentID {
-		return IdempotencyTransactionResult{}, errs.New(
+		item.Wait.Reason != workexecution.WaitInput {
+		return workqueue.Change{}, errs.New(
 			errs.KindValidationFailed,
 			"Direct Release acceptance requires its pending native Service work",
 		)
 	}
 	if err := request.Matches(task, item, rollout); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
-	graph, err := request.WorkGraph(task, item)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	var change workqueue.Change
-	if len(graph) == 1 {
-		change, err = workqueue.PrepareSingleTask(task, item, marker)
-	} else {
-		change, err = workqueue.PrepareStagedGraph(task, graph, []workexecution.Item{item}, marker)
-	}
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer keyvalue.ZeroMutationBytes(change.Mutations)
+	change := workqueue.Change{}
 	preparationValue, _, err := EncodeDirectReleasePreparation(request)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(preparationValue)
 	rolloutValue, err := releaserender.EncodeServiceRolloutCapture(rollout)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	defer clear(rolloutValue)
 	guards, err := ledger.directReleaseSourceConditions(
@@ -77,14 +59,14 @@ func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
 		request.Source.ReadRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	host, err := hostbindings.ReadLocal(ctx, ledger.store, request.Source.ReadRevision)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return workqueue.Change{}, err
 	}
 	if host.Binding.HostID != item.Placement.HostID {
-		return IdempotencyTransactionResult{}, errs.New(
+		return workqueue.Change{}, errs.New(
 			errs.KindStateConflict,
 			"Direct Release target host changed during acceptance",
 		)
@@ -114,16 +96,7 @@ func (ledger *ReleaseLedger) PublishDirectReleaseWithWork(ctx context.Context,
 			Value: append([]byte(nil), preparationValue...),
 		},
 	)
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask,
-		change.Conditions, change.Mutations, resourceWorkPublicationConflict(change.Conditions))
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	replay, err := NewIdempotencyRepository(ledger.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return replay.Apply(ctx, marker, plan)
+	return change, nil
 }
 
 func (ledger *ReleaseLedger) ResolveReleaseHost(ctx context.Context, revision int64) (workexecution.Placement, error) {

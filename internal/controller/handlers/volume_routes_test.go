@@ -152,8 +152,12 @@ func (mutator *volumeRouteTestMutator) EditVolume(
 }
 
 func (mutator *volumeRouteTestMutator) RemoveVolume(
-	context.Context, string, string, string, string,
-
+	context.Context,
+	string,
+	string,
+	string,
+	apiTypes.TaskRunAfterRequest,
+	string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	return testidempotencyowner.IdempotencyResponse{}, nil
 }

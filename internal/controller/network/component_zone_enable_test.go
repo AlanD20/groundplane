@@ -2,6 +2,14 @@ package network
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/acceptedactions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"testing"
 	"time"
 
@@ -63,6 +71,11 @@ func TestComponentEnableAfterOrdinaryZoneCreation(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := &componentZoneAuthoring{
+		scope: workexecution.Scope{
+			EnvironmentID: environmentID,
+			ProjectID:     projectID,
+			TenantID:      ids.NewAt(ids.KindTenant, at, 3),
+		},
 		component: testcomponents.Record{Desired: testcomponents.DesiredRecord{
 			ID: componentID, Owner: core.ComponentOwnerEnvironment, OwnerID: environmentID,
 			Kind: core.ComponentKindIngressCaddy,
@@ -71,7 +84,8 @@ func TestComponentEnableAfterOrdinaryZoneCreation(t *testing.T) {
 			EnvironmentID: environmentID, Revision: projection.RevisionID, Document: string(document),
 		},
 	}
-	mutations, err := component.NewMutationService(fixture, fixture, fixture, fixture)
+	submitter, queue := newComponentZoneSubmitter(t)
+	mutations, err := component.NewMutationService(fixture, fixture, fixture, fixture, submitter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,8 +93,36 @@ func TestComponentEnableAfterOrdinaryZoneCreation(t *testing.T) {
 	config := &apiTypes.ComponentConfigMutationInput{
 		Caddy: &apiTypes.CaddyComponentConfigMutationInput{ZoneIDs: []string{zoneID}},
 	}
-	if _, err := mutations.EnableComponent(t.Context(), componentID,
-		apiTypes.ComponentEnableRequest{Config: config}, "enable-component-zone"); err != nil {
+	response, err := mutations.EnableComponent(
+		t.Context(),
+		componentID,
+		apiTypes.ComponentEnableRequest{Config: config},
+		ids.NewULID(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fixture.calls != 0 {
+		t.Fatal("pure acceptance captured current authoring")
+	}
+	capture := func(response testidempotency.IdempotencyResponse) error {
+		var accepted apiTypes.TaskAccepted
+		if err := json.Unmarshal(response.Body, &accepted); err != nil {
+			return err
+		}
+		task, revision, err := queue.ReadTask(t.Context(), accepted.TaskID, 0)
+		if err != nil {
+			return err
+		}
+		_, err = mutations.AcceptedPreparations()[0].Owner.PrepareAccepted(
+			t.Context(),
+			task,
+			revision,
+			time.Now().UTC(),
+		)
+		return err
+	}
+	if err := capture(response); err != nil {
 		t.Fatal(err)
 	}
 	if fixture.calls != 1 || fixture.expected != projection.RevisionID {
@@ -101,15 +143,25 @@ func TestComponentEnableAfterOrdinaryZoneCreation(t *testing.T) {
 	}
 	fixture.document.Revision = ids.NewAt(ids.KindTask, at, 7)
 	fixture.reject = true
-	if _, err := mutations.EnableComponent(t.Context(), componentID,
-		apiTypes.ComponentEnableRequest{Config: config}, "enable-stale-zone"); err == nil {
-		t.Fatal("enable swallowed the publication revision conflict")
+	response, err = mutations.EnableComponent(
+		t.Context(),
+		componentID,
+		apiTypes.ComponentEnableRequest{Config: config},
+		ids.NewULID(),
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if err := capture(response); err == nil {
+		t.Fatal("deferred enable swallowed the publication revision conflict")
+	}
+
 }
 
 // Only the authoring/publication and unused platform/credential side-effect
 // ports are doubled; Zone creation and Component mutation are real producers.
 type componentZoneAuthoring struct {
+	scope     workexecution.Scope
 	component testcomponents.Record
 	document  apiTypes.EnvironmentBlueprintDocument
 	bundle    core.BlueprintBundle
@@ -127,14 +179,28 @@ func (f *componentZoneAuthoring) GetComponent(
 func (f *componentZoneAuthoring) GetBlueprint(context.Context, string) (apiTypes.EnvironmentBlueprintDocument, error) {
 	return f.document, nil
 }
-func (f *componentZoneAuthoring) ApplyComponentBlueprint(_ context.Context, _, _ string,
-	bundle core.BlueprintBundle, expected, _ string) (testidempotency.IdempotencyResponse, error) {
+
+func (f *componentZoneAuthoring) TaskAcceptanceIdentity(
+	_ context.Context,
+	environmentID string,
+) (workexecution.Scope, string, time.Duration, error) {
+	return f.scope, "production", time.Hour, nil
+}
+
+func (f *componentZoneAuthoring) PrepareAcceptedComponentBlueprint(
+	_ context.Context,
+	task workqueue.TaskSnapshot,
+	bundle core.BlueprintBundle,
+	expected string,
+	_ testidempotency.IdempotencyLocator,
+	_ testidempotency.ProtectedIntentRecord,
+) (taskdependencies.Prepared, error) {
 	f.calls++
 	f.bundle, f.expected = bundle, expected
 	if f.reject {
-		return testidempotency.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "authoring revision changed")
+		return taskdependencies.Prepared{}, errs.New(errs.KindStateConflict, "authoring revision changed")
 	}
-	return testidempotency.IdempotencyResponse{Status: 202}, nil
+	return taskdependencies.Prepared{Task: task.Task}, nil
 }
 func (*componentZoneAuthoring) ResolveCredentialReference(context.Context, string,
 	component.OpaqueSecretReferenceInput, string) (string, error) {
@@ -142,21 +208,21 @@ func (*componentZoneAuthoring) ResolveCredentialReference(context.Context, strin
 }
 
 func (*componentZoneAuthoring) EnablePlatformComponent(
-	context.Context, string, string,
+	context.Context, string, apiTypes.TaskRunAfterRequest, string,
 
 ) (testidempotency.IdempotencyResponse, error) {
 	panic("unexpected platform mutation")
 }
 
 func (*componentZoneAuthoring) DisablePlatformComponent(
-	context.Context, string, string,
+	context.Context, string, apiTypes.TaskRunAfterRequest, string,
 
 ) (testidempotency.IdempotencyResponse, error) {
 	panic("unexpected platform mutation")
 }
 
 func (*componentZoneAuthoring) UpdatePlatformComponent(
-	context.Context, string, string,
+	context.Context, string, apiTypes.TaskRunAfterRequest, string,
 
 ) (testidempotency.IdempotencyResponse, error) {
 	panic("unexpected platform mutation")
@@ -164,4 +230,47 @@ func (*componentZoneAuthoring) UpdatePlatformComponent(
 func (*componentZoneAuthoring) ReplacePlatformComponentConfig(context.Context, string,
 	apiTypes.ComponentConfigMutationRequest, string) (testidempotency.IdempotencyResponse, error) {
 	panic("unexpected platform mutation")
+}
+
+func newComponentZoneSubmitter(t *testing.T) (*acceptedaction.Submitter, *workqueue.Repository) {
+	t.Helper()
+	store := &componentZoneStore{revision: 1, values: make(map[string]*testkeyvalue.KeyValue)}
+	payloadRepository, err := acceptedactions.NewRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	protector, err := secretvalue.NewProtector(componentZoneCipher{}, componentZoneCipher{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloads, err := acceptedaction.NewPayloads(payloadRepository, protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queue, err := workqueue.NewRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := etcd.NewIdempotencyRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinator, err := idempotentintent.NewCoordinator(protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	submitter, err := acceptedaction.NewSubmitter(payloads, queue, replay, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return submitter, queue
+}
+
+type componentZoneCipher struct{}
+
+func (componentZoneCipher) Seal(_ context.Context, input []byte) ([]byte, error) {
+	return append([]byte("sealed:"), input...), nil
+}
+func (componentZoneCipher) Open(_ context.Context, input []byte) ([]byte, error) {
+	return append([]byte(nil), input[len("sealed:"):]...), nil
 }

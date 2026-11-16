@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -32,6 +33,7 @@ const (
 
 type provisioningRepository interface {
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
+	ResolveRunner(context.Context, string, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
 	PrepareRunnerCreation(
 		context.Context,
 		runnerallocation.RunnerAllocationConfig,
@@ -39,13 +41,13 @@ type provisioningRepository interface {
 		string,
 		time.Time,
 	) (etcd.RunnerCreationSource, error)
-	PublishRunnerCreation(
+	PrepareRunnerCreationCapture(
 		context.Context,
 		etcd.RunnerCreationSource,
 		runnerwork.Input,
 		workexecution.Task,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+		workexecution.Item,
+	) (workqueue.Change, error)
 	PrepareRunnerRetry(
 		context.Context,
 		etcdstore.Versioned[runnerrecord.RunnerRecord],
@@ -62,6 +64,7 @@ type runnerProjectReader interface {
 // into durable native Controller Tasks. The registration token is owned only
 // by its in-process broker and never crosses the persistence seam.
 type ProvisioningService struct {
+	submitter   *acceptedaction.Submitter
 	runners     provisioningRepository
 	queue       *workqueue.Repository
 	inputs      *runnerwork.Repository
@@ -86,16 +89,17 @@ func NewProvisioningService(
 	allocation runnerallocation.RunnerAllocationConfig,
 	imageRef string,
 	policy corerunner.IsolationPolicy,
+	submitter *acceptedaction.Submitter,
 ) (*ProvisioningService, error) {
 	if runners == nil || queue == nil || inputs == nil || projects == nil || idempotency == nil || coordinator == nil ||
-		broker == nil || imageRef == "" {
+		broker == nil || imageRef == "" || submitter == nil {
 		return nil, errs.New(errs.KindInternal, "Runner provisioning service is not configured")
 	}
 	if _, err := allocation.Validate(); err != nil {
 		return nil, err
 	}
 	return &ProvisioningService{
-		runners: runners, queue: queue, inputs: inputs, projects: projects,
+		runners: runners, submitter: submitter, queue: queue, inputs: inputs, projects: projects,
 		idempotency: idempotency, coordinator: coordinator, broker: broker,
 		allocation: allocation, imageRef: imageRef, policy: policy, now: time.Now,
 	}, nil
@@ -118,12 +122,12 @@ func (service *ProvisioningService) CreateRunner(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer token.clear()
-	desired, err := service.normalizeCreate(ctx, request)
+	desired, err := service.normalizeCreate(ctx, request, ids.New(ids.KindRunner))
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	locator := runnerProvisioningLocator(desired, http.MethodPost, runnerCreateRoute, idempotencyKey)
-	evidence, err := service.protectCreateIntent(ctx, locator, desired)
+	evidence, err := service.protectCreateIntent(ctx, locator, desired, request.After)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -144,56 +148,22 @@ func (service *ProvisioningService) CreateRunner(
 		return cloneResponse(resolution.Response), nil
 	}
 
-	if err := service.policy.RequireControllerEndpoint(); err != nil {
+	at := service.now().UTC()
+	task := newRunnerAcceptedTask(desired, workexecution.OperatorActor, workexecution.ActionCreate, request.After, at)
+	workID := ids.DeriveAt(ids.KindWorkItem, task.CreatedAt, task.ID, "runner-create-work")
+	key := TokenKey{TaskID: task.ID, WorkItemID: workID, Attempt: 1}
+	tokenDeadline := at.Add(time.Hour)
+	if task.Deadline.Before(tokenDeadline) {
+		tokenDeadline = task.Deadline
+	}
+	if err := service.broker.Stage(key, token, tokenDeadline); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	now := service.now().UTC()
-	taskID := ids.New(ids.KindTask)
-	source, err := service.runners.PrepareRunnerCreation(ctx, service.allocation, desired, taskID, now)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	response, err := submitRunnerAction(ctx, service.submitter, task, "runner-create", locator, evidence, request)
+	if err != nil && !unknownMutationOutcome(err) {
+		service.broker.Drop(key)
 	}
-	defer source.Clear()
-	record := source.Runner()
-	plan, err := corerunner.NewPlan(corerunner.Target{
-		RunnerID: desired.ID, TenantID: desired.TenantID,
-		OwnerKind: corerunner.OwnerKind(desired.OwnerKind), OwnerID: desired.OwnerID,
-		GitHubURL: desired.GitHubURL, RunnerGroup: desired.RunnerGroup, GitHubName: desired.GitHubName, CPUMillis: desired.CPUMillis, MemoryBytes: desired.MemoryBytes, Labels: desired.Labels, ImageRef: desired.ImageRef,
-		RuntimeEpoch: record.RuntimeEpoch + 1, AllocationConfig: service.allocation, Allocation: record.Allocation,
-	}, service.policy)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	input := runnerwork.Input{TaskID: taskID, WorkItemID: ids.New(ids.KindWorkItem),
-		PlanID: ids.New(ids.KindPlan), Operation: runnerallocation.RuntimeOperationCreate,
-		Desired: desired, Plan: plan, CreatedAt: now}
-	ref, err := input.Reference()
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task := workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor,
-		Scope: workexecution.Scope{
-			TenantID:      desired.TenantID,
-			ProjectID:     desired.ProjectID(),
-			EnvironmentID: desired.EnvironmentID(),
-		},
-		Action: workexecution.ActionCreate, TargetID: desired.ID, TargetName: desired.Slug,
-		Intent: ref, ExpectedItems: 1, CreatedAt: now, UpdatedAt: now,
-		Deadline: now.Add(time.Duration(runnerCreateTimeoutSeconds) * time.Second)}
-	response, marker, err := service.newTaskMarker(locator, evidence, task.ID, now)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	key := TokenKey{TaskID: task.ID, WorkItemID: input.WorkItemID, Attempt: 1}
-	if err := service.broker.Stage(key, token, task.Deadline); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	result, mutationErr := service.runners.PublishRunnerCreation(
-		ctx, source, input, task, marker,
-	)
-	return service.resolvePublication(ctx, locator, evidence, response, result, mutationErr, key)
+	return response, err
 }
 
 func (service *ProvisioningService) RetryRunner(
@@ -294,12 +264,10 @@ func (service *ProvisioningService) RetryRunner(
 
 func (service *ProvisioningService) normalizeCreate(
 	ctx context.Context,
-	request apiTypes.RunnerCreateRequest,
+	request apiTypes.RunnerCreateRequest, runnerID string,
 ) (runnerrecord.RunnerDesiredRecord, error) {
 	desired := runnerrecord.RunnerDesiredRecord{
-		ID: ids.New(
-			ids.KindRunner,
-		), AutoUpdate: request.AutoUpdate, Slug: request.Slug, GitHubURL: request.GitHubURL, RunnerGroup: request.RunnerGroup, GitHubName: request.GitHubName, CPUMillis: request.CPUMillis, MemoryBytes: request.MemoryBytes,
+		ID: runnerID, AutoUpdate: request.AutoUpdate, Slug: request.Slug, GitHubURL: request.GitHubURL, RunnerGroup: request.RunnerGroup, GitHubName: request.GitHubName, CPUMillis: request.CPUMillis, MemoryBytes: request.MemoryBytes,
 		Labels: slices.Clone(request.Labels), ImageRef: service.imageRef,
 	}
 	switch {
@@ -362,7 +330,7 @@ func runnerProvisioningLocator(
 func (service *ProvisioningService) protectCreateIntent(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
-	desired runnerrecord.RunnerDesiredRecord,
+	desired runnerrecord.RunnerDesiredRecord, after []string,
 ) (requestidempotency.ProtectedEvidence, error) {
 	labels := make([]requestidempotency.Value, len(desired.Labels))
 	for index, label := range desired.Labels {
@@ -387,6 +355,7 @@ func (service *ProvisioningService) protectCreateIntent(
 			requestidempotency.Field{Name: "cpu_millis", Value: requestidempotency.Integer(desired.CPUMillis)},
 			requestidempotency.Field{Name: "memory_bytes", Value: requestidempotency.Integer(desired.MemoryBytes)},
 			requestidempotency.Field{Name: "labels", Value: requestidempotency.List(labels...)},
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(after)},
 			requestidempotency.Field{Name: "registration_token_present", Value: requestidempotency.Bool(true)},
 		)),
 	})

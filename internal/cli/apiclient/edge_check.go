@@ -14,22 +14,26 @@ import (
 func (c *Client) CheckRouteConnections(
 	ctx context.Context,
 	routeID, connectorID, path string,
+	revision int64,
+	after []string,
 ) (apiTypes.TaskAccepted, error) {
 	route, err := c.GetRoute(ctx, routeID)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	if route.Revision <= 0 {
-		return apiTypes.TaskAccepted{}, errs.New(
-			errs.KindInternal,
-			"Controller returned a Route without its configuration revision",
-		)
+	if revision < 0 {
+		return apiTypes.TaskAccepted{}, errs.New(errs.KindValidationFailed, "revision cannot be negative")
 	}
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	body := generated.RouteCheckJSONRequestBody{RouteId: routeID, ConnectorId: connectorID, Revision: route.Revision}
+	body := generated.RouteCheckJSONRequestBody{
+		RouteId:     routeID,
+		ConnectorId: connectorID,
+		Revision:    optionalTaskRevision(revision),
+		After:       optionalServiceStrings(after),
+	}
 	if path != "" {
 		body.Path = &path
 	}

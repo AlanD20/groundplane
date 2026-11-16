@@ -5,15 +5,14 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// PreparePublication binds one native Task, its executable input and retained
-// Secret membership to the request replay record. The initiating operation joins
+// PreparePublication binds captured executable input and retained Secret
+// membership to the original accepted Task comparison. The initiating operation joins
 // desired-state publication, configuration sources and the Environment epoch
 // comparisons in the same transaction; this method never commits that transaction.
 func (repository *InputRepository) PreparePublication(
@@ -24,12 +23,11 @@ func (repository *InputRepository) PreparePublication(
 	input *agentpb.EntryConfigurationWorkInput,
 	capture Capture,
 	secrets tasksecretpins.Prepared,
-	marker idempotency.IdempotencyMarker,
 	guards []keyvalue.Condition,
 	at time.Time,
 ) (workexecution.Item, workqueue.Change, error) {
 	if at.IsZero() || at.Location() != time.UTC || at.Before(task.CreatedAt) ||
-		!at.Before(task.Deadline) || !at.Before(item.Deadline) || !item.CreatedAt.Equal(task.CreatedAt) ||
+		!at.Before(task.Deadline) || !at.Before(item.Deadline) || item.CreatedAt.Before(task.CreatedAt) ||
 		!item.UpdatedAt.Equal(item.CreatedAt) || len(item.Dependencies) != 0 ||
 		(capture.Secrets == nil) != secrets.IsZero() {
 		return workexecution.Item{}, workqueue.Change{}, conflict(
@@ -58,11 +56,6 @@ func (repository *InputRepository) PreparePublication(
 		}
 	}
 	defer keyvalue.ClearMutationValues(activation.Mutations)
-	markerConditions, markerMutations, err := idempotency.PreparePublication(marker)
-	if err != nil {
-		return workexecution.Item{}, workqueue.Change{}, err
-	}
-	defer keyvalue.ClearMutationValues(markerMutations)
 	reference, staged, err := repository.Stage(ctx, task, item, inputID, input, capture, guards)
 	if err != nil {
 		return workexecution.Item{}, workqueue.Change{}, err
@@ -77,19 +70,11 @@ func (repository *InputRepository) PreparePublication(
 	if err != nil {
 		return workexecution.Item{}, workqueue.Change{}, err
 	}
-	queue, err := workqueue.PrepareSingleTask(task, ready, marker)
-	if err != nil {
-		return workexecution.Item{}, workqueue.Change{}, err
-	}
-	staged.Conditions = append(staged.Conditions, queue.Conditions...)
 	staged.Conditions = append(staged.Conditions, activation.Conditions...)
-	staged.Conditions = append(staged.Conditions, markerConditions...)
-	staged.Mutations = append(staged.Mutations, queue.Mutations...)
 	for _, mutation := range activation.Mutations {
 		mutation.Value = append([]byte(nil), mutation.Value...)
 		staged.Mutations = append(staged.Mutations, mutation)
 	}
-	staged.Mutations = append(staged.Mutations, keyvalue.CloneMutations(markerMutations)...)
 	keep = true
 	return ready, staged, nil
 }

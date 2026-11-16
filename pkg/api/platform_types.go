@@ -5,6 +5,7 @@ import (
 )
 
 type ComponentEnableRequest struct {
+	After  []string                      `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 	Config *ComponentConfigMutationInput `json:"config,omitempty"`
 }
 
@@ -68,7 +69,8 @@ type EtcdConfigReplacement struct {
 }
 
 type EtcdConfigApplyRequest struct {
-	ExpectedRevision string `json:"expected_revision" pattern:"^sha256:[0-9a-f]{64}$"`
+	ExpectedRevision string   `json:"expected_revision,omitempty" pattern:"^sha256:[0-9a-f]{64}$"`
+	After            []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 }
 
 type LogEvent struct {

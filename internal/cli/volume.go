@@ -97,11 +97,16 @@ func newVolumeCmd() *cobra.Command {
 
 	var volumeSlug string
 	var volumeComposeKey string
+	var createAfter []string
 	add := &cobra.Command{
 		Use:   "add --slug <slug> [--key <compose-key>]",
 		Short: "Add a volume",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			after, err := validatedTaskAfter(createAfter)
+			if err != nil {
+				return err
+			}
 			environmentID, err := volumeEnvironmentID(cmd)
 			if err != nil {
 				return err
@@ -110,56 +115,62 @@ func newVolumeCmd() *cobra.Command {
 				return errs.New(errs.KindValidationFailed, "volume --key cannot be empty")
 			}
 			created, err := fromContext(cmd).Client.CreateVolume(cmd.Context(), apiTypes.VolumeCreate{
-				EnvironmentID: environmentID, Slug: volumeSlug, Key: volumeComposeKey,
+				EnvironmentID: environmentID, Slug: volumeSlug, Key: volumeComposeKey, After: after,
 			})
 			if err != nil {
 				return err
 			}
-			fields := volumeFields(created.Volume)
-			fields["task_id"] = created.TaskID
-			headers, values := fieldsOfVia(fields)
-			return fromContext(cmd).Out.RenderOne(headers, values, created)
+			return renderDispatchedTask(cmd, created)
 		},
 	}
 	add.Flags().StringVar(&volumeSlug, "slug", "", "environment-scoped mutable slug")
 	add.Flags().StringVar(&volumeComposeKey, "key", "", "immutable Compose volume key (defaults to slug)")
 	_ = add.MarkFlagRequired("slug")
+	addTaskAfterFlag(add, &createAfter)
 	cmd.AddCommand(add)
 
 	var newSlug string
+	var editAfter []string
 	edit := &cobra.Command{
 		Use:   "edit <slug>",
 		Short: "Edit a volume slug",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(editAfter)
+			if err != nil {
+				return err
+			}
 			id, err := resolveVolumeTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
 			edited, err := fromContext(cmd).Client.EditVolume(
-				cmd.Context(), id, apiTypes.VolumeEdit{Slug: newSlug},
+				cmd.Context(), id, apiTypes.VolumeEdit{Slug: newSlug, After: after},
 			)
 			if err != nil {
 				return err
 			}
-			fields := volumeFields(edited.Volume)
-			fields["task_id"] = edited.TaskID
-			headers, values := fieldsOfVia(fields)
-			return fromContext(cmd).Out.RenderOne(headers, values, edited)
+			return renderDispatchedTask(cmd, edited)
 		},
 	}
 	edit.Flags().StringVar(&newSlug, "slug", "", "new environment-scoped slug")
 	_ = edit.MarkFlagRequired("slug")
+	addTaskAfterFlag(edit, &editAfter)
 	cmd.AddCommand(edit)
 
 	var impactToken string
 	var confirmKey string
+	var removeAfter []string
 	remove := &cobra.Command{
 		Use:     "remove <slug>",
 		Aliases: []string{"delete"},
 		Short:   "Remove a volume after fixed-revision impact confirmation",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(removeAfter)
+			if err != nil {
+				return err
+			}
 			if (impactToken == "") != (confirmKey == "") {
 				return errs.New(
 					errs.KindValidationFailed,
@@ -171,7 +182,7 @@ func newVolumeCmd() *cobra.Command {
 				return err
 			}
 			if impactToken != "" {
-				return removeVolumeWithConfirmation(cmd, id, impactToken, confirmKey)
+				return removeVolumeWithConfirmation(cmd, id, impactToken, confirmKey, after)
 			}
 			pages, err := collectVolumeImpact(cmd, id)
 			if err != nil {
@@ -190,11 +201,12 @@ func newVolumeCmd() *cobra.Command {
 				return errs.New(errs.KindValidationFailed, "volume key confirmation did not match")
 			}
 			final := pages[len(pages)-1]
-			return removeVolumeWithConfirmation(cmd, id, final.ImpactToken, volumeKey)
+			return removeVolumeWithConfirmation(cmd, id, final.ImpactToken, volumeKey, after)
 		},
 	}
 	remove.Flags().StringVar(&impactToken, "impact-token", "", "final fixed-revision deletion-impact token")
 	remove.Flags().StringVar(&confirmKey, "confirm-key", "", "immutable Compose volume key")
+	addTaskAfterFlag(remove, &removeAfter)
 	cmd.AddCommand(remove)
 
 	return cmd
@@ -308,8 +320,8 @@ func impactItemDetail(item apiTypes.VolumeDeletionImpactItem) string {
 	return item.ServiceName
 }
 
-func removeVolumeWithConfirmation(cmd *cobra.Command, id, impactToken, confirmKey string) error {
-	accepted, err := fromContext(cmd).Client.RemoveVolume(cmd.Context(), id, impactToken, confirmKey)
+func removeVolumeWithConfirmation(cmd *cobra.Command, id, impactToken, confirmKey string, after []string) error {
+	accepted, err := fromContext(cmd).Client.RemoveVolume(cmd.Context(), id, impactToken, confirmKey, after)
 	if err != nil {
 		return err
 	}

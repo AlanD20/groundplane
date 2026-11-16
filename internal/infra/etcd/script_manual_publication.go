@@ -7,7 +7,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -23,17 +22,16 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PublishScriptWork reserves the complete immutable source set before
-// atomically exposing the manual Task and its source root. The source module
-// alone changes membership counts, including the Script-wide body aggregate.
-func (repository *ScriptRepository) PublishScriptWork(
+// PrepareScriptWork captures the source authority after the accepted Task's
+// prerequisites succeed. Join its fragment to promotion of that same Task, then
+// call Finish with the known commit outcome.
+func (repository *ScriptRepository) PrepareScriptWork(
 	ctx context.Context,
 	sources scriptsourcequeries.ScriptExecutionSources,
 	execution scriptexecutions.ScriptExecutionRecord,
 	task workexecution.Task,
 	item workexecution.Item,
-	marker idempotencyrecord.IdempotencyMarker,
-) (result IdempotencyTransactionResult, err error) {
+) (result ScriptWorkPublication, err error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return result, err
 	}
@@ -67,14 +65,8 @@ func (repository *ScriptRepository) PublishScriptWork(
 		execution.SourceMembershipCount != 0 {
 		return result, errs.New(errs.KindValidationFailed, "new Script execution record is invalid")
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
-		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID ||
-		!marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
-		task.ID != execution.CurrentTaskID ||
-		item.ID != execution.WorkItemID {
-		return result, errs.New(errs.KindValidationFailed, "Script execution marker does not match its Task")
+	if task.ID != execution.CurrentTaskID || item.ID != execution.WorkItemID {
+		return result, errs.New(errs.KindValidationFailed, "Script execution differs from its accepted Task")
 	}
 	initiation, err := newEnvironmentTaskInitiation(
 		&sources.Tenant,
@@ -85,34 +77,35 @@ func (repository *ScriptRepository) PublishScriptWork(
 	if err != nil {
 		return result, err
 	}
-	work, err := workqueue.PrepareSingleTask(task, item, marker)
-	if err != nil {
-		return result, err
-	}
-	defer etcdstore.ClearMutationValues(work.Mutations)
-	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
-		return result, err
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
-		return existing, err
-	}
 	snapshotRevision, err := repository.prepareManualScriptSnapshot(ctx, execution)
 	if err != nil {
 		return result, err
 	}
+	defer func() {
+		if result.authority != nil {
+			return
+		}
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+		defer cancel()
+		cleanupErr := repository.abandonManualScriptSnapshot(cleanup, execution.SnapshotID, item.ID, snapshotRevision)
+		if cleanupErr != nil {
+			err = errs.WrapJoined(errs.KindInternal, err, cleanupErr)
+		}
+	}()
 	members, err := repository.manualScriptSourceMembers(ctx, sources, execution, snapshotRevision)
 	if err != nil {
 		return result, err
 	}
-	defer clearScriptSourcePreparationMembers(members)
 	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
+		clearScriptSourcePreparationMembers(members)
 		return result, err
 	}
 	defer func() {
-		if result.kind == idempotencyTransactionApplied {
+		if result.authority != nil {
 			return
 		}
+		defer clearScriptSourcePreparationMembers(members)
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		// Abandon fences the descriptor and refuses an active root. This also
@@ -177,23 +170,22 @@ func (repository *ScriptRepository) PublishScriptWork(
 		{Type: etcdstore.MutationPut, Key: scriptexecutions.WorkKey(item.ID), Value: bindingValue},
 	}
 	mutations = append(mutations, fragment.Mutations()...)
-	conditions = append(conditions, work.Conditions...)
-	mutations = append(mutations, work.Mutations...)
-	conditions, classify, err := prepareTaskInitiationFences(initiation, conditions,
+	conditions, _, err = prepareTaskInitiationFences(initiation, conditions,
 		classifyScriptExecutionPublication(conditions))
 	if err != nil {
 		return result, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotencyrecord.IdempotencyMarkerTask,
-		conditions, mutations, classify)
-	if err != nil {
-		return result, err
+	// Local staging buffers are cleared on return. The deferred publication owns
+	// independent copies until the coordinator commits or abandons this capture.
+	owned := make([]etcdstore.Mutation, len(mutations))
+	for index, mutation := range mutations {
+		owned[index] = mutation
+		owned[index].Value = append([]byte(nil), mutation.Value...)
 	}
-	idempotency, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return result, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
+	return ScriptWorkPublication{Change: workqueue.Change{Conditions: conditions, Mutations: owned},
+		authority: authority, operationID: execution.OperationID, members: members,
+		store: repository.store, snapshotID: execution.SnapshotID, workID: item.ID, snapshotRevision: snapshotRevision}, nil
+
 }
 
 func (repository *ScriptRepository) prepareManualScriptSnapshot(

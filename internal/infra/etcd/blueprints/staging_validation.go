@@ -32,6 +32,11 @@ func ValidateEnvironmentBlueprintStageClaim(claim EnvironmentBlueprintStageClaim
 	if _, _, err := EnvironmentBlueprintLocatorKey(claim.Locator); err != nil {
 		return err
 	}
+	if claim.TaskLocator != nil {
+		if _, err := idempotencyrecord.IdempotencyMarkerKey(*claim.TaskLocator); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -90,7 +95,10 @@ func zeroDigest(value [sha256.Size]byte) bool { return value == [sha256.Size]byt
 
 func SameEnvironmentBlueprintStageClaim(left, right EnvironmentBlueprintStageClaim) bool {
 	return left.DescriptorID == right.DescriptorID && left.EnvironmentID == right.EnvironmentID &&
-		left.RevisionID == right.RevisionID && left.TaskID == right.TaskID && left.Locator == right.Locator &&
+		sameBlueprintTaskLocator(
+			left.TaskLocator,
+			right.TaskLocator,
+		) && left.RevisionID == right.RevisionID && left.TaskID == right.TaskID && left.Locator == right.Locator &&
 		left.Intent.EnvelopeVersion == right.Intent.EnvelopeVersion && left.Intent.Cipher == right.Intent.Cipher &&
 		left.Intent.DigestAlgorithm == right.Intent.DigestAlgorithm &&
 		left.Intent.CiphertextDigest == right.Intent.CiphertextDigest &&
@@ -101,6 +109,10 @@ func SameEnvironmentBlueprintStageClaim(left, right EnvironmentBlueprintStageCla
 }
 
 func CloneEnvironmentBlueprintStageClaim(value EnvironmentBlueprintStageClaim) EnvironmentBlueprintStageClaim {
+	if value.TaskLocator != nil {
+		locator := *value.TaskLocator
+		value.TaskLocator = &locator
+	}
 	value.Intent.Ciphertext = append([]byte(nil), value.Intent.Ciphertext...)
 	return value
 }
@@ -121,4 +133,19 @@ func blueprintChunkLabel(family uint8) string {
 		return "projection"
 	}
 	return fmt.Sprintf("invalid-%d", family)
+}
+
+func sameBlueprintTaskLocator(left, right *idempotencyrecord.IdempotencyLocator) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+// EnvironmentBlueprintTaskLocator identifies the public request owning this draft.
+func EnvironmentBlueprintTaskLocator(claim EnvironmentBlueprintStageClaim) idempotencyrecord.IdempotencyLocator {
+	if claim.TaskLocator != nil {
+		return *claim.TaskLocator
+	}
+	return claim.Locator
 }

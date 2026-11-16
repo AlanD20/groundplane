@@ -25,12 +25,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// captureServiceWork selects no mutable inputs after acceptance. Staged Release
-// records and configuration are inert; the caller must atomically publish the
-// returned native work, its complete capture and replay identity.
+// captureServiceWork compiles execution authority after whole-Task prerequisites
+// succeed. Staged Release records are inert until the original accepted Task is
+// atomically promoted with this capture; later work never reselects its inputs.
 func (service *Service) captureServiceWork(ctx context.Context, scope releasequeries.ReleasePlanningScope,
 	projection environmentprojection.EnvironmentComposeProjection, candidate releaseCandidateInput,
-	addresses networkreservations.ProxyAddresses, requestSHA string,
+	addresses networkreservations.ProxyAddresses, accepted workexecution.Task,
 ) (workexecution.Task, workexecution.Item, etcd.DirectReleasePreparation, releaserender.ServiceRolloutCapture, error) {
 	var task workexecution.Task
 	var item workexecution.Item
@@ -39,21 +39,20 @@ func (service *Service) captureServiceWork(ctx context.Context, scope releaseque
 	if err != nil {
 		return task, item, request, releaserender.ServiceRolloutCapture{}, err
 	}
-	at := service.now().UTC()
-	taskID, workID, planID := ids.New(ids.KindTask), ids.New(ids.KindWorkItem), ids.New(ids.KindPlan)
-	action := workexecution.ActionDeploy
-	if candidate.rollbackSource != "" {
-		action = workexecution.ActionRollback
-	}
-	scopeID := workexecution.Scope{
-		TenantID:      scope.Project.Record.TenantID,
-		ProjectID:     scope.Project.Record.ID,
-		EnvironmentID: scope.Environment.Record.ID,
-	}
-	task = workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor, Scope: scopeID, Action: action,
-		TargetID: candidate.planning.Service.Record.Desired.ID, TargetName: candidate.planning.Service.Record.Desired.Name,
-		Intent: workexecution.Input{ID: planID, SHA256: requestSHA}, CreatedAt: at, UpdatedAt: at,
-		Deadline: at.Add(service.timeout), ExpectedItems: 1}
+	workID, planID := ids.DeriveAt(
+		ids.KindWorkItem,
+		accepted.CreatedAt,
+		accepted.ID,
+		"service-release",
+	), ids.DeriveAt(
+		ids.KindPlan,
+		accepted.CreatedAt,
+		accepted.ID,
+		"service-release-plan",
+	)
+	task = accepted
+	task.Intent = workexecution.Input{ID: planID, SHA256: accepted.AcceptedIntent.SHA256}
+	task.ExpectedItems = 1
 	item = capturedReleaseItem(task, workID, task.TargetID, placement, workexecution.Release)
 	task, item, request, capture, err := service.captureReleaseMember(ctx, scope, projection, candidate, addresses,
 		task, item, planID, ids.New(ids.KindConfig), nil)

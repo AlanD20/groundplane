@@ -1,3 +1,4 @@
+import { TaskDependencyStatus } from "./task-dependency-status";
 import { useState } from "react";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import {
 import { StatusBadge } from "@/components/common/status-badge";
 import { operationLabel } from "./operation-label";
 
-export function TaskExecution({
+function TaskWorkExecution({
   detail,
   onChanged,
 }: {
@@ -73,6 +74,8 @@ export function TaskExecution({
       </ResourcePanel>
     );
   }
+  if (detail.work.items.length === 0 && detail.task.pending_preparation)
+    return null;
   if (detail.work.items.length === 0)
     return (
       <p className="text-sm text-muted-foreground">
@@ -163,5 +166,14 @@ export function TaskExecution({
         </div>
       ))}
     </section>
+  );
+}
+
+export function TaskExecution(props: Parameters<typeof TaskWorkExecution>[0]) {
+  return (
+    <div className="min-w-0 space-y-4">
+      <TaskDependencyStatus task={props.detail.task} />
+      <TaskWorkExecution {...props} />
+    </div>
   );
 }

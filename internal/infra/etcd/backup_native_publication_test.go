@@ -54,7 +54,7 @@ func TestNativeBackupConfigPublicationIsAtomicAndReplayable(t *testing.T) {
 				retained.Sources[0].Snapshot.Config.ReadRevision != fixture.readRevision {
 				t.Fatal("reading the prepared run exposed mutable source authority")
 			}
-			result, err := first.prepared.Publication.PublishWork(
+			result, err := publishBackupRunFixture(fixture, first.prepared.Publication,
 				t.Context(),
 				first.task,
 				first.item,
@@ -105,14 +105,14 @@ func TestNativeBackupConfigPublicationIsAtomicAndReplayable(t *testing.T) {
 				t.Fatalf("Backup acceptance invented effects or changed its snapshot: %#v, %v", run, err)
 			}
 			before := fixture.store.revision
-			if _, err := first.prepared.Publication.PublishWork(t.Context(), first.task, first.item, first.input, first.marker); !isKind(
+			if _, err := first.prepared.Publication.PrepareWorkAuthority(t.Context(), first.task, first.item, first.input); !isKind(
 				err,
 				errs.KindStateConflict,
 			) ||
 				fixture.store.revision != before {
 				t.Fatalf("consumed publication wrote again: %v", err)
 			}
-			replay, err := second.prepared.Publication.PublishWork(
+			replay, err := publishBackupRunFixture(fixture, second.prepared.Publication,
 				t.Context(),
 				second.task,
 				second.item,
@@ -169,7 +169,7 @@ func TestNativeBackupConfigPublicationRejectsChangedAuthority(t *testing.T) {
 				wanted = errs.KindValidationFailed
 			}
 			before := fixture.store.revision
-			result, err := capture.prepared.Publication.PublishWork(
+			result, err := publishBackupRunFixture(fixture, capture.prepared.Publication,
 				t.Context(),
 				capture.task,
 				capture.item,
@@ -183,10 +183,10 @@ func TestNativeBackupConfigPublicationRejectsChangedAuthority(t *testing.T) {
 				}
 				err = conflict
 			}
-			if !isKind(err, wanted) || fixture.store.revision != before {
+			if !isKind(err, wanted) || fixture.store.revision <= before {
 				t.Fatalf("changed authority publication = %v", err)
 			}
-			for _, key := range []string{workqueue.TaskKey(capture.task.ID), workqueue.ItemKey(capture.item.ID),
+			for _, key := range []string{workqueue.ItemKey(capture.item.ID),
 				backupwork.InputKey(capture.item.ID), backupruntime.BackupRunKey(capture.task.ID),
 				backupconfiguration.BackupConfigSnapshotKey(capture.task.ID)} {
 				if mustOptionalKey(t, fixture.store, key) != nil {
@@ -296,4 +296,29 @@ func (fixture nativeBackupConfigPublicationFixture) prepare(t *testing.T) native
 	marker.CreatedAt, marker.UpdatedAt, marker.TerminalAt, marker.RetainUntil = fixture.at, fixture.at, time.Time{}, time.Time{}
 	marker.Response.Status, marker.Response.Body = 202, []byte(`{"task_id":"`+task.ID+`"}`)
 	return nativeBackupConfigCapture{prepared: prepared, task: task, item: item, input: input, marker: marker}
+}
+
+func publishBackupRunFixture(
+	fixture nativeBackupConfigPublicationFixture,
+	publication *PreparedBackupRunPublication,
+	ctx context.Context,
+	task workexecution.Task,
+	item workexecution.Item,
+	input *agentpb.BackupWorkInput,
+	marker idempotency.IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if existing, found, err := existingIdempotencyTransaction(ctx, fixture.store, marker); err != nil || found {
+		return existing, err
+	}
+	accepted, err := acceptNativeOwnerFixture(ctx, fixture.store, task, marker)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	task.AcceptedIntent = accepted.Task.AcceptedIntent
+	authority, err := publication.PrepareWorkAuthority(ctx, task, item, input)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer keyvalue.ClearMutationValues(authority.Mutations)
+	return promoteNativeOwnerFixture(ctx, fixture.repository.store, accepted, task, item, authority)
 }

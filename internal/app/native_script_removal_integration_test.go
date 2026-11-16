@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	scriptcontroller "github.com/AlanD20/groundplane/internal/controller/scripts"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -84,11 +85,15 @@ func TestNativeScriptRemovalPublishesSettlesAndReplays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := scriptcontroller.NewDeletionIdempotency(coordinator, replays)
+	submitter, err := newAcceptedActions(f.base.store, protector, f.base.queue, replays, coordinator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	deletions, err := scriptcontroller.NewDeletionService(mutations, idempotency)
+	deletions, err := scriptcontroller.NewDeletionService(mutations, submitter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preparations, err := taskdependencies.NewPreparations(f.base.queue, deletions.AcceptedPreparations())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,18 +126,34 @@ func TestNativeScriptRemovalPublishesSettlesAndReplays(t *testing.T) {
 	if _, err := authority.Prepare(ctx, operationID, members); err != nil {
 		t.Fatal(err)
 	}
-	protectedRevision := f.base.store.revision
-	if _, err := deletions.RemoveScript(ctx, record.Desired.ID, key); !errors.Is(
-		err,
-		errs.New(errs.KindResourceInUse, ""),
-	) ||
-		f.base.store.revision != protectedRevision {
-		t.Fatalf("prepared body source did not prevent removal without writes: %v", err)
+	blocked, err := deletions.RemoveScript(
+		ctx,
+		record.Desired.ID,
+		api.TaskRunAfterRequest{},
+		"blocked-script-removal-0001",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var blockedTask api.TaskAccepted
+	if err := json.Unmarshal(blocked.Body, &blockedTask); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := preparations.Advance(ctx, blockedTask.TaskID, time.Now().UTC()); err != nil || !changed {
+		t.Fatalf("reject captured removal of protected Script: progressed=%t, %v", changed, err)
+	}
+	failed, _, err := f.base.queue.ReadTask(ctx, blockedTask.TaskID, 0)
+	if err != nil || failed.Task.Outcome != workexecution.Failed || failed.Task.ExpectedItems != 0 ||
+		failed.Task.FinishedAt == nil {
+		t.Fatalf("protected Script removal did not fail before publication: %#v, %v", failed, err)
+	}
+	if _, err := repository.GetScript(ctx, record.Desired.ID); err != nil {
+		t.Fatalf("protected Script removed: %v", err)
 	}
 	if err := authority.Abandon(ctx, operationID, members); err != nil {
 		t.Fatal(err)
 	}
-	response, err := deletions.RemoveScript(ctx, current.Record.Desired.ID, key)
+	response, err := deletions.RemoveScript(ctx, current.Record.Desired.ID, api.TaskRunAfterRequest{}, key)
 	if err != nil {
 		t.Fatalf("native Script removal acceptance: %v", err)
 	}
@@ -140,6 +161,13 @@ func TestNativeScriptRemovalPublishesSettlesAndReplays(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &accepted); err != nil || response.Status != http.StatusAccepted ||
 		accepted.TaskID == "" {
 		t.Fatalf("Script removal response: %#v, %v", response, err)
+	}
+	pure, _, err := f.base.queue.ReadTask(ctx, accepted.TaskID, 0)
+	if err != nil || !pure.Task.PendingPreparation() || pure.Task.ExpectedItems != 0 {
+		t.Fatalf("Script removal was not pure accepted input: %#v, %v", pure, err)
+	}
+	if changed, err := preparations.Advance(ctx, accepted.TaskID, time.Now().UTC()); err != nil || !changed {
+		t.Fatalf("prepare Script removal: progressed=%t, %v", changed, err)
 	}
 	page, err := f.base.queue.ListWork(ctx, accepted.TaskID, "", 10, 0)
 	if err != nil || len(page.Items) != 1 || page.Items[0].Item.Operation != workexecution.ScriptRemoval ||
@@ -172,7 +200,7 @@ func TestNativeScriptRemovalPublishesSettlesAndReplays(t *testing.T) {
 		t.Fatalf("Script removal retained its unreferenced body bytes: %v", err)
 	}
 	beforeFinish := f.base.store.revision
-	if _, err := deletions.RemoveScript(ctx, record.Desired.ID, key); !errors.Is(
+	if _, err := deletions.RemoveScript(ctx, record.Desired.ID, api.TaskRunAfterRequest{}, key); !errors.Is(
 		err,
 		errs.New(errs.KindIdempotencyInProgress, ""),
 	) ||
@@ -193,7 +221,7 @@ func TestNativeScriptRemovalPublishesSettlesAndReplays(t *testing.T) {
 		t.Fatalf("finish visible Script removal Task: %v", err)
 	}
 	before := f.base.store.revision
-	replay, err := deletions.RemoveScript(ctx, record.Desired.ID, key)
+	replay, err := deletions.RemoveScript(ctx, record.Desired.ID, api.TaskRunAfterRequest{}, key)
 	if err != nil || replay.Status != response.Status || string(replay.Body) != string(response.Body) ||
 		f.base.store.revision != before {
 		t.Fatalf("Script removal replay changed identity or wrote after deletion: %v", err)

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"log/slog"
 	"net/http"
 
@@ -15,8 +16,9 @@ type HierarchyDeletionService interface {
 }
 
 type hierarchyDeleteInput struct {
-	ID             string `path:"id"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID             string                        `path:"id"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type hierarchyDeleteOutput struct {
@@ -82,6 +84,7 @@ func registerHierarchyDeletionRoute(
 			hierarchydeletion.DeleteRequest{
 				TargetKind:     target,
 				TargetID:       input.ID,
+				After:          taskRunAfter(input.Body).After,
 				IdempotencyKey: input.IdempotencyKey,
 			},
 		)

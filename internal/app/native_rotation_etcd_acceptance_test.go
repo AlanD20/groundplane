@@ -102,22 +102,18 @@ func runNativeEtcdRotation(t *testing.T, ctx context.Context, prefix string, ope
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := f.repository.PrepareBackupKeyRotation(ctx, f.input,
+	publishRotationFixture(
+		t,
+		ctx,
+		store,
+		f.repository,
+		f.input,
 		backuppolicymutations.BackupPolicyInitialKeyMaterial{
-			Recipient: f.nextKey.Recipient, Ciphertext: f.nextCiphertext,
-		})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer prepared.Clear()
-	publication, err := f.repository.PublishBackupKeyRotation(ctx, prepared, f.marker)
-	if err != nil {
-		t.Fatal(err)
-	}
-	outcome, _, conflict, err := publication.Classify()
-	if err != nil || conflict != nil || outcome != etcd.IdempotencyKnownApplied {
-		t.Fatalf("real-etcd publication: outcome=%v conflict=%v error=%v", outcome, conflict, err)
-	}
+			Recipient:  f.nextKey.Recipient,
+			Ciphertext: f.nextCiphertext,
+		},
+		f.marker,
+	)
 	loss := &nativeRotationCommitLoss{Store: store}
 	f.queue, err = workqueue.NewRepository(loss)
 	if err != nil {

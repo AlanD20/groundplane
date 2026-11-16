@@ -17,8 +17,15 @@ func newControllerEdgeCheckService(dependencies controllerHTTPDependencies) (*ed
 	if err != nil {
 		return nil, err
 	}
-	return edgechecks.NewService(dependencies.dataServices.routeRecords, records, dependencies.authority.idempotency,
+	return edgechecks.NewService(
+		dependencies.dataServices.routeRecords,
+		records,
+		dependencies.authority.idempotency,
 		dependencies.authority.intentCoordinator,
 		imagedelivery.SelectionResolver{Images: dependencies.agentRuntime.Registry, Store: dependencies.store},
-		dependencies.agentRuntime.Registry, catalog, cloudflaretunnel.ObserveConnectionAction)
+		dependencies.agentRuntime.Registry,
+		catalog,
+		cloudflaretunnel.ObserveConnectionAction,
+		dependencies.authority.acceptedActions,
+	)
 }

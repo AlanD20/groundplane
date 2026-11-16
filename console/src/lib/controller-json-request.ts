@@ -8,7 +8,7 @@ import { reportResourceChange } from "./resource-observation";
 
 export async function controllerRequest<Response>(
   path: string,
-  expectedStatus: number,
+  expectedStatus: number | readonly number[],
   init: {
     method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
     body?: unknown;
@@ -41,12 +41,16 @@ export async function controllerRequest<Response>(
         : "request failed before an HTTP response";
     throw new ControllerTransportError(`${method} ${path}: ${detail}`, error);
   }
-  if (response.status !== expectedStatus) {
+  if (
+    !(typeof expectedStatus === "number"
+      ? response.status === expectedStatus
+      : expectedStatus.includes(response.status))
+  ) {
     throw await controllerResponseError(response, method, path);
   }
   init.onResponseHeaders?.(response.headers);
   const body: unknown =
-    expectedStatus === 204 ? undefined : await response.json();
+    response.status === 204 ? undefined : await response.json();
   if (method !== "GET") {
     reportResourceChange(true);
     reportAcceptedTasks(body);

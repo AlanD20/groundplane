@@ -84,6 +84,7 @@ const (
 )
 
 type DeleteRequest struct {
+	After          []string
 	TargetKind     TargetKind
 	TargetID       string
 	IdempotencyKey string

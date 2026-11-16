@@ -58,8 +58,8 @@ func TestBackingDeletionFreezesProjectSecrets(t *testing.T) {
 	}
 	begin := hierarchyDeletionCreationTestBegin(createdAt, testhierarchydeletion.HierarchyDeletionTargetBacking,
 		project.Record.ID, testhierarchydeletion.HierarchyDeletionOperationBacking, "8")
-	begin.Marker.Locator.ScopeKind, begin.Marker.Locator.ScopeID = testidempotency.IdempotencyScopePlatform, "-"
-	created, err := operations.Begin(ctx, begin)
+	begin.Locator.ScopeKind, begin.Locator.ScopeID = testidempotency.IdempotencyScopePlatform, "-"
+	created, err := captureHierarchyDeletionFixture(ctx, operations, begin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestEnvironmentDeletionFreezesAndFinalizesReleaseGroups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := operations.Begin(ctx, hierarchyDeletionCreationTestBegin(fixture.now,
+	created, err := captureHierarchyDeletionFixture(ctx, operations, hierarchyDeletionCreationTestBegin(fixture.now,
 		testhierarchydeletion.HierarchyDeletionTargetEnvironment, fixture.environment.Record.ID,
 		testhierarchydeletion.HierarchyDeletionOperationEnvironment, "9"))
 	if err != nil {

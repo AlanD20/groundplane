@@ -21,7 +21,7 @@ func (c *Client) RestoreBackup(ctx context.Context, environmentID, idempotencyKe
 	if idempotencyKey == "" {
 		idempotencyKey = ids.NewULID()
 	}
-	body := generated.RestoreRequest{SourceId: input.SourceID}
+	body := generated.RestoreRequest{SourceId: input.SourceID, After: optionalServiceStrings(input.After)}
 	if input.VersionReviewSHA256 != "" {
 		body.VersionReviewSha256 = &input.VersionReviewSHA256
 	}

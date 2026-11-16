@@ -74,7 +74,7 @@ func TestReleaseGroupMaximumRemovalFitsRealTaskPublicationEnvelope(t *testing.T)
 	}})
 	fixture.store.maxOperations = 0
 	input, marker := releaseGroupRemovalInputAndMarker(t, fixture)
-	result, err := fixture.tasks.PublishReleaseGroupRemoval(
+	result, err := publishReleaseGroupRemovalFixture(fixture.tasks,
 		context.Background(),
 		fixture.environment,
 		fixture.project,
@@ -156,7 +156,7 @@ func TestReleaseGroupRemovalFencesExactSelectedServiceDeletion(t *testing.T) {
 		Value: []byte(`{"phase":"requested"}`),
 	}})
 	input, marker := releaseGroupRemovalInputAndMarker(t, fixture)
-	result, err := fixture.tasks.PublishReleaseGroupRemoval(
+	result, err := publishReleaseGroupRemovalFixture(fixture.tasks,
 		context.Background(),
 		fixture.environment,
 		fixture.project,
@@ -164,17 +164,19 @@ func TestReleaseGroupRemovalFencesExactSelectedServiceDeletion(t *testing.T) {
 		input,
 		marker,
 	)
-	if err != nil {
-		t.Fatalf("PublishReleaseGroupMutation() error = %v", err)
+	if !isKind(err, errs.KindStateConflict) {
+		t.Fatalf("selected deletion race: %v", err)
 	}
-	outcome, _, conflict, classifyErr := result.Classify()
-	if classifyErr != nil || outcome != IdempotencyKnownConflict ||
-		!isKind(conflict, errs.KindStateConflict) {
-		t.Fatalf("selected deletion race = %v/%v/%v", outcome, conflict, classifyErr)
+	value := fixture.store.valueAt(workqueue.TaskKey(input.TaskID), fixture.store.revision)
+	if value == nil {
+		t.Fatal("rejected capture removed the original accepted Task")
 	}
-	if value := fixture.store.valueAt(workqueue.TaskKey(input.TaskID), fixture.store.revision); value != nil {
-		t.Fatalf("failed selected-member publication wrote Task %#v", value)
+	task, decodeErr := workqueue.DecodeTask(value.Value)
+	if decodeErr != nil || !task.PendingPreparation() {
+		t.Fatalf("rejected capture changed accepted Task: %v", decodeErr)
 	}
+	_ = result
+
 }
 
 func TestReleaseGroupBlueprintCollectionCASRejectsConcurrentInsertion(t *testing.T) {
@@ -447,4 +449,39 @@ func leftPadReleaseGroupIndex(index int) string {
 		return "0" + string(rune('0'+index))
 	}
 	return string([]rune{rune('0' + index/10), rune('0' + index%10)})
+}
+
+func publishReleaseGroupRemovalFixture(
+	repository *TaskRepository,
+	ctx context.Context,
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
+	prepared testreleasegroups.ReleaseGroupPreparedMutation,
+	input testreleasegroups.RemovalInput,
+	marker testidempotency.IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	task, _, err := input.Work()
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	accepted, err := acceptNativeOwnerFixture(ctx, repository.store, task, marker)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	task.AcceptedIntent = accepted.Task.AcceptedIntent
+	authority, item, err := repository.PrepareReleaseGroupRemovalAuthority(
+		ctx,
+		environment,
+		project,
+		prepared,
+		input,
+		task,
+		accepted.Revision,
+		marker.Locator,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer testkeyvalue.ClearMutationValues(authority.Mutations)
+	return promoteNativeOwnerFixture(ctx, repository.store, accepted, task, item, authority)
 }

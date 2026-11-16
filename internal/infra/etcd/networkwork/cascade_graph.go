@@ -43,8 +43,21 @@ func (repository *InputRepository) StageCascadeGraph(ctx context.Context, task w
 		return workqueue.Change{}, err
 	}
 	rootKey := cascadeGraphKey(task.ID)
+
+	acceptedGuard := false
+	for _, condition := range admission {
+		if condition.Key == workqueue.TaskKey(task.ID) && condition.ModRevision > 0 {
+			acceptedGuard = true
+		}
+	}
+	if task.AcceptedIntent != nil && !acceptedGuard {
+		return workqueue.Change{}, conflict("Backing Zone staging requires its accepted Task revision")
+	}
 	guards := append([]keyvalue.Condition(nil), admission...)
-	guards = append(guards, keyvalue.Condition{Key: rootKey}, keyvalue.Condition{Key: workqueue.TaskKey(task.ID)})
+	if task.AcceptedIntent == nil {
+		guards = append(guards, keyvalue.Condition{Key: workqueue.TaskKey(task.ID)})
+	}
+	guards = append(guards, keyvalue.Condition{Key: rootKey})
 	digest := sha256.New()
 	for ordinal, item := range graph {
 		if item.AttemptNumber != 0 || item.ActiveAttemptID != "" || item.Result != nil || item.FirstFailure != nil ||

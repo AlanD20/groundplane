@@ -13,8 +13,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// CheckConnector captures a current revision when checking a saved Connector;
-// any supplied Changes remain unsaved. Drafts have no saved owner or revision.
+// CheckConnector preserves explicit patch preconditions for unsaved Changes.
+// Read-only saved checks leave revision selection to deferred preparation.
 func (c *Client) CheckConnector(ctx context.Context, environmentID string,
 	input apiTypes.ConnectorCheckRequest,
 ) (apiTypes.TaskAccepted, error) {
@@ -22,7 +22,7 @@ func (c *Client) CheckConnector(ctx context.Context, environmentID string,
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	if input.ConnectorID != "" && input.Revision == 0 {
+	if input.ConnectorID != "" && input.Changes != nil && input.Revision == 0 {
 		snapshot, err := client.ConnectorShowWithResponse(ctx, input.ConnectorID)
 		if err != nil {
 			return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodGet, "/api/v1/connectors/{id}", err)

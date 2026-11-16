@@ -73,6 +73,24 @@ export function useResourceRemovalObservation<
               task,
               observedAt: Date.now(),
             });
+            if (removal.kind === "environment") {
+              const captured =
+                !task.task.pending_preparation &&
+                task.work.items.some((work) => work.phase !== "settled");
+              update((draft) => {
+                const environment = findEnvironment(draft, removal.resourceId);
+                if (!environment) return;
+                const next = captured
+                  ? taskId
+                  : environment.deletionTaskId === taskId
+                    ? null
+                    : environment.deletionTaskId;
+                if (environment.deletionTaskId !== next) {
+                  environment.deletionTaskId = next;
+                  draft.environmentDeletionRevision += 1;
+                }
+              });
+            }
           }
           return task;
         })
@@ -96,7 +114,7 @@ export function useResourceRemovalObservation<
       resourceRemovalTaskRequests.current.set(taskId, request);
       return request;
     },
-    [active, recordResourceRemovalError],
+    [active, recordResourceRemovalError, update],
   );
 
   const reconcileResourceRemoval = useCallback(

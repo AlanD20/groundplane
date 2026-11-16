@@ -33,8 +33,17 @@ func TestNativeStagingReconcilesAfterAgentProcessReplacement(t *testing.T) {
 	var previousAck *agentpb.BackupStagingRecoveryAck
 	for _, ordinal := range []byte{2, 3} {
 		process := [16]byte{ordinal}
-		registered, err := server.workIdentities.RegisterWorkProcess(t.Context(), agentID, 1, process,
-			workexecution.AgentConcurrency{Tasks: 1, OperationsPerTask: 1}, []workexecution.Operation{workexecution.Script})
+		registered, err := server.workIdentities.RegisterWorkProcess(
+			t.Context(),
+			agentID,
+			1,
+			process,
+			workexecution.AgentConcurrency{
+				Tasks:             1,
+				OperationsPerTask: 1,
+			},
+			[]workexecution.Operation{workexecution.Script},
+		)
 		if err != nil {
 			t.Fatal(err)
 		}

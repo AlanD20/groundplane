@@ -57,9 +57,21 @@ func (repository *InputRepository) StageCascadeCapture(
 		loaded.Clear()
 		return err
 	}
+
+	acceptedGuard := false
+	for _, condition := range admission {
+		if condition.Key == workqueue.TaskKey(task.ID) && condition.ModRevision > 0 {
+			acceptedGuard = true
+		}
+	}
+	if task.AcceptedIntent != nil && !acceptedGuard {
+		return checkpointConflict("Backing Zone staging requires its accepted Task revision")
+	}
 	guards := append([]keyvalue.Condition(nil), admission...)
-	guards = append(guards, keyvalue.Condition{Key: workqueue.TaskKey(task.ID)},
-		keyvalue.Condition{Key: workqueue.ItemKey(item.ID)}, keyvalue.Condition{Key: key})
+	if task.AcceptedIntent == nil {
+		guards = append(guards, keyvalue.Condition{Key: workqueue.TaskKey(task.ID)})
+	}
+	guards = append(guards, keyvalue.Condition{Key: workqueue.ItemKey(item.ID)}, keyvalue.Condition{Key: key})
 	reference, change, err := repository.StageDetach(ctx, item.Input.ID, input, guards)
 	if err != nil {
 		return err

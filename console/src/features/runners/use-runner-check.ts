@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ControllerRequestError } from "@/lib/controller-request-errors";
+import { requestTask, type TaskResponse } from "@/features/task/api";
 import {
   getRunnerCheck,
   pendingRunnerCheck,
@@ -17,6 +18,7 @@ export function useRunnerCheck(
 ) {
   const [taskId, setTaskId] = useState(initialTaskId);
   const [result, setResult] = useState<RunnerCheckResult | null>(null);
+  const [taskDetail, setTaskDetail] = useState<TaskResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -34,6 +36,7 @@ export function useRunnerCheck(
     setSending(false);
     setTaskId(initialTaskId);
     setResult(null);
+    setTaskDetail(null);
     setError(null);
     setUncertain(!!pendingRunnerCheck(runnerId));
     setLoading(open && !initialTaskId);
@@ -73,14 +76,22 @@ export function useRunnerCheck(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
-        const next = await getRunnerCheck(runnerId, taskId, controller.signal);
+        const detail = await requestTask(taskId, controller.signal);
         if (controller.signal.aborted) return;
-        setResult(next);
+        setTaskDetail(detail);
+        if (detail.work.items.length > 0) {
+          const next = await getRunnerCheck(
+            runnerId,
+            taskId,
+            controller.signal,
+          );
+          if (controller.signal.aborted) return;
+          setResult(next);
+        } else setResult(null);
+        if (controller.signal.aborted) return;
         setError(null);
-        timer = setTimeout(
-          () => void poll(),
-          next.phase === "finished" ? 10000 : 1000,
-        );
+        if (!detail.task.finished_at)
+          timer = setTimeout(() => void poll(), 1000);
       } catch (cause) {
         if (!controller.signal.aborted)
           setError(
@@ -97,17 +108,17 @@ export function useRunnerCheck(
     };
   }, [runnerId, taskId, open, reload]);
 
-  async function run() {
+  async function run(after: string[] = []): Promise<string> {
     const signal = scope.current?.signal;
     if (busy.current || loading || initialTaskId || !signal || signal.aborted)
-      return;
+      throw new Error("The Runner check cannot be submitted in this state");
     const current = generation.current;
     busy.current = true;
     setSending(true);
     setError(null);
     const pending = runnerCheckSubmission(runnerId);
     try {
-      pending.body ??= await runnerCheckRequest(runnerId, signal);
+      pending.body ??= runnerCheckRequest(after);
       const accepted = await startRunnerCheck(
         runnerId,
         pending.body,
@@ -121,6 +132,7 @@ export function useRunnerCheck(
         setTaskId(accepted);
         setReload((value) => value + 1);
       }
+      return accepted;
     } catch (cause) {
       if (
         !pending.body ||
@@ -129,13 +141,14 @@ export function useRunnerCheck(
             ![409, 500, 502, 503, 504].includes(cause.status)))
       )
         releaseRunnerCheck(runnerId, pending);
-      if (generation.current !== current) return;
+      if (generation.current !== current) throw cause;
       setUncertain(!!pendingRunnerCheck(runnerId));
       setError(
         cause instanceof Error
           ? cause.message
           : "Unable to start the Runner check",
       );
+      throw cause;
     } finally {
       if (generation.current === current) {
         busy.current = false;
@@ -146,12 +159,13 @@ export function useRunnerCheck(
   return {
     taskId,
     result,
+    taskDetail,
     error,
     loading,
     sending,
     uncertain,
     run,
-    active: !!taskId && (!result || result.phase !== "finished"),
+    active: !!taskId && !taskDetail?.task.finished_at,
     refresh: () => setReload((value) => value + 1),
   };
 }

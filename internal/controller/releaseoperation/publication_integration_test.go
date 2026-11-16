@@ -15,6 +15,7 @@ import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -23,6 +24,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/acceptedactions"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
@@ -325,26 +327,69 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	if err != nil {
 		t.Fatalf("actual first blue-green candidate: %v", err)
 	}
-	response, err := producer.publishServiceWork(ctx, scope, candidate, testidempotency.IdempotencyLocator{
-		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environmentID,
-		Method: http.MethodPost, Route: serviceDeployRoute, Key: "first-blue-green",
-	}, durable, protected)
-	if err != nil {
-		t.Fatalf("native first blue-green publisher: %v", err)
-	}
-	if response.Status != http.StatusAccepted {
-		t.Fatalf("publication status=%d", response.Status)
-	}
-	var accepted struct {
-		TaskID string `json:"task_id"`
-	}
-	if json.Unmarshal(response.Body, &accepted) != nil || accepted.TaskID == "" {
-		t.Fatal("missing accepted Task")
-	}
 	queue, err := workqueue.NewRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
+	payloadRepository, err := acceptedactions.NewRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloads, err := acceptedaction.NewPayloads(payloadRepository, protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := etcd.NewIdempotencyRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().UTC()
+	task := workexecution.Task{ID: ids.New(ids.KindTask), Actor: workexecution.OperatorActor,
+		Scope: workexecution.Scope{
+			TenantID:      tenant.Record.ID,
+			ProjectID:     project.Record.ID,
+			EnvironmentID: environmentID,
+		},
+		Action: workexecution.ActionDeploy, TargetID: serviceID, TargetName: desired.Name, CreatedAt: at, UpdatedAt: at, Deadline: at.Add(time.Hour)}
+	submitter, err := acceptedaction.NewSubmitter(payloads, queue, replay, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := acceptedaction.Submit(ctx, submitter, acceptedaction.Submission{Task: task, Kind: "service-deploy",
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeEnvironment,
+			ScopeID:   environmentID,
+			Method:    http.MethodPost,
+			Route:     serviceDeployRoute,
+			Key:       "first-blue-green",
+		}, Intent: durable, Evidence: protected}, domain.ServiceDeployInput{Tag: "first", Strategy: domain.StrategyBlueGreen, OnFailure: domain.OnFailureSwitchBack})
+	if err != nil || response.Status != http.StatusAccepted {
+		t.Fatalf("pure Task acceptance: %v", err)
+	}
+	acceptedTask, _, err := queue.ReadTask(ctx, task.ID, 0)
+	if err != nil || !acceptedTask.Task.PendingPreparation() {
+		t.Fatalf("pending accepted intent: %v", err)
+	}
+	prepared, err := producer.prepareServiceWork(ctx, scope, candidate, acceptedTask.Task)
+	if err != nil {
+		t.Fatalf("deferred native capture: %v", err)
+	}
+	promotion, err := queue.PrepareAcceptedTaskPromotion(
+		ctx,
+		acceptedTask,
+		prepared.Task,
+		prepared.Graph,
+		prepared.Initial,
+		prepared.Staged,
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := queue.Commit(ctx, promotion, prepared.Authority); err != nil || !result.Succeeded {
+		t.Fatalf("capture promotion: %v", err)
+	}
+	accepted := struct{ TaskID string }{task.ID}
 	stored, revision, err := queue.ReadTask(ctx, accepted.TaskID, 0)
 	if err != nil || stored.Task.Action != workexecution.ActionDeploy || stored.Task.TargetID != serviceID ||
 		stored.Task.Scope.EnvironmentID != environmentID || stored.Task.Progress.Waiting != 1 {
@@ -535,7 +580,15 @@ func (s *directPublicationStore) Transact(
 	s.revision++
 	for _, m := range mutations {
 		if m.Prefix {
-			panic("unexpected prefix mutation")
+			if m.Type != testkeyvalue.MutationDelete {
+				panic("unsupported prefix put")
+			}
+			for key := range s.values {
+				if strings.HasPrefix(key, m.Key) {
+					delete(s.values, key)
+				}
+			}
+			continue
 		}
 		if m.Type == testkeyvalue.MutationDelete {
 			delete(s.values, m.Key)

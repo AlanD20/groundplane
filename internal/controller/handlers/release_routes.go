@@ -48,7 +48,7 @@ type releasePageOutput struct {
 }
 
 func (s *Server) registerReleases() {
-	taskSchema := openAPISchema[apiTypes.ReleaseTaskAccepted](s.API.OpenAPI().Components.Schemas, "ReleaseTaskAccepted")
+	taskSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "release.list", Method: http.MethodGet, Path: "/releases",
 		Summary: "List releases", Tags: []string{"Release"},
@@ -128,6 +128,7 @@ func (s *Server) deployService(
 		ctx,
 		input.ID,
 		domain.ServiceDeployInput{
+			After:     append([]string(nil), input.Body.After...),
 			Image:     input.Body.Image,
 			Tag:       input.Body.Tag,
 			Strategy:  domain.Strategy(input.Body.Strategy),
@@ -158,7 +159,7 @@ func (s *Server) rollbackService(
 	response, err := s.releaseOperations.RollbackService(
 		ctx,
 		input.ID,
-		domain.ServiceRollbackInput{Tag: input.Body.Tag},
+		domain.ServiceRollbackInput{Tag: input.Body.Tag, After: append([]string(nil), input.Body.After...)},
 		input.IdempotencyKey,
 	)
 	if err != nil {

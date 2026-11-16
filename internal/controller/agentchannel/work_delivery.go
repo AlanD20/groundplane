@@ -121,8 +121,13 @@ func (server *Server) dispatchWork(
 }
 
 func agentConcurrency(config *agentpb.AgentConfig) workexecution.AgentConcurrency {
-	if config == nil || config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 || config.MaxParallelOperationsPerTask < 1 || config.MaxParallelOperationsPerTask > 256 {
+	if config == nil || config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 ||
+		config.MaxParallelOperationsPerTask < 1 ||
+		config.MaxParallelOperationsPerTask > 256 {
 		return workexecution.AgentConcurrency{}
 	}
-	return workexecution.AgentConcurrency{Tasks: uint16(config.MaxConcurrentTasks), OperationsPerTask: uint16(config.MaxParallelOperationsPerTask)}
+	return workexecution.AgentConcurrency{
+		Tasks:             uint16(config.MaxConcurrentTasks),
+		OperationsPerTask: uint16(config.MaxParallelOperationsPerTask),
+	}
 }

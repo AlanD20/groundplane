@@ -33,9 +33,8 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 				t.Fatal(err)
 			}
 			result := fixture.publish(t, repository)
-			if outcome, _, conflict, err := result.Classify(); err != nil || conflict != nil ||
-				outcome != IdempotencyKnownApplied {
-				t.Fatalf("native Runner allocation = %v, %v, %v", outcome, conflict, err)
+			if !result.Applied {
+				t.Fatal("Runner allocation was not published")
 			}
 		}
 		hierarchy, err := newHierarchyRepository(store)
@@ -156,10 +155,9 @@ func TestRunnerNativeCreationRejectsSelectedSlotRace(t *testing.T) {
 				t.Fatal(err)
 			}
 			result := fixture.publish(t, repository)
-			outcome, _, conflict, err := result.Classify()
 			if race {
-				if err != nil || outcome != IdempotencyKnownConflict || !isKind(conflict, errs.KindStateConflict) {
-					t.Fatalf("raced allocation = %v, %v, %v", outcome, conflict, err)
+				if result.Applied {
+					t.Fatal("Concurrent slot ownership was overwritten")
 				}
 				entry := mustOptionalKey(t, base, testrunners.RunnerHostSlotKey(80))
 				owned, err := testrunners.DecodeRunnerHostSlotRecord(entry.Value)
@@ -170,8 +168,8 @@ func TestRunnerNativeCreationRejectsSelectedSlotRace(t *testing.T) {
 					t.Fatalf("raced creation left a Runner: %v", err)
 				}
 			} else {
-				if err != nil || conflict != nil || outcome != IdempotencyKnownApplied {
-					t.Fatalf("allocation = %v, %v, %v", outcome, conflict, err)
+				if !result.Applied {
+					t.Fatal("Available Runner slot was not allocated")
 				}
 				current, err := repository.GetRunner(t.Context(), desired.ID)
 				if err != nil || current.Record.Allocation.Slot != 80 {

@@ -11,12 +11,16 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/acceptedactions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -31,7 +35,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	original := f.registry.selected
 	response, accepted := f.accept(t, "image-fetch-pinned-content")
 	f.registry.selected = imageTestPlan("d", "e")
-	if _, err := f.service.FetchImage(ctx, original.Requested, "image-fetch-pinned-content"); err == nil ||
+	if _, err := f.service.FetchImage(ctx, original.Requested, "image-fetch-pinned-content", nil); err == nil ||
 		f.registry.resolutions != 1 {
 		t.Fatalf("pending replay resolved a moved tag: resolves=%d, error=%v", f.registry.resolutions, err)
 	}
@@ -40,7 +44,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	if err == nil || len(f.registry.tagged) != 0 {
 		t.Fatal("mismatched image was accepted or tagged")
 	}
-	replay, err := f.service.FetchImage(ctx, original.Requested, "image-fetch-pinned-content")
+	replay, err := f.service.FetchImage(ctx, original.Requested, "image-fetch-pinned-content", nil)
 	if err != nil || !bytes.Equal(replay.Body, response.Body) || f.registry.resolutions != 1 {
 		t.Fatalf("terminal replay selected new content: %v", err)
 	}
@@ -130,7 +134,20 @@ func TestNativeImageUnknownTagDoesNotGrantRetryOrBlockUnrelatedWork(t *testing.T
 	}); err == nil {
 		t.Fatal("unknown write authorized another execution")
 	}
-	if _, err := f.service.FetchImage(t.Context(), f.registry.selected.Requested, "image-fetch-conflicting-selection"); err == nil {
+	conflict, err := f.service.FetchImage(
+		t.Context(),
+		f.registry.selected.Requested,
+		"image-fetch-conflicting-selection",
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var conflicting api.TaskAccepted
+	if err := json.Unmarshal(conflict.Body, &conflicting); err != nil {
+		t.Fatal(err)
+	}
+	if task := f.prepare(t, conflicting.TaskID); task.Outcome != workexecution.Failed {
 		t.Fatal("unresolved tag write allowed conflicting selection")
 	}
 	f.registry.selected = imageTestPlan("8", "9")
@@ -151,12 +168,14 @@ func TestNativeImageUnknownTagDoesNotGrantRetryOrBlockUnrelatedWork(t *testing.T
 }
 
 type nativeImageFixture struct {
-	store    *memoryHierarchyStore
-	queue    *workqueue.Repository
-	service  *imagedelivery.Service
-	registry *imageFetchRegistry
-	identity workexecution.Identity
-	retry    interface {
+	deferFinish  bool
+	store        *memoryHierarchyStore
+	queue        *workqueue.Repository
+	service      *imagedelivery.Service
+	registry     *imageFetchRegistry
+	identity     workexecution.Identity
+	preparations *taskdependencies.Preparations
+	retry        interface {
 		RetryTask(context.Context, string, string, api.TaskRetryRequest) (idempotency.IdempotencyResponse, error)
 	}
 }
@@ -194,10 +213,32 @@ func newNativeImageFixture(t *testing.T) *nativeImageFixture {
 	}
 	f.registry = &imageFetchRegistry{selected: imageTestPlan("a", "b"), tagOutcome: imagefetch.TagAssignmentApplied}
 	f.registry.returnedID = f.registry.selected.ConfigDigest
-	f.service, err = imagedelivery.New(f.registry, f.store, tasks, receipts, coordinator, diagnostics, releases)
+	inputs, err := acceptedactions.NewRepository(f.store)
 	if err != nil {
 		t.Fatal(err)
 	}
+	payloads, err := acceptedaction.NewPayloads(inputs, protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	submitter, err := acceptedaction.NewSubmitter(payloads, f.queue, receipts, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.service, err = imagedelivery.New(f.registry, f.store, receipts, coordinator, diagnostics, releases, submitter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.preparations, err = taskdependencies.NewPreparations(f.queue, f.service.AcceptedPreparations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := hostbindings.PrepareLocalEnrollment(t.Context(), f.store, ids.NewAt(ids.KindAgent,
+		time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC), 873))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.commit(t, host)
 	retries, err := workdispatch.NewRetries(
 		f.queue,
 		[]workdispatch.RetryRegistration{{Operation: workexecution.Image, Owner: f.service}},
@@ -247,23 +288,82 @@ func (f *nativeImageFixture) commit(t *testing.T, changes ...workqueue.Change) {
 	}
 }
 
+type capturedImageAcceptance struct {
+	api.TaskAccepted
+	Image, ConfigDigest string
+}
+
+func (f *nativeImageFixture) prepare(t *testing.T, taskID string) workexecution.Task {
+	t.Helper()
+	for range 3 {
+		task, _, err := f.queue.ReadTask(t.Context(), taskID, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !task.Task.PendingPreparation() {
+			return task.Task
+		}
+		changed, err := f.preparations.Advance(t.Context(), taskID, time.Now().UTC())
+		if err != nil || !changed {
+			t.Fatalf("native image preparation: changed=%t error=%v", changed, err)
+		}
+	}
+	t.Fatal("native image preparation did not settle")
+	return workexecution.Task{}
+}
+
 func (f *nativeImageFixture) accept(
 	t *testing.T,
 	key string,
-) (idempotency.IdempotencyResponse, api.ImageFetchAccepted) {
+) (idempotency.IdempotencyResponse, capturedImageAcceptance) {
 	t.Helper()
-	response, err := f.service.FetchImage(t.Context(), f.registry.selected.Requested, key)
+	before := f.registry.resolutions
+	response, err := f.service.FetchImage(t.Context(), f.registry.selected.Requested, key, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var accepted api.ImageFetchAccepted
+	var accepted capturedImageAcceptance
+	if err := json.Unmarshal(response.Body, &accepted.TaskAccepted); err != nil {
+		t.Fatal(err)
+	}
+	if f.registry.resolutions != before {
+		t.Fatal("acceptance resolved execution content before typed preparation")
+	}
+	task := f.prepare(t, accepted.TaskID)
+	if task.Intent == (workexecution.Input{}) {
+		t.Fatal("image preparation failed")
+	}
+	ops, err := imageoperations.NewRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := ops.Load(t.Context(), accepted.TaskID)
+	if err != nil || loaded.Record.Input.Fetch == nil {
+		t.Fatalf("captured image: %v", err)
+	}
+	accepted.Image, accepted.ConfigDigest = loaded.Record.Input.Fetch.Reference(), loaded.Record.Input.Fetch.ConfigDigest
+	if accepted.Image != f.registry.selected.Reference() || accepted.ConfigDigest != f.registry.selected.ConfigDigest {
+		t.Fatal("prepared content changed")
+	}
+	return response, accepted
+}
+
+func (f *nativeImageFixture) rejectRemoval(t *testing.T, image, key string) *workqueue.AcceptedPreparationFailure {
+	t.Helper()
+	response, err := f.service.RemoveImage(t.Context(), image, key, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var accepted api.TaskAccepted
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatal(err)
 	}
-	if accepted.Image != f.registry.selected.Reference() || accepted.ConfigDigest != f.registry.selected.ConfigDigest {
-		t.Fatal("accepted content changed")
+	task := f.prepare(t, accepted.TaskID)
+	failure, err := f.queue.ReadAcceptedPreparationFailure(t.Context(), task.ID, 0)
+	if err != nil || task.Outcome != workexecution.Failed || failure == nil {
+		t.Fatalf("removal was not rejected before execution: %#v %v", task, err)
 	}
-	return response, accepted
+	return failure
 }
 
 func (f *nativeImageFixture) execute(t *testing.T, taskID string) (workqueue.Delivery, error) {
@@ -326,7 +426,7 @@ func (f *nativeImageFixture) execute(t *testing.T, taskID string) (workqueue.Del
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settled.Item.Item.Phase == workexecution.Settled {
+	if settled.Item.Item.Phase == workexecution.Settled && !f.deferFinish {
 		completion, err := workdispatch.NewCompletions(f.queue, []workdispatch.CompletionRegistration{
 			{
 				Action:    settled.Task.Task.Action,

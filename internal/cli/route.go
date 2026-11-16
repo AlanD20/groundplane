@@ -49,11 +49,16 @@ func newRouteCmd() *cobra.Command {
 
 	var hostname, path, service, exposure string
 	var targetPort uint16
+	var addAfter []string
 	add := &cobra.Command{
 		Use:   "add",
 		Short: "Add a route",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(addAfter)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			environmentID, err := resolveEnvironmentTarget(cmd, app.Scope.Environment)
 			if err != nil {
@@ -64,14 +69,13 @@ func newRouteCmd() *cobra.Command {
 				return err
 			}
 			accepted, err := app.Client.CreateRoute(cmd.Context(), apiTypes.RouteCreate{
-				EnvironmentID: environmentID, Host: hostname, Path: path,
+				After: after, EnvironmentID: environmentID, Host: hostname, Path: path,
 				TargetServiceID: serviceID, TargetPort: targetPort, Exposure: exposure,
 			})
 			if err != nil {
 				return err
 			}
-			fields, values := fieldsOfVia(routeAcceptedFields(accepted))
-			return app.Out.RenderOne(fields, values, accepted)
+			return renderTaskAccepted(cmd, accepted)
 		},
 	}
 	add.Flags().StringVar(&hostname, "hostname", "", "route hostname")
@@ -86,44 +90,57 @@ func newRouteCmd() *cobra.Command {
 	)
 	_ = add.MarkFlagRequired("service")
 	_ = add.MarkFlagRequired("target-port")
+	addTaskAfterFlag(add, &addAfter)
 	cmd.AddCommand(add)
 
 	var editExposure string
+	var editAfter []string
 	edit := &cobra.Command{
 		Use:   "edit <id>",
 		Short: "Edit a route's exposure",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app := fromContext(cmd)
-			accepted, err := app.Client.EditRoute(
-				cmd.Context(), target(app, args[0]), apiTypes.RouteEdit{Exposure: editExposure},
-			)
+			after, err := validatedTaskAfter(editAfter)
 			if err != nil {
 				return err
 			}
-			fields, values := fieldsOfVia(routeAcceptedFields(accepted))
-			return app.Out.RenderOne(fields, values, accepted)
-		},
-	}
-	edit.Flags().StringVar(&editExposure, "exposure", "", "public | internal")
-	_ = edit.MarkFlagRequired("exposure")
-	cmd.AddCommand(edit)
-
-	cmd.AddCommand(&cobra.Command{
-		Use:     "remove <id>",
-		Aliases: []string{"delete"},
-		Short:   "Remove a route (dispatches a task)",
-		Args:    cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			accepted, err := fromContext(cmd).Client.RemoveRoute(
-				cmd.Context(), target(fromContext(cmd), args[0]),
+			app := fromContext(cmd)
+			accepted, err := app.Client.EditRoute(
+				cmd.Context(), target(app, args[0]), apiTypes.RouteEdit{Exposure: editExposure, After: after},
 			)
 			if err != nil {
 				return err
 			}
 			return renderTaskAccepted(cmd, accepted)
 		},
-	})
+	}
+	edit.Flags().StringVar(&editExposure, "exposure", "", "public | internal")
+	_ = edit.MarkFlagRequired("exposure")
+	addTaskAfterFlag(edit, &editAfter)
+	cmd.AddCommand(edit)
+
+	var removeAfter []string
+	remove := &cobra.Command{
+		Use:     "remove <id>",
+		Aliases: []string{"delete"},
+		Short:   "Remove a route (dispatches a task)",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(removeAfter)
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.RemoveRoute(
+				cmd.Context(), target(fromContext(cmd), args[0]), after,
+			)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
+		},
+	}
+	addTaskAfterFlag(remove, &removeAfter)
+	cmd.AddCommand(remove)
 
 	return cmd
 }
@@ -134,10 +151,4 @@ func routeFields(route apiTypes.Route) map[string]any {
 		"path": route.Path, "exposure": route.Exposure,
 		"target_service_id": route.TargetServiceID, "target_port": route.TargetPort, "status": route.Status,
 	}
-}
-
-func routeAcceptedFields(accepted apiTypes.RouteTaskAccepted) map[string]any {
-	fields := routeFields(accepted.Route)
-	fields["task_id"] = accepted.TaskID
-	return fields
 }

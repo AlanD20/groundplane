@@ -2,22 +2,19 @@ package environment
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprovision"
-	"net/http"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
-	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testnetworkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 const (
@@ -32,7 +29,6 @@ type fakeEnvironmentCreationRepository struct {
 	environment  testhierarchy.EnvironmentRecord
 	components   []testcomponents.Record
 	input        environmentprovision.Input
-	marker       testidempotency.IdempotencyMarker
 	calls        int
 }
 
@@ -53,7 +49,7 @@ func (repository *fakeEnvironmentCreationRepository) GetProject(
 	return repository.project, nil
 }
 
-func (repository *fakeEnvironmentCreationRepository) CreateEnvironmentWithWork(
+func (repository *fakeEnvironmentCreationRepository) PrepareEnvironmentCreation(
 	_ context.Context,
 	volumeRoot string,
 	_ testkeyvalue.Versioned[testhierarchy.ProjectRecord],
@@ -61,58 +57,17 @@ func (repository *fakeEnvironmentCreationRepository) CreateEnvironmentWithWork(
 	environment testhierarchy.EnvironmentRecord,
 	components []testcomponents.Record,
 	input environmentprovision.Input,
-	marker testidempotency.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
+) (workqueue.Change, error) {
 	repository.calls++
 	repository.volumeRoot = volumeRoot
 	repository.poolRegistry = poolRegistry
 	repository.environment = environment
 	repository.components = append([]testcomponents.Record(nil), components...)
 	repository.input = input
-	repository.marker = marker
-	repository.marker.Response.Body = append([]byte(nil), marker.Response.Body...)
-	return etcd.IdempotencyTransactionResult{}, nil
+	return workqueue.Change{}, nil
 }
 
-type fakeEnvironmentCreationIdempotency struct {
-	evidence   environmentCreationEvidence
-	resolution idempotentintent.Resolution
-	existing   bool
-}
-
-func (idempotency *fakeEnvironmentCreationIdempotency) Prepare(
-	context.Context,
-	CreateEnvironmentInput,
-) (environmentCreationEvidence, error) {
-	return idempotency.evidence, nil
-}
-
-func (idempotency *fakeEnvironmentCreationIdempotency) ResolveExisting(
-	context.Context, testidempotency.IdempotencyLocator,
-
-	environmentCreationEvidence,
-) (idempotentintent.Resolution, bool, error) {
-	return idempotency.resolution, idempotency.existing, nil
-}
-
-func (idempotency *fakeEnvironmentCreationIdempotency) ResolveKnown(
-	context.Context,
-	environmentCreationEvidence,
-	etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
-	return idempotency.resolution, nil
-}
-
-func (idempotency *fakeEnvironmentCreationIdempotency) ResolveUnknown(
-	context.Context, testidempotency.IdempotencyLocator,
-
-	environmentCreationEvidence,
-	error,
-) (idempotentintent.Resolution, error) {
-	return idempotency.resolution, nil
-}
-
-func TestEnvironmentCreationCapturesProvisioningAndProtectedResponse(t *testing.T) {
+func TestEnvironmentCreationCapturesProvisioningFromAcceptedTask(t *testing.T) {
 	project := testkeyvalue.Versioned[testhierarchy.ProjectRecord]{
 		Record: testhierarchy.ProjectRecord{
 			ID: environmentCreationTestProjectID, TenantID: environmentCreationTestTenantID,
@@ -126,33 +81,47 @@ func TestEnvironmentCreationCapturesProvisioningAndProtectedResponse(t *testing.
 			Record: testnetworkreservations.EnvironmentPoolRegistry{Reservations: map[string]string{}},
 		},
 	}
-	idempotency := &fakeEnvironmentCreationIdempotency{
-		resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
-	}
-	service, err := NewCreationService(
-		"/var/lib/groundplane/vol",
-		"10.0.0.0/8",
-		repository,
-		idempotency,
-	)
-	if err != nil {
-		t.Fatalf("NewCreationService() error = %v", err)
+	service := &environmentCreationService{
+		volumeRoot:      "/var/lib/groundplane/vol",
+		environmentPool: netip.MustParsePrefix("10.0.0.0/8"),
+		repository:      repository,
 	}
 	now := time.Date(2026, 8, 22, 15, 0, 0, 0, time.UTC)
-	service.now = func() time.Time { return now }
-	response, err := service.CreateEnvironment(context.Background(), CreateEnvironmentInput{
-		ProjectID: environmentCreationTestProjectID, Name: "production", NetworkPool: "10.200.0.0/16",
-	}, "environment-create-key-0001")
+	input := CreateEnvironmentInput{
+		ProjectID:   environmentCreationTestProjectID,
+		Name:        "production",
+		NetworkPool: "10.200.0.0/16",
+	}
+	reference := workexecution.Input{ID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", SHA256: strings.Repeat("a", 64)}
+	task := workexecution.Task{
+		ID:         "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionCreate,
+		TargetID:   "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		TargetName: input.Name,
+		Scope: workexecution.Scope{
+			TenantID:      project.Record.TenantID,
+			ProjectID:     project.Record.ID,
+			EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		},
+		AcceptedIntent: &reference,
+		CreatedAt:      now.Add(-time.Minute),
+		UpdatedAt:      now.Add(-time.Minute),
+		Deadline:       now.Add(time.Hour),
+	}
+	prepared, err := service.prepareAcceptedCreation(
+		context.Background(),
+		workqueue.TaskSnapshot{Task: task, Revision: 7},
+		7,
+		now,
+		input,
+	)
 	if err != nil {
-		t.Fatalf("CreateEnvironment() error = %v", err)
+		t.Fatal(err)
 	}
-	var accepted apiTypes.TaskAccepted
-	if err := json.Unmarshal(response.Body, &accepted); err != nil {
-		t.Fatalf("CreateEnvironment() body = %s, %v", response.Body, err)
-	}
-	if response.Status != http.StatusAccepted || response.ContentKind != "application/json" ||
-		accepted.TaskID == "" || accepted.TaskID != repository.input.TaskID {
-		t.Fatalf("CreateEnvironment() response = %#v / %#v", response, accepted)
+	if prepared.Task.ID != task.ID || !prepared.Task.CreatedAt.Equal(task.CreatedAt) || len(prepared.Graph) != 1 ||
+		!prepared.Graph[0].CreatedAt.Equal(now) {
+		t.Fatalf("compiler changed accepted identity or failed fresh capture: %+v", prepared)
 	}
 	environment := repository.environment
 	captured := repository.input
@@ -187,10 +156,5 @@ func TestEnvironmentCreationCapturesProvisioningAndProtectedResponse(t *testing.
 			component.Runtime.Healthy {
 			t.Fatalf("component[%d] initial state = %#v", index, component)
 		}
-	}
-	if repository.marker.TaskID != captured.TaskID || repository.marker.Response.Status != http.StatusAccepted ||
-		repository.marker.Locator.ScopeKind != testidempotency.IdempotencyScopeProject ||
-		repository.marker.Locator.ScopeID != environmentCreationTestProjectID {
-		t.Fatalf("Task idempotency marker = %#v", repository.marker)
 	}
 }

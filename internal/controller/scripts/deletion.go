@@ -2,366 +2,251 @@ package scripts
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"net/http"
-	"time"
-
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptremoval"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"net/http"
+	"time"
 )
 
-const (
-	scriptDeletionRoute           = "/scripts/{id}"
-	scriptDeletionTimeoutSeconds  = int64(30)
-	maximumScriptDeletionAttempts = 3
-)
+const scriptDeletionRoute = "/scripts/{id}"
 
 type scriptDeletionRepository interface {
-	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
-	GetScript(context.Context, string) (etcdstore.Versioned[scriptrecord.Record], error)
-	PublishScriptRemoval(
-		context.Context,
-		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[servicerecord.ServiceRecord],
-		etcdstore.Versioned[scriptrecord.Record],
-		scriptremoval.Input,
-		workexecution.Task,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	GetEnvironment(context.Context, string) (keyvalue.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (keyvalue.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetService(context.Context, string) (keyvalue.Versioned[servicerecord.ServiceRecord], error)
+	GetScript(context.Context, string) (keyvalue.Versioned[scriptrecord.Record], error)
+	PrepareScriptRemovalAuthority(context.Context, keyvalue.Versioned[hierarchyrecord.EnvironmentRecord],
+		keyvalue.Versioned[hierarchyrecord.ProjectRecord], keyvalue.Versioned[servicerecord.ServiceRecord],
+		keyvalue.Versioned[scriptrecord.Record], scriptremoval.Input, workexecution.Task, int64, idempotency.IdempotencyLocator,
+	) (workqueue.Change, workexecution.Item, error)
 }
 
-func (repository *MutationRepository) PublishScriptRemoval(
+func (repository *MutationRepository) PrepareScriptRemovalAuthority(
 	ctx context.Context,
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[servicerecord.ServiceRecord],
-	current etcdstore.Versioned[scriptrecord.Record],
+	environment keyvalue.Versioned[hierarchyrecord.EnvironmentRecord],
+	project keyvalue.Versioned[hierarchyrecord.ProjectRecord],
+	target keyvalue.Versioned[servicerecord.ServiceRecord],
+	current keyvalue.Versioned[scriptrecord.Record],
 	input scriptremoval.Input,
 	task workexecution.Task,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.scripts.PublishScriptRemoval(
-		ctx, environment, project, target, current, input, task, marker,
+	revision int64,
+	locator idempotency.IdempotencyLocator,
+) (workqueue.Change, workexecution.Item, error) {
+	return repository.scripts.PrepareScriptRemovalAuthority(
+		ctx,
+		environment,
+		project,
+		target,
+		current,
+		input,
+		task,
+		revision,
+		locator,
 	)
 }
 
-type scriptDeletionEvidence struct {
-	candidate requestidempotency.ProtectedEvidence
-	durable   idempotencyrecord.ProtectedIntentRecord
-}
-
-type scriptDeletionIdempotency interface {
-	ResolveReplayLocator(
-		context.Context,
-		idempotencyrecord.IdempotencyReplayTarget,
-		string,
-		string,
-		string,
-	) (idempotencyrecord.IdempotencyLocator, bool, error)
-	Prepare(context.Context, idempotencyrecord.IdempotencyLocator, string) (scriptDeletionEvidence, error)
-	ResolveExisting(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		scriptDeletionEvidence,
-	) (requestidempotency.Resolution, bool, error)
-	ResolveKnown(
-		context.Context,
-		scriptDeletionEvidence,
-		etcd.IdempotencyTransactionResult,
-	) (requestidempotency.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		scriptDeletionEvidence,
-		error,
-	) (requestidempotency.Resolution, error)
-}
-
-type durableScriptDeletionIdempotency struct {
-	coordinator *requestidempotency.Coordinator
-	repository  *etcd.IdempotencyRepository
-}
-
-func NewDeletionIdempotency(
-	coordinator *requestidempotency.Coordinator,
-	repository *etcd.IdempotencyRepository,
-) (*durableScriptDeletionIdempotency, error) {
-	if coordinator == nil || repository == nil {
-		return nil, errs.New(errs.KindInternal, "Script deletion idempotency is not configured")
-	}
-	return &durableScriptDeletionIdempotency{coordinator: coordinator, repository: repository}, nil
-}
-
-func (service *durableScriptDeletionIdempotency) ResolveReplayLocator(
-	ctx context.Context,
-	target idempotencyrecord.IdempotencyReplayTarget,
-	method string,
-	route string,
-	key string,
-) (idempotencyrecord.IdempotencyLocator, bool, error) {
-	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
-}
-
-func (service *durableScriptDeletionIdempotency) Prepare(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	scriptID string,
-) (scriptDeletionEvidence, error) {
-	if locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		ids.Validate(ids.KindEnvironment, locator.ScopeID) != nil {
-		return scriptDeletionEvidence{}, errs.New(errs.KindInternal, "Script deletion replay scope is invalid")
-	}
-	scope := requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: locator.ScopeID}
-	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
-		Method: http.MethodDelete, Route: scriptDeletionRoute, Scope: scope,
-		Path:  []requestidempotency.PathBinding{{Name: "id", Value: scriptID}},
-		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
-	})
-	if err != nil {
-		return scriptDeletionEvidence{}, err
-	}
-	defer digest.Destroy()
-	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)
-	if err != nil {
-		return scriptDeletionEvidence{}, err
-	}
-	durable, err := candidate.DurableRecord()
-	if err != nil {
-		return scriptDeletionEvidence{}, err
-	}
-	return scriptDeletionEvidence{candidate: candidate, durable: durable}, nil
-}
-
-func (service *durableScriptDeletionIdempotency) ResolveExisting(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence scriptDeletionEvidence,
-) (requestidempotency.Resolution, bool, error) {
-	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
-}
-
-func (service *durableScriptDeletionIdempotency) ResolveKnown(
-	ctx context.Context,
-	evidence scriptDeletionEvidence,
-	result etcd.IdempotencyTransactionResult,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
-}
-
-func (service *durableScriptDeletionIdempotency) ResolveUnknown(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence scriptDeletionEvidence,
-	original error,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
-}
-
 type scriptDeletionService struct {
-	repository  scriptDeletionRepository
-	idempotency scriptDeletionIdempotency
-	now         func() time.Time
+	repository scriptDeletionRepository
+	accepted   *acceptedaction.Submitter
+	now        func() time.Time
 }
 
 func NewDeletionService(
 	repository scriptDeletionRepository,
-	idempotency scriptDeletionIdempotency,
+	accepted *acceptedaction.Submitter,
 ) (*scriptDeletionService, error) {
-	if repository == nil || idempotency == nil {
+	if repository == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Script deletion service is not configured")
 	}
-	return &scriptDeletionService{repository: repository, idempotency: idempotency, now: time.Now}, nil
+	return &scriptDeletionService{repository: repository, accepted: accepted, now: time.Now}, nil
+}
+
+type acceptedScriptRemoval struct {
+	After []string `json:"after,omitempty"`
+	Key   string   `json:"key"`
 }
 
 func (service *scriptDeletionService) RemoveScript(
 	ctx context.Context,
 	scriptID string,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Script deletion context is required",
-		)
-	}
+	input api.TaskRunAfterRequest,
+	key string,
+) (idempotency.IdempotencyResponse, error) {
 	if ids.Validate(ids.KindScript, scriptID) != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Script id is invalid")
+		return idempotency.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Script id is invalid")
 	}
-	for attempt := 0; attempt < maximumScriptDeletionAttempts; attempt++ {
-		response, err := service.deleteScriptOnce(ctx, scriptID, idempotencyKey)
-		if err == nil {
-			return response, nil
+	target := idempotency.IdempotencyReplayTarget{Kind: idempotency.IdempotencyReplayTargetScript, ID: scriptID}
+	locator, indexed, err := service.accepted.ReplayLocator(ctx, target, http.MethodDelete, scriptDeletionRoute, key)
+	if err != nil {
+		return idempotency.IdempotencyResponse{}, err
+	}
+	var scope workexecution.Scope
+	var name string
+	if !indexed {
+		current, err := service.repository.GetScript(ctx, scriptID)
+		if err != nil {
+			return idempotency.IdempotencyResponse{}, err
 		}
-		kind, ok := errs.KindOf(err)
-		if !ok || kind != errs.KindStateConflict || attempt == maximumScriptDeletionAttempts-1 {
-			return idempotencyrecord.IdempotencyResponse{}, err
+		environment, err := service.repository.GetEnvironment(ctx, current.Record.EnvironmentID)
+		if err != nil {
+			return idempotency.IdempotencyResponse{}, err
+		}
+		project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
+		if err != nil {
+			return idempotency.IdempotencyResponse{}, err
+		}
+		scope = workexecution.Scope{
+			TenantID:      project.Record.TenantID,
+			ProjectID:     project.Record.ID,
+			EnvironmentID: environment.Record.ID,
+		}
+		name = current.Record.Desired.Slug
+		locator = idempotency.IdempotencyLocator{
+			ScopeKind: idempotency.IdempotencyScopeEnvironment,
+			ScopeID:   environment.Record.ID,
+			Method:    http.MethodDelete,
+			Route:     scriptDeletionRoute,
+			Key:       key,
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(
-		errs.KindInternal,
-		"Script deletion retry bound was not enforced",
-	)
-}
-
-func (service *scriptDeletionService) deleteScriptOnce(
-	ctx context.Context,
-	scriptID string,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	target := idempotencyrecord.IdempotencyReplayTarget{
-		Kind: idempotencyrecord.IdempotencyReplayTargetScript,
-		ID:   scriptID,
-	}
-	locator, indexed, err := service.idempotency.ResolveReplayLocator(
-		ctx, target, http.MethodDelete, scriptDeletionRoute, idempotencyKey,
+	intent, err := service.accepted.Begin(
+		ctx,
+		requestidempotency.CanonicalIntentV1{Method: http.MethodDelete, Route: scriptDeletionRoute,
+			Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: locator.ScopeID},
+			Path:  []requestidempotency.PathBinding{{Name: "id", Value: scriptID}}, Query: requestidempotency.Object(),
+			Body: requestidempotency.JSONBody(
+				requestidempotency.Object(
+					requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
+				),
+			)},
+		locator,
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return idempotency.IdempotencyResponse{}, err
+	}
+	defer intent.Destroy()
+	if replay, exists := intent.Replay(); exists {
+		return replay, nil
 	}
 	if indexed {
-		evidence, err := service.idempotency.Prepare(ctx, locator, scriptID)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-		defer clear(evidence.durable.Ciphertext)
-		resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
-		if err != nil {
-			return idempotencyrecord.IdempotencyResponse{}, err
-		}
-		if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Script deletion replay target is inconsistent",
-			)
-		}
-		return requestidempotency.CloneResponse(resolution.Response), nil
+		return idempotency.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Script deletion replay target is inconsistent",
+		)
 	}
+	at := service.now().UTC()
+	task := workexecution.Task{
+		ID:         ids.New(ids.KindTask),
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionRemove,
+		TargetID:   scriptID,
+		TargetName: name,
+		Scope:      scope,
+		After:      append([]string(nil), input.After...),
+		CreatedAt:  at,
+		UpdatedAt:  at,
+		Deadline:   at.Add(acceptedaction.QueueTimeout),
+	}
+	submission := intent.Submission(task, "script-remove")
+	submission.ReplayTarget = &target
+	return acceptedaction.Submit(ctx, service.accepted, submission, acceptedScriptRemoval{After: input.After, Key: key})
+}
 
-	current, err := service.repository.GetScript(ctx, scriptID)
+func (service *scriptDeletionService) AcceptedPreparations() []taskdependencies.Registration {
+	return []taskdependencies.Registration{
+		acceptedaction.Registration(
+			service.accepted,
+			"script-remove",
+			workexecution.ActionRemove,
+			ids.KindScript,
+			service.prepareAcceptedRemoval,
+		),
+	}
+}
+
+func (service *scriptDeletionService) prepareAcceptedRemoval(
+	ctx context.Context,
+	accepted workqueue.TaskSnapshot,
+	_ int64,
+	at time.Time,
+	request acceptedScriptRemoval,
+) (taskdependencies.Prepared, error) {
+	task := accepted.Task
+	current, err := service.repository.GetScript(ctx, task.TargetID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	environment, err := service.repository.GetEnvironment(ctx, current.Record.EnvironmentID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	targetService, err := service.repository.GetService(ctx, current.Record.ServiceID)
+	target, err := service.repository.GetService(ctx, current.Record.ServiceID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	locator = idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
-		Method: http.MethodDelete, Route: scriptDeletionRoute, Key: idempotencyKey,
-	}
-	evidence, err := service.idempotency.Prepare(ctx, locator, scriptID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(evidence.durable.Ciphertext)
-	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if existing {
-		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Script deletion replay resolution is invalid",
-			)
-		}
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	}
-
-	now := service.now().UTC()
-	input := scriptremoval.Input{
-		TaskID:              ids.New(ids.KindTask),
-		WorkItemID:          ids.New(ids.KindWorkItem),
-		PlanID:              ids.New(ids.KindPlan),
-		TenantID:            project.Record.TenantID,
-		ProjectID:           project.Record.ID,
-		EnvironmentID:       environment.Record.ID,
-		ServiceID:           current.Record.ServiceID,
-		ScriptID:            scriptID,
-		ScriptRevision:      current.Revision,
-		ScriptSetGeneration: current.Record.ScriptSetGeneration,
-		CreatedAt:           now,
-	}
-	ref, err := input.Reference()
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	task := workexecution.Task{ID: input.TaskID, Action: workexecution.ActionRemove, Actor: workexecution.OperatorActor,
-		Scope: workexecution.Scope{
-			TenantID:      input.TenantID,
-			ProjectID:     input.ProjectID,
-			EnvironmentID: input.EnvironmentID,
-		},
-		TargetID: scriptID, TargetName: current.Record.Desired.Slug, Intent: ref, ExpectedItems: 1,
-		CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Duration(scriptDeletionTimeoutSeconds) * time.Second)}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: append([]byte(nil), responseBody...),
-	}
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
-		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
-	}
-	result, deleteErr := service.repository.PublishScriptRemoval(
-		ctx, environment, project, targetService, current, input, task, marker,
-	)
-	if deleteErr != nil {
-		if !isUnknownScriptDeletionOutcome(deleteErr) {
-			return idempotencyrecord.IdempotencyResponse{}, deleteErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, deleteErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	switch resolution.Kind {
-	case requestidempotency.ResolutionApplied:
-		return requestidempotency.CloneResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Script deletion resolution is invalid",
+	if task.Scope != (workexecution.Scope{TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID}) {
+		return taskdependencies.Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"Script ownership changed while this removal was queued",
 		)
 	}
-}
-
-func isUnknownScriptDeletionOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
+	input := scriptremoval.Input{
+		TaskID:     task.ID,
+		WorkItemID: ids.DeriveAt(ids.KindWorkItem, task.CreatedAt, task.ID, "script-remove-work"),
+		PlanID: ids.DeriveAt(
+			ids.KindPlan,
+			task.CreatedAt,
+			task.ID,
+			"script-remove-input",
+		),
+		TenantID:            task.Scope.TenantID,
+		ProjectID:           task.Scope.ProjectID,
+		EnvironmentID:       task.Scope.EnvironmentID,
+		ServiceID:           current.Record.ServiceID,
+		ScriptID:            task.TargetID,
+		ScriptRevision:      current.Revision,
+		ScriptSetGeneration: current.Record.ScriptSetGeneration,
+		CreatedAt:           at,
 	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
+	task.Intent, err = input.Reference()
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	task.ExpectedItems = 1
+	task.UpdatedAt = at
+	locator := idempotency.IdempotencyLocator{
+		ScopeKind: idempotency.IdempotencyScopeEnvironment,
+		ScopeID:   task.Scope.EnvironmentID,
+		Method:    http.MethodDelete,
+		Route:     scriptDeletionRoute,
+		Key:       request.Key,
+	}
+	authority, item, err := service.repository.PrepareScriptRemovalAuthority(
+		ctx,
+		environment,
+		project,
+		target,
+		current,
+		input,
+		task,
+		accepted.Revision,
+		locator,
+	)
+	return taskdependencies.Prepared{Task: task, Graph: []workexecution.Item{item}, Authority: authority}, err
 }

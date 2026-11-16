@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -54,6 +55,7 @@ func (service *RestoreService) prepareRestoreIntent(ctx context.Context, environ
 		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: environmentID}}, Query: requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(request.After)},
 			requestidempotency.Field{Name: "source_id", Value: requestidempotency.String(request.SourceID)},
 			requestidempotency.Field{
 				Name:  "recovery_point_id",

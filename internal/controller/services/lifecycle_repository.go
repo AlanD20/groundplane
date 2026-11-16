@@ -6,13 +6,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/servicelifecyclework"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"time"
 )
@@ -39,7 +39,7 @@ type serviceLifecycleRepository interface {
 		string,
 		int64,
 	) (etcdstore.Versioned[releaserender.ReleaseRenderInput], error)
-	PublishServiceLifecycle(
+	PrepareServiceLifecycle(
 		context.Context,
 		*etcdstore.Versioned[hierarchyrecord.TenantRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -48,8 +48,8 @@ type serviceLifecycleRepository interface {
 		servicelifecyclework.Input,
 		*taskconfiguration.BackingHookEncryptedInputs,
 		time.Time,
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+		workqueue.TaskSnapshot,
+	) (etcd.ServiceLifecyclePublication, error)
 }
 
 func (repository *MutationRepository) GetTenant(
@@ -94,7 +94,7 @@ func (repository *MutationRepository) ResolveLifecycleHost(ctx context.Context) 
 	return repository.hierarchy.ResolveResourceHost(ctx)
 }
 
-func (repository *MutationRepository) PublishServiceLifecycle(
+func (repository *MutationRepository) PrepareServiceLifecycle(
 	ctx context.Context,
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -103,9 +103,9 @@ func (repository *MutationRepository) PublishServiceLifecycle(
 	input servicelifecyclework.Input,
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	deadline time.Time,
-	marker idempotencyrecord.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.services.PublishServiceLifecycle(
-		ctx, tenant, project, environment, current, input, hookInputs, deadline, marker,
+	accepted workqueue.TaskSnapshot,
+) (etcd.ServiceLifecyclePublication, error) {
+	return repository.services.PrepareServiceLifecycle(
+		ctx, tenant, project, environment, current, input, hookInputs, deadline, accepted,
 	)
 }

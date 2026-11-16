@@ -100,6 +100,7 @@ func (s *Server) removeEntry(
 	}
 	outcome, err := s.entryMutations.RemoveEntry(ctx, entrycapability.RemoveRequest{
 		EntryID: request.ID, IdempotencyKey: request.IdempotencyKey,
+		After: taskRunAfter(request.Body).After,
 	})
 	if err != nil {
 		return nil, normalizeProjectError(err)

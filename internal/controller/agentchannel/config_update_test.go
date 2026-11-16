@@ -13,8 +13,16 @@ func TestConfigUpdateDrainsBeforeDelivery(t *testing.T) {
 	server, peer, authenticate := nativeConnectFixture(t)
 	server.auth = &fakeAuthenticator{
 		authorization: Authorization{Generation: 1,
-			Config: &agentpb.AgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 2, MaxParallelOperationsPerTask: 1}},
-		configuration: &agentpb.AgentConfig{PullIntervalSeconds: 5, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1},
+			Config: &agentpb.AgentConfig{
+				PullIntervalSeconds:          2,
+				MaxConcurrentTasks:           2,
+				MaxParallelOperationsPerTask: 1,
+			}},
+		configuration: &agentpb.AgentConfig{
+			PullIntervalSeconds:          5,
+			MaxConcurrentTasks:           1,
+			MaxParallelOperationsPerTask: 1,
+		},
 	}
 	stream := &nativeDispatchStream{ctx: t.Context(), received: []*agentpb.AgentMessage{
 		authenticate, nativeConnectReplayComplete(), nativeConnectReady(1), nativeConnectReady(2),

@@ -5,8 +5,6 @@ import { newULID } from "@/lib/utils";
 
 export type RunnerCheckRequest = components["schemas"]["RunnerCheckRequest"];
 export type RunnerCheckResult = components["schemas"]["RunnerCheckResult"];
-type RunnerRead =
-  operations["runner.show"]["responses"][200]["content"]["application/json"];
 type Accepted =
   operations["runner.check"]["responses"][202]["content"]["application/json"];
 type Submission = { key: string; body?: RunnerCheckRequest };
@@ -28,26 +26,8 @@ export function releaseRunnerCheck(runnerId: string, pending: Submission) {
   if (submissions.get(runnerId) === pending) submissions.delete(runnerId);
 }
 
-export async function runnerCheckRequest(
-  runnerId: string,
-  signal: AbortSignal,
-): Promise<RunnerCheckRequest> {
-  const runner = await controllerRequest<RunnerRead>(
-    `/runners/${encodeURIComponent(runnerId)}`,
-    200,
-    { signal },
-  );
-  if (
-    runner.id !== runnerId ||
-    runner.lifecycle !== "ready" ||
-    runner.revision === undefined ||
-    !Number.isSafeInteger(runner.revision) ||
-    runner.revision <= 0
-  )
-    throw new Error(
-      "Runner must be registered and ready. Refresh before testing.",
-    );
-  return { revision: runner.revision };
+export function runnerCheckRequest(after: string[]): RunnerCheckRequest {
+  return { after: [...after] };
 }
 
 export async function startRunnerCheck(

@@ -6,7 +6,7 @@ import (
 
 	contract "github.com/AlanD20/groundplane/internal/common/edgeconnectioncheck"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/imagefence"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -24,7 +24,7 @@ func (service *Service) CheckTunnelConnections(
 		ids.Validate(
 			ids.KindService,
 			input.OriginServiceID,
-		) != nil || input.Revision <= 0 || input.OriginPort == 0 || target.Validate() != nil {
+		) != nil || input.Revision < 0 || input.OriginPort == 0 || target.Validate() != nil {
 		return idempotency.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Tunnel check requires its current revision, an origin Service HTTP port and a concrete public hostname/path",
@@ -46,6 +46,7 @@ func (service *Service) CheckTunnelConnections(
 			requestidempotency.Field{Name: "origin_port", Value: requestidempotency.Integer(int64(input.OriginPort))},
 			requestidempotency.Field{Name: "hostname", Value: requestidempotency.String(input.Hostname)},
 			requestidempotency.Field{Name: "path", Value: requestidempotency.String(input.Path)},
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
 		))}
 	version, digest, err := requestidempotency.Canonicalize(ctx, intent)
 	if err != nil {
@@ -71,20 +72,18 @@ func (service *Service) CheckTunnelConnections(
 	if err != nil || existing {
 		return resolution.Response, err
 	}
-	ctx = imagefence.WithScope(ctx)
-	source, err := service.routes.LoadTunnelCheckSource(
+	return acceptCheck(
 		ctx,
+		service,
 		environmentID,
 		connectorID,
-		input.Revision,
-		input.OriginServiceID,
-		input.OriginPort,
-		target,
+		input.Hostname,
+		"tunnel-check",
+		input.After,
+		input,
+		locator,
+		evidence,
 	)
-	if err != nil {
-		return idempotency.IdempotencyResponse{}, err
-	}
-	return service.admitSource(ctx, environmentID, source, locator, evidence)
 }
 
 func (service *Service) GetTunnelConnectionCheck(

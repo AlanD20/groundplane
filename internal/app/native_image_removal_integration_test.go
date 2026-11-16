@@ -38,9 +38,9 @@ func TestImageInventoryRemainsReadableWhenProtectionCannotBeVerified(t *testing.
 		inventory.Images[0].Tags[0] != "nginx:latest" {
 		t.Fatalf("inventory lost or unprotected: %#v %v", inventory, err)
 	}
-	if _, err := f.service.RemoveImage(t.Context(), accepted.ConfigDigest, "reject-unverified-removal"); err == nil ||
-		f.registry.removals != 0 {
-		t.Fatalf("unverified removal reached Docker: %v", err)
+	failure := f.rejectRemoval(t, accepted.ConfigDigest, "reject-unverified-removal")
+	if failure.Code == "" || f.registry.removals != 0 {
+		t.Fatal("unverified removal reached Docker")
 	}
 }
 
@@ -79,11 +79,9 @@ func TestNativeImageRemovalProtectsRunnerAndContainersWithoutGlobalHistoryLock(t
 		t.Fatalf("incorrect protection: %#v", inventory.Images)
 	}
 	for _, image := range f.registry.images[1:] {
-		if _, err := f.service.RemoveImage(t.Context(), image.ID, "protected-"+image.ID); !errors.Is(
-			err,
-			errs.New(errs.KindResourceInUse, ""),
-		) {
-			t.Fatalf("protected image accepted removal: %v", err)
+		failure := f.rejectRemoval(t, image.ID, "protected-"+image.ID)
+		if failure.Code != string(errs.New(errs.KindResourceInUse, "").ToProblem().Code) {
+			t.Fatalf("protected image accepted removal: %#v", failure)
 		}
 	}
 	f.registry.removeEnabled = true
@@ -163,7 +161,7 @@ func TestNativeImageRemovalFencesPublicationAndPreservesUnknownEffects(t *testin
 				if err := f.service.Settle(t.Context(), f.queue, delivery, time.Now().UTC()); err != nil {
 					t.Fatal(err)
 				}
-				replayed, err := f.service.RemoveImage(t.Context(), image, "native-image-removal")
+				replayed, err := f.service.RemoveImage(t.Context(), image, "native-image-removal", nil)
 				var same api.TaskAccepted
 				if err != nil {
 					t.Fatal(err)
@@ -179,13 +177,16 @@ func TestNativeImageRemovalFencesPublicationAndPreservesUnknownEffects(t *testin
 
 func nativeAcceptImageRemoval(t *testing.T, f *nativeImageFixture, image string) api.TaskAccepted {
 	t.Helper()
-	response, err := f.service.RemoveImage(t.Context(), image, "native-image-removal")
+	response, err := f.service.RemoveImage(t.Context(), image, "native-image-removal", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var accepted api.TaskAccepted
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatal(err)
+	}
+	if task := f.prepare(t, accepted.TaskID); task.Intent == (workexecution.Input{}) {
+		t.Fatal("image removal preparation failed")
 	}
 	return accepted
 }

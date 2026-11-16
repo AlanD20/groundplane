@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { readCheckTaskResult } from "@/features/task/check-result";
+import type { TaskResponse } from "@/features/task/api";
 import { newULID } from "@/lib/utils";
 import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { retryTask, type TaskRetryRequest } from "@/features/task/api";
@@ -11,12 +13,6 @@ import {
   type ConnectorCheckResult,
 } from "./api";
 
-const activePhases = new Set<ConnectorCheckResult["phase"]>([
-  "ready",
-  "checking",
-  "cleaning",
-]);
-
 export function useConnectorCheck(
   environmentId: string,
   identity: string,
@@ -25,6 +21,7 @@ export function useConnectorCheck(
   connectorId?: string,
 ) {
   const [taskId, setTaskId] = useState(initialTaskId ?? "");
+  const [taskDetail, setTaskDetail] = useState<TaskResponse | null>(null);
   const [result, setResult] = useState<ConnectorCheckResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -48,6 +45,7 @@ export function useConnectorCheck(
     const current = ++generation.current;
     const controller = new AbortController();
     setTaskId(initialTaskId ?? "");
+    setTaskDetail(null);
     setResult(null);
     setError(null);
     setSending(false);
@@ -97,16 +95,19 @@ export function useConnectorCheck(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
-        const next = await getConnectorCheck(
-          environmentId,
+        const next = await readCheckTaskResult(
           taskId,
           controller.signal,
+          () => getConnectorCheck(environmentId, taskId, controller.signal),
+          setTaskDetail,
         );
         if (controller.signal.aborted) return;
-        setResult(next);
+        setResult(next.result);
         setError(null);
-        if (activePhases.has(next.phase))
-          timer = setTimeout(() => void poll(), 1000);
+        timer = setTimeout(
+          () => void poll(),
+          next.taskDetail.task.finished_at ? 10000 : 1000,
+        );
       } catch (cause) {
         if (!controller.signal.aborted)
           setError(
@@ -123,7 +124,10 @@ export function useConnectorCheck(
     };
   }, [environmentId, taskId, open, reload]);
 
-  async function run(getRequest: () => Promise<ConnectorCheckRequest>) {
+  async function run(
+    getRequest: () => Promise<ConnectorCheckRequest>,
+    after: string[] = [],
+  ) {
     if (submitting.current || loadingLatest) return;
     submitting.current = true;
     const runGeneration = generation.current;
@@ -136,7 +140,7 @@ export function useConnectorCheck(
     try {
       // Preserve the exact body and key when acceptance is uncertain. A fresh
       // detail read on retry could select a different revision under that key.
-      request.input ??= await getRequest();
+      request.input ??= { ...(await getRequest()), after: [...after] };
       if (generation.current !== runGeneration) return;
       const accepted = await checkConnectorConnection(
         environmentId,
@@ -146,6 +150,7 @@ export function useConnectorCheck(
       if (generation.current !== runGeneration) return;
       intent.current = null;
       testedIdentity.current = runIdentity;
+      setTaskDetail(null);
       setResult(null);
       setTaskId(accepted);
       setReload((value) => value + 1);
@@ -185,8 +190,10 @@ export function useConnectorCheck(
       const next = await retryTask(taskId, captured.input, captured.key);
       if (generation.current === runGeneration) {
         cleanupIntent.current = null;
+        setTaskDetail(null);
         setResult(null);
         setTaskId(next);
+        setReload((value) => value + 1);
       }
     } catch (cause) {
       if (generation.current === runGeneration)
@@ -200,9 +207,11 @@ export function useConnectorCheck(
       }
     }
   }
-  const active = !!taskId && (!result || activePhases.has(result.phase));
+  const active = !!taskId && !taskDetail?.task.finished_at;
   return {
     taskId,
+    taskDetail,
+    uncertain: intent.current !== null,
     result,
     error,
     sending,

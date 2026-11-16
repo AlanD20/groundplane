@@ -4,6 +4,7 @@ package taskinspection
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -96,6 +97,10 @@ type Summary struct {
 	HistoryExpired                 bool
 	StopRequested                  bool
 	Cancel                         ActionAvailability
+	After                          []string
+	PendingPreparation             bool
+	Dependencies                   *workexecution.TaskDependencyDecision
+	PreparationWait                *workexecution.Wait
 }
 
 type Work struct {
@@ -139,7 +144,11 @@ func (service *Service) WorkPage(ctx context.Context, taskID, after string, limi
 	if err != nil {
 		return Page{}, err
 	}
-	result := Page{Task: summarize(task.Task), Revision: readRevision, Work: []Work{}}
+	summary, err := service.summarizeDependencies(ctx, task.Task, readRevision)
+	if err != nil {
+		return Page{}, err
+	}
+	result := Page{Task: summary, Revision: readRevision, Work: []Work{}}
 	if result.Task.HistoryExpired {
 		return result, nil
 	}
@@ -233,5 +242,46 @@ func summarize(task workexecution.Task) Summary {
 	return Summary{ID: task.ID, Action: task.Action, TargetID: task.TargetID, TargetName: task.TargetName,
 		Scope: task.Scope, Actor: task.Actor, Status: status, Counts: task.Progress, ResourceKind: resourceKind(task.TargetID),
 		CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt, Deadline: task.Deadline, FinishedAt: task.FinishedAt,
-		HistoryExpired: task.CollectionStartedAt != nil, StopRequested: task.Stop != nil, Cancel: cancellation(task)}
+		HistoryExpired: task.CollectionStartedAt != nil, StopRequested: task.Stop != nil, Cancel: cancellation(task),
+		After: slices.Clone(task.After), PendingPreparation: task.PendingPreparation()}
+}
+
+func (service *Service) summarizeDependencies(
+	ctx context.Context,
+	task workexecution.Task,
+	revision int64,
+) (Summary, error) {
+	summary := summarize(task)
+	if task.PendingPreparation() {
+		wait, err := service.queue.ReadAcceptedPreparationWait(ctx, task.ID, revision)
+		if err != nil {
+			return Summary{}, err
+		}
+		summary.PreparationWait = wait
+		if wait != nil && task.Stop == nil {
+			summary.Status = "waiting"
+		}
+	}
+	if len(task.After) == 0 || task.CollectionStartedAt != nil {
+		return summary, nil
+	}
+	dependencies, _, err := service.queue.ReadTaskDependencies(ctx, task.ID, revision)
+	if err != nil {
+		return Summary{}, err
+	}
+	if dependencies.Revision == 0 {
+		return Summary{}, errs.New(errs.KindInternal, "Task dependency state is unavailable")
+	}
+	decision, err := dependencies.Record.Decision()
+	if err != nil {
+		return Summary{}, err
+	}
+	if task.FinishedAt != nil {
+		decision.Waiting = nil
+	}
+	summary.Dependencies = &decision
+	if task.PendingPreparation() && task.Stop == nil && !decision.Ready {
+		summary.Status = "waiting"
+	}
+	return summary, nil
 }

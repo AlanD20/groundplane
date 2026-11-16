@@ -33,32 +33,39 @@ type ServiceRemovalPublication struct {
 	Input       serviceremovalwork.Input
 	Deadline    time.Time
 	Marker      idempotency.IdempotencyMarker
+	Accepted    workqueue.TaskSnapshot
 }
 
-// PublishServiceRemoval protects the sealed desired revision and captured
+// PrepareServiceRemoval protects the sealed desired revision and captured
 // runtime while publishing native work. The visible Service/head remain until
 // execution proves the workload absent and finalization commits atomically.
-func (repository *ServiceRepository) PublishServiceRemoval(
+func (repository *ServiceRepository) PrepareServiceRemoval(
 	ctx context.Context,
 	request ServiceRemovalPublication,
-) (_ IdempotencyTransactionResult, resultErr error) {
+) (result ServiceRemovalCapture, resultErr error) {
 	input, marker, claim := request.Input, request.Marker, request.Claim
 	input, configurationGuards, err := repository.captureRemovalConfiguration(ctx, input, request.Baseline.ReadRevision)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	if err := validateServiceLifecycleHierarchy(&request.Tenant, request.Project, request.Environment, request.Service); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	if err := serviceremovalwork.ValidateCandidate(input, request.Baseline.Record, request.Candidate); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	if input.Scope != (workexecution.Scope{TenantID: request.Tenant.Record.ID, ProjectID: request.Project.Record.ID, EnvironmentID: request.Environment.Record.ID}) ||
 		request.Baseline.Revision != input.HeadRevision ||
 		claim.TaskID != input.TaskID ||
 		claim.RevisionID != input.DesiredRevisionID ||
-		!claim.CreatedAt.Equal(input.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
+		!claim.CreatedAt.Equal(request.Accepted.Task.CreatedAt) ||
+		input.CreatedAt.Before(request.Accepted.Task.CreatedAt) ||
+		request.Accepted.Revision <= 0 ||
+		!request.Accepted.Task.PendingPreparation() ||
+		request.Accepted.Task.ID != input.TaskID ||
+		request.Accepted.Task.TargetID != input.ServiceID ||
+		request.Accepted.Task.Scope != input.Scope {
+		return ServiceRemovalCapture{}, errs.New(
 			errs.KindValidationFailed,
 			"Service removal sources do not describe one resource snapshot",
 		)
@@ -72,14 +79,11 @@ func (repository *ServiceRepository) PublishServiceRemoval(
 		!blueprints.SameBlueprintProtectedIntent(
 			marker.Intent,
 			claim.Intent,
-		) || !marker.CreatedAt.Equal(input.CreatedAt) || !marker.UpdatedAt.Equal(input.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
+		) || !marker.CreatedAt.Equal(request.Accepted.Task.CreatedAt) || !marker.UpdatedAt.Equal(request.Accepted.Task.CreatedAt) {
+		return ServiceRemovalCapture{}, errs.New(
 			errs.KindValidationFailed,
 			"Service removal replay marker differs from its action",
 		)
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
-		return existing, err
 	}
 	fence, err := environmentfence.LoadOrdinary(
 		ctx,
@@ -88,16 +92,16 @@ func (repository *ServiceRepository) PublishServiceRemoval(
 		request.Baseline.ReadRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	references, err := repository.validateServiceRemovalReferences(ctx, request.Service, request.Baseline)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	dns, err := dnsrecords.NewReader(repository.store).
 		PrepareServiceWithdrawal(ctx, input.ServiceID, request.Baseline.ReadRevision)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	scripts, err := scriptsourceevidence.PrepareServiceScriptAbsence(
 		ctx,
@@ -106,7 +110,7 @@ func (repository *ServiceRepository) PublishServiceRemoval(
 		request.Baseline.ReadRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	publication, err := composeHierarchyRepository(repository.store).prepareEnvironmentDirectPublication(ctx, claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{
@@ -115,11 +119,11 @@ func (repository *ServiceRepository) PublishServiceRemoval(
 		},
 		request.Candidate, marker, input.HeadRevision)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	defer clear(publication.publishedDescriptor)
 	if hex.EncodeToString(publication.seal.ProjectionSHA256[:]) != input.DesiredSHA256 {
-		return IdempotencyTransactionResult{}, errs.New(
+		return ServiceRemovalCapture{}, errs.New(
 			errs.KindStateConflict,
 			"Service removal sealed desired bytes changed",
 		)
@@ -129,11 +133,11 @@ func (repository *ServiceRepository) PublishServiceRemoval(
 	identities, err := prepareEnvironmentDesiredIdentityPublication(ctx, repository.store, request.Candidate,
 		claim.SourceKind, input.HeadRevision, request.Baseline.ReadRevision)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	defer identities.clear()
 	defer func() {
-		if resultErr != nil {
+		if result.repository == nil {
 			resultErr = repository.abandonRemovalSecretPreparation(ctx, input, resultErr)
 		}
 	}()
@@ -145,23 +149,23 @@ func (repository *ServiceRepository) PublishServiceRemoval(
 			configurationGuards,
 			keyvalue.Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 			keyvalue.Condition{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
-			keyvalue.Condition{Key: workqueue.TaskKey(input.TaskID)},
+			keyvalue.Condition{Key: workqueue.TaskKey(input.TaskID), ModRevision: request.Accepted.Revision},
 			keyvalue.Condition{Key: workqueue.ItemKey(input.WorkItemID)},
 			keyvalue.Condition{Key: serviceremovalwork.InputKey(input.WorkItemID)},
 		),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	defer keyvalue.ClearMutationValues(pinChange.Mutations)
-	_, change, err := serviceremovalwork.PrepareAdmission(input, request.Service, request.Deadline, marker)
+	item, change, err := serviceremovalwork.PrepareCapture(input, request.Service, request.Deadline)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	defer keyvalue.ClearMutationValues(change.Mutations)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	defer clear(epoch.Value)
 	conditions := append(change.Conditions, references.Conditions()...)
@@ -203,7 +207,7 @@ func (repository *ServiceRepository) PublishServiceRemoval(
 	mutations = append(mutations, pinChange.Mutations...)
 	conditions, err = mergeServiceRemovalConditions(conditions)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	initiation, err := newEnvironmentTaskInitiation(
 		&request.Tenant,
@@ -212,22 +216,24 @@ func (repository *ServiceRepository) PublishServiceRemoval(
 		taskjournal.TaskActorOperator,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
 	classify := idempotencyPlanClassifier(func(_ int64, _ []*keyvalue.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "Service or its references changed before removal; retry the action")
 	})
 	conditions, classify, err = prepareTaskInitiationFences(initiation, conditions, classify)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return ServiceRemovalCapture{}, err
 	}
-	plan, err := newIdempotencyMutationPlanForMarker(idempotency.IdempotencyMarkerTask, conditions, mutations, classify)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
+	owned := make([]keyvalue.Mutation, len(mutations))
+	for index, mutation := range mutations {
+		owned[index] = mutation
+		owned[index].Value = append([]byte(nil), mutation.Value...)
 	}
-	receipts, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return receipts.Apply(ctx, marker, plan)
+	return ServiceRemovalCapture{
+		Input:      input,
+		Item:       item,
+		Change:     workqueue.Change{Conditions: conditions, Mutations: owned},
+		repository: repository,
+	}, nil
 }

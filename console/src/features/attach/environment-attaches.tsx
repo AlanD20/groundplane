@@ -309,7 +309,8 @@ export function DetachAttach({
         destructive
         confirmText={g?.name ?? "detach"}
         startLabel="Detach"
-        onDispatch={() => store.removeAttach(env.id, attach.id)}
+        runAfter
+        onDispatch={(after) => store.removeAttach(env.id, attach.id, after)}
       />
     </>
   );

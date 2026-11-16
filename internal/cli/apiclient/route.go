@@ -11,20 +11,20 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (c *Client) CreateRoute(ctx context.Context, input apiTypes.RouteCreate) (apiTypes.RouteTaskAccepted, error) {
+func (c *Client) CreateRoute(ctx context.Context, input apiTypes.RouteCreate) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.RouteTaskAccepted{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	exposure := generated.RouteCreateExposure(input.Exposure)
 	if !exposure.Valid() {
-		return apiTypes.RouteTaskAccepted{}, errs.New(
+		return apiTypes.TaskAccepted{}, errs.New(
 			errs.KindValidationFailed,
 			"Route exposure must be public or internal",
 		)
 	}
 	body := generated.RouteCreateJSONRequestBody{
-		EnvironmentId: input.EnvironmentID, Exposure: exposure,
+		After: optionalServiceStrings(input.After), EnvironmentId: input.EnvironmentID, Exposure: exposure,
 		TargetServiceId: input.TargetServiceID, TargetPort: int32(input.TargetPort),
 	}
 	if input.Host != "" {
@@ -37,27 +37,14 @@ func (c *Client) CreateRoute(ctx context.Context, input apiTypes.RouteCreate) (a
 		ctx, &generated.RouteCreateParams{IdempotencyKey: ids.NewULID()}, body,
 	)
 	if err != nil {
-		return apiTypes.RouteTaskAccepted{}, generatedCallError(ctx, http.MethodPost, "/api/v1/routes", err)
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, "/api/v1/routes", err)
 	}
 	if err := generatedResponseError(
 		http.MethodPost, "/api/v1/routes", response.HTTPResponse, response.Body, http.StatusAccepted,
 	); err != nil {
-		return apiTypes.RouteTaskAccepted{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
-	parsed := response.JSON202
-	if parsed == nil {
-		parsed = &generated.RouteTaskAccepted{}
-		if err := decodeSingleJSON(
-			http.MethodPost, "/api/v1/routes", bytes.NewReader(response.Body), parsed,
-		); err != nil {
-			return apiTypes.RouteTaskAccepted{}, err
-		}
-	}
-	route, err := routeFromGenerated(parsed.Route)
-	if err != nil {
-		return apiTypes.RouteTaskAccepted{}, err
-	}
-	return apiTypes.RouteTaskAccepted{Route: route, TaskID: parsed.TaskId}, nil
+	return generatedTaskAccepted(http.MethodPost, "/api/v1/routes", response.Body, response.JSON202)
 }
 
 func (c *Client) ListRoutes(
@@ -143,15 +130,15 @@ func (c *Client) EditRoute(
 	ctx context.Context,
 	id string,
 	input apiTypes.RouteEdit,
-) (apiTypes.RouteTaskAccepted, error) {
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.RouteTaskAccepted{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
 	path := "/api/v1/routes/" + id
 	exposure := generated.RouteEditExposure(input.Exposure)
 	if !exposure.Valid() {
-		return apiTypes.RouteTaskAccepted{}, errs.New(
+		return apiTypes.TaskAccepted{}, errs.New(
 			errs.KindValidationFailed,
 			"Route exposure must be public or internal",
 		)
@@ -160,31 +147,20 @@ func (c *Client) EditRoute(
 		ctx,
 		id,
 		&generated.RouteEditParams{IdempotencyKey: ids.NewULID()},
-		generated.RouteEditJSONRequestBody{Exposure: exposure},
+		generated.RouteEditJSONRequestBody{Exposure: exposure, After: optionalServiceStrings(input.After)},
 	)
 	if err != nil {
-		return apiTypes.RouteTaskAccepted{}, generatedCallError(ctx, http.MethodPatch, path, err)
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPatch, path, err)
 	}
 	if err := generatedResponseError(
 		http.MethodPatch, path, response.HTTPResponse, response.Body, http.StatusAccepted,
 	); err != nil {
-		return apiTypes.RouteTaskAccepted{}, err
+		return apiTypes.TaskAccepted{}, err
 	}
-	parsed := response.JSON202
-	if parsed == nil {
-		parsed = &generated.RouteTaskAccepted{}
-		if err := decodeSingleJSON(http.MethodPatch, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.RouteTaskAccepted{}, err
-		}
-	}
-	route, err := routeFromGenerated(parsed.Route)
-	if err != nil {
-		return apiTypes.RouteTaskAccepted{}, err
-	}
-	return apiTypes.RouteTaskAccepted{Route: route, TaskID: parsed.TaskId}, nil
+	return generatedTaskAccepted(http.MethodPatch, path, response.Body, response.JSON202)
 }
 
-func (c *Client) RemoveRoute(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) RemoveRoute(ctx context.Context, id string, after []string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -194,6 +170,7 @@ func (c *Client) RemoveRoute(ctx context.Context, id string) (apiTypes.TaskAccep
 		ctx,
 		id,
 		&generated.RouteRemoveParams{IdempotencyKey: ids.NewULID()},
+		generated.RouteRemoveJSONRequestBody{After: optionalServiceStrings(after)},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)

@@ -8,6 +8,7 @@ import (
 
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -21,6 +22,7 @@ const (
 )
 
 type entryEditInput struct {
+	After    []string
 	Source   core.EntrySource
 	Exposure []string
 }
@@ -94,6 +96,7 @@ func (service *durableEntryEditIdempotency) Prepare(
 		Path:   []requestidempotency.PathBinding{{Name: "id", Value: entryID}},
 		Query:  requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
 			requestidempotency.Field{Name: "exposure", Value: canonicalEntryExposure(input.Exposure)},
 			requestidempotency.Field{Name: "source", Value: canonicalEntryEditSource(input.Source)},
 		)),

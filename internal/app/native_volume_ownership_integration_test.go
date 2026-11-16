@@ -76,7 +76,7 @@ func TestNativeVolumeRemovalOwnershipSettlementAndRetry(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := journal.Begin(t.Context(), parent); err != nil {
+				if err := commitNativeHierarchyCapture(t, f, journal, parent); err != nil {
 					t.Fatal(err)
 				}
 			}

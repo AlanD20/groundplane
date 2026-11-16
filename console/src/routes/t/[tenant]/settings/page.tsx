@@ -251,7 +251,8 @@ export default function TenantSettingsPage() {
         destructive
         confirmText={tenant.slug}
         startLabel="Delete tenant"
-        onDispatch={() => store.removeTenant(tenant.id)}
+        runAfter
+        onDispatch={(after) => store.removeTenant(tenant.id, after)}
         onCommit={() => navigate("/platform/overview", { replace: true })}
       />
     </div>

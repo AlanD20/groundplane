@@ -42,6 +42,7 @@ type RunnerPage struct {
 }
 
 type RunnerCreateRequest struct {
+	After             []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 	AutoUpdate        bool     `json:"auto_update"`
 	Slug              string   `json:"slug"`
 	TenantID          string   `json:"tenant_id,omitempty"`

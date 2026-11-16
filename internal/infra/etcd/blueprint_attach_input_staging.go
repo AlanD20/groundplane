@@ -29,12 +29,16 @@ func (repository *EnvironmentBlueprintRepository) stageBlueprintAttachInputs(
 	if len(prepared.generations) == 0 {
 		return nil
 	}
+	taskGuard, err := blueprintStagingTaskCondition(ctx, repository.store, parent)
+	if err != nil {
+		return err
+	}
 	sealKey := blueprints.EnvironmentBlueprintRevisionPrefixFinal(
 		parent.Scope.EnvironmentID,
 		parent.ID,
 	) + "attach-input-seal"
 	guards := append(slices.Clone(consumerGuards), descriptor,
-		keyvalue.Condition{Key: workqueue.TaskKey(parent.ID)}, keyvalue.Condition{Key: sealKey})
+		taskGuard, keyvalue.Condition{Key: sealKey})
 	digest := sha256.New()
 	var remaining []keyvalue.Mutation
 	for _, mutation := range prepared.mutations {

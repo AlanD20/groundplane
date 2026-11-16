@@ -32,10 +32,30 @@ type ServiceObserver interface {
 type ServiceMutator interface {
 	CreateService(context.Context, apiTypes.ServiceCreate, string) (idempotencyrecord.IdempotencyResponse, error)
 	EditService(context.Context, string, apiTypes.ServiceEdit, string) (idempotencyrecord.IdempotencyResponse, error)
-	RemoveService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	StartService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	StopService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	DestroyService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveService(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	StartService(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	StopService(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	DestroyService(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type serviceListInput struct {
@@ -64,8 +84,9 @@ type serviceEditInput struct {
 }
 
 type serviceRemoveInput struct {
-	ID             string `path:"id" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID             string                        `path:"id" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type serviceDetailOutput struct{ Body apiTypes.ServiceDetail }
@@ -255,7 +276,12 @@ func (s *Server) removeService(ctx context.Context, request *serviceRemoveInput)
 	if s.serviceMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Service mutator is not configured")
 	}
-	response, err := s.serviceMutations.RemoveService(ctx, request.ID, request.IdempotencyKey)
+	response, err := s.serviceMutations.RemoveService(
+		ctx,
+		request.ID,
+		taskRunAfter(request.Body),
+		request.IdempotencyKey,
+	)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Error("controller: remove Service", slog.String("service_id", request.ID), slog.Any("error", err))

@@ -15,6 +15,7 @@ type BackingServiceCreate struct {
 	Hooks          *BackingHookConfiguration `json:"hooks,omitempty"`
 	Resources      *ServiceResources         `json:"resources,omitempty" doc:"Optional CPU/RAM limits enforced from the first container start."`
 	CustomVolume   *BackingCustomVolume      `json:"custom_volume,omitempty" doc:"Optional initial persistent Volume for Custom only; managed adapters own their storage layout."`
+	After          []string                  `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 }
 
 type BackingCustomVolume struct {
@@ -52,9 +53,4 @@ type BackingServiceZoneCreate struct {
 	Name     string `json:"name"`
 	Subnet   string `json:"subnet"`
 	Internal bool   `json:"internal"`
-}
-
-type BackingServiceCreated struct {
-	BackingService BackingService `json:"backing_service"`
-	TaskID         string         `json:"task_id"`
 }

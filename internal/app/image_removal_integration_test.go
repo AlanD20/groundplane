@@ -143,11 +143,8 @@ func TestImageRemovalProtectsRetainedReleaseWithoutContainers(t *testing.T) {
 	if err != nil || len(inventory.Images) != 1 || inventory.Images[0].RemovalBlocked != "Retained Release "+releaseID {
 		t.Fatalf("retained Release lost image protection without runtime: %#v %v", inventory, err)
 	}
-	if _, err := f.service.RemoveImage(t.Context(), imageID, "remove-retained-image"); !errors.Is(
-		err,
-		errs.New(errs.KindResourceInUse, ""),
-	) ||
-		f.registry.removals != 0 {
-		t.Fatalf("retained image removal: %v calls=%d", err, f.registry.removals)
+	failure := f.rejectRemoval(t, imageID, "remove-retained-image")
+	if failure.Code != string(errs.New(errs.KindResourceInUse, "").ToProblem().Code) || f.registry.removals != 0 {
+		t.Fatalf("retained image removal: %#v calls=%d", failure, f.registry.removals)
 	}
 }

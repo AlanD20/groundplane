@@ -164,6 +164,20 @@ allowing at most nine operations in total. Sequential stages of one operation do
 not consume extra slots; dependencies and resource authority can further restrict
 parallel execution.
 
+An operator Task may name up to 16 existing whole Tasks as immutable
+prerequisites. Acceptance preserves only pure authored intent and request identity.
+Until every prerequisite succeeds and fully settles, the dependent Task cannot
+capture mutable execution inputs, claim resources or consume execution capacity.
+A prerequisite failure prevents dependent effects. These dependencies are distinct
+from operation dependencies inside a Task; request replay preserves the exact list.
+
+Simple actions have an immutable 24-hour acceptance deadline for dependency
+waiting and preparation. Their native work keeps its existing feature timeout,
+measured from actual capture and clamped to the Task deadline. Release actions
+retain their configured whole-Task deadline. Waiting does not extend a deadline
+or reserve an execution slot. Expiry, cancellation and preparation failure retain
+an explicit operator-facing reason.
+
 Workload effects run through typed Agent Tasks. Native Controller Tasks own
 bootstrap, Runner, connection-check and persistence orchestration. Bootstrap
 and persistence-only operations do not require an Agent; a Backing access check

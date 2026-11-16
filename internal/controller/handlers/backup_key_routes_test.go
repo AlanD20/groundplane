@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"io"
 	"log/slog"
 	"net/http"
@@ -27,8 +28,10 @@ func (service *fakeBackupKeyService) ExportBackupKey(context.Context, string) (b
 }
 
 func (service *fakeBackupKeyService) RotateBackupKey(
-	context.Context, string, string,
-
+	context.Context,
+	string,
+	string,
+	apiTypes.TaskRunAfterRequest,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	service.rotates++
 	service.rotated = []byte("{\"task_id\":\"task_01ARZ3NDEKTSV4RRFFQ69G5FAV\"}")
@@ -101,7 +104,7 @@ func TestBackupKeyRotationWritesOwnedTaskAcceptedBody(t *testing.T) {
 	}
 }
 
-// Rationale: both bodyless key operations must reject ignored request bytes
+// Rationale: key operations must reject malformed request bytes
 // before invoking either secret-bearing service boundary.
 func TestBackupKeyMutationRoutesRejectBodies(t *testing.T) {
 	service := &fakeBackupKeyService{}
@@ -114,7 +117,7 @@ func TestBackupKeyMutationRoutesRejectBodies(t *testing.T) {
 		request := httptest.NewRequest(
 			http.MethodPost,
 			"/api/v1/environments/"+environmentID+"/"+route,
-			bytes.NewBufferString("{}"),
+			bytes.NewBufferString("{"),
 		)
 		request.Header.Set("Content-Type", "application/json")
 		if route == "rotate-key" {

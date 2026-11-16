@@ -69,8 +69,8 @@ func TestProductionHTTPPolicyIsPinned(t *testing.T) {
 }
 
 // Delivery: registered Backup route policy; no Backup handler or effect is executed.
-// Rationale: A bodyless Backup run must not silently inherit JSON input handling.
-func TestBackupRunRouteIsBodyless(t *testing.T) {
+// Rationale: Backup run accepts the typed Run after JSON input under normal body limits.
+func TestBackupRunRouteUsesJSONBodyPolicy(t *testing.T) {
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
 	request := httptest.NewRequest(
 		http.MethodPost,
@@ -81,8 +81,8 @@ func TestBackupRunRouteIsBodyless(t *testing.T) {
 	if pattern != "POST /api/v1/environments/{id}/backup-run" {
 		t.Fatalf("backup run pattern = %q", pattern)
 	}
-	if policy := server.policyFor(request); policy.body != bodyless {
-		t.Fatalf("backup run body policy = %d, want bodyless", policy.body)
+	if policy := server.policyFor(request); policy.body != jsonBody {
+		t.Fatalf("backup run body policy = %d, want JSON", policy.body)
 	}
 }
 

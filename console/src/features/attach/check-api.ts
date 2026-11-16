@@ -1,7 +1,6 @@
 import type { operations } from "@/lib/api.generated";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { requireTaskId } from "@/features/task/journal-model";
-import type { AttachPageResponse } from "./api";
 
 export type BackingCheckRequest =
   operations["attach.check"]["requestBody"]["content"]["application/json"];
@@ -10,45 +9,17 @@ export type BackingCheckResult =
 type Accepted =
   operations["attach.check"]["responses"][202]["content"]["application/json"];
 
-export async function backingCheckRequest(
-  environmentId: string,
+export function backingCheckRequest(
   attachId: string,
   grantId: string,
-  signal: AbortSignal,
-): Promise<BackingCheckRequest> {
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({
-      environment: environmentId,
-      limit: "200",
-    });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<AttachPageResponse>(
-      `/attaches?${query}`,
-      200,
-      { signal },
-    );
-    const attach = page.items?.find((item) => item.id === attachId);
-    if (attach) {
-      if (
-        !Number.isSafeInteger(attach.revision) ||
-        !attach.revision ||
-        attach.revision <= 0
-      )
-        throw new Error(
-          "The Attach snapshot has no valid revision. Refresh before testing.",
-        );
-      return {
-        attach_id: attach.id,
-        revision: attach.revision,
-        grant_id: grantId || undefined,
-      };
-    }
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  throw new Error(
-    "This Attach no longer exists in the Environment. Refresh the connections.",
-  );
+  after: string[],
+): BackingCheckRequest {
+  return {
+    attach_id: attachId,
+    revision: 0,
+    grant_id: grantId || undefined,
+    after: [...after],
+  };
 }
 
 export async function startBackingCheck(

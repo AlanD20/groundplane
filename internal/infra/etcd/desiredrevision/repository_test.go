@@ -4,7 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -178,6 +182,14 @@ func (store *memoryStore) Transact(
 		if value != nil {
 			actual = value.ModRevision
 		}
+		if condition.Prefix {
+			for key := range store.history {
+				if strings.HasPrefix(key, condition.Key) && store.valueAt(key, store.revision) != nil {
+					actual = store.revision
+					break
+				}
+			}
+		}
 		if actual != condition.ModRevision {
 			failureReads := make([]*testkeyvalue.KeyValue, len(conditions))
 			for index, failed := range conditions {
@@ -223,4 +235,134 @@ func (store *memoryStore) valueAt(key string, revision int64) *testkeyvalue.KeyV
 		}
 	}
 	return nil
+}
+
+// Terminal native cleanup can race the independent bounded draft collector.
+// Absence is idempotent only while the original public request still owns an
+// uncompiled Task, and no private draft/revision has appeared again.
+func TestAcceptedDraftAbandonAfterCollectionRequiresExactUncapturedOwner(t *testing.T) {
+	ctx := t.Context()
+	store := newMemoryStore()
+	repository, err := newRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().UTC()
+	taskID, envID := ids.New(ids.KindTask), ids.New(ids.KindEnvironment)
+	public := testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopePlatform,
+		ScopeID:   "-",
+		Method:    "POST",
+		Route:     "/backing-services",
+		Key:       ids.NewULID(),
+	}
+	ciphertext := []byte("protected")
+	digest := sha256.Sum256(ciphertext)
+	claim := testblueprints.EnvironmentBlueprintStageClaim{
+		DescriptorID:  ids.NewULID(),
+		EnvironmentID: envID,
+		RevisionID:    taskID,
+		TaskID:        taskID,
+		TaskLocator:   &public,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeEnvironment,
+			ScopeID:   envID,
+			Method:    public.Method,
+			Route:     public.Route,
+			Key:       public.Key,
+		},
+		Intent: testidempotency.ProtectedIntentRecord{
+			EnvelopeVersion:  1,
+			Cipher:           "age-x25519",
+			DigestAlgorithm:  "sha256",
+			CiphertextDigest: hex.EncodeToString(digest[:]),
+			Ciphertext:       ciphertext,
+		},
+		SourceKind:       testblueprints.EnvironmentBlueprintSourceApply,
+		RenderGeneration: 1,
+		ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
+		CreatedAt:        at,
+	}
+	task := workexecution.Task{
+		ID:             taskID,
+		Action:         workexecution.ActionCreate,
+		Actor:          workexecution.OperatorActor,
+		TargetID:       envID,
+		Scope:          workexecution.Scope{EnvironmentID: envID, ProjectID: ids.New(ids.KindProject)},
+		CreatedAt:      at,
+		UpdatedAt:      at,
+		Deadline:       at.Add(time.Hour),
+		AcceptedIntent: &workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: strings.Repeat("a", 64)},
+	}
+	marker := testidempotency.IdempotencyMarker{
+		Kind:      testidempotency.IdempotencyMarkerTask,
+		State:     testidempotency.IdempotencyMarkerPending,
+		Locator:   public,
+		Intent:    claim.Intent,
+		TaskID:    taskID,
+		CreatedAt: at,
+		UpdatedAt: at,
+		Response: testidempotency.IdempotencyResponse{
+			Status:      202,
+			ContentKind: "application/json",
+			Body:        []byte(`{"task_id":"` + taskID + `"}`),
+		},
+	}
+	markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	markerKey, err := testidempotency.IdempotencyMarkerKey(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	putTask := func() {
+		value, err := workqueue.EncodeTask(task)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = store.Put(ctx, workqueue.TaskKey(taskID), value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err = store.Put(ctx, markerKey, markerValue); err != nil {
+		t.Fatal(err)
+	}
+	putTask()
+	if err = repository.AbandonEnvironmentBlueprintStage(ctx, claim); err != nil {
+		t.Fatalf("already-collected exact draft: %v", err)
+	}
+	prefixKey := testblueprints.EnvironmentBlueprintRevisionPrefixFinal(envID, taskID) + "late-chunk"
+	if _, err = store.Put(ctx, prefixKey, []byte("data")); err != nil {
+		t.Fatal(err)
+	}
+	if err = repository.AbandonEnvironmentBlueprintStage(ctx, claim); !isClaimConflict(err) {
+		t.Fatalf("late revision chunk must prevent idempotent abandonment: %v", err)
+	}
+	if _, err = store.Delete(ctx, prefixKey); err != nil {
+		t.Fatal(err)
+	}
+	task.Intent = workexecution.Input{ID: ids.New(ids.KindPlan), SHA256: strings.Repeat("b", 64)}
+	putTask()
+	if err = repository.AbandonEnvironmentBlueprintStage(ctx, claim); !isClaimConflict(err) {
+		t.Fatalf("promoted Task must prevent idempotent abandonment: %v", err)
+	}
+}
+
+func isClaimConflict(err error) bool {
+	kind, _ := errs.KindOf(err)
+	return err != nil && kind == errs.KindStateConflict
+}
+
+func (store *memoryStore) Put(ctx context.Context, key string, value []byte) (int64, error) {
+	result, err := store.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: value}},
+	)
+	return result.Revision, err
+}
+func (store *memoryStore) Delete(ctx context.Context, key string) (int64, error) {
+	result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}})
+	return result.Revision, err
 }

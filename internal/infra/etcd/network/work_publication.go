@@ -2,12 +2,15 @@ package network
 
 import (
 	"context"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/attachremoval"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,11 +18,11 @@ func (repository *Repository) ResolveResourceHost(ctx context.Context) (workexec
 	return repository.publication.ResolveResourceHost(ctx)
 }
 
-func (repository *Repository) PublishNetworkWork(
+func (repository *Repository) PrepareNetworkWork(
 	ctx context.Context,
 	request etcd.NetworkWorkPublication,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.publication.PublishNetworkWork(ctx, request)
+) (workqueue.Change, error) {
+	return repository.publication.PrepareNetworkWork(ctx, request)
 }
 
 func (repository *Repository) SealBackingHookInputsAtRevision(ctx context.Context, operationID, projectID string,
@@ -64,4 +67,36 @@ func (repository *Repository) CaptureBackingZoneDetaches(ctx context.Context, pr
 		snapshots = append(snapshots, snapshot)
 	}
 	return snapshots, nil
+}
+
+func (repository *Repository) AbandonEnvironmentBlueprintStage(
+	ctx context.Context,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+) error {
+	return repository.desired.AbandonEnvironmentBlueprintStage(ctx, claim)
+}
+
+func (repository *Repository) AbandonNetworkWorkInput(
+	ctx context.Context,
+	accepted workqueue.TaskSnapshot,
+	workID string,
+	detaches []string,
+) (bool, error) {
+	return repository.publication.AbandonNetworkWorkInput(ctx, accepted, workID, detaches)
+}
+
+func (repository *Repository) FinishNativePreparationDraft(
+	ctx context.Context,
+	taskID string,
+	promoted bool,
+) (bool, error) {
+	return repository.publication.FinishNativePreparationDraft(ctx, taskID, promoted)
+}
+
+func (repository *Repository) CleanupNativePreparationDraft(
+	ctx context.Context,
+	accepted workqueue.TaskSnapshot,
+	at time.Time,
+) (blueprints.EnvironmentBlueprintStageClaim, bool, error) {
+	return repository.publication.CleanupNativePreparationDraft(ctx, accepted, at)
 }

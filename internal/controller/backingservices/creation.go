@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/netip"
 	"time"
@@ -32,9 +31,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -42,6 +43,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingpostgresrelease"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backingprovisionwork"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -56,15 +58,20 @@ type backingServiceCreationRepository interface {
 	) (etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry], error)
 	ClaimBackingServiceCreationStage(
 		context.Context,
-		etcd.BackingServiceCreationStage,
+		etcd.BackingServiceCreationStage, int64,
 	) (etcdstore.Versioned[etcd.BackingServiceCreationStage], error)
-	PublishBackingServiceWithWork(
+	PrepareBackingServiceCreation(
 		context.Context,
 		etcd.BackingServiceCreation,
-	) (etcd.IdempotencyTransactionResult, error)
+	) (workqueue.Change, error)
 }
 
 type backingServiceHookInputs interface {
+	BindBackingHookSecretReferences(
+		context.Context,
+		string,
+		backinghook.Configuration,
+	) (backinghook.Configuration, []string, error)
 	SealBackingHookTaskInputs(
 		context.Context,
 		string,
@@ -74,6 +81,7 @@ type backingServiceHookInputs interface {
 }
 
 type CreationService struct {
+	accepted         *acceptedaction.Submitter
 	volumeRoot       string
 	environmentPool  netip.Prefix
 	repository       backingServiceCreationRepository
@@ -100,16 +108,17 @@ func NewCreationService(
 	agents *agentregistration.Repository,
 	images workloadseal.Resolver,
 	imageRegistry creationImageRegistry,
+	accepted *acceptedaction.Submitter,
 ) (*CreationService, error) {
 	if volumeRoot == "" || !environmentPool.IsValid() || repository == nil || idempotency == nil || protector == nil ||
-		workInputs == nil {
+		workInputs == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service creation dependencies are incomplete")
 	}
 	if err := componentrender.ValidateEnvironmentComponentCatalog(componentCatalog); err != nil {
 		return nil, err
 	}
 	return &CreationService{
-		volumeRoot: volumeRoot, environmentPool: environmentPool,
+		accepted: accepted, volumeRoot: volumeRoot, environmentPool: environmentPool,
 		repository: repository, idempotency: idempotency, protector: protector,
 		workInputs: workInputs, hookInputs: hookInputs,
 		agents: agents, images: images, imageRegistry: imageRegistry,
@@ -205,23 +214,36 @@ func (service *CreationService) CreateBackingService(
 	if response, existing, err := service.replayCreation(ctx, locator, evidence); existing || err != nil {
 		return response, err
 	}
-	createdAt := service.now().UTC()
-	stage, err := service.repository.ClaimBackingServiceCreationStage(ctx, etcd.BackingServiceCreationStage{
-		Locator: locator, RequestSHA256: requestSHA256,
-		ProjectID: ids.New(ids.KindProject), EnvironmentID: ids.New(ids.KindEnvironment),
-		TaskID: ids.New(ids.KindTask), CreatedAt: createdAt,
-	})
-	if err != nil {
-		// A concurrent acceptance can win after our initial replay read. Stage
-		// admission compares marker absence, so resolve that outcome without
-		// creating another inert staging record or choosing fresh image bytes.
-		if response, existing, replayErr := service.replayCreation(ctx, locator, evidence); existing ||
-			replayErr != nil {
-			return response, replayErr
+	at := service.now().UTC()
+	taskID := ids.New(ids.KindTask)
+	projectID, environmentID := ids.New(ids.KindProject), ids.New(ids.KindEnvironment)
+	serviceID := ids.New(ids.KindService)
+	var boundHooks *apiTypes.BackingHookConfiguration
+	var secretIDs []string
+	if hooks != nil {
+		if service.hookInputs == nil {
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Backing hook input binding is unavailable",
+			)
 		}
-		return idempotencyrecord.IdempotencyResponse{}, err
+		bound, references, err := service.hookInputs.BindBackingHookSecretReferences(ctx, projectID, *hooks)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		boundHooks, secretIDs = taskplanning.BackingHookConfigurationToAPI(&bound), references
 	}
-	return service.createBackingServiceFromStage(ctx, input, bundle, stage, adapter, spec, evidence)
+	task := workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionCreate,
+		TargetID: serviceID, TargetName: input.Name, Scope: workexecution.Scope{ProjectID: projectID, EnvironmentID: environmentID},
+		After: append(
+			[]string(nil),
+			input.After...), CreatedAt: at, UpdatedAt: at, Deadline: at.Add(acceptedaction.QueueTimeout)}
+	submission := evidence.Submission(task, "backing-create", locator)
+	submission.SecretIDs = secretIDs
+	return acceptedaction.Submit(ctx, service.accepted, submission, acceptedCreation{
+		BoundHooks: boundHooks,
+		Request:    input, ProjectID: projectID, EnvironmentID: environmentID, ServiceID: serviceID,
+		Locator: locator, RequestSHA256: requestSHA256, Intent: evidence.Durable})
 }
 
 func (service *CreationService) replayCreation(
@@ -249,30 +271,33 @@ func (service *CreationService) createBackingServiceFromStage(
 	stage etcdstore.Versioned[etcd.BackingServiceCreationStage],
 	adapter adapters.Adapter,
 	spec adapters.CreationSpec,
-	evidence desiredrevision.Evidence,
-) (response idempotencyrecord.IdempotencyResponse, resultErr error) {
+	intent idempotencyrecord.ProtectedIntentRecord,
+	snapshot workqueue.TaskSnapshot,
+	serviceID string,
+	capturedAt time.Time,
+) (prepared taskdependencies.Prepared, resultErr error) {
 	authentication := core.BackingAuthentication(input.Authentication)
 	blueprintLocator := stage.Record.Locator
 	blueprintLocator.ScopeKind = idempotencyrecord.IdempotencyScopeEnvironment
 	blueprintLocator.ScopeID = stage.Record.EnvironmentID
 	claim, err := desiredrevision.Claim(ctx, service.repository, desiredrevision.ClaimInput{
 		EnvironmentID: stage.Record.EnvironmentID, CandidateTaskID: stage.Record.TaskID,
-		Locator: blueprintLocator, Intent: evidence.Durable,
+		AcceptedTaskRevision: snapshot.Revision, TaskLocator: &stage.Record.Locator, Locator: blueprintLocator, Intent: intent,
 		MatchExistingIntent: func(ctx context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
-			return service.idempotency.MatchesStaged(ctx, evidence, existing)
+			return blueprints.SameBlueprintProtectedIntent(intent, existing), nil
 		},
 		BaselineHeadRevision: 0, SourceKind: blueprints.EnvironmentBlueprintSourceApply,
 		RenderGeneration: 1, CreatedAt: stage.Record.CreatedAt,
 	})
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	allocator, err := desiredrevision.NewBlueprintIdentityAllocator(claim)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	if claim.TaskID != stage.Record.TaskID || !claim.CreatedAt.Equal(stage.Record.CreatedAt) {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		return taskdependencies.Prepared{}, errs.New(
 			errs.KindInternal,
 			"Backing-service desired claim changed creation authority",
 		)
@@ -284,21 +309,21 @@ func (service *CreationService) createBackingServiceFromStage(
 	}
 	poolRegistry, err := service.repository.GetEnvironmentPoolRegistry(ctx)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	reservedPools, networkPool, err := poolRegistry.Record.Reserve(
 		service.environmentPool, stage.Record.EnvironmentID, input.NetworkPool,
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	poolRegistry.Record = reservedPools
 	environment, err := hierarchyrecord.NewProvisioningEnvironment(
 		service.volumeRoot, project, stage.Record.EnvironmentID, "main", networkPool,
-		stage.Record.TaskID, stage.Record.CreatedAt,
+		stage.Record.TaskID, capturedAt,
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 
 	zone, err := zonerecord.NewRecord(environment.ID, core.Zone{
@@ -306,13 +331,18 @@ func (service *CreationService) createBackingServiceFromStage(
 		Internal: input.Zone.Internal, OwnerKind: core.ZoneOwnerBackingProject, OwnerID: project.ID,
 	})
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
+	seed, err := service.openCreationSeed(ctx, stage.Record)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	defer clear(seed)
 	entries, generations, secrets, secretValues, resolved, err := service.backingCreationEntries(
-		ctx, project.ID, environment.ID, spec, allocator, stage.Record.CreatedAt,
+		ctx, project.ID, environment.ID, spec, allocator, stage.Record.CreatedAt, seed,
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	for key := range resolved {
 		defer func(key string) { resolved[key] = "" }(key)
@@ -325,10 +355,9 @@ func (service *CreationService) createBackingServiceFromStage(
 		resolvedVolume := core.Volume{ID: volumeID, Slug: spec.VolumeSlug, Key: spec.VolumeKey}
 		volume = &resolvedVolume
 	}
-	serviceID := allocator.New(ids.KindService)
 	sealedImage, err := service.sealCreationImage(ctx, spec.Image)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	if !adapter.Custom() {
 		spec.Image = sealedImage.reference
@@ -337,14 +366,14 @@ func (service *CreationService) createBackingServiceFromStage(
 	if input.Adapter == "postgres" {
 		release, releaseErr := postgres16protocol.CompiledManagedRelease()
 		if releaseErr != nil {
-			return idempotencyrecord.IdempotencyResponse{}, releaseErr
+			return taskdependencies.Prepared{}, releaseErr
 		}
 		// Database selection is operator-owned; only the backup tool artifacts
 		// come from the authenticated installation catalog.
 		release.DatabaseImage = spec.Image
 		selected, releaseErr := backingpostgresrelease.New(environment.ID, serviceID, release)
 		if releaseErr != nil {
-			return idempotencyrecord.IdempotencyResponse{}, releaseErr
+			return taskdependencies.Prepared{}, releaseErr
 		}
 		postgresRelease = &selected
 	}
@@ -368,7 +397,7 @@ func (service *CreationService) createBackingServiceFromStage(
 	}
 	serviceRecord, err := servicerecord.NewServiceRecord(environment.ID, desiredService, zone.Desired.ID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	if postgresRelease != nil {
 		serviceRecord.Runtime.PostgresToolsImage = postgresRelease.Release.Image
@@ -399,7 +428,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		service.componentCatalog,
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	identities := composeidentity.Snapshot{
 		Services: []composeidentity.Resource{{ID: serviceID, Name: spec.ServiceName}},
@@ -421,7 +450,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		RenderGeneration: 1, AuthorizedVolumeDir: environment.VolumeDir, Identities: identities,
 	})
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	for _, workload := range artifact.Services {
 		if workload.ServiceId == serviceID {
@@ -432,26 +461,30 @@ func (service *CreationService) createBackingServiceFromStage(
 	}
 	artifactValue, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return taskdependencies.Prepared{}, errs.Wrap(errs.KindInternal, err)
 	}
 	captured, err := service.captureCreation(ctx, creationCapture{PlanID: planID, Environment: environment,
-		Service: desiredService, Artifact: artifact, Entries: entries, Resolved: resolved, Allocator: allocator})
+		Service: desiredService, Artifact: artifact, Entries: entries, Resolved: resolved, Allocator: allocator, Deadline: acceptedaction.ExecutionDeadline(snapshot.Task, capturedAt, 930*time.Second)})
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	defer captured.Clear()
-	task, _, err := captured.Input.Work()
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	published := false
+	returned := false
 	defer func() {
-		if !published {
-			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		if !returned {
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 			defer cancel()
-			resultErr = errors.Join(resultErr, captured.AbandonUnpublished(cleanup))
+			if cleanupErr := captured.AbandonUnpublished(cleanup); cleanupErr != nil {
+				resultErr = errs.WrapJoined(errs.KindInternal, resultErr, cleanupErr)
+			}
 		}
 	}()
+	capturedTask, item, err := captured.Input.Work()
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	task := snapshot.Task
+	task.Intent, task.ExpectedItems, task.UpdatedAt = capturedTask.Intent, 1, capturedAt
 	volumeSlugs := map[string]string(nil)
 	volumeMounts := []projectionrecord.EnvironmentServiceVolumeMount(nil)
 	if volume != nil {
@@ -464,7 +497,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		backingDesiredComposeProject(spec, zone.Desired, volume, environment),
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	desiredInput, err := projectionrecord.NewEnvironmentDesiredInput(
 		environment.ID, claim.RevisionID, claim.RenderGeneration,
@@ -474,7 +507,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		},
 	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	projection := buildBackingServiceCreationProjection(
 		environment.ID, task.ID, identities, volumeSlugs, volumeMounts,
@@ -482,28 +515,21 @@ func (service *CreationService) createBackingServiceFromStage(
 	)
 	projectionEvidence, err := desiredrevision.PreflightProjection(projection)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	revision := desiredrevision.BlueprintRevision(environment.ID, task.ID, stage.Record.CreatedAt, bundle)
 	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim, Blueprint: &revision, DesiredInput: desiredInput,
 		DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	responseBody, err := json.Marshal(apiTypes.BackingServiceCreated{
-		BackingService: apiTypes.BackingService{
-			Authentication: input.Authentication,
-			ProjectID:      project.ID, EnvironmentID: environment.ID,
-			ServiceID: serviceID, BackingNetworkID: zone.Desired.ID,
-		},
-		TaskID: task.ID,
-	})
+	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return taskdependencies.Prepared{}, errs.Wrap(errs.KindInternal, err)
 	}
-	response = idempotencyrecord.IdempotencyResponse{
-		Status:      http.StatusCreated,
+	response := idempotencyrecord.IdempotencyResponse{
+		Status:      http.StatusAccepted,
 		ContentKind: "application/json",
 		Body:        responseBody,
 	}
@@ -512,7 +538,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		Locator: stage.Record.Locator, Intent: claim.Intent, Response: response,
 		TaskID: task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 	}
-	result, publishErr := service.repository.PublishBackingServiceWithWork(ctx, etcd.BackingServiceCreation{
+	authority, err := service.repository.PrepareBackingServiceCreation(ctx, etcd.BackingServiceCreation{
 		VolumeRoot: service.volumeRoot, Stage: stage, PoolRegistry: poolRegistry,
 		Project: project, Environment: environment, Components: nil,
 		Zone: zone, Service: serviceRecord, Secrets: secrets, SecretValues: secretValues,
@@ -521,39 +547,20 @@ func (service *CreationService) createBackingServiceFromStage(
 		Projection: projection, Task: task, Work: captured, Marker: marker,
 		PostgresRelease: postgresRelease,
 	})
-	if publishErr != nil {
-		if !isUnknownBackingServiceCreationOutcome(publishErr) {
-			return idempotencyrecord.IdempotencyResponse{}, publishErr
-		}
-		resolved, resolveErr := service.idempotency.ResolveUnknown(ctx, stage.Record.Locator, evidence, publishErr)
-		if resolveErr != nil {
-			return idempotencyrecord.IdempotencyResponse{}, resolveErr
-		}
-		return requestidempotency.CloneResponse(resolved.Response), nil
-	}
-	outcome, err := service.idempotency.ResolveKnown(ctx, evidence, result)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	switch outcome.Kind {
-	case requestidempotency.ResolutionApplied:
-		published = true
-		return requestidempotency.CloneResponse(response), nil
-	case requestidempotency.ResolutionReplay:
-		published = true
-		return requestidempotency.CloneResponse(outcome.Response), nil
-	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Backing-service creation resolution is invalid",
-		)
-	}
-}
-
-func isUnknownBackingServiceCreationOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
+	returned = true
+	return taskdependencies.Prepared{
+		BackingCreation: true,
+		Task:            task,
+		Graph:           []workexecution.Item{item},
+		Authority:       authority,
+		Finalize: func(ctx context.Context, applied bool) error {
+			if applied {
+				return nil
+			}
+			return captured.AbandonUnpublished(ctx)
+		},
+	}, nil
 }

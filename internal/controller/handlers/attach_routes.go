@@ -23,7 +23,12 @@ import (
 type AttachMutator interface {
 	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
 	CreateAttach(context.Context, apiTypes.AttachRequest, string) (idempotencyrecord.IdempotencyResponse, error)
-	DetachAttach(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	DetachAttach(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 	RenameAttach(
 		context.Context,
 		string,
@@ -38,8 +43,9 @@ type attachCreateInput struct {
 }
 
 type attachDetachInput struct {
-	ID             string `path:"id"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID             string                        `path:"id"`
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type attachMutationOutput struct {
@@ -69,6 +75,7 @@ func (s *Server) registerAttaches() {
 		},
 		Responses: attachMutationResponses(taskAcceptedSchema),
 	}
+	s.setRoutePolicy("DELETE /api/v1/attaches/{id}", routePolicy{body: jsonBody})
 	huma.Register(s.API, createOperation, s.createAttach)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "attach.detach", Method: http.MethodDelete, Path: "/attaches/{id}",
@@ -161,7 +168,7 @@ func (s *Server) detachAttach(
 	if s.attachMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Attach mutator is not configured")
 	}
-	response, err := s.attachMutations.DetachAttach(ctx, request.ID, request.IdempotencyKey)
+	response, err := s.attachMutations.DetachAttach(ctx, request.ID, taskRunAfter(request.Body), request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -207,6 +214,8 @@ func decodeAttachCreate(body []byte) (apiTypes.AttachRequest, error) {
 			err = decoder.Decode(&request.Name)
 		case "credential":
 			request.Credential, err = decodeAttachCredential(decoder)
+		case "after":
+			request.After, err = decodeAttachStringList(decoder, member)
 		case "grant_attach_ids":
 			request.GrantAttachIDs, err = decodeAttachStringList(decoder, member)
 		default:

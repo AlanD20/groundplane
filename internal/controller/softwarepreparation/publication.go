@@ -5,13 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"net/http"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -25,6 +23,7 @@ func (service *Service) protect(
 		Method: http.MethodPost, Route: Route,
 		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
 		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(request.After)},
 			requestidempotency.Field{Name: "selection", Value: requestidempotency.String(string(request.Selection))},
 			requestidempotency.Field{Name: "source_kind", Value: requestidempotency.String(string(request.SourceKind))},
 			requestidempotency.Field{Name: "ref", Value: requestidempotency.String(request.Ref)},
@@ -52,62 +51,6 @@ func (service *Service) protect(
 		return requestidempotency.ProtectedEvidence{}, idempotencyrecord.IdempotencyLocator{}, err
 	}
 	return evidence, locator, nil
-}
-
-func (service *Service) resolvePublication(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence requestidempotency.ProtectedEvidence,
-	result etcd.IdempotencyTransactionResult,
-	publicationErr error,
-	accepted Accepted,
-) (Accepted, error) {
-	if publicationErr != nil {
-		if !errors.Is(publicationErr, context.DeadlineExceeded) &&
-			!errors.Is(publicationErr, errs.New(errs.KindStorageUnavailable, "")) {
-			return Accepted{}, publicationErr
-		}
-		if err := ctx.Err(); err != nil {
-			return Accepted{}, err
-		}
-		read, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		replay, found, err := service.intents.ResolveOperationRootExisting(
-			read, service.evidence, locator, evidence,
-		)
-		if err != nil || !found {
-			if err != nil && !errors.Is(err, context.DeadlineExceeded) &&
-				!errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) {
-				return Accepted{}, err
-			}
-			return Accepted{}, publicationErr
-		}
-		return decodeReplay(replay)
-	}
-	outcome, marker, conflict, err := result.Classify()
-	if err != nil {
-		return Accepted{}, err
-	}
-	switch outcome {
-	case etcd.IdempotencyKnownApplied:
-		return accepted, nil
-	case etcd.IdempotencyKnownConflict:
-		return Accepted{}, conflict
-	case etcd.IdempotencyKnownExisting:
-		stored := append([]byte(nil), marker.Response.Body...)
-		resolution, err := service.intents.ResolveMarker(ctx, evidence, marker)
-		if errors.Is(err, errs.New(errs.KindIdempotencyInProgress, "")) {
-			defer clear(stored)
-			return decodeAccepted(stored)
-		}
-		clear(stored)
-		if err != nil {
-			return Accepted{}, err
-		}
-		return decodeReplay(resolution)
-	default:
-		return Accepted{}, errs.New(errs.KindInternal, "software preparation publication outcome is invalid")
-	}
 }
 
 func decodeReplay(resolution requestidempotency.Resolution) (Accepted, error) {

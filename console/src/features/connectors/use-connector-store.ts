@@ -40,6 +40,7 @@ export type ConnectorActions = {
   removeConnector: (
     id: string,
     intent: ConnectorMutationIntent,
+    after?: string[],
   ) => Promise<string>;
 };
 type UpdateConnectors = (change: (draft: ConnectorState) => void) => void;
@@ -324,12 +325,16 @@ export function useConnectorStore(
       });
       return edited;
     },
-    removeConnector: async (id, intent) => {
+    removeConnector: async (id, intent, after = []) => {
+      const signature = JSON.stringify(after);
+      const requestKey = `${id}:${signature}`;
       const pendingTask = [...pendingConnectorRemovals.current.entries()].find(
-        ([, pending]) => pending.connectorId === id,
+        ([, pending]) =>
+          pending.connectorId === id &&
+          JSON.stringify(pending.after) === signature,
       );
       if (pendingTask) return pendingTask[0];
-      const inFlight = connectorRemovalRequests.current.get(id);
+      const inFlight = connectorRemovalRequests.current.get(requestKey);
       if (inFlight) return inFlight;
       const request = (async () => {
         try {
@@ -340,13 +345,18 @@ export function useConnectorStore(
           const accepted = await controllerRequest<ConnectorTaskAccepted>(
             `/connectors/${encodeURIComponent(id)}`,
             202,
-            { method: "DELETE", idempotencyKey: intent.idempotencyKey },
+            {
+              method: "DELETE",
+              body: { after },
+              idempotencyKey: intent.idempotencyKey,
+            },
           );
           if (!accepted.task_id)
             throw new Error("Controller response is missing task_id");
           pendingConnectorRemovals.current.set(accepted.task_id, {
             connectorId: id,
             environmentId: connector.scopeRef,
+            after: [...after],
           });
           persistPendingConnectorRemovals(pendingConnectorRemovals.current);
           update((draft) => {
@@ -363,12 +373,12 @@ export function useConnectorStore(
           throw error;
         }
       })();
-      connectorRemovalRequests.current.set(id, request);
+      connectorRemovalRequests.current.set(requestKey, request);
       try {
         return await request;
       } finally {
-        if (connectorRemovalRequests.current.get(id) === request) {
-          connectorRemovalRequests.current.delete(id);
+        if (connectorRemovalRequests.current.get(requestKey) === request) {
+          connectorRemovalRequests.current.delete(requestKey);
         }
       }
     },

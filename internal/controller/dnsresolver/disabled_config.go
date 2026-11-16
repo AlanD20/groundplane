@@ -3,6 +3,7 @@ package dnsresolver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -67,4 +68,12 @@ func (service *PlatformMutationService) saveDisabledConfig(
 		)
 	}
 	return cloneIdempotencyResponse(response), nil
+}
+
+func unknownPlatformComponentMutationOutcome(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	kind, ok := errs.KindOf(err)
+	return ok && kind == errs.KindStorageUnavailable
 }

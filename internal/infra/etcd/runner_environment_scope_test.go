@@ -107,9 +107,8 @@ func TestRunnerEnvironmentCreationFencesEveryParent(t *testing.T) {
 					t.Fatal(err)
 				}
 				result := fixture.publish(t, repository)
-				_, _, conflict, classifyErr := result.Classify()
-				if classifyErr != nil || !errors.Is(conflict, errs.New(errs.KindStateConflict, "")) {
-					t.Fatalf("parent race = %v, %v", conflict, classifyErr)
+				if result.Applied {
+					t.Fatal("Runner hierarchy deletion race was ignored")
 				}
 			}
 			if _, err := repository.GetRunner(ctx, desired.ID); !errors.Is(err, errs.New(errs.KindRunnerNotFound, "")) {
@@ -119,8 +118,21 @@ func TestRunnerEnvironmentCreationFencesEveryParent(t *testing.T) {
 				ctx,
 				workqueue.TaskKey(ids.NewAt(ids.KindTask, runnerStorageTime(), runnerTaskEntropyBase+811)),
 			)
-			if err != nil || read.Entry != nil {
-				t.Fatalf("rejected creation left Task: %#v, %v", read, err)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if scope == "wrong-project" {
+				if read.Entry != nil {
+					t.Fatal("Invalid owner was accepted")
+				}
+			} else {
+				if read.Entry == nil {
+					t.Fatal("Native capture conflict lost its accepted Task")
+				}
+				task, decodeErr := workqueue.DecodeTask(read.Entry.Value)
+				if decodeErr != nil || !task.PendingPreparation() || task.ExpectedItems != 0 {
+					t.Fatalf("Raced capture published executable work: %#v/%v", task, decodeErr)
+				}
 			}
 		})
 	}

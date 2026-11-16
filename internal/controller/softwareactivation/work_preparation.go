@@ -50,13 +50,17 @@ func (service *Service) Prepare(ctx context.Context, taskID, workID string) erro
 		if expected.ID != item.ID {
 			continue
 		}
+		expectedDeadline := expected.Deadline
+		if task.Deadline.Before(expectedDeadline) {
+			expectedDeadline = task.Deadline
+		}
 		matched = expected.Operation == item.Operation && expected.TargetID == item.TargetID &&
 			expected.Placement == item.Placement &&
 			slices.Equal(expected.Claims, item.Claims) &&
 			slices.Equal(expected.Dependencies, item.Dependencies) &&
 			expected.Input == nil &&
 			expected.CreatedAt.Equal(item.CreatedAt) &&
-			expected.Deadline.Equal(item.Deadline)
+			expectedDeadline.Equal(item.Deadline)
 	}
 	if !matched {
 		return errs.New(errs.KindStateConflict, "software activation work differs from its accepted graph")

@@ -175,6 +175,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "image": {
             "maxLength": 1024,
             "minLength": 1,
@@ -373,6 +384,17 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "backing_service_id": {
             "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
@@ -585,6 +607,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "attach_id": {
             "pattern": "^att_[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
@@ -595,13 +628,12 @@
           },
           "revision": {
             "format": "int64",
-            "minimum": 1,
+            "minimum": 0,
             "type": "integer"
           }
         },
         "required": [
-          "attach_id",
-          "revision"
+          "attach_id"
         ],
         "type": "object"
       },
@@ -1042,6 +1074,17 @@
             "description": "Required supported server version for a managed database adapter; omitted for Custom.",
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "authentication": {
             "description": "Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.",
             "enum": [
@@ -1088,31 +1131,6 @@
           "adapter",
           "network_pool",
           "zone"
-        ],
-        "type": "object"
-      },
-      "BackingServiceCreated": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "/api/v1/BackingServiceCreated.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "backing_service": {
-            "$ref": "#/components/schemas/BackingService"
-          },
-          "task_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "backing_service",
-          "task_id"
         ],
         "type": "object"
       },
@@ -1653,7 +1671,7 @@
       },
       "ComponentConfigMutationRequest": {
         "additionalProperties": false,
-        "maxProperties": 1,
+        "maxProperties": 2,
         "minProperties": 1,
         "properties": {
           "$schema": {
@@ -1664,6 +1682,17 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "config": {
             "oneOf": [
@@ -2007,6 +2036,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "config": {
             "oneOf": [
               {
@@ -2256,6 +2296,17 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "changes": {
             "$ref": "#/components/schemas/ConnectorEditRequest"
@@ -2794,6 +2845,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "release": {
             "maxLength": 71,
             "minLength": 71,
@@ -3086,6 +3148,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "queries": {
             "items": {
               "$ref": "#/components/schemas/DNSCheckQuery"
@@ -3098,13 +3171,10 @@
           },
           "revision": {
             "format": "int64",
-            "minimum": 1,
+            "minimum": 0,
             "type": "integer"
           }
         },
-        "required": [
-          "revision"
-        ],
         "type": "object"
       },
       "DNSCheckResult": {
@@ -3194,6 +3264,18 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "description": "Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "image": {
             "description": "Host-local registry reference for this Release only; mutually exclusive with tag",
@@ -3331,6 +3413,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "connector_id": {
             "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
@@ -3342,7 +3435,7 @@
           },
           "revision": {
             "format": "int64",
-            "minimum": 1,
+            "minimum": 0,
             "type": "integer"
           },
           "route_id": {
@@ -3352,7 +3445,6 @@
         },
         "required": [
           "route_id",
-          "revision",
           "connector_id"
         ],
         "type": "object"
@@ -3592,6 +3684,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "entries": {
             "items": {
               "$ref": "#/components/schemas/EntryBulkItem"
@@ -3625,37 +3728,6 @@
         ],
         "type": "object"
       },
-      "EntryBulkUpsertResult": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "/api/v1/EntryBulkUpsertResult.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "entries": {
-            "items": {
-              "$ref": "#/components/schemas/Entry"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "task_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "entries"
-        ],
-        "type": "object"
-      },
       "EntryCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3667,6 +3739,17 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "environment_id": {
             "type": "string"
@@ -3724,6 +3807,17 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "exposure": {
             "items": {
@@ -3962,6 +4056,17 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "name": {
             "type": "string"
@@ -4322,14 +4427,22 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "expected_revision": {
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
           }
         },
-        "required": [
-          "expected_revision"
-        ],
         "type": "object"
       },
       "EtcdConfigDocument": {
@@ -4869,37 +4982,6 @@
         ],
         "type": "object"
       },
-      "ImageFetchAccepted": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "/api/v1/ImageFetchAccepted.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "config_digest": {
-            "description": "Pinned OCI configuration digest, verified before Task completion",
-            "type": "string"
-          },
-          "image": {
-            "description": "Immutable registry reference selected for this operation",
-            "type": "string"
-          },
-          "task_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "image",
-          "config_digest"
-        ],
-        "type": "object"
-      },
       "ImageFetchRecord": {
         "additionalProperties": false,
         "properties": {
@@ -4947,6 +5029,17 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "image": {
             "description": "Explicit tag or SHA-256 digest in a public registry or GP's managed private registry",
@@ -6233,6 +6326,18 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "description": "Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "tag": {
             "type": "string"
           }
@@ -6273,47 +6378,6 @@
             "$ref": "#/components/schemas/OptionalNullableString"
           }
         },
-        "type": "object"
-      },
-      "ReleaseGroupMemberRelease": {
-        "additionalProperties": false,
-        "properties": {
-          "release_id": {
-            "type": "string"
-          },
-          "service_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "service_id",
-          "release_id"
-        ],
-        "type": "object"
-      },
-      "ReleaseGroupMutationAccepted": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "/api/v1/ReleaseGroupMutationAccepted.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "release_group_id": {
-            "type": "string"
-          },
-          "task_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "release_group_id"
-        ],
         "type": "object"
       },
       "ReleaseGroupRollbackPreview": {
@@ -6364,6 +6428,18 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "description": "Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "preview_revision": {
             "pattern": "^[1-9][0-9]*$",
             "type": "string"
@@ -6391,41 +6467,6 @@
           "service_id",
           "release_id",
           "tag"
-        ],
-        "type": "object"
-      },
-      "ReleaseGroupTaskAccepted": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "/api/v1/ReleaseGroupTaskAccepted.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "release_group_operation_id": {
-            "type": "string"
-          },
-          "releases": {
-            "items": {
-              "$ref": "#/components/schemas/ReleaseGroupMemberRelease"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "task_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "release_group_operation_id",
-          "releases"
         ],
         "type": "object"
       },
@@ -6531,35 +6572,6 @@
         ],
         "type": "object"
       },
-      "ReleaseTaskAccepted": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "/api/v1/ReleaseTaskAccepted.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "operation_id": {
-            "type": "string"
-          },
-          "release_id": {
-            "type": "string"
-          },
-          "task_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "operation_id",
-          "release_id"
-        ],
-        "type": "object"
-      },
       "RestoreDatabaseReview": {
         "additionalProperties": false,
         "properties": {
@@ -6651,6 +6663,17 @@
           "acknowledge_version_difference": {
             "type": "boolean"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "age_identity": {
             "maxLength": 4096,
             "type": "string",
@@ -6685,6 +6708,18 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "description": "Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "tag": {
             "type": "string"
@@ -6777,6 +6812,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "environment_id": {
             "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
@@ -6826,6 +6872,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "exposure": {
             "enum": [
               "public",
@@ -6836,32 +6893,6 @@
         },
         "required": [
           "exposure"
-        ],
-        "type": "object"
-      },
-      "RouteTaskAccepted": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "/api/v1/RouteTaskAccepted.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "route": {
-            "$ref": "#/components/schemas/Route"
-          },
-          "task_id": {
-            "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
-            "type": "string"
-          }
-        },
-        "required": [
-          "route",
-          "task_id"
         ],
         "type": "object"
       },
@@ -7056,15 +7087,23 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "revision": {
             "format": "int64",
-            "minimum": 1,
+            "minimum": 0,
             "type": "integer"
           }
         },
-        "required": [
-          "revision"
-        ],
         "type": "object"
       },
       "RunnerCheckResult": {
@@ -7202,6 +7241,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "auto_update": {
             "type": "boolean"
           },
@@ -7317,8 +7367,20 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "revision": {
             "format": "int64",
+            "minimum": 0,
             "type": "integer"
           },
           "version": {
@@ -7326,7 +7388,6 @@
           }
         },
         "required": [
-          "revision",
           "version"
         ],
         "type": "object"
@@ -8855,6 +8916,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "ref": {
             "maxLength": 256,
             "minLength": 1,
@@ -9526,6 +9598,51 @@
         ],
         "type": "object"
       },
+      "TaskDependencyDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "failed": {
+            "$ref": "#/components/schemas/TaskDependencyFailure"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "waiting": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "ready"
+        ],
+        "type": "object"
+      },
+      "TaskDependencyFailure": {
+        "additionalProperties": false,
+        "properties": {
+          "observed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "outcome",
+          "observed_at"
+        ],
+        "type": "object"
+      },
       "TaskDetails": {
         "additionalProperties": false,
         "properties": {
@@ -9698,7 +9815,8 @@
               "planning_deadline_exceeded",
               "planning_stopped",
               "planning_invalid_input",
-              "planning_dependency_conflict"
+              "planning_dependency_conflict",
+              "dependency.failed"
             ],
             "type": "string"
           },
@@ -9746,6 +9864,33 @@
           "work_item_id",
           "attempt"
         ],
+        "type": "object"
+      },
+      "TaskRunAfterRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/TaskRunAfterRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "after": {
+            "description": "Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          }
+        },
         "type": "object"
       },
       "TaskStages": {
@@ -9814,6 +9959,16 @@
             ],
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "cancel": {
             "$ref": "#/components/schemas/TaskActionAvailability"
           },
@@ -9828,6 +9983,9 @@
             "format": "date-time",
             "type": "string"
           },
+          "dependencies": {
+            "$ref": "#/components/schemas/TaskDependencyDecision"
+          },
           "finished_at": {
             "format": "date-time",
             "type": "string"
@@ -9837,6 +9995,13 @@
           },
           "id": {
             "type": "string"
+          },
+          "pending_preparation": {
+            "description": "Accepted pure intent has not been compiled into executable work",
+            "type": "boolean"
+          },
+          "preparation_wait": {
+            "$ref": "#/components/schemas/Wait"
           },
           "resource_kind": {
             "type": "string"
@@ -9875,6 +10040,7 @@
           }
         },
         "required": [
+          "pending_preparation",
           "resource_kind",
           "id",
           "action",
@@ -10226,6 +10392,17 @@
             "readOnly": true,
             "type": "string"
           },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
           "hostname": {
             "description": "Concrete public hostname configured by the operator at the Tunnel provider; GP does not read or change provider ingress.",
             "maxLength": 253,
@@ -10252,12 +10429,11 @@
           "revision": {
             "description": "Current Tunnel Component revision.",
             "format": "int64",
-            "minimum": 1,
+            "minimum": 0,
             "type": "integer"
           }
         },
         "required": [
-          "revision",
           "origin_service_id",
           "origin_port",
           "hostname",
@@ -10324,6 +10500,17 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "environment_id": {
             "type": "string"
@@ -10471,6 +10658,17 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
           },
           "slug": {
             "type": "string"
@@ -10909,6 +11107,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -10969,6 +11176,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -11513,6 +11729,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -11791,15 +12016,15 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BackingServiceCreated"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
-            "description": "Created",
+            "description": "Accepted",
             "headers": {
               "Content-Type": {
                 "schema": {
@@ -11850,6 +12075,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -11943,6 +12177,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -12003,6 +12246,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -12063,6 +12315,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -12310,15 +12571,15 @@
               }
             }
           },
-          "default": {
+          "202": {
             "content": {
-              "application/problem+json": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
-            "description": "Error"
+            "description": "Accepted"
           }
         },
         "summary": "Replace Component config",
@@ -12352,6 +12613,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -12739,6 +13009,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -13072,6 +13351,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -13473,15 +13761,15 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Entry"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
-            "description": "Created",
+            "description": "Accepted",
             "headers": {
               "Content-Type": {
                 "schema": {
@@ -13545,7 +13833,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EntryBulkUpsertResult"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
@@ -13600,6 +13888,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -13709,15 +14006,15 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Entry"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
-            "description": "OK",
+            "description": "Accepted",
             "headers": {
               "Content-Type": {
                 "schema": {
@@ -13934,6 +14231,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -14203,6 +14509,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -14321,7 +14636,7 @@
             "multipart/form-data": {
               "schema": {
                 "contentMediaType": "application/octet-stream",
-                "description": "Deterministic Blueprint multipart stream: manifest first, then declared file parts in order. Optional manifest.service selects one Compose Service; unrelated desired changes are rejected. Workloads use their declared release strategy.",
+                "description": "Deterministic Blueprint multipart stream: manifest first, then declared file parts in order. Optional manifest.after lists up to 16 whole-Task prerequisites for Apply only. Optional manifest.service selects one Compose Service; unrelated desired changes are rejected. Workloads use their declared release strategy.",
                 "format": "binary",
                 "type": "string"
               }
@@ -14390,7 +14705,7 @@
             "multipart/form-data": {
               "schema": {
                 "contentMediaType": "application/octet-stream",
-                "description": "Deterministic Blueprint multipart stream: manifest first, then declared file parts in order. Optional manifest.service selects one Compose Service; unrelated desired changes are rejected. Workloads use their declared release strategy.",
+                "description": "Deterministic Blueprint multipart stream: manifest first, then declared file parts in order. Optional manifest.after lists up to 16 whole-Task prerequisites for Apply only. Optional manifest.service selects one Compose Service; unrelated desired changes are rejected. Workloads use their declared release strategy.",
                 "format": "binary",
                 "type": "string"
               }
@@ -14946,6 +15261,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -15204,6 +15528,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -15584,7 +15917,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ImageFetchAccepted"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
@@ -15639,6 +15972,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -15830,6 +16172,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -16193,12 +16544,21 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleaseGroupMutationAccepted"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
@@ -16376,7 +16736,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleaseGroupTaskAccepted"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
@@ -16445,7 +16805,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleaseGroupTaskAccepted"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
@@ -16727,7 +17087,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RouteTaskAccepted"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
@@ -16912,6 +17272,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -17025,7 +17394,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RouteTaskAccepted"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
@@ -17218,6 +17587,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -17862,6 +18240,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -18030,6 +18417,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -18223,6 +18619,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -18559,6 +18964,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -18742,7 +19156,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleaseTaskAccepted"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
@@ -18797,6 +19211,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -18954,7 +19377,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleaseTaskAccepted"
+                  "$ref": "#/components/schemas/TaskAccepted"
                 }
               }
             },
@@ -19009,6 +19432,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -19069,6 +19501,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -19394,6 +19835,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -20467,6 +20917,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -20769,7 +21228,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -20777,20 +21236,16 @@
                   "properties": {
                     "task_id": {
                       "type": "string"
-                    },
-                    "volume": {
-                      "$ref": "#/components/schemas/Volume"
                     }
                   },
                   "required": [
-                    "volume",
                     "task_id"
                   ],
                   "type": "object"
                 }
               }
             },
-            "description": "Created",
+            "description": "Accepted",
             "headers": {
               "Content-Type": {
                 "schema": {
@@ -20862,6 +21317,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -20980,7 +21444,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -20988,20 +21452,16 @@
                   "properties": {
                     "task_id": {
                       "type": "string"
-                    },
-                    "volume": {
-                      "$ref": "#/components/schemas/Volume"
                     }
                   },
                   "required": [
-                    "volume",
                     "task_id"
                   ],
                   "type": "object"
                 }
               }
             },
-            "description": "OK",
+            "description": "Accepted",
             "headers": {
               "Content-Type": {
                 "schema": {
@@ -21249,6 +21709,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunAfterRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {

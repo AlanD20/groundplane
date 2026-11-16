@@ -34,8 +34,10 @@ func (fixture *componentEnableRouteFixture) EnableComponent(
 }
 
 func (*componentEnableRouteFixture) DisableComponent(
-	context.Context, string, string,
-
+	context.Context,
+	string,
+	apiTypes.TaskRunAfterRequest,
+	string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	return testidempotencyowner.IdempotencyResponse{}, errs.New(errs.KindInternal, "unexpected disable")
 }
@@ -43,6 +45,7 @@ func (*componentEnableRouteFixture) DisableComponent(
 func (*componentEnableRouteFixture) UpdateComponent(
 	context.Context,
 	string,
+	apiTypes.TaskRunAfterRequest,
 	string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	return testidempotencyowner.IdempotencyResponse{}, errs.New(errs.KindInternal, "unexpected update")

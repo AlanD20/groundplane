@@ -9,7 +9,8 @@ type AgentStatus string
 
 // AgentUpdate selects an independently distributed, immutable Agent image.
 type AgentUpdate struct {
-	Image string `json:"image" minLength:"1" maxLength:"1024"`
+	After []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	Image string   `json:"image" minLength:"1" maxLength:"1024"`
 }
 
 const (

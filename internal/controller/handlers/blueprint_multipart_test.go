@@ -34,10 +34,10 @@ func TestDecodeBlueprintMultipartAcceptsClosedVerifiedBundle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeBlueprintMultipart() error = %v", err)
 	}
-	if bundle.RootPath != "blueprint.yaml" || len(bundle.ComposeSources) != 1 ||
-		bundle.ComposeSources[0] != "blueprint.yaml" || bundle.Interpolation["TAG"] != "v1" ||
-		len(bundle.Files) != 1 || bundle.Files[0].Path != "blueprint.yaml" ||
-		!bytes.Equal(bundle.Files[0].Content, content) {
+	if bundle.Bundle.RootPath != "blueprint.yaml" || len(bundle.Bundle.ComposeSources) != 1 ||
+		bundle.Bundle.ComposeSources[0] != "blueprint.yaml" || bundle.Bundle.Interpolation["TAG"] != "v1" ||
+		len(bundle.Bundle.Files) != 1 || bundle.Bundle.Files[0].Path != "blueprint.yaml" ||
+		!bytes.Equal(bundle.Bundle.Files[0].Content, content) {
 		t.Fatalf("decodeBlueprintMultipart() = %#v", bundle)
 	}
 }

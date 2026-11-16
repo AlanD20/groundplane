@@ -2,7 +2,8 @@ package connectors
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"net/http"
 	"testing"
 	"time"
@@ -52,39 +53,46 @@ func TestConnectorDeletionPublishesCapturedNativeRemoval(t *testing.T) {
 	idempotency := &fakeConnectorDeletionIdempotency{
 		known: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
 	}
-	service, err := NewDeletionService(repository, idempotency)
+	service, err := NewDeletionService(repository, idempotency, &acceptedaction.Submitter{})
 	if err != nil {
 		t.Fatalf("NewDeletionService() error = %v", err)
 	}
 	service.now = func() time.Time { return now }
-	response, err := service.DeleteConnector(context.Background(), connectorID, "connector-delete-key-0001")
-	if err != nil {
-		t.Fatalf("DeleteConnector() error = %v", err)
+	task := workexecution.Task{
+		ID:         ids.New(ids.KindTask),
+		Actor:      workexecution.OperatorActor,
+		Action:     workexecution.ActionRemove,
+		TargetID:   connectorID,
+		TargetName: "primary-backups",
+		Scope:      workexecution.Scope{TenantID: tenantID, ProjectID: projectID, EnvironmentID: environmentID},
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		Deadline:   now.Add(acceptedaction.QueueTimeout),
 	}
-	var accepted apiTypes.TaskAccepted
-	if err := json.Unmarshal(response.Body, &accepted); err != nil {
-		t.Fatalf("decode TaskAccepted: %v", err)
+	if repository.beginCalls != 0 {
+		t.Fatal("removal captured before deferred compiler")
+	}
+	prepared, err := service.prepareAcceptedRemoval(
+		t.Context(),
+		workqueue.TaskSnapshot{Task: task, Revision: 1},
+		1,
+		now,
+		acceptedConnectorRemoval{},
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
 	reference, err := repository.input.Reference()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Status != http.StatusAccepted || accepted.TaskID != repository.task.ID ||
-		repository.task.Validate() != nil || repository.task.Scope.EnvironmentID != environmentID ||
-		repository.task.Scope.ProjectID != projectID || repository.task.Scope.TenantID != tenantID ||
-		repository.task.Actor != workexecution.OperatorActor || repository.task.Action != workexecution.ActionRemove ||
-		repository.task.TargetID != connectorID || repository.task.TargetName != "primary-backups" ||
-		!repository.task.Deadline.Equal(now.Add(time.Duration(connectorDeletionTimeoutSeconds)*time.Second)) ||
-		repository.task.Intent != reference || repository.marker.TaskID != repository.task.ID ||
-		repository.marker.ReplayTarget == nil ||
-		*repository.marker.ReplayTarget != (testidempotency.IdempotencyReplayTarget{
-			Kind: testidempotency.IdempotencyReplayTargetConnector, ID: connectorID,
-		}) || repository.marker.Locator.ScopeKind != testidempotency.IdempotencyScopeEnvironment ||
-		repository.marker.Locator.ScopeID != environmentID ||
-		repository.input.ConnectorRevision != repository.connector.Revision {
-		t.Fatalf("deletion response/task/marker/input = %#v/%#v/%#v/%#v",
-			response, repository.task, repository.marker, repository.input)
+	if prepared.Task.ID != task.ID || prepared.Task.Scope != task.Scope || prepared.Task.Intent != reference ||
+		len(prepared.Graph) != 1 ||
+		repository.input.ConnectorRevision != repository.connector.Revision ||
+		repository.beginCalls != 1 {
+		t.Fatalf("captured removal = %#v / %#v", prepared, repository.input)
 	}
+
 }
 
 // Rationale: an exact retry after successful finalization must resolve through
@@ -111,11 +119,16 @@ func TestConnectorDeletionReplaysBeforeTargetLookup(t *testing.T) {
 			Kind: idempotentintent.ResolutionReplay, Response: want,
 		},
 	}
-	service, err := NewDeletionService(repository, idempotency)
+	service, err := NewDeletionService(repository, idempotency, &acceptedaction.Submitter{})
 	if err != nil {
 		t.Fatalf("NewDeletionService() error = %v", err)
 	}
-	got, err := service.DeleteConnector(context.Background(), connectorID, "connector-delete-key-0002")
+	got, err := service.DeleteConnector(
+		context.Background(),
+		connectorID,
+		apiTypes.TaskRunAfterRequest{},
+		"connector-delete-key-0002",
+	)
 	if err != nil || got.Status != want.Status || got.ContentKind != want.ContentKind ||
 		string(got.Body) != string(want.Body) || repository.readCalls != 0 || repository.beginCalls != 0 {
 		t.Fatalf(
@@ -175,18 +188,17 @@ func (repository *fakeConnectorDeletionRepository) CaptureConnectorRemoval(
 	}, nil
 }
 
-func (repository *fakeConnectorDeletionRepository) PublishConnectorRemoval(
+func (repository *fakeConnectorDeletionRepository) PrepareConnectorRemovalAuthority(
 	_ context.Context,
 	_ testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
 	_ testkeyvalue.Versioned[testhierarchy.ProjectRecord],
 	_ testkeyvalue.Versioned[testconnectors.Record],
 	input connectorremoval.Input,
 	task workexecution.Task,
-	marker testidempotency.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
+) (workqueue.Change, workexecution.Item, error) {
 	repository.beginCalls++
-	repository.input, repository.task, repository.marker = input, task, marker
-	return etcd.IdempotencyTransactionResult{}, nil
+	repository.input, repository.task = input, task
+	return workqueue.Change{}, workexecution.Item{ID: input.WorkItemID, TaskID: task.ID, Input: &task.Intent}, nil
 }
 
 type fakeConnectorDeletionIdempotency struct {
@@ -211,6 +223,7 @@ func (idempotency *fakeConnectorDeletionIdempotency) Prepare(
 	_ context.Context,
 	_ testidempotency.IdempotencyLocator,
 	_ string,
+	_ []string,
 ) (connectorDeletionEvidence, error) {
 	return connectorDeletionEvidence{}, nil
 }

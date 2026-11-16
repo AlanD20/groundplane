@@ -18,6 +18,7 @@ import (
 	commandrunner "github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/internal/common/version"
 
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	"github.com/AlanD20/groundplane/internal/controller/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/controller/etcdconfig"
 	"github.com/AlanD20/groundplane/internal/controller/host"
@@ -26,6 +27,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/controller/softwareactivation"
 	"github.com/AlanD20/groundplane/internal/controller/softwarepreparation"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/agentimagemetadata"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
@@ -36,13 +38,18 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
 	"github.com/AlanD20/groundplane/internal/infra/systemd"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type Dependencies struct {
-	Config             config.ControllerConfig
-	Key                agentruntime.ControllerKey
-	Protector          *secretvalue.Protector
-	Store              etcdstore.Store
+	Accepted  *acceptedaction.Submitter
+	Config    config.ControllerConfig
+	Key       agentruntime.ControllerKey
+	Protector *secretvalue.Protector
+	Store     interface {
+		etcdstore.Store
+		workqueue.BackingCreationStore
+	}
 	Agents             *agentregistration.Repository
 	Tasks              *etcd.TaskRepository
 	Intents            *requestidempotency.Coordinator
@@ -86,6 +93,9 @@ func New(
 	ctx context.Context,
 	dependencies Dependencies,
 ) (_ *Platform, result error) {
+	if dependencies.Accepted == nil {
+		return nil, errs.New(errs.KindInternal, "host accepted action submission is required")
+	}
 	cfg := dependencies.Config
 	configIdempotency, err := agentruntime.NewConfigIdempotency(dependencies.Intents, dependencies.Idempotency)
 	if err != nil {
@@ -177,7 +187,7 @@ func New(
 	platform.controllerWork = controllerWork
 	agentImages := &agentimagemetadata.Verifier{}
 	platform.Upgrades, err = controllerupgrade.NewService(controllerupgrade.ServiceDependencies{
-		Catalog: catalog, Unit: unit, Agents: platform.agents, Tasks: dependencies.Tasks, Records: controllerRecords,
+		Submitter: dependencies.Accepted, Catalog: catalog, Unit: unit, Agents: platform.agents, Tasks: dependencies.Tasks, Records: controllerRecords,
 		Evidence: dependencies.Idempotency, Intents: dependencies.Intents,
 		ProcessDigest: process, BootstrapAgentImage: cfg.Agent.Image, AgentImages: agentImages,
 	})
@@ -186,40 +196,25 @@ func New(
 	}
 	defaults := localagent.Config{PullIntervalSeconds: cfg.Agent.Runtime.PullIntervalSeconds,
 		MaxConcurrentTasks: cfg.Agent.Runtime.MaxConcurrentTasks, MaxParallelOperationsPerTask: cfg.Agent.Runtime.MaxParallelOperationsPerTask, Labels: cfg.Agent.Runtime.Labels}
-	enrollmentIdempotency, err := agentmanagement.NewEnrollmentIdempotency(
-		dependencies.Intents,
-		dependencies.Idempotency,
-	)
-	if err != nil {
-		return nil, err
-	}
 	enrollments, err := agentmanagement.NewEnrollmentService(
 		platform.Upgrades,
 		defaults,
 		dependencies.Tasks,
-		enrollmentIdempotency,
+		dependencies.Accepted,
 	)
-	if err != nil {
-		return nil, err
-	}
-	updateIdempotency, err := agentmanagement.NewUpdateIdempotency(dependencies.Intents, dependencies.Idempotency)
 	if err != nil {
 		return nil, err
 	}
 	updates, err := agentmanagement.NewUpdateService(
 		platform.agents,
 		dependencies.Tasks,
-		updateIdempotency,
 		agentImages,
+		dependencies.Accepted,
 	)
 	if err != nil {
 		return nil, err
 	}
-	removalIdempotency, err := agentmanagement.NewRemovalIdempotency(dependencies.Intents, dependencies.Idempotency)
-	if err != nil {
-		return nil, err
-	}
-	removals, err := agentmanagement.NewRemovalService(platform.agents, dependencies.Tasks, removalIdempotency)
+	removals, err := agentmanagement.NewRemovalService(platform.agents, dependencies.Tasks, dependencies.Accepted)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +273,7 @@ func New(
 	}
 	platform.EtcdConfig, err = etcdconfig.New(
 		dependencies.EtcdLifecycle.Configuration(), dependencies.EtcdLifecycle,
-		dependencies.Tasks, etcdInputs, queue, dependencies.Idempotency, dependencies.Intents,
+		dependencies.Tasks, etcdInputs, queue, dependencies.Idempotency, dependencies.Intents, dependencies.Accepted,
 	)
 	if err != nil {
 		return nil, err
@@ -293,4 +288,11 @@ type reconciliationScheduler interface {
 // Run owns the managed Agent reconciliation loop for the host lifetime.
 func (platform *Platform) Run(ctx context.Context) {
 	platform.reconciliation.Run(ctx)
+}
+
+// AcceptedPreparations joins host lifecycle compilers without exposing them to
+// HTTP handlers or inventing a second execution-dispatch boundary.
+func (platform *Platform) AcceptedPreparations() []taskdependencies.Registration {
+	registrations := platform.AgentMutations.AcceptedPreparations()
+	return append(registrations, platform.Upgrades.AcceptedPreparations()...)
 }

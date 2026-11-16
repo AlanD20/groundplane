@@ -73,12 +73,16 @@ func TestAgentReadRoutesExposeTheConfiguredProjection(t *testing.T) {
 func TestAgentConfigUpdateReplacesTheCompleteDocument(t *testing.T) {
 	t.Parallel()
 
-	wantBody := []byte(`{"labels":{"zone":"edge"},"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"pull_interval_seconds":5}`)
+	wantBody := []byte(
+		`{"labels":{"zone":"edge"},"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"pull_interval_seconds":5}`,
+	)
 	reader := &fakeAgentReader{response: testidempotencyowner.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: wantBody,
 	}}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{Agents: reader})
-	body := []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"labels":{"zone":"edge"}}`)
+	body := []byte(
+		`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"labels":{"zone":"edge"}}`,
+	)
 	request := httptest.NewRequest(
 		http.MethodPut,
 		"/api/v1/agents/"+testAgentReadID+"/config",
@@ -185,7 +189,7 @@ func TestAgentUpdateReturnsExactTaskResponse(t *testing.T) {
 	}
 }
 
-func TestAgentMutationsRejectBodiesBeforeDispatch(t *testing.T) {
+func TestAgentMutationsRejectMalformedBodiesBeforeDispatch(t *testing.T) {
 	t.Parallel()
 
 	for name, test := range map[string][2]string{
@@ -196,7 +200,7 @@ func TestAgentMutationsRejectBodiesBeforeDispatch(t *testing.T) {
 			t.Parallel()
 			mutator := &fakeAgentMutator{}
 			server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{AgentMutations: mutator})
-			request := httptest.NewRequest(test[0], test[1], bytes.NewReader([]byte(`{}`)))
+			request := httptest.NewRequest(test[0], test[1], bytes.NewReader([]byte(`{`)))
 			request.Header.Set(idempotencyKeyHeader, "agent-body-key-0001")
 			response := httptest.NewRecorder()
 			server.requestHandler().ServeHTTP(response, request)
@@ -231,6 +235,7 @@ type fakeAgentMutator struct {
 
 func (mutator *fakeAgentMutator) EnrollAgent(
 	_ context.Context,
+	_ apiTypes.TaskRunAfterRequest,
 	key string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	mutator.key = key
@@ -240,6 +245,7 @@ func (mutator *fakeAgentMutator) EnrollAgent(
 func (mutator *fakeAgentMutator) RemoveAgent(
 	_ context.Context,
 	agentID string,
+	_ apiTypes.TaskRunAfterRequest,
 	key string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	mutator.removedAgentID = agentID
@@ -250,7 +256,7 @@ func (mutator *fakeAgentMutator) RemoveAgent(
 func (mutator *fakeAgentMutator) UpdateAgent(
 	_ context.Context,
 	agentID string,
-	_ string,
+	_ apiTypes.AgentUpdate,
 	key string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	mutator.updatedAgentID = agentID
@@ -267,7 +273,12 @@ func (reader *fakeAgentReader) GetAgent(context.Context, string) (apiTypes.Agent
 }
 
 func (reader *fakeAgentReader) GetAgentConfig(context.Context, string) (apiTypes.AgentConfig, error) {
-	return apiTypes.AgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, MaxParallelOperationsPerTask: 1, Labels: map[string]string{}}, nil
+	return apiTypes.AgentConfig{
+		PullIntervalSeconds:          2,
+		MaxConcurrentTasks:           3,
+		MaxParallelOperationsPerTask: 1,
+		Labels:                       map[string]string{},
+	}, nil
 }
 
 func (reader *fakeAgentReader) UpdateAgentConfig(

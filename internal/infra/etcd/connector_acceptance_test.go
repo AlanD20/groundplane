@@ -137,7 +137,7 @@ func TestC15ConnectorRemovalDistinguishesDisabledAndEnabledPolicyReferences(t *t
 			native := nativeConnectorFixture{store: fixture.store, repository: repository,
 				environment: fixture.environment, project: fixture.project, current: fixture.connector}
 			native.capture(t, fixture.now.Add(time.Minute))
-			result, err := repository.PublishConnectorRemoval(
+			result, err := publishConnectorRemovalFixture(repository,
 				context.Background(), fixture.environment, fixture.project, fixture.connector,
 				native.input, native.task, native.marker,
 			)

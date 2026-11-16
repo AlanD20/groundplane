@@ -23,6 +23,7 @@ func (fake *fakeZoneMutator) RemoveZone(
 	_ context.Context,
 	id string,
 	idempotencyKey string,
+	_ []string,
 ) (corenetwork.MutationResponse, error) {
 	fake.input.EnvironmentID = id
 	fake.idempotencyKey = idempotencyKey

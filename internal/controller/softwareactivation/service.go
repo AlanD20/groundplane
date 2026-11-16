@@ -4,21 +4,19 @@ package softwareactivation
 
 import (
 	"context"
-	"encoding/json"
 	"math"
-	"net/http"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
 	preparationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwarepreparation"
@@ -38,12 +36,11 @@ type PreparationStore interface {
 }
 
 type TaskStore interface {
-	CreateSoftwareActivationWork(
+	PrepareSoftwareActivationAuthority(
 		context.Context,
 		activationrecord.Record,
 		etcdstore.Versioned[preparationrecord.Record],
-		idempotencyrecord.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	) (workqueue.Change, error)
 }
 
 type CurrentHealth interface {
@@ -64,6 +61,7 @@ type ControllerSource interface {
 }
 
 type ServiceDependencies struct {
+	Submitter         *acceptedaction.Submitter
 	Preparations      PreparationStore
 	Records           *activationrecord.Repository
 	Tasks             TaskStore
@@ -79,6 +77,7 @@ type ServiceDependencies struct {
 }
 
 type Service struct {
+	submitter         *acceptedaction.Submitter
 	preparations      PreparationStore
 	records           *activationrecord.Repository
 	tasks             TaskStore
@@ -95,13 +94,23 @@ type Service struct {
 }
 
 func NewService(dependencies ServiceDependencies) (*Service, error) {
-	if dependencies.Preparations == nil || dependencies.Records == nil || dependencies.Tasks == nil ||
-		dependencies.Health == nil || dependencies.Stager == nil || dependencies.ControllerSource == nil || dependencies.Queue == nil ||
-		dependencies.Diagnostics == nil || dependencies.ControllerRecords == nil || dependencies.AgentRecords == nil || dependencies.Evidence == nil || dependencies.Intents == nil {
+	if dependencies.Submitter == nil ||
+		dependencies.Preparations == nil ||
+		dependencies.Records == nil ||
+		dependencies.Tasks == nil ||
+		dependencies.Health == nil ||
+		dependencies.Stager == nil ||
+		dependencies.ControllerSource == nil ||
+		dependencies.Queue == nil ||
+		dependencies.Diagnostics == nil ||
+		dependencies.ControllerRecords == nil ||
+		dependencies.AgentRecords == nil ||
+		dependencies.Evidence == nil ||
+		dependencies.Intents == nil {
 		return nil, errs.New(errs.KindInternal, "software activation service dependencies are incomplete")
 	}
 	return &Service{
-		preparations: dependencies.Preparations, records: dependencies.Records, tasks: dependencies.Tasks,
+		submitter: dependencies.Submitter, preparations: dependencies.Preparations, records: dependencies.Records, tasks: dependencies.Tasks,
 		health: dependencies.Health, stager: dependencies.Stager,
 		controllerSource: dependencies.ControllerSource, queue: dependencies.Queue, diagnostics: dependencies.Diagnostics,
 		controllerRecords: dependencies.ControllerRecords, agentRecords: dependencies.AgentRecords,
@@ -109,8 +118,13 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	}, nil
 }
 
-func (service *Service) Start(ctx context.Context, preparationTaskID, key string) (Accepted, error) {
-	evidence, locator, err := service.protect(ctx, preparationTaskID, key)
+func (service *Service) Start(
+	ctx context.Context,
+	preparationTaskID string,
+	after []string,
+	key string,
+) (Accepted, error) {
+	evidence, locator, err := service.protect(ctx, preparationTaskID, after, key)
 	if err != nil {
 		return Accepted{}, err
 	}
@@ -122,76 +136,28 @@ func (service *Service) Start(ctx context.Context, preparationTaskID, key string
 	if found {
 		return decodeReplay(existing)
 	}
-	prepared, err := service.preparations.Get(ctx, preparationTaskID)
-	if err != nil {
-		return Accepted{}, err
+	if ids.Validate(ids.KindTask, preparationTaskID) != nil {
+		return Accepted{}, errs.New(errs.KindValidationFailed, "software preparation Task id is invalid")
 	}
-	if prepared.Record.Progress.Phase != preparation.PhaseVerified {
-		return Accepted{}, errs.New(errs.KindStateConflict, "software preparation is not verified")
-	}
-	agent, err := service.freezeAgent(ctx, prepared.Record.Source.Selection)
-	if err != nil {
-		return Accepted{}, err
-	}
-	stagingImage := ""
-	if prepared.Record.Source.Selection.IncludesController() {
-		if prepared.Record.Source.Selection.IncludesAgent() {
-			stagingImage = prepared.Record.Progress.Result.Agent.Artifact.Reference
-		} else if agent != nil {
-			stagingImage = agent.Image
-		} else {
-			stagingImage, err = service.controllerSource.DesiredAgentImage(ctx)
-			if err != nil {
-				return Accepted{}, err
-			}
-			if !imageref.IsDigestPinned(stagingImage) {
-				return Accepted{}, errs.New(errs.KindStateConflict, "Controller activation has no valid default Agent image")
-			}
-		}
-	}
-	now := service.now().UTC()
-	input := activationrecord.Input{
-		OperationID: ids.New(ids.KindOperation), Preparation: prepared.Record,
-		Agent: agent, StagingAgentImage: stagingImage,
-	}
-	if prepared.Record.Source.Selection.IncludesController() {
-		input.PreviousController, err = service.controllerSource.ActivationPredecessor(ctx)
-		if err != nil {
-			return Accepted{}, err
-		}
-	}
-	_, inputHash, err := activationrecord.EncodeInput(input)
-	if err != nil {
-		return Accepted{}, err
-	}
-	record, err := activationrecord.NewRecord(ids.New(ids.KindTask), inputHash, input, now)
-	if err != nil {
-		return Accepted{}, err
-	}
-	accepted := Accepted{TaskID: record.TaskID}
-	body, err := json.Marshal(accepted)
-	if err != nil {
-		return Accepted{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(body)
+	at := service.now().UTC()
+	task := workexecution.Task{ID: ids.New(ids.KindTask), Actor: workexecution.OperatorActor,
+		Action: workexecution.ActionActivate, TargetID: activationrecord.TargetID(), TargetName: "Groundplane software",
+		After: append(
+			[]string(nil),
+			after...), CreatedAt: at, UpdatedAt: at, Deadline: at.Add(acceptedaction.QueueTimeout)}
 	intent, err := evidence.DurableRecord()
 	if err != nil {
 		return Accepted{}, err
 	}
 	defer clear(intent.Ciphertext)
-	result, publicationErr := service.tasks.CreateSoftwareActivationWork(
-		ctx, record, prepared, idempotencyrecord.IdempotencyMarker{
-			Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-			Locator: locator, Intent: intent,
-			Response: idempotencyrecord.IdempotencyResponse{
-				Status:      http.StatusAccepted,
-				ContentKind: "application/json",
-				Body:        body,
-			},
-			TaskID: record.TaskID, CreatedAt: now, UpdatedAt: now,
-		},
-	)
-	return service.resolvePublication(ctx, locator, evidence, result, publicationErr, accepted)
+	response, err := acceptedaction.Submit(ctx, service.submitter, acceptedaction.Submission{
+		Task: task, Kind: "software-activate", Locator: locator, Intent: intent, Evidence: evidence},
+		activationRequest{PreparationTaskID: preparationTaskID})
+	if err != nil {
+		return Accepted{}, err
+	}
+	return decodeAccepted(response.Body)
+
 }
 
 func (service *Service) Get(ctx context.Context, taskID string) (etcdstore.Versioned[activationrecord.Record], error) {

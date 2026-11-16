@@ -86,11 +86,16 @@ func (service *ReadService) UpdateAgentConfig(
 	if config.MaxConcurrentTasks < 1 || config.MaxConcurrentTasks > 256 ||
 		config.MaxParallelOperationsPerTask < 1 || config.MaxParallelOperationsPerTask > 256 ||
 		config.MaxConcurrentTasks*config.MaxParallelOperationsPerTask > 256 {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Agent task limits must each be 1..256 with at most 256 total operations")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Agent task limits must each be 1..256 with at most 256 total operations",
+		)
 	}
 	body, err := service.health.UpdateConfig(ctx, id, localagent.Config{
 		PullIntervalSeconds: int32(config.PullIntervalSeconds),
-		MaxConcurrentTasks:  int32(config.MaxConcurrentTasks), MaxParallelOperationsPerTask: int32(config.MaxParallelOperationsPerTask),
+		MaxConcurrentTasks: int32(
+			config.MaxConcurrentTasks,
+		), MaxParallelOperationsPerTask: int32(config.MaxParallelOperationsPerTask),
 		Labels: copyAgentLabels(config.Labels),
 	}, idempotencyKey)
 	if err != nil {
@@ -173,7 +178,9 @@ func ProjectStatus(health localagent.Health) (apiTypes.AgentStatus, error) {
 func projectAgentConfig(config localagent.Config) apiTypes.AgentConfig {
 	return apiTypes.AgentConfig{
 		PullIntervalSeconds: int(config.PullIntervalSeconds),
-		MaxConcurrentTasks:  int(config.MaxConcurrentTasks), MaxParallelOperationsPerTask: int(config.MaxParallelOperationsPerTask),
+		MaxConcurrentTasks: int(
+			config.MaxConcurrentTasks,
+		), MaxParallelOperationsPerTask: int(config.MaxParallelOperationsPerTask),
 		Labels: copyAgentLabels(config.Labels),
 	}
 }

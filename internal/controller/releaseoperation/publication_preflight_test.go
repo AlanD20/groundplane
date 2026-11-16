@@ -7,11 +7,10 @@ import (
 	"testing"
 	"time"
 
-	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testlocalagents "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
@@ -47,18 +46,16 @@ func TestPublishUnavailableImageResolutionDoesNotStage(t *testing.T) {
 					ReplicaCount:       3,
 				}
 			}
-			response, err := service.publishServiceWork(
+			response, err := service.prepareServiceWork(
 				context.Background(),
 				testreleasequeries.ReleasePlanningScope{},
 				candidate,
-				testidempotency.IdempotencyLocator{},
-				testidempotency.ProtectedIntentRecord{},
-				idempotentintent.ProtectedEvidence{},
+				workexecution.Task{},
 			)
 			if kind, ok := errs.KindOf(err); !ok || kind != errs.KindWorkloadImageResolutionUnavailable {
 				t.Fatalf("missing image error = %v", err)
 			}
-			if images.calls != 1 || store.writes != 0 || response.Status != 0 || len(response.Body) != 0 {
+			if images.calls != 1 || store.writes != 0 || response.Task.ID != "" || len(response.Graph) != 0 {
 				t.Fatal("failed preflight published state or response")
 			}
 		})

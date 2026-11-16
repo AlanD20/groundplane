@@ -198,7 +198,7 @@ export default function TenantPage() {
           id={removingProject.id}
           workspace={tenant.slug}
           description="Permanently removes this Project and every Environment, workload, volume, Secret, Connector, and project Runner it owns."
-          onDispatch={() => store.deleteProject(removingProject.id)}
+          onDispatch={(after) => store.deleteProject(removingProject.id, after)}
           onCommit={() => setRemovingProject(null)}
         />
       ) : null}

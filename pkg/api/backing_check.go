@@ -3,9 +3,10 @@ package api
 import "github.com/AlanD20/groundplane/internal/common/backingaccess"
 
 type BackingCheckRequest struct {
-	AttachID string `json:"attach_id" required:"true" pattern:"^att_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Revision int64  `json:"revision" required:"true" minimum:"1"`
-	GrantID  string `json:"grant_id,omitempty" pattern:"^att_[0-9A-HJKMNP-TV-Z]{26}$"`
+	After    []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	AttachID string   `json:"attach_id" required:"true" pattern:"^att_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Revision int64    `json:"revision,omitempty" minimum:"0"`
+	GrantID  string   `json:"grant_id,omitempty" pattern:"^att_[0-9A-HJKMNP-TV-Z]{26}$"`
 }
 
 type BackingCheckConfiguration struct {

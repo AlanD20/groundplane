@@ -1,3 +1,4 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,14 +32,18 @@ export function ImageFetchAction({
   const seed = initialImage ?? search.get("fetch") ?? "";
   const [image, setImage] = useState(seed);
   const [busy, setBusy] = useState(false);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
   const [error, setError] = useState("");
   const inputId = useId();
-  const intent = useRef<{ image: string; key: string } | null>(null);
+  const intent = useRef<{ fingerprint: string; key: string } | null>(null);
   const pending = useRef(false);
   const wasOpen = useRef(false);
   useEffect(() => {
     if (open && !wasOpen.current) {
       setImage(seed);
+      setAfter([]);
+      setAfterLoading(false);
       setError("");
     }
     wasOpen.current = open;
@@ -46,16 +51,20 @@ export function ImageFetchAction({
 
   async function dispatch() {
     const requested = image.trim();
-    if (!requested || pending.current) return;
-    if (!intent.current || intent.current.image !== requested)
-      intent.current = { image: requested, key: newULID() };
+    if (!requested || pending.current || afterLoading) return;
+    const fingerprint = JSON.stringify({ image: requested, after });
+    if (!intent.current || intent.current.fingerprint !== fingerprint)
+      intent.current = { fingerprint, key: newULID() };
     pending.current = true;
     setBusy(true);
     setError("");
     try {
       await controllerRequest<Accepted>("/images/fetch", 202, {
         method: "POST",
-        body: { image: requested },
+        body: {
+          image: requested,
+          ...(after.length ? { after: [...after] } : {}),
+        },
         idempotencyKey: intent.current.key,
       });
       // The transport publishes acceptance to Task notifications. Inventory
@@ -106,6 +115,11 @@ export function ImageFetchAction({
               </p>
             )}
           </div>
+          <TaskRunAfterSelector
+            value={after}
+            onChange={setAfter}
+            onBusyChange={setAfterLoading}
+          />
           <DialogFooter>
             <Button
               type="button"
@@ -115,7 +129,10 @@ export function ImageFetchAction({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={busy || !image.trim()}>
+            <Button
+              type="submit"
+              disabled={busy || afterLoading || !image.trim()}
+            >
               {busy && <Loader2 className="size-4 animate-spin" />}
               {busy ? "Starting…" : "Fetch image"}
             </Button>

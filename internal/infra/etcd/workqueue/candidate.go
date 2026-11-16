@@ -177,7 +177,12 @@ func (repository *Repository) ReadCandidate(
 		}
 	}
 	if item.Placement.Executor == workexecution.Agent {
-		keys = append(keys, HostEffectKey(item.Placement.HostID, item.ID), HostForwardFenceKey(item.Placement.HostID), AdmissionFenceKey(identity))
+		keys = append(
+			keys,
+			HostEffectKey(item.Placement.HostID, item.ID),
+			HostForwardFenceKey(item.Placement.HostID),
+			AdmissionFenceKey(identity),
+		)
 	}
 	read, err := repository.read(ctx, keys, view.ReadRevision)
 	if err != nil {

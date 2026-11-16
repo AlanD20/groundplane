@@ -126,7 +126,9 @@ func (reader *fakeLocalAgentHealthReader) UpdateConfig(
 	}
 	reader.key = key
 	if reader.responseBody == nil {
-		reader.responseBody = []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"labels":{"zone":"edge"}}`)
+		reader.responseBody = []byte(
+			`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"max_parallel_operations_per_task":1,"labels":{"zone":"edge"}}`,
+		)
 	}
 	return append([]byte(nil), reader.responseBody...), nil
 }

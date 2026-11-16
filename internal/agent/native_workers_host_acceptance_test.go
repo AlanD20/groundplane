@@ -199,9 +199,18 @@ func newNativeWorkersHostFixture(t *testing.T, limit int) *nativeWorkersHostFixt
 		HostID: ids.New(ids.KindHost), AgentID: ids.New(ids.KindAgent), Generation: 1}
 	exchange := newNativeExchange(ctx, journal)
 	exchange.identity = identity
-	workers := &executionWorkers{ctx: ctx, cancel: cancel, identity: identity, limit: limit, limits: workexecution.AgentConcurrency{Tasks: uint16(limit), OperationsPerTask: 1},
-		scripts: scripts, exchange: exchange, ownership: ownership,
-		active: make(map[string]activeExecution), outputs: make(chan executionOutput, limit)}
+	workers := &executionWorkers{
+		ctx:       ctx,
+		cancel:    cancel,
+		identity:  identity,
+		limit:     limit,
+		limits:    workexecution.AgentConcurrency{Tasks: uint16(limit), OperationsPerTask: 1},
+		scripts:   scripts,
+		exchange:  exchange,
+		ownership: ownership,
+		active:    make(map[string]activeExecution),
+		outputs:   make(chan executionOutput, limit),
+	}
 	t.Cleanup(func() { workers.close(); exchange.close() })
 	return &nativeWorkersHostFixture{workers: workers, exchange: exchange, ownership: ownership}
 }

@@ -10,9 +10,24 @@ import (
 )
 
 type backingServiceLifecycle interface {
-	StartService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	StopService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	DestroyService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	StartService(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	StopService(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	DestroyService(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type MutationService struct {
@@ -47,37 +62,40 @@ func (service *MutationService) CreateBackingService(
 func (service *MutationService) StartBackingService(
 	ctx context.Context,
 	projectID string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	backing, err := service.resolve(ctx, projectID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.lifecycle.StartService(ctx, backing.ServiceID, idempotencyKey)
+	return service.lifecycle.StartService(ctx, backing.ServiceID, input, idempotencyKey)
 }
 
 func (service *MutationService) StopBackingService(
 	ctx context.Context,
 	projectID string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	backing, err := service.resolve(ctx, projectID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.lifecycle.StopService(ctx, backing.ServiceID, idempotencyKey)
+	return service.lifecycle.StopService(ctx, backing.ServiceID, input, idempotencyKey)
 }
 
 func (service *MutationService) DestroyBackingService(
 	ctx context.Context,
 	projectID string,
+	input apiTypes.TaskRunAfterRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	backing, err := service.resolve(ctx, projectID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.lifecycle.DestroyService(ctx, backing.ServiceID, idempotencyKey)
+	return service.lifecycle.DestroyService(ctx, backing.ServiceID, input, idempotencyKey)
 }
 
 func (service *MutationService) resolve(

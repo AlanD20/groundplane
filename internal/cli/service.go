@@ -323,36 +323,48 @@ func newServiceCmd() *cobra.Command {
 	edit.MarkFlagsMutuallyExclusive("log-max-file", "reset-logging")
 	cmd.AddCommand(edit)
 
-	cmd.AddCommand(&cobra.Command{
+	var removeAfter []string
+	remove := &cobra.Command{
 		Use:     "remove <name>",
 		Aliases: []string{"delete"},
 		Short:   "Remove a service (destructive — dispatches a task)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(removeAfter)
+			if err != nil {
+				return err
+			}
 			serviceID, err := resolveServiceTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.RemoveService(cmd.Context(), serviceID)
+			accepted, err := fromContext(cmd).Client.RemoveService(cmd.Context(), serviceID, after)
 			if err != nil {
 				return err
 			}
 			return renderDispatchedTask(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(remove, &removeAfter)
+	cmd.AddCommand(remove)
 
 	var deployTag, deployImage, deployStrategy, deployOnFailure string
+	var deployAfter []string
 	deploy := &cobra.Command{
 		Use:   "deploy <name>",
 		Short: "Deploy a service (tag defaults to the current tag — the redeploy case)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(deployAfter)
+			if err != nil {
+				return err
+			}
 			serviceID, err := resolveServiceTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
 			accepted, err := fromContext(cmd).Client.DeployService(cmd.Context(), serviceID, apiTypes.DeployRequest{
-				Tag: deployTag, Image: deployImage, Strategy: deployStrategy, OnFailure: apiTypes.OnFailure(deployOnFailure),
+				After: after, Tag: deployTag, Image: deployImage, Strategy: deployStrategy, OnFailure: apiTypes.OnFailure(deployOnFailure),
 			})
 			if err != nil {
 				return err
@@ -369,20 +381,26 @@ func newServiceCmd() *cobra.Command {
 		StringVar(&deployStrategy, "strategy", "", "blue-green | recreate | rolling")
 	deploy.Flags().
 		StringVar(&deployOnFailure, "on-failure", "", "switch_back | leave_active (defaults to the Service declaration)")
+	addTaskAfterFlag(deploy, &deployAfter)
 	cmd.AddCommand(deploy)
 
 	var rollbackTag string
+	var rollbackAfter []string
 	rollback := &cobra.Command{
 		Use:   "rollback <name>",
 		Short: "Deploy a previous image using the current Service configuration and strategy",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(rollbackAfter)
+			if err != nil {
+				return err
+			}
 			serviceID, err := resolveServiceTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
 			accepted, err := fromContext(cmd).Client.RollbackService(
-				cmd.Context(), serviceID, apiTypes.RollbackRequest{Tag: rollbackTag},
+				cmd.Context(), serviceID, apiTypes.RollbackRequest{Tag: rollbackTag, After: after},
 			)
 			if err != nil {
 				return err
@@ -391,56 +409,78 @@ func newServiceCmd() *cobra.Command {
 		},
 	}
 	rollback.Flags().StringVar(&rollbackTag, "tag", "", "explicit tag (overrides the auto-selected previous tag)")
+	addTaskAfterFlag(rollback, &rollbackAfter)
 	cmd.AddCommand(rollback)
 
-	cmd.AddCommand(&cobra.Command{
+	var startAfter []string
+	start := &cobra.Command{
 		Use:   "start <name>",
 		Short: "Start a service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(startAfter)
+			if err != nil {
+				return err
+			}
 			serviceID, err := resolveServiceTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.StartService(cmd.Context(), serviceID)
+			accepted, err := fromContext(cmd).Client.StartService(cmd.Context(), serviceID, after)
 			if err != nil {
 				return err
 			}
 			return renderDispatchedTask(cmd, accepted)
 		},
-	})
-	cmd.AddCommand(&cobra.Command{
+	}
+	addTaskAfterFlag(start, &startAfter)
+	cmd.AddCommand(start)
+	var stopAfter []string
+	stop := &cobra.Command{
 		Use:   "stop <name>",
 		Short: "Stop a service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(stopAfter)
+			if err != nil {
+				return err
+			}
 			serviceID, err := resolveServiceTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.StopService(cmd.Context(), serviceID)
+			accepted, err := fromContext(cmd).Client.StopService(cmd.Context(), serviceID, after)
 			if err != nil {
 				return err
 			}
 			return renderDispatchedTask(cmd, accepted)
 		},
-	})
-	cmd.AddCommand(&cobra.Command{
+	}
+	addTaskAfterFlag(stop, &stopAfter)
+	cmd.AddCommand(stop)
+	var destroyAfter []string
+	destroy := &cobra.Command{
 		Use:   "destroy <name>",
 		Short: "Remove service containers while retaining its definition and persistent volumes",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(destroyAfter)
+			if err != nil {
+				return err
+			}
 			serviceID, err := resolveServiceTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.DestroyService(cmd.Context(), serviceID)
+			accepted, err := fromContext(cmd).Client.DestroyService(cmd.Context(), serviceID, after)
 			if err != nil {
 				return err
 			}
 			return renderDispatchedTask(cmd, accepted)
 		},
-	})
+	}
+	addTaskAfterFlag(destroy, &destroyAfter)
+	cmd.AddCommand(destroy)
 
 	var tail uint32
 	var follow bool
@@ -472,81 +512,7 @@ func newServiceCmd() *cobra.Command {
 	logs.Flags().BoolVarP(&follow, "follow", "f", false, "stream new log lines as they arrive")
 	cmd.AddCommand(logs)
 
-	var attachName string
-	var grants []string
-	var newCredential bool
-	var credentialAttach string
-	attach := &cobra.Command{
-		Use:   "attach <name> <backing>",
-		Short: "Attach a backing service to this service (provisions its own database + role)",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if newCredential == (credentialAttach != "") {
-				return errs.New(errs.KindValidationFailed, "choose exactly one of --new-credential or --credential")
-			}
-			if credentialAttach != "" && len(grants) > 0 {
-				return errs.New(errs.KindValidationFailed, "--grant requires --new-credential")
-			}
-			serviceID, err := resolveServiceTarget(cmd, args[0])
-			if err != nil {
-				return err
-			}
-			backingServiceID, err := resolveBackingAdapterServiceTarget(cmd, args[1])
-			if err != nil {
-				return err
-			}
-			credential := apiTypes.AttachCredential{Mode: apiTypes.AttachCredentialNew}
-			if credentialAttach != "" {
-				credentialID, resolveErr := resolveAttachTarget(cmd, credentialAttach)
-				if resolveErr != nil {
-					return resolveErr
-				}
-				credential = apiTypes.AttachCredential{Mode: apiTypes.AttachCredentialExisting, AttachID: credentialID}
-			}
-			grantAttachIDs := make([]string, len(grants))
-			for index, grant := range grants {
-				grantAttachIDs[index], err = resolveAttachTarget(cmd, grant)
-				if err != nil {
-					return err
-				}
-			}
-			accepted, err := fromContext(cmd).Client.CreateAttach(cmd.Context(), apiTypes.AttachRequest{
-				ServiceID:        serviceID,
-				BackingServiceID: backingServiceID,
-				Name:             attachName,
-				Credential:       credential,
-				GrantAttachIDs:   grantAttachIDs,
-			})
-			if err != nil {
-				return err
-			}
-			return renderDispatchedTask(cmd, accepted)
-		},
-	}
-	attach.Flags().
-		StringVar(&attachName, "name", "", "attach name (default: Controller-suggested, unique within the environment)")
-	attach.Flags().BoolVar(&newCredential, "new-credential", false, "provision a new backing-service credential")
-	attach.Flags().
-		StringVar(&credentialAttach, "credential", "", "reuse the credential owned by an existing attach id/name")
-	attach.Flags().StringSliceVar(&grants, "grant", nil, "other attach id/name(s) this attach's role may also access")
-	cmd.AddCommand(attach)
-
-	cmd.AddCommand(&cobra.Command{
-		Use:   "detach <attach>",
-		Short: "Detach backing access and run its configured cleanup",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveAttachTarget(cmd, args[0])
-			if err != nil {
-				return err
-			}
-			accepted, err := fromContext(cmd).Client.DetachAttach(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			return renderDispatchedTask(cmd, accepted)
-		},
-	})
+	cmd.AddCommand(newServiceAttachCmd(), newServiceDetachCmd())
 
 	return cmd
 }

@@ -14,9 +14,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Synchronous metadata publication has no Task. Its descriptor owns cleanup
-// after the replay window, using the same live-reference guards as Task-owned
-// revisions. Keep the immutable root until every companion record is gone.
+// Metadata descriptors own cleanup after the replay window. Accepted metadata
+// also waits for its explicit Task owner to retire. Both use the same live
+// reference guards and retain the immutable root until companions are gone.
 func (repository *Repository) cleanupPublishedMetadataRevision(
 	ctx context.Context, descriptor blueprints.EnvironmentBlueprintStageDescriptor, now time.Time,
 ) (bool, error) {
@@ -41,7 +41,7 @@ func (repository *Repository) cleanupPublishedMetadataRevision(
 	}
 	defer keyvalue.ClearRangeValues(page.Values)
 	descriptorKey := blueprints.EnvironmentBlueprintDescriptorKeyByID(descriptor.Claim.DescriptorID)
-	markerKey, err := idempotency.IdempotencyMarkerKey(descriptor.Claim.Locator)
+	markerKey, err := idempotency.IdempotencyMarkerKey(blueprints.EnvironmentBlueprintTaskLocator(descriptor.Claim))
 	if err != nil {
 		return false, err
 	}
@@ -62,10 +62,16 @@ func (repository *Repository) cleanupPublishedMetadataRevision(
 		return false, blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	if read.Values[3] != nil {
+		if stored.Claim.TaskLocator != nil {
+			return false, nil
+		}
 		return false, errs.New(errs.KindInternal, "metadata revision unexpectedly has a Task owner")
 	}
 	if read.Values[1] != nil {
-		marker, err := idempotency.DecodeIdempotencyMarker(read.Values[1].Value, stored.Claim.Locator)
+		marker, err := idempotency.DecodeIdempotencyMarker(
+			read.Values[1].Value,
+			blueprints.EnvironmentBlueprintTaskLocator(stored.Claim),
+		)
 		if err != nil {
 			return false, err
 		}

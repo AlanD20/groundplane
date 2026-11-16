@@ -74,7 +74,6 @@ func (service *SoftwareService) updateAutomatic(ctx context.Context) error {
 				apiTypes.RunnerUpdateRequest{Revision: item.Revision, Version: latest.Version},
 				key,
 				true,
-				&latest,
 			)
 			if err != nil && firstError == nil {
 				firstError = err

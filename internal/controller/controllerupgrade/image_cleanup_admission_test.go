@@ -36,13 +36,21 @@ func TestControllerUpdateAfterImageCleanup(t *testing.T) {
 						Key: imagefence.Key, Value: []byte(`{"operation":"new-cleanup"}`), ModRevision: h.storage.revision}
 				}
 			}
-			_, err := h.service.UpdateController(t.Context(), string(h.input.Release), "update-after-image-cleanup")
-			if (err == nil) != scenario.allowed {
-				t.Fatalf("admitted=%v, want %v: %v", err == nil, scenario.allowed, err)
+			response, err := h.service.UpdateController(
+				t.Context(),
+				string(h.input.Release),
+				nil,
+				"update-after-image-cleanup",
+			)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if !scenario.allowed && h.storage.transactions != 0 {
-				t.Fatal("rejected update published effects")
+			h.prepare(t, response.Body)
+			_, found, err := h.service.records.Current(t.Context(), 0)
+			if err != nil || found != scenario.allowed {
+				t.Fatalf("captured=%v, want %v: %v", found, scenario.allowed, err)
 			}
+
 		})
 	}
 }

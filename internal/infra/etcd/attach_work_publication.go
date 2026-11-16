@@ -2,7 +2,9 @@ package etcd
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
@@ -18,12 +20,12 @@ import (
 )
 
 type DetachWorkPublication struct {
-	Task       workexecution.Task
-	Item       workexecution.Item
-	Input      attachremoval.DetachInput
-	Capture    attachremoval.WorkCapture
-	Marker     idempotency.IdempotencyMarker
-	Initiation *TaskInitiation
+	Accepted workqueue.TaskSnapshot
+	Task     workexecution.Task
+	Item     workexecution.Item
+	Input    attachremoval.DetachInput
+	Capture  attachremoval.WorkCapture
+	Marker   idempotency.IdempotencyMarker
 }
 
 func (repository *AttachRepository) CaptureDetachSnapshot(
@@ -62,22 +64,17 @@ func (repository *AttachRepository) ResolveDetachHost(ctx context.Context) (work
 	return workexecution.Placement{Executor: workexecution.Agent, HostID: host.Binding.HostID}, nil
 }
 
-// PublishDetachWork atomically publishes direct Detach, its desired omission,
-// immutable input root and replay. It does not call the old Task publisher,
-// generate an ExecutionPlan, or start a child operation for credential cleanup.
-func (repository *AttachRepository) PublishDetachWork(
+// PrepareDetachWork captures exact effects after whole-Task prerequisites.
+// Its guarded source/resource fragment joins promotion of the accepted Task.
+func (repository *AttachRepository) PrepareDetachWork(
 	ctx context.Context,
 	request DetachWorkPublication,
-) (IdempotencyTransactionResult, error) {
+) (_ DetachWorkCapture, resultErr error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	if err := validateDetachWorkPublication(ctx, request); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
-		found {
-		return existing, err
+		return DetachWorkCapture{}, err
 	}
 	source, task, item := request.Input.Snapshot.Source, request.Task, request.Item
 	fence, err := environmentfence.LoadOrdinary(
@@ -87,14 +84,14 @@ func (repository *AttachRepository) PublishDetachWork(
 		source.SnapshotRevision,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	host, err := hostbindings.ReadLocal(ctx, repository.store, source.SnapshotRevision)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	if item.Placement.HostID != host.Binding.HostID {
-		return IdempotencyTransactionResult{}, errs.New(
+		return DetachWorkCapture{}, errs.New(
 			errs.KindStateConflict,
 			"Detach target host changed before publication",
 		)
@@ -107,88 +104,99 @@ func (repository *AttachRepository) PublishDetachWork(
 		item.Placement.HostID,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	defer keyvalue.ClearMutationValues(ownership.Mutations)
 	checks, err := backingchecks.RequireAttachIdle(ctx, repository.store, source.Attach.ID, source.SnapshotRevision)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	sources, err := attachremoval.SourceConditions(ctx, repository.store, source)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	desired, err := prepareAttachDesiredAuthoring(ctx, repository.store, source.Attach, "", true, request.Marker)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	defer clearDesiredMutationFragment(desired)
 	ancestry, err := hierarchydeletion.BindMutationEpochs(ctx, repository.store, source.SnapshotRevision,
 		hierarchydeletion.MutationScope{TenantID: source.TenantID, ProjectID: source.ProjectID}, nil, nil)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	defer ancestry.Clear()
 	groups := [][]keyvalue.Condition{fence.TransactionConditions(), host.Conditions, sources, ownership.Conditions,
 		request.Input.Snapshot.ConsumerConditions(), desired.conditions, ancestry.Conditions(), {checks}}
-	if request.Initiation != nil {
-		groups = append(groups, request.Initiation.fences)
-	}
+	groups = append(
+		groups,
+		[]keyvalue.Condition{{Key: workqueue.TaskKey(task.ID), ModRevision: request.Accepted.Revision}},
+	)
 	admission, err := resourcePublicationConditions(groups...)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	inputs, err := attachremoval.NewInputRepository(repository.store)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
+	custody := DetachWorkCapture{
+		store:            repository.store,
+		taskID:           task.ID,
+		workID:           item.ID,
+		operationID:      request.Capture.OperationID,
+		backingProjectID: source.Attach.BackingProjectID,
+		input:            *item.Input,
+	}
+	defer func() {
+		if resultErr != nil {
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			resultErr = errors.Join(resultErr, custody.Finish(cleanup, false))
+		}
+	}()
 	captured, err := inputs.PrepareDetachPublicationCapture(
 		ctx,
-		workqueue.TaskSnapshot{Task: task},
+		workqueue.TaskSnapshot{Task: task, Revision: request.Accepted.Revision},
 		item,
 		request.Input,
 		request.Capture,
 		admission,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	defer keyvalue.ClearMutationValues(captured.Mutations)
 	admission, err = resourcePublicationConditions(admission, captured.Conditions)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	reference, staged, err := inputs.StageDetach(ctx, item.Input.ID, request.Input, admission)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	defer keyvalue.ClearMutationValues(staged.Mutations)
 	if reference != *item.Input {
-		return IdempotencyTransactionResult{}, errs.New(
+		return DetachWorkCapture{}, errs.New(
 			errs.KindStateConflict,
 			"Detach staged input differs from its admitted reference",
 		)
 	}
-	publication, err := workqueue.PrepareSingleTask(task, item, request.Marker)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer keyvalue.ClearMutationValues(publication.Mutations)
 	value, err := attachrecord.EncodeAttachRecord(detaching)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	defer clear(value)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
 	defer clear(epoch.Value)
-	conditions, err := resourcePublicationConditions(staged.Conditions, publication.Conditions)
+	conditions, err := resourcePublicationConditions(staged.Conditions)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return DetachWorkCapture{}, err
 	}
-	mutations := append([]keyvalue.Mutation(nil), publication.Mutations...)
+	var mutations []keyvalue.Mutation
 	mutations = append(mutations, ownership.Mutations...)
 	mutations = append(mutations, captured.Mutations...)
 	mutations = append(mutations, staged.Mutations...)
@@ -199,20 +207,14 @@ func (repository *AttachRepository) PublishDetachWork(
 		epoch,
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: attachrecord.AttachKey(source.Attach.ID), Value: value},
 	)
-	plan, err := newIdempotencyMutationPlanForMarker(
-		idempotency.IdempotencyMarkerTask,
-		conditions,
-		mutations,
-		resourceWorkPublicationConflict(conditions),
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
+	owned := make([]keyvalue.Mutation, len(mutations))
+	for index, mutation := range mutations {
+		owned[index] = mutation
+		owned[index].Value = append([]byte(nil), mutation.Value...)
 	}
-	replay, err := NewIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return replay.applyEnvironmentBlueprint(ctx, request.Marker, plan, repository.store)
+	custody.Change = workqueue.Change{Conditions: conditions, Mutations: owned}
+	return custody, nil
+
 }
 
 func validateDetachWorkPublication(ctx context.Context, request DetachWorkPublication) error {
@@ -231,7 +233,8 @@ func validateDetachWorkPublication(ctx context.Context, request DetachWorkPublic
 		task.Scope != (workexecution.Scope{TenantID: source.TenantID, ProjectID: source.ProjectID, EnvironmentID: source.Attach.EnvironmentID}) ||
 		len(item.Dependencies) != 0 ||
 		!slices.Equal(item.Claims, request.Input.Claims(item.Placement.HostID)) ||
-		task.Intent.SHA256 != request.Marker.Intent.CiphertextDigest ||
+		task.Intent != *item.Input ||
+		request.Accepted.Revision <= 0 || !request.Accepted.Task.PendingPreparation() || request.Accepted.Task.ID != task.ID ||
 		request.Marker.TaskID != task.ID ||
 		request.Marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
 		request.Marker.Locator.ScopeID != source.Attach.EnvironmentID ||
@@ -251,15 +254,8 @@ func validateDetachWorkPublication(ctx context.Context, request DetachWorkPublic
 	if item.Placement.Executor != wantExecutor {
 		return errs.New(errs.KindValidationFailed, "Detach executor differs from its captured effects")
 	}
-	if request.Initiation != nil {
-		owner := request.Initiation.Owner()
-		if owner.TenantID != task.Scope.TenantID || owner.ProjectID != task.Scope.ProjectID ||
-			owner.EnvironmentID != task.Scope.EnvironmentID ||
-			workexecution.Actor(request.Initiation.Actor()) != task.Actor {
-			return errs.New(errs.KindScopeUnauthorized, "Detach initiation does not own the captured Environment")
-		}
-	} else if task.Actor != workexecution.OperatorActor {
-		return errs.New(errs.KindScopeUnauthorized, "system Detach requires its captured initiation")
+	if task.Actor != workexecution.OperatorActor {
+		return errs.New(errs.KindScopeUnauthorized, "Direct Detach requires an operator Task")
 	}
 	return nil
 }

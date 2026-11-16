@@ -38,6 +38,7 @@ func serviceCreateBody(input apiTypes.ServiceCreate) (generated.ServiceCreateJSO
 
 func serviceDeployBody(input apiTypes.DeployRequest) generated.ServiceDeployJSONRequestBody {
 	return generated.ServiceDeployJSONRequestBody{
+		After: optionalServiceStrings(input.After),
 		Image: optionalServiceString(input.Image),
 		Tag:   optionalServiceString(input.Tag), Strategy: optionalServiceString(input.Strategy),
 		OnFailure: optionalServiceString(string(input.OnFailure)),
@@ -45,7 +46,10 @@ func serviceDeployBody(input apiTypes.DeployRequest) generated.ServiceDeployJSON
 }
 
 func serviceRollbackBody(input apiTypes.RollbackRequest) generated.ServiceRollbackJSONRequestBody {
-	return generated.ServiceRollbackJSONRequestBody{Tag: optionalServiceString(input.Tag)}
+	return generated.ServiceRollbackJSONRequestBody{
+		Tag:   optionalServiceString(input.Tag),
+		After: optionalServiceStrings(input.After),
+	}
 }
 
 func serviceHealthcheckBody(input apiTypes.ServiceHealthcheck) generated.ServiceHealthcheck {
@@ -85,4 +89,11 @@ func optionalServiceStrings(value []string) *[]string {
 		return nil
 	}
 	return &value
+}
+
+func optionalTaskRevision(revision int64) *int64 {
+	if revision == 0 {
+		return nil
+	}
+	return &revision
 }

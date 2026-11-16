@@ -1,3 +1,5 @@
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
+import { TaskExecution } from "@/features/task/task-execution";
 import { useState } from "react";
 import { Check, Circle, LoaderCircle, PlugZap, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +100,8 @@ export function BackingCheckPanel({
   open: boolean;
   disabled?: boolean;
 }) {
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterBusy, setAfterBusy] = useState(false);
   const check = useBackingCheck(environmentId, open, attachId, grantId, taskId);
   const result = check.result;
   return (
@@ -107,28 +111,42 @@ export function BackingCheckPanel({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium">Consumer access check</h3>
-        {attachId && (
+        {attachId && !taskId && (
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={
-              disabled || check.sending || check.loading || check.active
+              (disabled && after.length === 0) ||
+              afterBusy ||
+              check.sending ||
+              check.loading ||
+              check.active
             }
-            onClick={() => void check.run()}
+            onClick={() => void check.run(after)}
           >
             {check.sending ? (
               <LoaderCircle className="size-3.5 animate-spin" />
             ) : (
               <PlugZap className="size-3.5" />
             )}
-            Test access
+            {check.uncertain ? "Resolve submission" : "Test access"}
           </Button>
         )}
       </div>
+      {attachId && !taskId && (
+        <fieldset disabled={check.sending || check.active || check.uncertain}>
+          <TaskRunAfterSelector
+            value={after}
+            onChange={setAfter}
+            onBusyChange={setAfterBusy}
+          />
+        </fieldset>
+      )}
       {disabled && (
         <p className="text-xs text-muted-foreground">
-          The Attach must be ready before its access can be checked.
+          The Attach must be ready, or queue this check after the Task that
+          prepares it.
         </p>
       )}
       {check.loading && (
@@ -137,6 +155,10 @@ export function BackingCheckPanel({
         </p>
       )}
       {check.taskId && <TaskLink taskId={check.taskId} />}
+      {!check.result && check.taskDetail && (
+        <TaskExecution detail={check.taskDetail} />
+      )}
+
       {check.error && (
         <p role="alert" className="text-xs text-destructive">
           {check.error}

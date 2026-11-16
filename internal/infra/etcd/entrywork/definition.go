@@ -8,7 +8,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -27,60 +26,66 @@ type DefinitionResult struct {
 func DefinitionKey(workID string) string { return "/v1/entry-work-definition/" + workID }
 
 func PrepareDefinitionPublication(task workexecution.Task, item workexecution.Item, removal Removal,
-	configurationRevision int64, marker idempotency.IdempotencyMarker, at time.Time,
-) (workqueue.Change, error) {
+	configurationRevision int64, at time.Time,
+) (workexecution.Item, workqueue.Change, error) {
 	if task.Action != workexecution.ActionRemove || item.Operation != workexecution.EntryConfiguration ||
 		item.Placement.Executor != workexecution.Controller || configurationRevision < 0 ||
 		removal.EntryID != task.TargetID || removal.RevisionID != task.ID {
-		return workqueue.Change{}, conflict("Entry definition settlement requires its exact removal")
+		return workexecution.Item{}, workqueue.Change{}, conflict(
+			"Entry definition settlement requires its exact removal",
+		)
 	}
-	return prepareDefinitionDecision(task, item, removal.EntryID, configurationRevision, marker, at)
+	return prepareDefinitionDecision(task, item, removal.EntryID, configurationRevision, at)
 }
 
 // PrepareMetadataPublication settles an Entry authoring action with no host
 // effects. Its publisher owns the proof that no runtime or file is affected.
 func PrepareMetadataPublication(task workexecution.Task, item workexecution.Item,
-	configurationRevision int64, marker idempotency.IdempotencyMarker, at time.Time,
-) (workqueue.Change, error) {
+	configurationRevision int64, at time.Time,
+) (workexecution.Item, workqueue.Change, error) {
 	if (task.Action != workexecution.ActionCreate && task.Action != workexecution.ActionUpdate && task.Action != workexecution.ActionRemove) ||
 		item.Operation != workexecution.EntryConfiguration ||
 		item.Placement.Executor != workexecution.Controller ||
 		configurationRevision < 0 ||
 		!definitionTarget(task) {
-		return workqueue.Change{}, conflict("Entry metadata requires its exact Controller action")
+		return workexecution.Item{}, workqueue.Change{}, conflict("Entry metadata requires its exact Controller action")
 	}
-	return prepareMetadataDecision(task, item, configurationRevision, marker, at)
+	return prepareMetadataDecision(task, item, configurationRevision, at)
 }
 
 func prepareDefinitionDecision(task workexecution.Task, item workexecution.Item, targetID string,
-	configurationRevision int64, marker idempotency.IdempotencyMarker, at time.Time,
-) (workqueue.Change, error) {
+	configurationRevision int64, at time.Time,
+) (workexecution.Item, workqueue.Change, error) {
 	value, err := recordcodec.Encode("entry-definition-result", DefinitionResult{
 		TaskID: task.ID, WorkItemID: item.ID, EnvironmentID: task.Scope.EnvironmentID,
 		EntryID: targetID, RevisionID: task.ID, ConfigurationRevision: configurationRevision, At: at,
 	})
 	if err != nil {
-		return workqueue.Change{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
 	digest := sha256.Sum256(value)
-	change, err := workqueue.PrepareSettledDecision(task, item, workexecution.Input{
-		ID: ids.DeriveAt(
-			ids.KindPlan,
-			item.CreatedAt,
-			item.ID,
-			"entry-definition-result",
-		), SHA256: hex.EncodeToString(digest[:]),
-	}, marker, at)
+	ready, err := workexecution.SettleUnstarted(
+		item,
+		workexecution.Completion{Outcome: workexecution.Succeeded, EffectsSettled: true, Evidence: workexecution.Input{
+			ID: ids.DeriveAt(
+				ids.KindPlan,
+				item.CreatedAt,
+				item.ID,
+				"entry-definition-result",
+			), SHA256: hex.EncodeToString(digest[:]),
+		}},
+		at,
+	)
 	if err != nil {
 		clear(value)
-		return workqueue.Change{}, err
+		return workexecution.Item{}, workqueue.Change{}, err
 	}
-	change.Conditions = append(change.Conditions, keyvalue.Condition{Key: DefinitionKey(item.ID)})
+	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: DefinitionKey(item.ID)}}}
 	change.Mutations = append(
 		change.Mutations,
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: DefinitionKey(item.ID), Value: value},
 	)
-	return change, nil
+	return ready, change, nil
 }
 
 func (repository *InputRepository) retireDefinition(

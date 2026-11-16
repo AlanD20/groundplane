@@ -93,7 +93,7 @@ func newAgentLifecycleFixture(t *testing.T, elapsed time.Duration) *agentLifecyc
 		ContentKind: "application/json",
 		Body:        []byte(fmt.Sprintf(`{"task_id":%q}`, f.capture.TaskID)),
 	}
-	if _, err := tasks.CreateAgentWork(ctx, f.capture, marker); err != nil {
+	if err := acceptAgentFixture(t, ctx, f.store, tasks, f.capture, marker); err != nil {
 		t.Fatal(err)
 	}
 	f.queue, err = workqueue.NewRepository(f.store)

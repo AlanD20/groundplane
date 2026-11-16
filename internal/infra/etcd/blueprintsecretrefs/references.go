@@ -74,7 +74,9 @@ func PrepareReplacement(ctx context.Context, store Store, environmentID, project
 			}
 		}
 	}
-	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])}}}
+	change := workqueue.Change{
+		Conditions: []keyvalue.Condition{{Key: key, ModRevision: keyvalue.RevisionOf(read.Values[0])}},
+	}
 	if len(previous.SecretIDs) == 0 && len(nextIDs) == 0 {
 		return workqueue.Change{}, nil
 	}
@@ -94,7 +96,10 @@ func PrepareReplacement(ctx context.Context, store Store, environmentID, project
 		for index, id := range nextIDs {
 			value, tombstone := credentials.Values[index*2], credentials.Values[index*2+1]
 			if value == nil {
-				return workqueue.Change{}, errs.New(errs.KindSecretNotFound, "The Component credential no longer exists; select an existing credential before applying")
+				return workqueue.Change{}, errs.New(
+					errs.KindSecretNotFound,
+					"The Component credential no longer exists; select an existing credential before applying",
+				)
 			}
 			record, err := secrets.DecodeRecord(value.Value)
 			if err != nil || value.Key != keys[index*2] || record.Secret.ID != id ||
@@ -104,7 +109,10 @@ func PrepareReplacement(ctx context.Context, store Store, environmentID, project
 				return workqueue.Change{}, invalid("Component credential is unavailable in this Project")
 			}
 			if tombstone != nil {
-				return workqueue.Change{}, errs.New(errs.KindResourceInUse, "Component credential removal has already started")
+				return workqueue.Change{}, errs.New(
+					errs.KindResourceInUse,
+					"Component credential removal has already started",
+				)
 			}
 			change.Conditions = append(change.Conditions,
 				keyvalue.Condition{Key: keys[index*2], ModRevision: value.ModRevision},
@@ -116,7 +124,10 @@ func PrepareReplacement(ctx context.Context, store Store, environmentID, project
 	}
 	for _, id := range previous.SecretIDs {
 		if !slices.Contains(nextIDs, id) {
-			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: SecretPrefix(id) + environmentID})
+			change.Mutations = append(
+				change.Mutations,
+				keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: SecretPrefix(id) + environmentID},
+			)
 		}
 	}
 	for _, id := range nextIDs {
@@ -129,7 +140,10 @@ func PrepareReplacement(ctx context.Context, store Store, environmentID, project
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})
 		return change, nil
 	}
-	value, err := recordcodec.Encode("blueprint-secret-references", references{EnvironmentID: environmentID, SecretIDs: nextIDs})
+	value, err := recordcodec.Encode(
+		"blueprint-secret-references",
+		references{EnvironmentID: environmentID, SecretIDs: nextIDs},
+	)
 	if err != nil {
 		keyvalue.ClearMutationValues(change.Mutations)
 		return workqueue.Change{}, err

@@ -6,26 +6,21 @@ import (
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
-	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
 
-func entryDesiredResponse(
-	record *entryrecord.Record,
-	taskID string,
-	status int,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	var value any = apiTypes.TaskAccepted{TaskID: taskID}
-	if record != nil {
-		value = entryCreationResponse(record.Entry)
-	}
-	body, err := json.Marshal(value)
+func entryTaskResponse(taskID string) (idempotencyrecord.IdempotencyResponse, error) {
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return idempotencyrecord.IdempotencyResponse{Status: status, ContentKind: "application/json", Body: body}, nil
+	return idempotencyrecord.IdempotencyResponse{
+		Status:      http.StatusAccepted,
+		ContentKind: "application/json",
+		Body:        body,
+	}, nil
 }
 
 func entryDesiredRemovalOutcome(

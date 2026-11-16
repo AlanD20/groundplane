@@ -28,7 +28,7 @@ import {
   type BulkEntryValue,
 } from "./bulk-entry-draft";
 import { listAllEntries } from "./api";
-import { entryFromAPI } from "./projection";
+import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 export function BulkEntryDrawer({
   env,
   bulkOpen,
@@ -43,6 +43,9 @@ export function BulkEntryDrawer({
   setBulkOpen: (open: boolean) => void;
 }) {
   const store = useStore();
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
+  const acceptedBatches = useRef(new Set<string>());
   const [bulkText, setBulkText] = useState("");
   const [bulkExposure, setBulkExposure] = useState<string[]>(["all"]);
   const [bulkStorage, setBulkStorage] = useState<"plain" | "secret">("plain");
@@ -58,6 +61,8 @@ export function BulkEntryDrawer({
   useEffect(() => {
     let cancelled = false;
     setBulkText("");
+    setAfter([]);
+    acceptedBatches.current.clear();
     setBaseline([]);
     setLoaded(false);
     setBulkError(null);
@@ -137,17 +142,11 @@ export function BulkEntryDrawer({
     setBulkError(null);
     try {
       for (const batch of plan.batches) {
-        const response = await store.bulkUpsertEntries(env.id, batch);
-        // Retain accepted batches as the baseline if a later batch fails.
-        setBaseline((current) => {
-          const next = new Map(current.map((item) => [item.key, item]));
-          for (const entry of response.entries ?? []) {
-            const value = batch.entries.find((item) => item.key === entry.key);
-            if (value)
-              next.set(value.key, { ...value, entry: entryFromAPI(entry) });
-          }
-          return [...next.values()];
-        });
+        const signature = JSON.stringify({ ...batch, after });
+        if (acceptedBatches.current.has(signature)) continue;
+        await store.bulkUpsertEntries(env.id, { ...batch, after });
+        // Accepted Tasks own these exact inputs, even if a later submission fails.
+        acceptedBatches.current.add(signature);
       }
       setBulkOpen(false);
       setBulkText("");
@@ -274,6 +273,11 @@ export function BulkEntryDrawer({
           </p>
         )}
       </div>
+      <TaskRunAfterSelector
+        value={after}
+        onChange={setAfter}
+        onBusyChange={setAfterLoading}
+      />
       <DialogFooter>
         <Button
           variant="outline"
@@ -285,6 +289,7 @@ export function BulkEntryDrawer({
         <Button
           disabled={
             bulkSaving ||
+            afterLoading ||
             !loaded ||
             !plan?.batches.length ||
             !!inputError ||

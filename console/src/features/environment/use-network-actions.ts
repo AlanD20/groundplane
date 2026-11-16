@@ -1,10 +1,10 @@
-import { useRef, type MutableRefObject } from "react";
+import { requireTaskId } from "@/features/task/journal-model";
+import { useRef } from "react";
 import type { Zone, Route } from "@/lib/types";
 import { controllerRequest } from "@/lib/controller-json-request";
 import {
   findEnvironment,
   type EnvironmentRemovalDraft,
-  type EnvironmentMutationKind,
   type PendingResourceRemoval,
 } from "./environment-removal-model";
 import type { TaskResponse } from "@/features/task/api";
@@ -39,34 +39,34 @@ export type NetworkActions = {
     envId: string,
     zoneId: string,
     impactToken: string,
+    after?: string[],
   ) => Promise<string>;
   addRoute: (
     envId: string,
-    route: Omit<Route, "id" | "environmentId" | "status">,
-  ) => Promise<Route>;
+    route: Omit<Route, "id" | "environmentId" | "status"> & {
+      after?: string[];
+    },
+  ) => Promise<string>;
   getRoute: (routeId: string) => Promise<Route>;
   updateRoute: (
     envId: string,
     routeId: string,
-    patch: Pick<Route, "exposure">,
-  ) => Promise<Route>;
-  removeRoute: (envId: string, routeId: string) => Promise<string>;
+    patch: Pick<Route, "exposure"> & { after?: string[] },
+  ) => Promise<string>;
+  removeRoute: (
+    envId: string,
+    routeId: string,
+    after?: string[],
+  ) => Promise<string>;
 };
 type NetworkWorkspace = {
   update: (change: (draft: EnvironmentRemovalDraft) => void) => void;
   assertEnvironmentMutable: (environmentId: string, operation: string) => void;
-  nextEnvironmentGeneration: (
-    environmentId: string,
-    kind?: EnvironmentMutationKind,
-  ) => number;
-  environmentGenerations: MutableRefObject<Map<string, number>>;
   dispatchResourceRemoval: (removal: PendingResourceRemoval) => Promise<string>;
 };
 export function useNetworkActions({
   update,
   assertEnvironmentMutable,
-  nextEnvironmentGeneration,
-  environmentGenerations,
   dispatchResourceRemoval,
 }: NetworkWorkspace) {
   const pendingZoneRemovals = useRef(
@@ -130,12 +130,12 @@ export function useNetworkActions({
         200,
         { method: "GET" },
       ),
-    removeZone: async (envId, zoneId, impactToken) => {
+    removeZone: async (envId, zoneId, impactToken, after = []) => {
       assertEnvironmentMutable(envId, "Zone mutation");
       const accepted = await controllerRequest<ZoneRemoveResponse>(
         `/zones/${encodeURIComponent(zoneId)}${impactToken ? `?impact_token=${encodeURIComponent(impactToken)}` : ""}`,
         202,
-        { method: "DELETE" },
+        { method: "DELETE", body: { after } },
       );
       if (!accepted.task_id)
         throw new Error("Controller response is missing task_id");
@@ -144,7 +144,6 @@ export function useNetworkActions({
     },
     addRoute: async (envId, route) => {
       assertEnvironmentMutable(envId, "Route mutation");
-      const generation = nextEnvironmentGeneration(envId, "child");
       const body: RouteCreateRequest = {
         environment_id: envId,
         host: route.host || undefined,
@@ -152,6 +151,7 @@ export function useNetworkActions({
         exposure: route.exposure,
         target_service_id: route.targetServiceId,
         target_port: route.targetPort,
+        after: route.after,
       };
       const accepted = await controllerRequest<RouteCreateAccepted>(
         "/routes",
@@ -161,14 +161,7 @@ export function useNetworkActions({
           body,
         },
       );
-      const created = routeFromAPI(accepted.route);
-      update((d) => {
-        // Public Routes never auto-enable ingress; Component lifecycle is not authored by C07.
-        if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
-          return;
-        findEnvironment(d, envId)?.routes.push(created);
-      });
-      return created;
+      return requireTaskId(accepted, "Route creation");
     },
     getRoute: async (routeId) =>
       routeFromAPI(
@@ -180,31 +173,24 @@ export function useNetworkActions({
       ),
     updateRoute: async (envId, routeId, patch) => {
       assertEnvironmentMutable(envId, "Route mutation");
-      const generation = nextEnvironmentGeneration(envId, "child");
-      const body: RouteEditRequest = { exposure: patch.exposure };
+      const body: RouteEditRequest = {
+        exposure: patch.exposure,
+        after: patch.after,
+      };
       const accepted = await controllerRequest<RouteEditAccepted>(
         `/routes/${encodeURIComponent(routeId)}`,
         202,
         { method: "PATCH", body },
       );
-      const edited = routeFromAPI(accepted.route);
-      update((d) => {
-        if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
-          return;
-        const route = findEnvironment(d, envId)?.routes.find(
-          (candidate) => candidate.id === routeId,
-        );
-        if (!route) return;
-        Object.assign(route, edited);
-      });
-      return edited;
+      return requireTaskId(accepted, "Route edit");
     },
-    removeRoute: (envId, routeId) => (
+    removeRoute: (envId, routeId, after = []) => (
       assertEnvironmentMutable(envId, "Route mutation"),
       dispatchResourceRemoval({
         kind: "route",
         environmentId: envId,
         resourceId: routeId,
+        after,
       })
     ),
   };

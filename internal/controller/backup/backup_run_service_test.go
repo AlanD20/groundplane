@@ -8,10 +8,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -174,11 +177,11 @@ func (idempotency backupRunServiceIdempotency) ResolveUnknown(
 // TASK-101: exact replay must not derive a second durable candidate.
 func TestBackupRunServiceReplaysBeforePreparation(t *testing.T) {
 	repository := &backupRunReplayRepository{}
-	service := NewBackupRunService(repository, backupRunReplayIdempotency{})
+	service := newBackupRunFixtureService(t, repository, backupRunReplayIdempotency{})
 	response, err := service.RunBackup(
 		context.Background(),
 		"env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		"manual-replay",
+		"manual-replay", api.TaskRunAfterRequest{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -235,33 +238,48 @@ func TestDurableBackupRunNewMarkerHasNoPendingRetention(t *testing.T) {
 
 // TASK-101: a fresh internal request returns the exact applied response only
 // after one publication attempt has been classified as applied.
-func TestBackupRunServicePublishesFreshAppliedRun(t *testing.T) {
+func TestBackupRunServiceCapturesOnlyWhenAcceptedCompilerRuns(t *testing.T) {
 	publication := &backupRunServicePublication{}
 	repository := &backupRunServiceRepository{t: t, publication: publication}
-	service := NewBackupRunService(repository, backupRunServiceIdempotency{
-		known: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
-	})
-	service.now = func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) }
-	response, err := service.RunBackup(
-		context.Background(), "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", "manual-backup-key-0002",
-	)
-	if err != nil || response.Status != 202 || publication.publishes != 1 ||
-		repository.prepares != 1 {
-		t.Fatalf(
-			"RunBackup() = %#v, %v publishes=%d prepares=%d",
-			response,
-			err,
-			publication.publishes,
-			repository.prepares,
-		)
+	service := newBackupRunFixtureService(t, repository, backupRunServiceIdempotency{})
+	at := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	task := workexecution.Task{
+		ID:        ids.New(ids.KindTask),
+		Actor:     workexecution.OperatorActor,
+		Action:    workexecution.ActionBackup,
+		TargetID:  "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		CreatedAt: at,
+		UpdatedAt: at,
+		Deadline:  at.Add(acceptedaction.QueueTimeout),
 	}
-	if publication.task.Action != workexecution.ActionBackup ||
-		publication.task.Actor != workexecution.OperatorActor ||
-		publication.task.TargetID != "env_01ARZ3NDEKTSV4RRFFQ69G5FAV" ||
-		publication.item.TaskID != publication.task.ID || publication.item.Input == nil ||
-		*publication.item.Input != publication.task.Intent ||
-		publication.input.Operation != agentpb.BackupWorkOperation_BACKUP_WORK_OPERATION_CAPTURE {
-		t.Fatal("accepted Backup did not publish its native captured work")
+	fixture := backupRunWorkFixture(
+		t,
+		BackupRunPrepareInput{
+			EnvironmentID: task.TargetID,
+			TaskID:        task.ID,
+			OperationID:   ids.New(ids.KindOperation),
+			PlanID:        ids.New(ids.KindPlan),
+			CreatedAt:     at,
+		},
+	)
+	task.Scope = workexecution.Scope{
+		TenantID:      fixture.Owner.TenantID,
+		ProjectID:     fixture.Owner.ProjectID,
+		EnvironmentID: task.TargetID,
+	}
+	prepared, err := service.prepareAcceptedRun(
+		t.Context(),
+		workqueue.TaskSnapshot{Task: task, Revision: 1},
+		1,
+		at,
+		acceptedBackupRun{},
+	)
+	if err != nil || repository.prepares != 1 || publication.publishes != 1 || prepared.Task.ID != task.ID ||
+		len(prepared.Graph) != 1 {
+		t.Fatalf("late capture: %#v / %v", prepared, err)
+	}
+	if prepared.Graph[0].Input == nil || *prepared.Graph[0].Input != prepared.Task.Intent {
+		t.Fatal("compiled Backup lost captured input")
 	}
 }
 
@@ -277,14 +295,18 @@ func TestBackupRunServiceResolvesUnknownPublication(t *testing.T) {
 		err: errs.New(errs.KindStorageUnavailable, "unknown commit"),
 	}
 	repository := &backupRunServiceRepository{t: t, publication: publication}
-	service := NewBackupRunService(repository, backupRunServiceIdempotency{
+	service := newBackupRunFixtureService(t, repository, backupRunServiceIdempotency{
 		unknown: idempotentintent.Resolution{
 			Kind:     idempotentintent.ResolutionReplay,
 			Response: want,
 		},
 	})
-	response, err := service.RunBackup(
-		context.Background(), "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", "manual-backup-key-0003",
+	response, err := service.RunScheduledBackup(
+		context.Background(),
+		"env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		42,
+		time.Now().UTC(),
+		time.Now().UTC(),
 	)
 	if err != nil || response.Status != want.Status || publication.publishes != 1 ||
 		repository.prepares != 1 {
@@ -311,14 +333,14 @@ func TestBackupRunServiceRejectsExistingMarkerConflictBeforePreparation(t *testi
 		t.Run(test.name, func(t *testing.T) {
 			publication := &backupRunServicePublication{}
 			repository := &backupRunServiceRepository{t: t, publication: publication}
-			service := NewBackupRunService(
+			service := newBackupRunFixtureService(t,
 				repository,
 				backupRunServiceIdempotency{
 					existingErr: errs.New(test.kind, test.name),
 				},
 			)
 			if _, err := service.RunBackup(
-				context.Background(), "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", "manual-backup-key-0004",
+				context.Background(), "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", "manual-backup-key-0004", api.TaskRunAfterRequest{},
 			); err == nil || repository.prepares != 0 || publication.publishes != 0 {
 				t.Fatalf(
 					"RunBackup(%s) error=%v prepares=%d publishes=%d",
@@ -343,6 +365,12 @@ func (capture *backupRunLocatorCapture) ResolveExisting(
 	_ backupRunEvidence,
 ) (idempotentintent.Resolution, bool, error) {
 	capture.locators = append(capture.locators, locator)
+	if locator.Route == backupRunRoute {
+		return idempotentintent.Resolution{
+			Kind:     idempotentintent.ResolutionReplay,
+			Response: testidempotency.IdempotencyResponse{Status: 202, Body: []byte(`{"task_id":"replay"}`)},
+		}, true, nil
+	}
 	return idempotentintent.Resolution{}, false, nil
 }
 
@@ -355,11 +383,11 @@ func TestBackupRunScheduledIdempotencyNamespaceCannotCollideWithOperatorHeader(t
 	publication := &backupRunServicePublication{}
 	repository := &backupRunServiceRepository{t: t, publication: publication}
 	capture := &backupRunLocatorCapture{}
-	service := NewBackupRunService(repository, capture)
+	service := newBackupRunFixtureService(t, repository, capture)
 	service.now = func() time.Time { return evaluatedAt }
 
 	if _, err := service.RunBackup(
-		context.Background(), "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", key,
+		context.Background(), "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", key, api.TaskRunAfterRequest{},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -376,4 +404,42 @@ func TestBackupRunScheduledIdempotencyNamespaceCannotCollideWithOperatorHeader(t
 		capture.locators[0].Route == capture.locators[1].Route {
 		t.Fatalf("idempotency locators = %#v", capture.locators)
 	}
+}
+
+func newBackupRunFixtureService(
+	t *testing.T,
+	repository BackupRunRepository,
+	idem backupRunIdempotency,
+) *BackupRunService {
+	t.Helper()
+	protector, err := secretvalue.NewProtector(backupRunTestCipher{}, backupRunTestCipher{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinator, err := idempotentintent.NewCoordinator(protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewBackupRunService(repository, idem, &acceptedaction.Submitter{}, coordinator)
+}
+func (*backupRunReplayRepository) ReadBackupTaskAcceptance(context.Context, string) (etcd.BackupTaskAcceptance, error) {
+	panic("replay must not read acceptance metadata")
+}
+
+func (*backupRunServiceRepository) ReadBackupTaskAcceptance(
+	context.Context,
+	string,
+) (etcd.BackupTaskAcceptance, error) {
+	return etcd.BackupTaskAcceptance{}, nil
+}
+
+func (publication *backupRunServicePublication) PrepareWorkAuthority(
+	ctx context.Context,
+	task workexecution.Task,
+	item workexecution.Item,
+	input *agentpb.BackupWorkInput,
+) (workqueue.Change, error) {
+	publication.publishes++
+	publication.task, publication.item, publication.input = task, item, proto.CloneOf(input)
+	return workqueue.Change{}, publication.err
 }

@@ -8,8 +8,9 @@ type RunnerVersions struct {
 	Items []RunnerVersion `json:"items" nullable:"false"`
 }
 type RunnerUpdateRequest struct {
-	Revision int64  `json:"revision"`
-	Version  string `json:"version"`
+	After    []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	Revision int64    `json:"revision,omitempty" minimum:"0"`
+	Version  string   `json:"version"`
 }
 type RunnerUpdateStage struct {
 	Name    string `json:"name"`

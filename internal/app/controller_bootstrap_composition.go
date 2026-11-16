@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/hostbootstrap"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -37,6 +38,7 @@ type controllerBootstrapComposition struct {
 
 type controllerStore interface {
 	etcd.EnvironmentBlueprintStore
+	workqueue.BackingCreationStore
 }
 
 // newControllerBootstrapComposition owns the native resources needed before

@@ -7,11 +7,17 @@ import (
 
 func newAttachCheckCmd() *cobra.Command {
 	var grant string
+	var runAfter []string
+	var revision int64
 	cmd := &cobra.Command{
 		Use:   "check <attach>",
 		Short: "Check Backing access from the deployed consumer's network",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			environmentID, err := resolveEnvironmentTarget(cmd, fromContext(cmd).Scope.Environment)
 			if err != nil {
 				return err
@@ -27,7 +33,16 @@ func newAttachCheckCmd() *cobra.Command {
 					return err
 				}
 			}
-			accepted, err := fromContext(cmd).Client.CheckBackingAccess(cmd.Context(), environmentID, attachID, grantID)
+			accepted, err := fromContext(
+				cmd,
+			).Client.CheckBackingAccess(
+				cmd.Context(),
+				environmentID,
+				attachID,
+				grantID,
+				revision,
+				after,
+			)
 			if err != nil {
 				return err
 			}
@@ -36,6 +51,9 @@ func newAttachCheckCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&grant, "grant", "", "check a database granted to this consumer's credential")
+	cmd.Flags().
+		Int64Var(&revision, "revision", 0, "optional exact Attach revision; omitted resolves after prerequisites")
+	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
 

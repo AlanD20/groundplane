@@ -1,7 +1,8 @@
 package api
 
 type ImageFetchRequest struct {
-	Image string `json:"image" minLength:"1" maxLength:"512" doc:"Explicit tag or SHA-256 digest in a public registry or GP's managed private registry"`
+	After []string `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
+	Image string   `json:"image" minLength:"1" maxLength:"512" doc:"Explicit tag or SHA-256 digest in a public registry or GP's managed private registry"`
 }
 
 // HostImage is a live local-daemon observation. Containers includes stopped
@@ -62,12 +63,4 @@ type ImageFetchRecord struct {
 type ImageList struct {
 	Images     []HostImage `json:"images" nullable:"false"`
 	ObservedAt string      `json:"observed_at"`
-}
-
-// ImageFetchAccepted identifies the selected content, not a successful fetch.
-// Wait for Task completion before using Image in a Service Deploy.
-type ImageFetchAccepted struct {
-	TaskID       string `json:"task_id"`
-	Image        string `json:"image" doc:"Immutable registry reference selected for this operation"`
-	ConfigDigest string `json:"config_digest" doc:"Pinned OCI configuration digest, verified before Task completion"`
 }

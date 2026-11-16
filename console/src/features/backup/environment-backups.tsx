@@ -25,6 +25,7 @@ import { RestoreDialog } from "@/features/backup/restore-dialog";
 import { RecoveryPointDeleteDialog } from "@/features/backup/recovery-point-delete-dialog";
 import type { RecoveryPoint } from "@/features/backup/types";
 import { TaskLink } from "@/components/common/task-link";
+import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { useBackupRefresh } from "./use-backup-refresh";
 import { backupScheduleDescription } from "./backup-schedule";
 import { RecoveryGroupsTable } from "./recovery-groups-table";
@@ -40,7 +41,7 @@ export function BackupsCard({ env }: { env: Environment }) {
   const [restorePoint, setRestorePoint] = useState<RecoveryPoint | null>(null);
   const [deletePoint, setDeletePoint] = useState<RecoveryPoint | null>(null);
   const [runTaskId, setRunTaskId] = useState<string | null>(null);
-  const [runError, setRunError] = useState<string | null>(null);
+  const [runOpen, setRunOpen] = useState(false);
   useBackupRefresh(env.id, true);
   const activeConnector = store.connectors.find(
     (connector) =>
@@ -82,25 +83,11 @@ export function BackupsCard({ env }: { env: Environment }) {
               variant="outline"
               size="sm"
               disabled={
-                !configured ||
-                !backup.enabled ||
                 policyState.loading ||
                 policyState.saving ||
                 Boolean(policyState.loadError)
               }
-              onClick={() => {
-                setRunError(null);
-                void store
-                  .runBackup(env.id)
-                  .then((taskId) => setRunTaskId(taskId))
-                  .catch((error) =>
-                    setRunError(
-                      error instanceof Error
-                        ? error.message
-                        : "Unable to run backup",
-                    ),
-                  );
-              }}
+              onClick={() => setRunOpen(true)}
             >
               <Terminal className="size-3.5" /> Backup now
             </Button>
@@ -118,7 +105,7 @@ export function BackupsCard({ env }: { env: Environment }) {
               Edit policy
             </Button>
           </div>
-          {(runTaskId || runError) && (
+          {runTaskId && (
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {runTaskId && (
                 <span className="text-muted-foreground">
@@ -126,7 +113,6 @@ export function BackupsCard({ env }: { env: Environment }) {
                   <TaskLink taskId={runTaskId}>{runTaskId}</TaskLink>
                 </span>
               )}
-              {runError && <span className="text-destructive">{runError}</span>}
             </div>
           )}
         </CardHeader>
@@ -222,6 +208,25 @@ export function BackupsCard({ env }: { env: Environment }) {
           </div>
         </CardContent>
       </Card>
+
+      <TaskRunnerDialog
+        open={runOpen}
+        onOpenChange={setRunOpen}
+        title={`Run backup · ${env.name}`}
+        description="Back up the sources selected in this Environment's policy."
+        type="backup"
+        target={env.id}
+        workspace={env.name}
+        runAfter
+        startLabel="Run backup"
+        startDisabled={(after) =>
+          policyState.loading ||
+          policyState.saving ||
+          (after.length === 0 && (!configured || !backup.enabled))
+        }
+        onDispatch={(after) => store.runBackup(env.id, after)}
+        onSettled={() => store.loadRecoveryPoints(env.id)}
+      />
 
       <Card>
         <CardHeader

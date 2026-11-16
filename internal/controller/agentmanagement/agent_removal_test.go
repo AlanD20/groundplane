@@ -1,133 +1,40 @@
 package agentmanagement
 
 import (
-	"context"
-	"encoding/json"
-	"net/http"
-	"reflect"
 	"testing"
 	"time"
 
-	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/pkg/api"
 )
 
-const testAgentRemovalID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-
-func TestAgentRemovalServiceCreatesBoundedControllerTask(t *testing.T) {
-	t.Parallel()
-
-	targets := &fakeAgentRemovalTargets{health: localagent.Health{
-		Agent: localagent.Agent{ID: testAgentRemovalID, Image: testAgentUpdatePreviousImage, Generation: 7},
-	}}
-	tasks := &fakeAgentEnrollmentTasks{}
-	idempotency := &fakeAgentRemovalIdempotency{resolution: idempotentintent.Resolution{
-		Kind: idempotentintent.ResolutionApplied,
-	}}
-	service, err := NewRemovalService(targets, tasks, idempotency)
-	if err != nil {
-		t.Fatalf("NewRemovalService() error = %v", err)
-	}
-	now := time.Date(2026, 8, 22, 15, 0, 0, 0, time.UTC)
-	service.now = func() time.Time { return now }
-	response, err := service.RemoveAgent(context.Background(), testAgentRemovalID, "agent-remove-key-0001")
-	if err != nil {
-		t.Fatalf("RemoveAgent() error = %v", err)
-	}
-	var accepted apiTypes.TaskAccepted
-	if err := json.Unmarshal(response.Body, &accepted); err != nil || accepted.TaskID != tasks.capture.TaskID {
-		t.Fatalf("RemoveAgent() body = %s, %v", response.Body, err)
-	}
-	if response.Status != http.StatusAccepted || tasks.capture.AgentID != testAgentRemovalID ||
-		tasks.capture.Image != testAgentUpdatePreviousImage || tasks.capture.StartingGeneration != 7 {
-		t.Fatalf("captured removal = %#v, response=%#v", tasks.capture, response)
-	}
-	if targets.healthCalls != 1 || tasks.marker.Locator.Route != agentRemovalRoute ||
-		tasks.marker.Locator.Method != http.MethodDelete {
-		t.Fatalf("removal target/marker = %d/%#v", targets.healthCalls, tasks.marker)
-	}
-}
-
-func TestAgentRemovalServiceReplaysBeforeTargetLookup(t *testing.T) {
-	t.Parallel()
-
-	want := testidempotency.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: []byte(`{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`),
-	}
-	targets := &fakeAgentRemovalTargets{}
-	service, err := NewRemovalService(
-		targets,
-		&fakeAgentEnrollmentTasks{},
-		&fakeAgentRemovalIdempotency{
-			existing: true,
-			resolution: idempotentintent.Resolution{
-				Kind: idempotentintent.ResolutionReplay, Response: want,
-			},
-		},
+// Rationale: removal queued behind an update must remove that update's actual
+// current generation, with the original Task identity and a bounded work deadline.
+func TestAgentRemovalCapturesCurrentGeneration(t *testing.T) {
+	at := time.Date(2026, 8, 22, 15, 0, 0, 0, time.UTC)
+	task := acceptedAgentFixture(at, workexecution.ActionRemove)
+	targets := &fakeAgentUpdateTargets{health: localagent.Health{Agent: localagent.Agent{
+		ID: task.TargetID, Image: testAgentUpdateDesiredImage, Generation: 9}}}
+	records := &fakeAgentCaptureRepository{}
+	service := &agentRemovalService{targets: targets, tasks: records}
+	prepared, err := service.prepareAcceptedRemoval(
+		t.Context(),
+		workqueue.TaskSnapshot{Task: task, Revision: 1},
+		1,
+		at.Add(time.Minute),
+		api.TaskRunAfterRequest{},
 	)
 	if err != nil {
-		t.Fatalf("NewRemovalService() error = %v", err)
+		t.Fatal(err)
 	}
-	got, err := service.RemoveAgent(context.Background(), testAgentRemovalID, "agent-remove-key-0002")
-	if err != nil || !reflect.DeepEqual(got, want) {
-		t.Fatalf("RemoveAgent(replay) = %#v, %v", got, err)
+	if records.capture.AgentID != task.TargetID || records.capture.Image != testAgentUpdateDesiredImage ||
+		records.capture.StartingGeneration != 9 ||
+		prepared.Task.ID != task.ID ||
+		!prepared.Task.CreatedAt.Equal(at) ||
+		!prepared.Task.Deadline.Equal(task.Deadline) ||
+		!prepared.Graph[0].Deadline.Equal(at.Add(3*time.Minute)) {
+		t.Fatalf("late removal capture: %#v / %#v", prepared, records.capture)
 	}
-	if targets.healthCalls != 0 {
-		t.Fatalf("Health() calls = %d during replay", targets.healthCalls)
-	}
-}
-
-type fakeAgentRemovalTargets struct {
-	health      localagent.Health
-	healthErr   error
-	healthCalls int
-}
-
-func (targets *fakeAgentRemovalTargets) Health(
-	context.Context,
-	string,
-) (localagent.Health, error) {
-	targets.healthCalls++
-	return targets.health, targets.healthErr
-}
-
-type fakeAgentRemovalIdempotency struct {
-	existing   bool
-	resolution idempotentintent.Resolution
-}
-
-func (idempotency *fakeAgentRemovalIdempotency) Prepare(
-	context.Context,
-	string,
-) (agentRemovalEvidence, error) {
-	return agentRemovalEvidence{}, nil
-}
-
-func (idempotency *fakeAgentRemovalIdempotency) ResolveExisting(
-	context.Context, testidempotency.IdempotencyLocator,
-
-	agentRemovalEvidence,
-) (idempotentintent.Resolution, bool, error) {
-	return idempotency.resolution, idempotency.existing, nil
-}
-
-func (idempotency *fakeAgentRemovalIdempotency) ResolveKnown(
-	context.Context,
-	agentRemovalEvidence,
-	etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
-	return idempotency.resolution, nil
-}
-
-func (idempotency *fakeAgentRemovalIdempotency) ResolveUnknown(
-	context.Context, testidempotency.IdempotencyLocator,
-
-	agentRemovalEvidence,
-	error,
-) (idempotentintent.Resolution, error) {
-	return idempotency.resolution, nil
 }

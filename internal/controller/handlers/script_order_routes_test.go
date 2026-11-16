@@ -82,6 +82,7 @@ func (mutations *scriptOrderRouteMutations) EditScript(
 func (*scriptOrderRouteMutations) RemoveScript(
 	context.Context,
 	string,
+	apiTypes.TaskRunAfterRequest,
 	string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	return testidempotencyowner.IdempotencyResponse{}, errs.New(errs.KindNotImplemented, "not part of order authoring")
@@ -90,6 +91,7 @@ func (*scriptOrderRouteMutations) RemoveScript(
 func (*scriptOrderRouteMutations) RunScript(
 	context.Context,
 	string,
+	apiTypes.TaskRunAfterRequest,
 	string,
 ) (testidempotencyowner.IdempotencyResponse, error) {
 	return testidempotencyowner.IdempotencyResponse{}, errs.New(errs.KindNotImplemented, "not part of order authoring")

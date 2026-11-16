@@ -15,6 +15,7 @@ import (
 	deletion "github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -179,15 +180,19 @@ func newNativeHierarchyEtcdRuntime(
 	if err != nil {
 		t.Fatal(err)
 	}
-	adapter, err := deletion.NewEtcdRepository(records, evidence, coordinator, clock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := deletion.NewService(adapter, deletion.StableIDGenerator{}, clock)
 	queue, err := workqueue.NewRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
+	accepted, err := newAcceptedActions(store, protector, queue, evidence, coordinator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := deletion.NewEtcdRepository(records, evidence, coordinator, clock, accepted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := deletion.NewService(adapter, deletion.StableIDGenerator{}, clock)
 	attachRecords, err := etcd.NewAttachRepository(store)
 	if err != nil {
 		t.Fatal(err)
@@ -210,6 +215,11 @@ func newNativeHierarchyEtcdRuntime(
 	if err != nil {
 		t.Fatal(err)
 	}
+	preparations, err := taskdependencies.NewPreparations(queue, adapter.AcceptedPreparations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	publications.ConfigureAcceptedPreparations(preparations)
 	controller, err := deletion.NewControllerWork(records)
 	if err != nil {
 		t.Fatal(err)

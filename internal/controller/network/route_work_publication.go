@@ -2,8 +2,13 @@ package network
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
+	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
@@ -58,6 +63,8 @@ func NewRouteWorkPublisher(
 }
 
 type routeWorkRequest struct {
+	Accepted      workqueue.TaskSnapshot
+	At            time.Time
 	Project       keyvalue.Versioned[hierarchy.ProjectRecord]
 	Environment   keyvalue.Versioned[hierarchy.EnvironmentRecord]
 	Target        keyvalue.Versioned[services.ServiceRecord]
@@ -70,22 +77,22 @@ type routeWorkRequest struct {
 	Action        workexecution.Action
 }
 
-func (publisher *RouteWorkPublisher) publish(
+func (publisher *RouteWorkPublisher) prepare(
 	ctx context.Context,
 	request routeWorkRequest,
-) (etcd.IdempotencyTransactionResult, error) {
+	finish func(context.Context, bool) error) (taskdependencies.Prepared, error) {
 	marker, err := routeWorkResponse(request.Claim, request.Route)
 	if err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
 	if request.Provider == nil {
-		return publisher.publishDefinition(ctx, request, marker)
+		return publisher.prepareDefinition(ctx, request, marker, finish)
 	}
 	placement, err := publisher.repository.ResolveResourceHost(ctx)
 	if err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	task, item, err := taskplanning.NewRouteConfigurationWork(workexecution.Scope{
 		TenantID: request.Project.Record.TenantID, ProjectID: request.Project.Record.ID,
@@ -93,11 +100,21 @@ func (publisher *RouteWorkPublisher) publish(
 	}, placement, request.Claim, request.Action, request.Route.Desired.ID,
 		request.Route.Desired.Host+request.Route.Desired.Path, request.Provider.ComponentID)
 	if err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
+		return taskdependencies.Prepared{}, err
 	}
+	task.Intent = *request.Accepted.Task.AcceptedIntent
+	retained := request.Accepted.Task
+	retained.Intent, retained.ExpectedItems, retained.UpdatedAt = task.Intent, 1, request.At
+	task = retained
+	item.CreatedAt, item.UpdatedAt = request.At, request.At
+	item.Deadline = acceptedaction.ExecutionDeadline(
+		task,
+		request.At,
+		time.Duration(desiredrevision.TaskTimeoutSeconds)*time.Second,
+	)
 	runtime, present, err := publisher.providers.CapturedRuntime(ctx, *request.Provider)
 	if err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	var expected componentrecord.Record
 	for _, component := range request.Candidate.Components {
@@ -108,29 +125,29 @@ func (publisher *RouteWorkPublisher) publish(
 	}
 	component, err := publisher.repository.ReadRouteWorkComponent(ctx, expected, request.Provider.InputRevision)
 	if err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	operationID := ids.DeriveAt(ids.KindOperation, item.CreatedAt, item.ID, "route-operation")
-	configurationID := ids.DeriveAt(ids.KindConfig, item.CreatedAt, item.ID, "configuration")
+	operationID := ids.DeriveAt(ids.KindOperation, task.CreatedAt, item.ID, "route-operation")
+	configurationID := ids.DeriveAt(ids.KindConfig, task.CreatedAt, item.ID, "configuration")
 	rendered, err := publisher.providers.RenderWork(ctx, task, item, request.Project.Record, request.Environment.Record,
 		request.Candidate, *request.Provider)
 	if err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	defer clear(rendered.Content)
 	if err := publisher.contents.Stage(ctx, rendered.File, request.Candidate.RenderGeneration, rendered.Content); err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	prepared, err := publisher.repository.PrepareMutationWorkConfiguration(ctx, task, item, request.Claim,
 		request.Provider.InputRevision, configurationID, operationID, []taskmaterialization.Record{rendered.File})
 	if err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	var prior runtimeconfiguration.Snapshot
 	if prepared.Capture.Prior != nil {
 		prior, err = publisher.snapshots.LoadRetained(ctx, *prepared.Capture.Prior)
 		if err != nil {
-			return etcd.IdempotencyTransactionResult{}, err
+			return taskdependencies.Prepared{}, err
 		}
 	}
 	input, err := publisher.configuration.PrepareRouteWork(ctx, taskplanning.RouteWorkRequest{
@@ -139,7 +156,7 @@ func (publisher *RouteWorkPublisher) publish(
 		Configuration: prepared.Capture, PriorConfiguration: prior,
 	})
 	if err != nil {
-		return etcd.IdempotencyTransactionResult{}, err
+		return taskdependencies.Prepared{}, err
 	}
 	capture := componentwork.Capture{Current: component.Record, CurrentRevision: component.Revision,
 		Candidate: component.Record, RuntimeRevision: runtime.Revision, Configuration: prepared.Capture,
@@ -154,14 +171,14 @@ func (publisher *RouteWorkPublisher) publish(
 	if present {
 		predecessor, err := componentwork.CaptureRuntimePredecessor(runtime.Record)
 		if err != nil {
-			return etcd.IdempotencyTransactionResult{}, err
+			return taskdependencies.Prepared{}, err
 		}
 		capture.Predecessor = &predecessor
 	}
 	if !prepared.Secrets.IsZero() {
 		binding, err := prepared.Secrets.Binding()
 		if err != nil {
-			return etcd.IdempotencyTransactionResult{}, err
+			return taskdependencies.Prepared{}, err
 		}
 		capture.Secrets = &binding
 	}
@@ -175,10 +192,19 @@ func (publisher *RouteWorkPublisher) publish(
 		capture.Zones,
 		func(left, right zonerecord.Record) int { return strings.Compare(left.Desired.ID, right.Desired.ID) },
 	)
-	return publisher.repository.PublishRouteWork(ctx, etcd.RouteWorkPublication{
+	captureResult, err := publisher.repository.PrepareRouteWorkCapture(ctx, etcd.RouteWorkPublication{
 		Project: request.Project, Environment: request.Environment, Target: request.Target, Current: request.Current,
 		Claim: request.Claim, Projection: request.Candidate, EpochRevision: request.EpochRevision,
-		Task: task, Item: item, InputID: ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "captured-input"),
+		Task: task, Item: item, InputID: ids.DeriveAt(ids.KindPlan, task.CreatedAt, item.ID, "captured-input"),
 		Input: input, Capture: capture, Secrets: prepared.Secrets, Marker: marker, PreparationConditions: prepared.Conditions,
 	})
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	return taskdependencies.Prepared{
+		Task:      task,
+		Graph:     []workexecution.Item{captureResult.Item},
+		Authority: captureResult.Change,
+		Finalize:  finish,
+	}, nil
 }

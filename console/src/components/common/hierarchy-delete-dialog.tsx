@@ -20,12 +20,13 @@ export function HierarchyDeleteDialog({
   id: string;
   workspace: string;
   description: string;
-  onDispatch: () => Promise<string>;
+  onDispatch: (after: string[]) => Promise<string>;
   onCommit?: () => void;
 }) {
   return (
     <TaskRunnerDialog
       open={open}
+      runAfter
       onOpenChange={onOpenChange}
       title={`Delete ${kind} · ${name}`}
       description={description}

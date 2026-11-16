@@ -11,6 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -55,10 +56,25 @@ func (repository *Repository) ClaimEnvironmentBlueprintStage(
 	ctx context.Context,
 	request blueprints.EnvironmentBlueprintStageClaimRequest,
 ) (blueprints.EnvironmentBlueprintStageClaim, error) {
+	return repository.claimEnvironmentBlueprintStage(ctx, request, false)
+}
+
+func (repository *Repository) claimEnvironmentBlueprintStage(
+	ctx context.Context,
+	request blueprints.EnvironmentBlueprintStageClaimRequest,
+	retired bool,
+) (blueprints.EnvironmentBlueprintStageClaim, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return blueprints.EnvironmentBlueprintStageClaim{}, err
 	}
+	if (request.AcceptedTaskRevision > 0) != (request.TaskLocator != nil) || request.AcceptedTaskRevision < 0 {
+		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint accepted Task authority is incomplete",
+		)
+	}
 	claim := blueprints.EnvironmentBlueprintStageClaim{
+		TaskLocator:  request.TaskLocator,
 		DescriptorID: ids.NewULID(), EnvironmentID: request.EnvironmentID,
 		RevisionID: request.CandidateRevisionID, TaskID: request.CandidateTaskID,
 		Locator: request.Locator, Intent: request.Intent, BaselineHeadRevision: request.BaselineHeadRevision,
@@ -71,6 +87,11 @@ func (repository *Repository) ClaimEnvironmentBlueprintStage(
 	descriptor := blueprints.EnvironmentBlueprintStageDescriptor{
 		Claim: blueprints.CloneEnvironmentBlueprintStageClaim(claim), State: blueprints.EnvironmentBlueprintStageOpen,
 		UpdatedAt: claim.CreatedAt,
+	}
+	if request.AcceptedTaskRevision > 0 {
+		// Waiting for predecessors must not make a newly created compilation
+		// draft immediately eligible for the five-minute orphan collector.
+		descriptor.UpdatedAt = blueprints.NextBlueprintProgressTime(claim.CreatedAt)
 	}
 	descriptorValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(descriptor)
 	if err != nil {
@@ -91,16 +112,55 @@ func (repository *Repository) ClaimEnvironmentBlueprintStage(
 	if err != nil {
 		return blueprints.EnvironmentBlueprintStageClaim{}, err
 	}
-	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(claim.Locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(blueprints.EnvironmentBlueprintTaskLocator(claim))
 	if err != nil {
 		return blueprints.EnvironmentBlueprintStageClaim{}, err
 	}
 	conditions := []etcdstore.Condition{{Key: descriptorKey}, {Key: locatorKey}, {Key: markerKey}}
+	maximumOperations := 5
+	if request.AcceptedTaskRevision != 0 {
+		read, err := repository.store.GetMany(
+			ctx,
+			etcdstore.GetManyRequest{Keys: []string{markerKey, workqueue.TaskKey(claim.TaskID)}},
+		)
+		if err != nil {
+			return blueprints.EnvironmentBlueprintStageClaim{}, err
+		}
+		if read == nil || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
+			return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint compilation requires its accepted Task and request",
+			)
+		}
+		defer clearKeyValues(read.Values)
+		task, err := workqueue.DecodeTask(read.Values[1].Value)
+		if err != nil || !task.PendingPreparation() || task.Stop != nil || task.ID != claim.TaskID ||
+			task.Scope.EnvironmentID != claim.EnvironmentID || !task.CreatedAt.Equal(claim.CreatedAt) ||
+			read.Values[1].ModRevision != request.AcceptedTaskRevision {
+			return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint accepted Task changed before compilation",
+			)
+		}
+		owned, err := environmentBlueprintMarkerOwnedBy(read.Values[0].Value, descriptor)
+		if err != nil || !owned {
+			return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint request does not own the accepted Task",
+			)
+		}
+		conditions[2].ModRevision = read.Values[0].ModRevision
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: workqueue.TaskKey(claim.TaskID), ModRevision: request.AcceptedTaskRevision},
+		)
+		maximumOperations = 6
+	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: descriptorKey, Value: descriptorValue},
 		{Type: etcdstore.MutationPut, Key: locatorKey, Value: locatorValue},
 	}
-	if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, 5, blueprints.EnvironmentBlueprintStageTransactionBytes); err != nil {
+	if err := etcd.ValidateBlueprintTransaction(repository.store, conditions, mutations, maximumOperations, blueprints.EnvironmentBlueprintStageTransactionBytes); err != nil {
 		return blueprints.EnvironmentBlueprintStageClaim{}, err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
@@ -114,7 +174,7 @@ func (repository *Repository) ClaimEnvironmentBlueprintStage(
 	if len(result.FailureReads) != len(conditions) {
 		return blueprints.EnvironmentBlueprintStageClaim{}, blueprints.CorruptEnvironmentBlueprintStage()
 	}
-	if result.FailureReads[2] != nil {
+	if result.FailureReads[2] != nil && request.AcceptedTaskRevision == 0 {
 		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 			errs.KindStateConflict,
 			"public idempotency authority already owns the Blueprint staging locator",
@@ -144,12 +204,26 @@ func (repository *Repository) ClaimEnvironmentBlueprintStage(
 	defer clear(existing.Values[0].Value)
 	stored, err := blueprints.DecodeEnvironmentBlueprintStageDescriptor(existing.Values[0].Value)
 	if err != nil || stored.Claim.DescriptorID != existingID ||
-		stored.State == blueprints.EnvironmentBlueprintStagePublished || stored.State == blueprints.EnvironmentBlueprintStageAbandoned {
+		stored.State == blueprints.EnvironmentBlueprintStagePublished {
 		return blueprints.EnvironmentBlueprintStageClaim{}, blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	storedDigest, err := blueprints.ProtectedBlueprintIntentDigest(stored.Claim.Intent)
-	if err != nil || storedDigest != existingDigest || stored.Claim.Locator != claim.Locator {
+	if err != nil || storedDigest != existingDigest || stored.Claim.Locator != claim.Locator ||
+		(stored.Claim.TaskLocator == nil) != (claim.TaskLocator == nil) ||
+		blueprints.EnvironmentBlueprintTaskLocator(stored.Claim) != blueprints.EnvironmentBlueprintTaskLocator(claim) {
 		return blueprints.EnvironmentBlueprintStageClaim{}, blueprints.CorruptEnvironmentBlueprintStage()
+	}
+	if stored.State == blueprints.EnvironmentBlueprintStageAbandoned {
+		if retired || claim.TaskLocator == nil || stored.Claim.TaskID != claim.TaskID {
+			return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint draft is awaiting retirement",
+			)
+		}
+		if err := repository.retireAcceptedBlueprintDraft(ctx, stored); err != nil {
+			return blueprints.EnvironmentBlueprintStageClaim{}, err
+		}
+		return repository.claimEnvironmentBlueprintStage(ctx, request, true)
 	}
 	winner := blueprints.CloneEnvironmentBlueprintStageClaim(stored.Claim)
 	winner.Existing = true

@@ -26,7 +26,13 @@ type BackupPolicyMutator interface {
 }
 
 type BackupRunMutator interface {
-	RunBackup(context.Context, string, string, ...int64) (idempotencyrecord.IdempotencyResponse, error)
+	RunBackup(
+		context.Context,
+		string,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		...int64,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type backupPolicyShowInput struct {

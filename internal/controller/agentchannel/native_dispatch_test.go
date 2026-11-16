@@ -60,7 +60,8 @@ func TestNativeDispatchDefersOnlyReadinessPublicationConflict(t *testing.T) {
 	delivered := map[string]string{}
 	peer.readiness = func() error { return errs.New(errs.KindAgentReadinessChanged, "lost publication CAS") }
 	if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, false, delivered, payloads); err != nil ||
-		peer.calls != 0 || len(stream.messages) != 0 {
+		peer.calls != 0 ||
+		len(stream.messages) != 0 {
 		t.Fatalf("publication conflict disconnected or granted work: %v", err)
 	}
 	peer.readiness = func() error { return errs.New(errs.KindStateConflict, "foreign executor") }
@@ -70,7 +71,9 @@ func TestNativeDispatchDefersOnlyReadinessPublicationConflict(t *testing.T) {
 	}
 	peer.readiness = nil
 	if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, false, delivered, payloads); err != nil ||
-		peer.calls != 1 || len(stream.messages) != 1 || len(delivered) != 1 {
+		peer.calls != 1 ||
+		len(stream.messages) != 1 ||
+		len(delivered) != 1 {
 		t.Fatalf("fresh request did not deliver the exact saved attempt: %v", err)
 	}
 }
@@ -141,9 +144,13 @@ func nativeDispatchFixture(t *testing.T) (*Server, *Session, *nativeDispatchPeer
 	digest := sha256.Sum256(bytes.Repeat([]byte{1}, tokenSize))
 	_, err = identities.CreateSingleton(t.Context(), localagents.LocalAgentRecord{
 		ID: agentID, EnrollmentTaskID: ids.New(ids.KindTask), Generation: 1,
-		Image:          "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
-		Phase:          localagents.LocalAgentPhaseProvisioning,
-		Config:         localagents.LocalAgentConfig{PullIntervalSeconds: 2, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1},
+		Image: "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
+		Phase: localagents.LocalAgentPhaseProvisioning,
+		Config: localagents.LocalAgentConfig{
+			PullIntervalSeconds:          2,
+			MaxConcurrentTasks:           1,
+			MaxParallelOperationsPerTask: 1,
+		},
 		EncryptedToken: []byte("supplied-ciphertext"), TokenDigest: base64.RawURLEncoding.EncodeToString(digest[:]),
 		CreatedAt: at, TokenUpdatedAt: at,
 	})
@@ -151,8 +158,14 @@ func nativeDispatchFixture(t *testing.T) (*Server, *Session, *nativeDispatchPeer
 		t.Fatal(err)
 	}
 	process := [16]byte{1}
-	identity, err := identities.RegisterWorkProcess(t.Context(), agentID, 1, process, workexecution.AgentConcurrency{Tasks: 1, OperationsPerTask: 1},
-		[]workexecution.Operation{workexecution.Script})
+	identity, err := identities.RegisterWorkProcess(
+		t.Context(),
+		agentID,
+		1,
+		process,
+		workexecution.AgentConcurrency{Tasks: 1, OperationsPerTask: 1},
+		[]workexecution.Operation{workexecution.Script},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

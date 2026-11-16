@@ -24,6 +24,12 @@ func newControllerDNSCheckService(
 	if err != nil {
 		return nil, err
 	}
-	return dnsresolver.NewConnectionCheckService(planner, dependencies.authority.tasks, records,
-		dependencies.authority.idempotency, dependencies.authority.intentCoordinator)
+	return dnsresolver.NewConnectionCheckService(
+		planner,
+		dependencies.authority.tasks,
+		records,
+		dependencies.authority.idempotency,
+		dependencies.authority.intentCoordinator,
+		dependencies.authority.acceptedActions,
+	)
 }

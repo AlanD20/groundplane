@@ -2,244 +2,118 @@ package agentmanagement
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const (
-	agentRemovalRoute = "/agents/{id}"
-)
+const agentRemovalRoute = "/agents/{id}"
 
 type agentRemovalTargets interface {
 	Health(context.Context, string) (localagent.Health, error)
 }
-
-type agentRemovalEvidence struct {
-	candidate requestidempotency.ProtectedEvidence
-	durable   idempotencyrecord.ProtectedIntentRecord
-}
-
-type agentRemovalIdempotency interface {
-	Prepare(context.Context, string) (agentRemovalEvidence, error)
-	ResolveExisting(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		agentRemovalEvidence,
-	) (requestidempotency.Resolution, bool, error)
-	ResolveKnown(
-		context.Context,
-		agentRemovalEvidence,
-		etcd.IdempotencyTransactionResult,
-	) (requestidempotency.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		agentRemovalEvidence,
-		error,
-	) (requestidempotency.Resolution, error)
-}
-
-type durableAgentRemovalIdempotency struct {
-	coordinator *requestidempotency.Coordinator
-	repository  *etcd.IdempotencyRepository
-}
-
-func NewRemovalIdempotency(
-	coordinator *requestidempotency.Coordinator,
-	repository *etcd.IdempotencyRepository,
-) (*durableAgentRemovalIdempotency, error) {
-	if coordinator == nil || repository == nil {
-		return nil, errs.New(errs.KindInternal, "Agent removal idempotency is not configured")
-	}
-	return &durableAgentRemovalIdempotency{coordinator: coordinator, repository: repository}, nil
-}
-
-func (service *durableAgentRemovalIdempotency) Prepare(
-	ctx context.Context,
-	agentID string,
-) (agentRemovalEvidence, error) {
-	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
-		Method: http.MethodDelete,
-		Route:  agentRemovalRoute,
-		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
-		Path:   []requestidempotency.PathBinding{{Name: "id", Value: agentID}},
-		Query:  requestidempotency.Object(),
-		Body:   requestidempotency.NoBody(),
-	})
-	if err != nil {
-		return agentRemovalEvidence{}, err
-	}
-	defer digest.Destroy()
-	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)
-	if err != nil {
-		return agentRemovalEvidence{}, err
-	}
-	durable, err := candidate.DurableRecord()
-	if err != nil {
-		return agentRemovalEvidence{}, err
-	}
-	return agentRemovalEvidence{candidate: candidate, durable: durable}, nil
-}
-
-func (service *durableAgentRemovalIdempotency) ResolveExisting(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence agentRemovalEvidence,
-) (requestidempotency.Resolution, bool, error) {
-	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
-}
-
-func (service *durableAgentRemovalIdempotency) ResolveKnown(
-	ctx context.Context,
-	evidence agentRemovalEvidence,
-	result etcd.IdempotencyTransactionResult,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
-}
-
-func (service *durableAgentRemovalIdempotency) ResolveUnknown(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence agentRemovalEvidence,
-	original error,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
-}
-
 type agentRemovalService struct {
-	targets     agentRemovalTargets
-	tasks       agentEnrollmentTaskRepository
-	idempotency agentRemovalIdempotency
-	now         func() time.Time
+	targets  agentRemovalTargets
+	tasks    agentCaptureRepository
+	accepted *acceptedaction.Submitter
+	now      func() time.Time
 }
 
 func NewRemovalService(
 	targets agentRemovalTargets,
-	tasks agentEnrollmentTaskRepository,
-	idempotency agentRemovalIdempotency,
+	tasks agentCaptureRepository,
+	accepted *acceptedaction.Submitter,
 ) (*agentRemovalService, error) {
-	if targets == nil || tasks == nil || idempotency == nil {
+	if targets == nil || tasks == nil || accepted == nil {
 		return nil, errs.New(errs.KindInternal, "Agent removal service dependencies are invalid")
 	}
-	return &agentRemovalService{targets: targets, tasks: tasks, idempotency: idempotency, now: time.Now}, nil
+	return &agentRemovalService{targets: targets, tasks: tasks, accepted: accepted, now: time.Now}, nil
 }
 
 func (service *agentRemovalService) RemoveAgent(
 	ctx context.Context,
 	agentID string,
-	idempotencyKey string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent removal context is required")
+	input api.TaskRunAfterRequest,
+	key string,
+) (idempotency.IdempotencyResponse, error) {
+	if ids.Validate(ids.KindAgent, agentID) != nil {
+		return idempotency.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Agent id is invalid")
 	}
-	if err := ids.Validate(ids.KindAgent, agentID); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Agent id is invalid")
-	}
-	evidence, err := service.idempotency.Prepare(ctx, agentID)
+	intent, err := beginAgentAction(
+		ctx,
+		service.accepted,
+		http.MethodDelete,
+		agentRemovalRoute,
+		agentID,
+		requestidempotency.Object(
+			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
+		),
+		key,
+	)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return idempotency.IdempotencyResponse{}, err
 	}
-	defer clear(evidence.durable.Ciphertext)
-	locator := idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopePlatform,
-		ScopeID:   "-",
-		Method:    http.MethodDelete,
-		Route:     agentRemovalRoute,
-		Key:       idempotencyKey,
+	defer intent.Destroy()
+	if response, found := intent.Replay(); found {
+		return response, nil
 	}
-	existing, found, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	task := newAcceptedAgentTask(service.now().UTC(), agentID, workexecution.ActionRemove, input.After)
+	return acceptedaction.Submit(ctx, service.accepted, intent.Submission(task, "agent-remove"), input)
+}
+func (service *agentRemovalService) AcceptedPreparations() []taskdependencies.Registration {
+	return []taskdependencies.Registration{
+		acceptedaction.Registration(
+			service.accepted,
+			"agent-remove",
+			workexecution.ActionRemove,
+			ids.KindAgent,
+			service.prepareAcceptedRemoval,
+		),
+	}
+}
+
+func (service *agentRemovalService) prepareAcceptedRemoval(
+	ctx context.Context,
+	task workqueue.TaskSnapshot,
+	_ int64,
+	at time.Time,
+	_ api.TaskRunAfterRequest,
+) (taskdependencies.Prepared, error) {
+	health, err := service.targets.Health(ctx, task.Task.TargetID)
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+		return taskdependencies.Prepared{}, err
 	}
-	if found {
-		if existing.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Agent removal replay resolution is invalid",
-			)
-		}
-		return requestidempotency.CloneResponse(existing.Response), nil
-	}
-	health, err := service.targets.Health(ctx, agentID)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if health.Agent.ID != agentID {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+	if health.Agent.ID != task.Task.TargetID {
+		return taskdependencies.Prepared{}, errs.New(
 			errs.KindInternal,
 			"Agent removal target lookup returned another Agent",
 		)
 	}
-	now := service.now().UTC()
-	task, err := newAgentRemovalCapture(now, health.Agent)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	capture := agentoperations.Capture{
+		TaskID:     task.Task.ID,
+		WorkItemID: ids.DeriveAt(ids.KindWorkItem, task.Task.CreatedAt, task.Task.ID, "agent-work"),
+		PlanID: ids.DeriveAt(
+			ids.KindPlan,
+			task.Task.CreatedAt,
+			task.Task.ID,
+			"agent-input",
+		),
+		AgentID:            task.Task.TargetID,
+		Action:             workexecution.ActionRemove,
+		Image:              health.Agent.Image,
+		StartingGeneration: health.Agent.Generation,
+		CreatedAt:          at,
 	}
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.TaskID})
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	response := idempotencyrecord.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: append([]byte(nil), responseBody...),
-	}
-	result, createErr := service.tasks.CreateAgentWork(ctx, task, idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: locator, Intent: evidence.durable,
-		Response: response, TaskID: task.TaskID, CreatedAt: now, UpdatedAt: now,
-	})
-	var resolution requestidempotency.Resolution
-	if createErr != nil {
-		if !isUnknownAgentRemovalOutcome(createErr) {
-			return idempotencyrecord.IdempotencyResponse{}, createErr
-		}
-		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
-	} else {
-		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
-	}
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if resolution.Kind == requestidempotency.ResolutionReplay {
-		return requestidempotency.CloneResponse(resolution.Response), nil
-	}
-	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Agent removal resolution is invalid",
-		)
-	}
-	return requestidempotency.CloneResponse(response), nil
-}
-
-func newAgentRemovalCapture(
-	createdAt time.Time,
-	agent localagent.Agent,
-) (agentoperations.Capture, error) {
-	capture := agentoperations.Capture{TaskID: ids.New(ids.KindTask), WorkItemID: ids.New(ids.KindWorkItem),
-		PlanID: ids.New(ids.KindPlan), AgentID: agent.ID, Action: workexecution.ActionRemove, CreatedAt: createdAt,
-		Image: agent.Image, StartingGeneration: agent.Generation}
-	_, err := capture.Reference()
-	return capture, err
-}
-
-func isUnknownAgentRemovalOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
+	return prepareAgentCapture(ctx, service.tasks, task, capture, at)
 }

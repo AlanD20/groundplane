@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { readCheckTaskResult } from "@/features/task/check-result";
+import type { TaskResponse } from "@/features/task/api";
 import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { newULID } from "@/lib/utils";
 import {
@@ -16,6 +18,7 @@ export function useDNSCheck(
   initialTaskId = "",
 ) {
   const [taskId, setTaskId] = useState(initialTaskId);
+  const [taskDetail, setTaskDetail] = useState<TaskResponse | null>(null);
   const [result, setResult] = useState<DNSCheckResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -28,6 +31,7 @@ export function useDNSCheck(
   const intent = useRef<{
     key: string;
     queries: DNSCheckQuery[];
+    after: string[];
     body?: DNSCheckRequest;
   } | null>(null);
   const identity = `${componentId}/${initialTaskId}`;
@@ -45,6 +49,7 @@ export function useDNSCheck(
     setUncertain(intent.current !== null);
     setSending(false);
     setTaskId(initialTaskId);
+    setTaskDetail(null);
     setResult(null);
     setError(null);
     setLoading(open && !initialTaskId);
@@ -84,14 +89,19 @@ export function useDNSCheck(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
-        const next = await getDNSCheck(componentId, taskId, controller.signal);
+        const next = await readCheckTaskResult(
+          taskId,
+          controller.signal,
+          () => getDNSCheck(componentId, taskId, controller.signal),
+          setTaskDetail,
+        );
         if (controller.signal.aborted) return;
-        setResult(next);
+        setResult(next.result);
         setError(null);
         // Only read recorded evidence, including terminal-result freshness.
         timer = setTimeout(
           () => void poll(),
-          next.phase === "finished" ? 10000 : 1000,
+          next.taskDetail.task.finished_at ? 10000 : 1000,
         );
       } catch (cause) {
         if (!controller.signal.aborted)
@@ -109,7 +119,7 @@ export function useDNSCheck(
     };
   }, [componentId, taskId, open, reload]);
 
-  async function run(queries: DNSCheckQuery[]) {
+  async function run(queries: DNSCheckQuery[], after: string[] = []) {
     if (
       busy.current ||
       loading ||
@@ -126,14 +136,11 @@ export function useDNSCheck(
     intent.current ??= {
       key: newULID(),
       queries: queries.map((query) => ({ ...query })),
+      after: [...after],
     };
     const pending = intent.current;
     try {
-      pending.body ??= await dnsCheckRequest(
-        componentId,
-        pending.queries,
-        signal,
-      );
+      pending.body ??= dnsCheckRequest(pending.queries, pending.after);
       const accepted = await startDNSCheck(
         componentId,
         pending.body,
@@ -143,6 +150,7 @@ export function useDNSCheck(
       if (generation.current === current) {
         intent.current = null;
         setUncertain(false);
+        setTaskDetail(null);
         setResult(null);
         setTaskId(accepted);
         setReload((value) => value + 1);
@@ -171,13 +179,14 @@ export function useDNSCheck(
   }
   return {
     taskId,
+    taskDetail,
     result,
     error,
     loading,
     sending,
     uncertain,
     run,
-    active: !!taskId && (!result || result.phase !== "finished"),
+    active: !!taskId && !taskDetail?.task.finished_at,
     refresh: () => setReload((value) => value + 1),
   };
 }

@@ -5,11 +5,17 @@ import "github.com/spf13/cobra"
 func newComponentTunnelCheckCmd() *cobra.Command {
 	var origin, hostname, path string
 	var port uint16
+	var runAfter []string
+	var revision int64
 	cmd := &cobra.Command{
 		Use:   "tunnel-check <id>",
 		Short: "Check Tunnel readiness, a serving Service origin and public DNS/TLS/HTTP",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := validatedTaskAfter(runAfter)
+			if err != nil {
+				return err
+			}
 			serviceID, err := resolveServiceTarget(cmd, origin)
 			if err != nil {
 				return err
@@ -21,7 +27,7 @@ func newComponentTunnelCheckCmd() *cobra.Command {
 				serviceID,
 				port,
 				hostname,
-				path,
+				path, revision, after,
 			)
 			if err != nil {
 				return err
@@ -36,6 +42,9 @@ func newComponentTunnelCheckCmd() *cobra.Command {
 	for _, flag := range []string{"origin", "port", "hostname", "path"} {
 		_ = cmd.MarkFlagRequired(flag)
 	}
+	cmd.Flags().
+		Int64Var(&revision, "revision", 0, "optional exact Tunnel revision; omitted resolves after prerequisites")
+	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
 

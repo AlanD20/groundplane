@@ -21,6 +21,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+type RouteWorkCapture struct {
+	Item   workexecution.Item
+	Change workqueue.Change
+}
+
 type RouteWorkPublication struct {
 	Project               keyvalue.Versioned[hierarchy.ProjectRecord]
 	Environment           keyvalue.Versioned[hierarchy.EnvironmentRecord]
@@ -40,12 +45,12 @@ type RouteWorkPublication struct {
 	InactiveRouterKinds   []core.ComponentKind
 }
 
-// PublishRouteWork joins desired state and the native router operation. Removal
-// publishes intent now, but keeps mutable Route metadata until host completion.
-func (repository *HierarchyRepository) PublishRouteWork(
+// PrepareRouteWorkCapture guards desired state and the native router operation.
+// Removal retains mutable Route metadata until host completion.
+func (repository *HierarchyRepository) PrepareRouteWorkCapture(
 	ctx context.Context,
 	request RouteWorkPublication,
-) (IdempotencyTransactionResult, error) {
+) (RouteWorkCapture, error) {
 	project, environment, claim := request.Project, request.Environment, request.Claim
 	task, item, route := request.Task, request.Item, request.Capture.Route
 	if ctx == nil || repository == nil || route == nil ||
@@ -59,24 +64,20 @@ func (repository *HierarchyRepository) PublishRouteWork(
 		request.Marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
 		request.Marker.Locator.ScopeID != environment.Record.ID ||
 		(route.Remove && (request.Current == nil || request.Current.Record != route.Record)) {
-		return IdempotencyTransactionResult{}, errs.New(
+		return RouteWorkCapture{}, errs.New(
 			errs.KindValidationFailed,
 			"Route publication authority is inconsistent",
 		)
 	}
 	if err := routepersistence.ValidateRouteHierarchy(ctx, environment, project, request.Target, route.Record); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
-		found {
-		return existing, err
+		return RouteWorkCapture{}, err
 	}
 	fence, err := repository.loadEnvironmentBlueprintMutationFence(ctx, project, environment)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RouteWorkCapture{}, err
 	}
 	if epoch, found := fence.EpochRevision(); !found || epoch != request.EpochRevision {
-		return IdempotencyTransactionResult{}, errs.New(
+		return RouteWorkCapture{}, errs.New(
 			errs.KindStateConflict,
 			"Route Environment changed before publication",
 		)
@@ -86,13 +87,13 @@ func (repository *HierarchyRepository) PublishRouteWork(
 		request.Projection, desiredPublicationOwner{TaskID: task.ID, EnvironmentID: environment.Record.ID,
 			RevisionID: task.ID, RenderGeneration: claim.RenderGeneration}, request.Marker, claim.BaselineHeadRevision)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RouteWorkCapture{}, err
 	}
 	defer clear(publication.publishedDescriptor)
 	identities, err := prepareEnvironmentDesiredIdentityPublication(ctx, repository.store, request.Projection,
 		claim.SourceKind, claim.BaselineHeadRevision, fence.ReadRevision())
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RouteWorkCapture{}, err
 	}
 	defer identities.clear()
 	definitions := routepersistence.NewRepository(repository.store)
@@ -107,14 +108,14 @@ func (repository *HierarchyRepository) PublishRouteWork(
 		fence.ReadRevision(),
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RouteWorkCapture{}, err
 	}
 	defer keyvalue.ClearMutationValues(writes)
 	if item.Placement.Executor == workexecution.Controller && route.Remove {
 		retirementConditions, retirement, err := routepersistence.PrepareRetirement(ctx, repository.store,
 			environment.Record.ID, route.Record.Desired.ID, fence.ReadRevision())
 		if err != nil {
-			return IdempotencyTransactionResult{}, err
+			return RouteWorkCapture{}, err
 		}
 		defer keyvalue.ClearMutationValues(retirement)
 		conditions = append(conditions, retirementConditions...)
@@ -122,7 +123,7 @@ func (repository *HierarchyRepository) PublishRouteWork(
 	}
 	check, err := edgechecks.RequireRouteIdle(ctx, repository.store, route.Record.Desired.ID, fence.ReadRevision())
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RouteWorkCapture{}, err
 	}
 	guards := append(fence.TransactionConditions(), request.PreparationConditions...)
 	guards = append(guards, identities.conditions...)
@@ -141,9 +142,9 @@ func (repository *HierarchyRepository) PublishRouteWork(
 			ModRevision: claim.BaselineHeadRevision,
 		},
 	)
-	change, err := repository.prepareRouteWorkExecution(ctx, request, guards, fence.ReadRevision())
+	item, change, err := repository.prepareRouteWorkExecution(ctx, request, guards, fence.ReadRevision())
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RouteWorkCapture{}, err
 	}
 	defer keyvalue.ClearMutationValues(change.Mutations)
 	for _, mutations := range [][]keyvalue.Mutation{identities.mutations, writes} {
@@ -154,11 +155,11 @@ func (repository *HierarchyRepository) PublishRouteWork(
 	}
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RouteWorkCapture{}, err
 	}
 	reference, err := idempotency.EncodeTaskReference(task.ID)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return RouteWorkCapture{}, err
 	}
 	change.Mutations = append(
 		change.Mutations,
@@ -175,24 +176,11 @@ func (repository *HierarchyRepository) PublishRouteWork(
 		},
 		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: publication.locatorKey},
 	)
-	queue, err := workqueue.NewRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	result, err := queue.Commit(ctx, change)
-	keyvalue.ClearValues(result.FailureReads)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if result.Succeeded {
-		return IdempotencyTransactionResult{kind: idempotencyTransactionApplied, revision: result.Revision}, nil
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, request.Marker); err != nil ||
-		found {
-		return existing, err
-	}
-	return IdempotencyTransactionResult{}, errs.New(
-		errs.KindStateConflict,
-		"Route publication changed before atomic acceptance",
-	)
+	return RouteWorkCapture{
+		Item: item,
+		Change: workqueue.Change{
+			Conditions: append([]keyvalue.Condition(nil), change.Conditions...),
+			Mutations:  keyvalue.CloneMutations(change.Mutations),
+		},
+	}, nil
 }

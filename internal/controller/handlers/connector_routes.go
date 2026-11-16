@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -42,7 +41,12 @@ type ConnectorMutator interface {
 }
 
 type ConnectorDeleter interface {
-	DeleteConnector(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	DeleteConnector(
+		context.Context,
+		string,
+		apiTypes.TaskRunAfterRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type connectorCreateInput struct {
@@ -62,8 +66,9 @@ type connectorShowInput struct {
 }
 
 type connectorRemoveInput struct {
-	ID  string `path:"id" pattern:"^con_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Key string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ID   string                        `path:"id" pattern:"^con_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Key  string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body *apiTypes.TaskRunAfterRequest `required:"false"`
 }
 
 type connectorPageOutput struct {
@@ -110,6 +115,7 @@ func (s *Server) registerConnectors() {
 			},
 		},
 	}
+	s.setRoutePolicy("DELETE /api/v1/connectors/{id}", routePolicy{body: jsonBody})
 	huma.Register(s.API, operation, s.createConnector)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "connector.list", Method: http.MethodGet, Path: "/connectors",
@@ -126,7 +132,7 @@ func (s *Server) registerConnectors() {
 		OperationID: "connector.remove", Method: http.MethodDelete, Path: "/connectors/{id}",
 		Summary: "Remove an Environment connector", Tags: []string{"Connector"},
 		DefaultStatus: http.StatusAccepted,
-		Middlewares:   huma.Middlewares{s.rejectConnectorDeleteBody, s.rejectConnectorDeleteQuery},
+		Middlewares:   huma.Middlewares{s.rejectConnectorDeleteQuery},
 		Responses:     attachMutationResponses(taskAcceptedSchema),
 	}, s.removeConnector)
 	s.setRoutePolicy("POST /api/v1/connectors", routePolicy{body: jsonBody})
@@ -212,7 +218,7 @@ func (s *Server) removeConnector(
 	if s.connectorDeletions == nil {
 		return nil, errs.New(errs.KindInternal, "connector deleter is not configured")
 	}
-	response, err := s.connectorDeletions.DeleteConnector(ctx, request.ID, request.Key)
+	response, err := s.connectorDeletions.DeleteConnector(ctx, request.ID, taskRunAfter(request.Body), request.Key)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -225,16 +231,6 @@ func (s *Server) removeConnector(
 			}
 		},
 	}, nil
-}
-
-func (s *Server) rejectConnectorDeleteBody(ctx huma.Context, next func(huma.Context)) {
-	var probe [1]byte
-	count, err := ctx.BodyReader().Read(probe[:])
-	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		s.writeConnectorProblem(ctx, "connector deletion body is not allowed")
-		return
-	}
-	next(ctx)
 }
 
 func (s *Server) rejectConnectorDeleteQuery(ctx huma.Context, next func(huma.Context)) {
