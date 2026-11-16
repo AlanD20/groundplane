@@ -94,7 +94,14 @@ export function ResourceForm({
     <Editing.Provider value={editing}>
       <Inline.Provider value={inline}>
         {inline ? (
-          <EditorDiscard.Provider value={() => onOpenChange(false)}>
+          <EditorDiscard.Provider
+            value={(reason) => {
+              // The router's blocked transition owns the next URL. Closing a
+              // URL-driven editor here would replace that transition before
+              // its saved continuation can proceed.
+              if (reason !== "navigation") onOpenChange(false);
+            }}
+          >
             <FormActionsActive.Provider value={open && editing}>
               <AnimatedSection
                 open={open}
