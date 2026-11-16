@@ -11,6 +11,21 @@ Initial single-host release.
 
 ### Console, hosting and operator refinements
 
+- Queue operator actions behind up to 16 whole Tasks with **Run after** in the
+  Console, CLI and API. Capture execution inputs only after every prerequisite
+  succeeds and fully settles, without occupying Agent capacity while waiting.
+  Show prerequisite links and explicit preparation, cancellation and failure reasons.
+- Configure **Concurrent Tasks** and **Parallel operations per Task** independently
+  on each Agent, defaulting to three of each, with bounded total capacity and
+  scheduling across ready Tasks.
+- Use consistent Configuration labels for variables and files, and shared form
+  shortcuts: Enter to submit single-line forms, Ctrl/Cmd+Enter from editors,
+  and Escape to cancel while respecting open menus and dialogs.
+- Protect credentials selected by queued requests and authored Components from
+  deletion. Missing inputs fail clearly instead of waiting indefinitely, and
+  deleting and recreating a key cannot silently retarget an accepted request.
+- Advance ready Blueprint work without the periodic scheduler delay, and release
+  large queued request payloads after capture while retaining compact Task history.
 - Keep disabled Cloudflare Tunnels valid without a token throughout Component
   storage and Blueprint preparation; enabling a Tunnel still requires a valid
   Secret reference.
