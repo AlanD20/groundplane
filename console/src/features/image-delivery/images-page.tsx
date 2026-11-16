@@ -14,6 +14,7 @@ import {
 } from "@/components/common/table-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import {
@@ -39,6 +40,8 @@ import {
   shortImageId,
 } from "./image-presentation";
 import { RemoveImageDialog } from "./remove-image-dialog";
+import { ImageBulkActions } from "./image-bulk-actions";
+import { RemoveImagesDialog } from "./remove-images-dialog";
 import { useImageInventory } from "./use-image-inventory";
 
 export default function ImagesPage() {
@@ -76,6 +79,19 @@ export default function ImagesPage() {
     });
   }
   const [removing, setRemoving] = useState<HostImage | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState<{
+    images: HostImage[];
+    unused: boolean;
+  } | null>(null);
+  const checkedImages = inventoryRows.filter((image) => checked.has(image.id));
+  function toggleChecked(ids: string[], value: boolean) {
+    setChecked((current) => {
+      const next = new Set(current);
+      ids.forEach((id) => (value ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }
   const images = useMemo(
     () =>
       (inventory?.images ?? [])
@@ -116,6 +132,13 @@ export default function ImagesPage() {
     "asc",
     `${search}/${usage}`,
   );
+  const selectableRows = table.rows.filter(
+    (image) => !image.removal_blocked && image.containers === 0,
+  );
+  const allPageChecked =
+    selectableRows.length > 0 &&
+    selectableRows.every((image) => checked.has(image.id));
+  const somePageChecked = selectableRows.some((image) => checked.has(image.id));
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -218,6 +241,13 @@ export default function ImagesPage() {
                   </Button>
                 </div>
               </CollectionToolbar>
+              <ImageBulkActions
+                images={inventoryRows}
+                selected={checkedImages}
+                disabled={loading || !!error || !!removing}
+                onClear={() => setChecked(new Set())}
+                onReview={(images, unused) => setBulk({ images, unused })}
+              />
               {error && (
                 <p role="alert" className="text-sm text-destructive">
                   {error} {inventory ? "The list may be stale." : ""}
@@ -248,6 +278,29 @@ export default function ImagesPage() {
                     <Table className="table-fixed">
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-10">
+                            <Checkbox
+                              aria-label="Select removable images on this page"
+                              checked={allPageChecked}
+                              ref={(node) => {
+                                if (node)
+                                  node.indeterminate =
+                                    somePageChecked && !allPageChecked;
+                              }}
+                              disabled={
+                                loading ||
+                                !!error ||
+                                !selectableRows.length ||
+                                !!removing
+                              }
+                              onChange={(event) =>
+                                toggleChecked(
+                                  selectableRows.map((image) => image.id),
+                                  event.target.checked,
+                                )
+                              }
+                            />
+                          </TableHead>
                           <TableSortHead sort={table} field="name">
                             Image
                           </TableSortHead>
@@ -309,6 +362,26 @@ export default function ImagesPage() {
                                 key={image.id}
                                 onOpen={() => setSelected(image.id)}
                               >
+                                <TableCell className="px-3">
+                                  <Checkbox
+                                    aria-label={`Select ${imageName(image)}, image ${shortImageId(image.id)}`}
+                                    checked={checked.has(image.id)}
+                                    disabled={
+                                      loading ||
+                                      !!error ||
+                                      !!removing ||
+                                      !!image.removal_blocked ||
+                                      image.containers > 0
+                                    }
+                                    title={image.removal_blocked || undefined}
+                                    onChange={(event) =>
+                                      toggleChecked(
+                                        [image.id],
+                                        event.target.checked,
+                                      )
+                                    }
+                                  />
+                                </TableCell>
                                 <TableCell>
                                   <Button
                                     variant="ghost"
@@ -437,7 +510,7 @@ export default function ImagesPage() {
                                   </Button>
                                 </TableCell>
                               </ResourceRow>
-                              <TableExpansion columns={6}>
+                              <TableExpansion columns={7}>
                                 {removing?.id === image.id && (
                                   <RemoveImageDialog
                                     image={removing}
@@ -472,6 +545,17 @@ export default function ImagesPage() {
               )}
             </CardContent>
           </Card>
+          {bulk && (
+            <RemoveImagesDialog
+              images={bulk.images}
+              unused={bulk.unused}
+              onRefresh={refresh}
+              onClose={() => {
+                setBulk(null);
+                setChecked(new Set());
+              }}
+            />
+          )}
         </>
       )}
       {selected && !detail && (

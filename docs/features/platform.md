@@ -343,6 +343,16 @@ registration token. Active work, or a Task whose complete image dependencies
 cannot be determined, still blocks removal. Missing or corrupt retained inputs
 never authorize deletion.
 The Remove action deletes the selected image and its local tags together.
+Select inventory rows to **Remove selected**; the header checkbox selects removable
+images on the current page, and selections persist across pages and filters.
+**Remove unused** reviews images without containers across the entire inventory,
+not just the current page or filter. The review captures exact image IDs and skips
+protected images; it does not include images added afterward. Both bulk controls
+submit ordinary protected removal requests, one Task per image, with individual
+Task links and partial submission results. Submitted does not mean removed.
+Retrying an uncertain request retains its original idempotency key; already
+accepted Tasks are not submitted again. Failed execution is handled through its
+original Task. Closing the review does not cancel accepted Tasks.
 Multiple tags alone do not block removal. GP resolves each repository through
 Docker's exact content descriptor, removes those references without force, and
 requires final exact-ID deletion to succeed. It never removes by mutable tag.
