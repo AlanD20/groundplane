@@ -31,6 +31,12 @@ If initial Volume creation is interrupted, recovery inspects the captured
 operation before allowing conflicting work. Proving that both its directory and
 Docker Volume are absent settles its effects without marking creation successful.
 Retry or a new Apply can then create it under the usual ownership checks.
+If directory preparation completed but Docker Volume creation did not, recovery
+can also settle the failed creation after proving that the helper stopped, the
+owned directory is ready and the Docker Volume is absent. It retains the directory
+and its data. An explicit Retry can then create the missing Volume; neither
+inspection nor settling the failure repeats the creation command. Unknown or
+conflicting storage observations retain recovery ownership.
 
 ### Mount a Volume
 

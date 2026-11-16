@@ -10,6 +10,8 @@ that every deployment or failure scenario has been qualified.
 - Retry contended native execution-result publications with their exact captured
   report during live delivery and restart replay, rather than refusing completed
   work and interrupting parallel operations.
+- Settle interrupted Volume creation when inspection proves its owned directory
+  is ready and the Docker Volume is absent, preserving data for explicit Retry.
 
 ## 0.0.1 — 2026-11-16
 

@@ -66,7 +66,17 @@ func (report RecoveryReport) Disposition(action agentpb.VolumeWorkAction, bounda
 	absentCreation := action == agentpb.VolumeWorkAction_VOLUME_WORK_ACTION_CREATE &&
 		boundary.Stage == PrepareDirectory && report.HelperStopped &&
 		report.Observation.DirectoryAbsent && report.Observation.VolumeAbsent
-	return RecoveryDisposition{BoundaryCompleted: completed, EffectsSettled: completed || absentCreation}
+	// The directory is already an owned persistent precondition at this stage.
+	// A stopped helper and proven Docker Volume absence settle the failed create
+	// without deleting that directory or claiming that the Volume was created.
+	uncreatedVolume := action == agentpb.VolumeWorkAction_VOLUME_WORK_ACTION_CREATE &&
+		boundary.Stage == PrepareVolume && report.HelperStopped &&
+		report.Observation.DirectoryReady && !report.Observation.DirectoryAbsent &&
+		report.Observation.VolumeAbsent && !report.Observation.VolumeReady
+	return RecoveryDisposition{
+		BoundaryCompleted: completed,
+		EffectsSettled:    completed || absentCreation || uncreatedVolume,
+	}
 }
 
 func EncodeRecoveryReport(
