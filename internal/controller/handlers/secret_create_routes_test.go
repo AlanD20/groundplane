@@ -29,7 +29,7 @@ func TestSecretCreateRoutePreservesExactMutationResponse(t *testing.T) {
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/secrets",
-		bytes.NewBufferString(`{"platform":true,"key":"TOKEN","kind":"env_var","value":"private"}`),
+		bytes.NewBufferString(`{"platform":true,"key":"TOKEN","kind":"env_var","value":"private","sensitive":false,"encryption":"none"}`),
 	)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set(idempotencyKeyHeader, "secret-create-key-0004")
@@ -46,6 +46,7 @@ func TestSecretCreateRoutePreservesExactMutationResponse(t *testing.T) {
 	}
 	if !mutator.called || !mutator.input.Platform || mutator.input.Key != "TOKEN" ||
 		mutator.input.Kind != "env_var" || mutator.input.Value != "private" ||
+		mutator.input.Sensitive == nil || *mutator.input.Sensitive || mutator.input.Encryption != "none" ||
 		mutator.key != "secret-create-key-0004" {
 		t.Fatalf("CreateSecret() did not receive the exact decoded request")
 	}
@@ -59,6 +60,8 @@ func TestSecretCreateRouteRejectsNonCanonicalBodies(t *testing.T) {
 		`{"platform":true,"key":"A","key":"B","kind":"env_var","value":"x"}`,
 		`{"platform":true,"key":"A","kind":"env_var","value":"x","extra":true}`,
 		`{"platform":"true","key":"A","kind":"env_var","value":"x"}`,
+		`{"platform":true,"key":"A","kind":"env_var","value":"x","sensitive":"false"}`,
+		`{"platform":true,"key":"A","kind":"env_var","value":"x","encryption":false}`,
 		`{"platform":true,"key":"A","kind":"env_var","value":"x"}{}`,
 	} {
 		mutator := &fakeSecretMutator{}

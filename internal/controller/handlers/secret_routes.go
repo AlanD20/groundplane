@@ -236,7 +236,7 @@ func decodeSecretCreate(body []byte) (apiTypes.SecretCreateRequest, error) {
 		)
 	}
 	input := apiTypes.SecretCreateRequest{}
-	seen := make(map[string]struct{}, 6)
+	seen := make(map[string]struct{}, 8)
 	for decoder.More() {
 		token, tokenErr := decoder.Token()
 		if tokenErr != nil {
@@ -261,7 +261,11 @@ func decodeSecretCreate(body []byte) (apiTypes.SecretCreateRequest, error) {
 			if err := decoder.Decode(&input.Platform); err != nil {
 				return apiTypes.SecretCreateRequest{}, secretCreateMemberError(err)
 			}
-		case "project_id", "key", "kind", "path", "value":
+		case "sensitive":
+			if err := decoder.Decode(&input.Sensitive); err != nil {
+				return apiTypes.SecretCreateRequest{}, secretCreateMemberError(err)
+			}
+		case "project_id", "key", "kind", "path", "value", "encryption":
 			var value string
 			if err := decoder.Decode(&value); err != nil {
 				return apiTypes.SecretCreateRequest{}, secretCreateMemberError(err)
@@ -277,6 +281,8 @@ func decodeSecretCreate(body []byte) (apiTypes.SecretCreateRequest, error) {
 				input.Path = value
 			case "value":
 				input.Value = value
+			case "encryption":
+				input.Encryption = value
 			}
 		default:
 			return apiTypes.SecretCreateRequest{}, errs.New(
