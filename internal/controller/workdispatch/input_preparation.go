@@ -2,7 +2,10 @@ package workdispatch
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -109,7 +112,45 @@ func (inputs *Inputs) Advance(ctx context.Context, entry workqueue.QueueEntry) e
 	}
 	bounded, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
-	return owner.Prepare(bounded, task.ID, item.ID)
+	prepareErr := owner.Prepare(bounded, task.ID, item.ID)
+	if prepareErr == nil && item.Wait.Code == "" {
+		return nil
+	}
+	if err := inputs.recordDiagnostic(ctx, task.ID, item.ID, prepareErr); err != nil {
+		return errs.WrapJoined(errs.KindInternal, prepareErr, err)
+	}
+	return prepareErr
+}
+
+func (inputs *Inputs) recordDiagnostic(ctx context.Context, taskID, workID string, preparation error) error {
+	view, err := inputs.queue.ReadWork(ctx, taskID, workID, 0)
+	if err != nil {
+		return err
+	}
+	code, detail := "", ""
+	if preparation != nil {
+		public := errs.Wrap(errs.KindInternal, preparation).ToProblem()
+		var domain *errs.Error
+		if errors.As(preparation, &domain) {
+			public = domain.ToProblem()
+		}
+		code, detail = string(public.Code), strings.TrimSpace(public.Detail)
+		if len(detail) > 512 {
+			detail = detail[:512]
+			for !utf8.ValidString(detail) {
+				detail = detail[:len(detail)-1]
+			}
+			detail = strings.TrimSpace(detail)
+		}
+	}
+	change, err := workqueue.PrepareInputDiagnostic(view, code, detail, time.Now().UTC())
+	if err != nil || len(change.Mutations) == 0 {
+		return err
+	}
+	defer keyvalue.ZeroMutationBytes(change.Mutations)
+	result, err := inputs.queue.Commit(ctx, change)
+	keyvalue.ClearValues(result.FailureReads)
+	return err
 }
 
 func (inputs *Inputs) Run(ctx context.Context, interval time.Duration, report func(Issue)) error {

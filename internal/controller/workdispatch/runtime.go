@@ -108,7 +108,7 @@ func (runtime *Runtime) Run(
 	report := func(issue Issue) {
 		runtime.logger.ErrorContext(
 			running,
-			"execution operation requires attention",
+			"execution reconciliation failed",
 			"task_id",
 			issue.TaskID,
 			"work_id",

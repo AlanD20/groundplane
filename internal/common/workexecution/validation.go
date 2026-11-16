@@ -175,6 +175,9 @@ func (item Item) Validate() error {
 		if err := item.Wait.Validate(); err != nil {
 			return err
 		}
+		if item.Wait.Code != "" && (item.Input != nil || item.AttemptNumber != 0) {
+			return invalid("input preparation diagnostic requires never-executable work")
+		}
 	case Ready, Attention, Settled:
 		if item.ActiveAttemptID != "" || item.Wait != nil {
 			return invalid("inactive work cannot retain an active assignment or wait")
@@ -193,6 +196,18 @@ func (item Item) Validate() error {
 }
 
 func (wait Wait) Validate() error {
+	if (wait.Code == "") != (wait.Detail == "") || len(wait.Code) > 128 || len(wait.Detail) > 512 ||
+		!utf8.ValidString(wait.Code) || !utf8.ValidString(wait.Detail) ||
+		strings.TrimSpace(wait.Code) != wait.Code || strings.TrimSpace(wait.Detail) != wait.Detail ||
+		wait.Code != "" && wait.Reason != WaitInput {
+		return invalid("input preparation diagnostic is invalid or outside an input wait")
+	}
+	for _, character := range wait.Code {
+		if !(character >= 'a' && character <= 'z' || character >= '0' && character <= '9' ||
+			character == '.' || character == '_') {
+			return invalid("input preparation diagnostic code is invalid")
+		}
+	}
 	switch wait.Reason {
 	case WaitInput, WaitDependency, WaitConflict, WaitReservation, WaitExecutor, WaitOperation, WaitCapacity, WaitRetry:
 	default:

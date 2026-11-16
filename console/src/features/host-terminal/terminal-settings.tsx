@@ -59,21 +59,20 @@ export function HostTerminalSettings() {
     <ResourcePanel
       title={
         <span className="flex items-center gap-2">
-          <SquareTerminal className="size-4 text-muted-foreground" /> Host
-          terminal
+          <SquareTerminal className="size-4 text-muted-foreground" /> Terminals
         </span>
       }
     >
       <SettingsRow
         title="Operator-input inactivity"
-        help="The root shell terminates after this period without keyboard input. Shell output does not reset the timer. Maximum 8 hours."
+        help="Host and container sessions terminate after this period without keyboard input. Shell output does not reset the timer. Maximum 8 hours."
       >
         <Input
           type="number"
           min={1}
           max={480}
           className="w-24"
-          aria-label="Host terminal inactivity minutes"
+          aria-label="Terminal inactivity minutes"
           value={minutes}
           disabled={controllerConfigLoading || saving || !controllerConfig}
           onChange={(event) => setMinutes(Number(event.target.value))}

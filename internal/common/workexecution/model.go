@@ -130,6 +130,8 @@ const (
 
 type Wait struct {
 	Reason     WaitReason `json:"reason"`
+	Code       string     `json:"code,omitempty" maxLength:"128"`
+	Detail     string     `json:"detail,omitempty" maxLength:"512"`
 	WorkItemID string     `json:"work_item_id,omitempty"`
 	TaskID     string     `json:"task_id,omitempty"`
 	Until      *time.Time `json:"until,omitempty"`

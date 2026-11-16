@@ -18,6 +18,10 @@ changes do not invent Agent executions.
 Open the exact Task from its action toast, notification or Activity row. The
 inspector shows the requested action, resource, status and recorded work counts.
 Each resource shows its current blocker, named stages and recorded results.
+When executable input cannot be prepared, waiting work also shows the last safe
+preparation issue and its code. Repeated identical issues do not create more
+writes. The issue clears after successful preparation; it is not a host execution
+attempt, a failed effect or an attention-state transition.
 Expand a stage for expectations, timing and a safe diagnostic code. Latest
 attempts are visible first; earlier attempts remain inspectable. Filtering a
 work page filters that page, not unseen resources.

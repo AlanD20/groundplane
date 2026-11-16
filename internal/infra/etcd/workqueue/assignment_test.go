@@ -13,6 +13,106 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
+// A preparation issue is metadata, and cannot overwrite a concurrent input
+// publication or Stop, authorize an attempt, or churn storage on every poll.
+func TestInputDiagnosticDeduplicatesAndPreservesExecutionAuthority(t *testing.T) {
+	for _, stopped := range []bool{false, true} {
+		t.Run(map[bool]string{false: "input publication", true: "Stop"}[stopped], func(t *testing.T) {
+			ctx := context.Background()
+			store := &assignmentStore{revision: 1, values: make(map[string]keyvalue.KeyValue)}
+			fixture := assignmentFixture(t, store, workexecution.Release, nil)
+			view := View{Task: fixture.Task, Item: fixture.Item, ReadRevision: 1}
+			view.Task.Task.Progress = workexecution.Progress{Waiting: 1}
+			view.Item.Item.Phase, view.Item.Item.Input = workexecution.Waiting, nil
+			view.Item.Item.Wait = &workexecution.Wait{Reason: workexecution.WaitInput}
+			for key, encode := range map[string]func() ([]byte, error){
+				TaskKey(view.Task.Task.ID): func() ([]byte, error) { return EncodeTask(view.Task.Task) },
+				ItemKey(view.Item.Item.ID): func() ([]byte, error) { return EncodeItem(view.Item.Item) },
+			} {
+				value, err := encode()
+				if err != nil {
+					t.Fatal(err)
+				}
+				store.values[key] = keyvalue.KeyValue{Key: key, Value: value, ModRevision: 1}
+			}
+			delete(store.values, QueueKey(fixture.Item.Item))
+			repository, err := NewRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			at := fixture.At
+			change, err := PrepareInputDiagnostic(
+				view,
+				"validation.failed",
+				"Component Secret reference is invalid",
+				at,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := repository.Commit(ctx, change)
+			if err != nil || !result.Succeeded {
+				t.Fatalf("save diagnostic: %v/%v", result, err)
+			}
+			current, err := DecodeItem(store.values[ItemKey(view.Item.Item.ID)].Value)
+			if err != nil || current.Phase != workexecution.Waiting || current.AttemptNumber != 0 ||
+				current.Input != nil ||
+				current.Wait.Code != "validation.failed" ||
+				current.Wait.Detail != "Component Secret reference is invalid" {
+				t.Fatalf("diagnostic changed execution state or was not stored: %+v/%v", current, err)
+			}
+			view.Item = ItemSnapshot{Item: current, Revision: result.Revision}
+			view.ReadRevision = result.Revision
+			before := store.revision
+			repeated, err := PrepareInputDiagnostic(view, current.Wait.Code, current.Wait.Detail, at.Add(time.Second))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(repeated.Mutations) != 0 {
+				if _, err := repository.Commit(ctx, repeated); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if store.revision != before {
+				t.Fatal("identical recurring issue wrote another revision")
+			}
+			stale, err := PrepareInputDiagnostic(
+				view,
+				"state.conflict",
+				"Input source unavailable",
+				at.Add(2*time.Second),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var winner Change
+			if stopped {
+				winner, err = PrepareStop(view.Task, workexecution.Cancelled, at.Add(time.Second))
+			} else {
+				winner, err = PrepareInput(view.Task, view.Item, fixture.Task.Task.Intent, at.Add(time.Second))
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err = repository.Commit(ctx, winner)
+			if err != nil || !result.Succeeded {
+				t.Fatalf("publish competing authority: %v/%v", result, err)
+			}
+			result, err = repository.Commit(ctx, stale)
+			if err != nil || result.Succeeded {
+				t.Fatalf("stale diagnostic overwrote competing authority: %v/%v", result, err)
+			}
+			if !stopped {
+				prepared, err := DecodeItem(store.values[ItemKey(current.ID)].Value)
+				if err != nil || prepared.Phase != workexecution.Ready || prepared.Wait != nil ||
+					prepared.AttemptNumber != 0 {
+					t.Fatalf("input publication retained stale issue or created an attempt: %+v/%v", prepared, err)
+				}
+			}
+		})
+	}
+}
+
 // TASK-23: losing Backup staging after scheduling must invalidate its stale
 // assignment transaction without disabling unrelated work or consuming a slot.
 func TestUnavailableOperationFencesStaleAssignmentAndLeavesCapacity(t *testing.T) {

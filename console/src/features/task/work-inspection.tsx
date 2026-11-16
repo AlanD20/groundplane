@@ -94,6 +94,17 @@ export function WorkInspection({
           <p>
             {waiting[work.wait.reason] ?? "Waiting for execution permission"}
           </p>
+          {work.phase === "waiting" &&
+            work.wait.reason === "input" &&
+            work.wait.code && (
+              <div className="space-y-1 break-words">
+                <p className="font-medium">Last input-preparation issue</p>
+                <p>{work.wait.detail}</p>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {work.wait.code}
+                </p>
+              </div>
+            )}
           {work.wait.task_id && (
             <a
               className="underline"

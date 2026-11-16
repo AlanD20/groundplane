@@ -84,7 +84,7 @@ export function HostTerminalPanel() {
   return (
     <>
       <section
-        aria-label="Host terminal"
+        aria-label="Terminal"
         className={cn(
           "flex flex-col border-t border-border bg-[#111318] text-zinc-100 shadow-[0_-12px_36px_rgba(0,0,0,0.2)]",
           !terminal.visible && "hidden",

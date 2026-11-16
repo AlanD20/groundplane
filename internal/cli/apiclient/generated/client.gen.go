@@ -5537,6 +5537,8 @@ type VolumeEdit struct {
 
 // Wait defines model for Wait.
 type Wait struct {
+	Code       *string    `json:"code,omitempty"`
+	Detail     *string    `json:"detail,omitempty"`
 	Reason     string     `json:"reason"`
 	TaskId     *string    `json:"task_id,omitempty"`
 	Until      *time.Time `json:"until,omitempty"`

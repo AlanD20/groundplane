@@ -376,10 +376,11 @@ func (config ComponentConfig) Empty() bool {
 	return config.Caddy == nil && config.Envoy == nil && config.CloudflareTunnel == nil && config.CoreDNS == nil
 }
 
-// SecretReferences returns opaque references required by the selected
-// Component configuration. Secret values never cross this model boundary.
+// SecretReferences returns configured opaque references. An unset optional
+// credential is not a reference; enabled-setting validation owns required values.
+// Secret values never cross this model boundary.
 func (config ComponentConfig) SecretReferences() []string {
-	if config.CloudflareTunnel == nil {
+	if config.CloudflareTunnel == nil || config.CloudflareTunnel.SecretID == "" {
 		return nil
 	}
 	return []string{config.CloudflareTunnel.SecretID}

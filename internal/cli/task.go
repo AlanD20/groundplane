@@ -124,12 +124,22 @@ func renderTaskPage(cmd *cobra.Command, page apiTypes.ExecutionPage[apiTypes.Tas
 }
 func taskFields(details apiTypes.TaskDetails) map[string]any {
 	task := details.Task
+	issues := make([]string, 0)
+	for _, work := range details.Work.Items {
+		if work.Phase == "waiting" && work.Wait != nil && work.Wait.Reason == "input" && work.Wait.Code != "" {
+			target := work.TargetName
+			if target == "" {
+				target = work.ID
+			}
+			issues = append(issues, fmt.Sprintf("%s: %s [%s]", target, work.Wait.Detail, work.Wait.Code))
+		}
+	}
 	return map[string]any{"id": task.ID, "action": task.Action, "target": task.TargetName,
 		"target_id": task.TargetID, "status": task.Status, "scope": task.Scope, "actor": task.Actor,
 		"created_at": taskTimestamp(task.CreatedAt), "updated_at": taskTimestamp(task.UpdatedAt),
 		"deadline": taskTimestamp(task.Deadline), "finished_at": nullableTaskTimestamp(task.FinishedAt),
 		"counts": task.Counts, "cancel": task.Cancel, "history_expired": task.HistoryExpired,
-		"preparation": details.Preparation, "work": details.Work}
+		"preparation": details.Preparation, "input_preparation_issues": issues, "work": details.Work}
 }
 
 func newTaskJournalListCmd(short string, activity bool) *cobra.Command {

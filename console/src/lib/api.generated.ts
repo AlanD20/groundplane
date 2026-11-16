@@ -5287,6 +5287,8 @@ export interface components {
             slug: string;
         };
         Wait: {
+            code?: string;
+            detail?: string;
             reason: string;
             task_id?: string;
             /** Format: date-time */

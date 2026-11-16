@@ -11,6 +11,12 @@ Initial single-host release.
 
 ### Console, hosting and operator refinements
 
+- Keep disabled Cloudflare Tunnels valid without a token throughout Component
+  storage and Blueprint preparation; enabling a Tunnel still requires a valid
+  Secret reference.
+- Show bounded input-preparation issues in Task details and CLI output instead
+  of leaving waiting work unexplained. Repeated identical issues do not add
+  writes or manufacture execution attempts.
 - Open container shells from Service and Backing Service details with an exact
   container selector, user, command arguments and working directory, sharing the
   existing terminal tabs and bounded session lifetime.
