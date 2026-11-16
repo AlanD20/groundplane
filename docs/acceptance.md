@@ -2009,6 +2009,39 @@ or arm64 runtime. Application images were not transferred or deployed during
 this check. Private values and deployment-specific recipes remain outside this
 public product repository.
 
+## Multi-Service reconstruction and private routing
+
+**H126 — selected BP-04 and CMP-01 variants, 2026-11-16.** A fresh
+Ubuntu 24.04 amd64 QA installation prepared the H125 resources and applied a
+ten-Service workload using two verified, previously built application images.
+Disabled-Component preparation exposed two producer defects: an optional empty
+token was treated as a Secret reference, and successful disable was recorded as
+declaration removal. The corrections preserve required-token validation and
+retain the applied fingerprint of an authored disabled Component.
+
+Controller `b1693a64d`, with the H124 Agent, then completed a normal protected
+Controller update and a new native Apply: all 66 steps succeeded. The original
+Task history remained intact and terminal; no immutable receipt was rewritten.
+All 33 required Attach, Entry and Component receipts matched the selected input.
+
+Independent checks returned HTTP 200 for application health, Identity readiness,
+and the country API through the exact Caddy origin. Read-only database queries
+found one country, 33 cities and 46 migrations. Private DNS names completed
+CA- and hostname-verified TLS: portal health and reviewer login returned 200;
+the callback rejected GET with the expected 405. Three protected Entries retained
+their exact values and Service exposures. Every probe terminal was closed.
+
+The initial router probe used an alias outside its Zone and failed resolution;
+the corrected origin check ran inside the observed Caddy container. No network
+or desired-state change was made to accommodate that probe. The Tunnel remained
+disabled and the source installation was unchanged. No database reset ran.
+
+This qualifies the named reconstruction and reconciliation, not a clean tagged
+installer, an uninterrupted first Apply of this corrected build, public ingress,
+full authentication/callback processing, workload interruption or arm64 runtime.
+The earlier QA-only binary repair is not normal-update qualification; the later
+Controller update used the normal protected path.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
