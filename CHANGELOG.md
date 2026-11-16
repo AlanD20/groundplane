@@ -29,6 +29,8 @@ Initial single-host release.
 - Retain known deployment readiness failures across Agent reconnects, showing
   container exits, failed healthchecks and missing probe tools in Task steps.
   Keep genuinely unobserved outcomes explicitly unknown.
+- Isolate the Agent execution journal from temporary Script workspaces so
+  concurrent Scripts cannot prevent execution or reconnect recovery.
 - Keep disabled Cloudflare Tunnels valid without a token throughout Component
   storage and Blueprint preparation; enabling a Tunnel still requires a valid
   Secret reference.

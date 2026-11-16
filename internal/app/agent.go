@@ -233,7 +233,7 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	if err := client.SetProcessOwnership(ownership); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
-	workJournal, err := agentworkjournal.Open(agentprotocol.StatePath + "/work")
+	workJournal, err := agentworkjournal.OpenState(agentprotocol.StatePath)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}

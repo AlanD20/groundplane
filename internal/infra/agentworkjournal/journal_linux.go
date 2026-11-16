@@ -3,12 +3,6 @@ package agentworkjournal
 import (
 	"context"
 	"errors"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"golang.org/x/sys/unix"
 	"io"
 	"io/fs"
 	"os"
@@ -16,6 +10,13 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"golang.org/x/sys/unix"
 )
 
 type Journal struct {
@@ -24,6 +25,15 @@ type Journal struct {
 	directory *os.File
 	uid       uint32
 	closed    bool
+}
+
+// OpenState opens the journal-owned leaf of an Agent state root. Script bodies
+// and other runtime workspaces are siblings, never members of this inventory.
+func OpenState(stateRoot string) (*Journal, error) {
+	if !filepath.IsAbs(stateRoot) || filepath.Clean(stateRoot) != stateRoot || stateRoot == "/" {
+		return nil, invalid()
+	}
+	return Open(filepath.Join(stateRoot, "work-journal"))
 }
 
 // Open creates only the supplied leaf, never its parents, and pins its identity.
