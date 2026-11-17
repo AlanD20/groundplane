@@ -76,7 +76,7 @@ func (ledger *ReleaseLedger) PrepareGroupReleaseCapture(
 	change := workqueue.Change{
 		Conditions: []keyvalue.Condition{{Key: workqueue.TaskKey(task.ID), ModRevision: accepted.Revision}},
 	}
-	root, err := releasegroups.PrepareExecutionCapture(task, capture.Root)
+	root, err := releasegroups.PrepareExecutionCapture(accepted, capture.Root)
 	if err != nil {
 		return workqueue.Change{}, err
 	}

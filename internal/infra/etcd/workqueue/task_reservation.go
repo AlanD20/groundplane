@@ -40,15 +40,23 @@ func (reservation TaskReservation) validate() error {
 	return nil
 }
 
-// PrepareTaskReservation joins initial Task acceptance and immutable source
-// publication. An active work claim prevents reservation; a reservation created
-// concurrently with another assignment wins or loses through the same keys.
-// This MVP uses one reserved effect scope per action, not a host-wide lock.
-func PrepareTaskReservation(task workexecution.Task, claim workexecution.Claim) (Change, error) {
-	if task.Validate() != nil || task.PublicationComplete || task.Progress.Total() != 0 ||
+// PrepareAcceptedTaskReservation joins the original accepted action's promotion
+// and immutable source publication. Waiting for prerequisites holds no resource
+// exclusion; promotion compares the accepted revision and excludes active work.
+func PrepareAcceptedTaskReservation(
+	accepted TaskSnapshot,
+	task workexecution.Task,
+	claim workexecution.Claim,
+) (Change, error) {
+	if accepted.Revision <= 0 || accepted.Task.Validate() != nil || !accepted.Task.PendingPreparation() ||
+		accepted.Task.Stop != nil || accepted.Task.PublicationComplete ||
+		accepted.Task.ID != task.ID || accepted.Task.Actor != task.Actor || accepted.Task.Scope != task.Scope ||
+		accepted.Task.Action != task.Action || accepted.Task.TargetID != task.TargetID || accepted.Task.TargetName != task.TargetName ||
+		!accepted.Task.CreatedAt.Equal(task.CreatedAt) || !accepted.Task.Deadline.Equal(task.Deadline) ||
+		task.Validate() != nil || task.PublicationComplete || task.Progress.Total() != 0 ||
 		task.FinishedAt != nil || task.CollectionStartedAt != nil || task.Stop != nil ||
 		task.Scope.EnvironmentID == "" || claim != (workexecution.Claim{ScopeID: task.Scope.EnvironmentID}) {
-		return Change{}, invalid("Task reservation must join unexecuted action acceptance")
+		return Change{}, invalid("Task reservation must promote its exact unstarted accepted action")
 	}
 	reservation := TaskReservation{TaskID: task.ID, Intent: task.Intent, Claim: claim}
 	if err := reservation.validate(); err != nil {
@@ -60,7 +68,12 @@ func PrepareTaskReservation(task workexecution.Task, claim workexecution.Claim) 
 	}
 	key, index := TaskReservationKey(claim), taskReservationIndexKey(task.ID)
 	return Change{
-		Conditions: []keyvalue.Condition{{Key: TaskKey(task.ID)}, {Key: key}, {Key: index}, {Key: ClaimKey(claim)}},
+		Conditions: []keyvalue.Condition{
+			{Key: TaskKey(task.ID), ModRevision: accepted.Revision},
+			{Key: key},
+			{Key: index},
+			{Key: ClaimKey(claim)},
+		},
 		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value},
 			{Type: keyvalue.MutationPut, Key: index, Value: append([]byte(nil), value...)}},
 	}, nil

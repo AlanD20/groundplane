@@ -208,31 +208,23 @@ func (capture ExecutionCapture) Task() (workexecution.Task, error) {
 	return task, workexecution.ValidateGraph(task, capture.Graph)
 }
 
-// PrepareExecutionCapture joins native Task acceptance. The producer also joins
+// PrepareExecutionCapture joins native Task promotion. The producer also joins
 // complete immutable member preparations and source/host/hierarchy comparisons.
-func PrepareExecutionCapture(task workexecution.Task, capture ExecutionCapture) (workqueue.Change, error) {
-	expected, err := capture.Task()
+func PrepareExecutionCapture(accepted workqueue.TaskSnapshot, capture ExecutionCapture) (workqueue.Change, error) {
+	task, err := capture.Task()
 	if err != nil {
 		return workqueue.Change{}, err
-	}
-	if task.ID != expected.ID || task.Actor != expected.Actor || task.Scope != expected.Scope ||
-		task.Action != expected.Action || task.TargetID != expected.TargetID || task.TargetName != expected.TargetName ||
-		task.Intent != expected.Intent || task.ExpectedItems != expected.ExpectedItems || task.PublicationComplete ||
-		task.Progress.Total() != 0 || task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
-		!task.CreatedAt.Equal(
-			expected.CreatedAt,
-		) || !task.UpdatedAt.Equal(expected.UpdatedAt) || !task.Deadline.Equal(expected.Deadline) {
-		return workqueue.Change{}, errs.New(
-			errs.KindStateConflict,
-			"Release Group acceptance differs from its complete capture",
-		)
 	}
 	value, _, err := capture.encoded()
 	if err != nil {
 		return workqueue.Change{}, err
 	}
 	key := ExecutionCaptureKey(task.ID)
-	reservation, err := workqueue.PrepareTaskReservation(task, workexecution.Claim{ScopeID: task.Scope.EnvironmentID})
+	reservation, err := workqueue.PrepareAcceptedTaskReservation(
+		accepted,
+		task,
+		workexecution.Claim{ScopeID: task.Scope.EnvironmentID},
+	)
 	if err != nil {
 		clear(value)
 		return workqueue.Change{}, err

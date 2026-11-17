@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Fix Release Group Deploy/Rollback preparation to reserve resources while
+  promoting the original accepted Task, instead of comparing that Task as both
+  present and absent and rejecting the release before execution.
+
 ## 0.0.1 — 2026-11-17
 
 Initial single-host release.
