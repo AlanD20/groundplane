@@ -149,6 +149,7 @@ const (
 	KindRotationNotImplemented
 	KindAdapterCustomOnly
 	KindValidationFailed
+	KindRouterConfigurationInvalid
 	KindMalformedRequest
 	KindScopeUnauthorized
 	KindConnectorScopeInvalid
@@ -225,6 +226,7 @@ var kindDescriptors = [kindLimit]descriptor{
 	KindRotationNotImplemented:             {CodeRotationNotImplemented, ClassValidation, 422},
 	KindAdapterCustomOnly:                  {CodeAdapterCustomOnly, ClassValidation, 422},
 	KindValidationFailed:                   {CodeValidationFailed, ClassValidation, 422},
+	KindRouterConfigurationInvalid:         {CodeValidationFailed, ClassValidation, 422},
 	KindMalformedRequest:                   {CodeValidationFailed, ClassBadRequest, 400},
 	KindScopeUnauthorized:                  {CodeScopeUnauthorized, ClassValidation, 422},
 	KindConnectorScopeInvalid:              {CodeConnectorScopeInvalid, ClassValidation, 422},

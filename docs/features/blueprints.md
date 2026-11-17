@@ -6,6 +6,13 @@ extensions. It is not a record of running containers.
 
 ## Read, edit, validate and apply
 
+An enabled router's custom template must agree with the authored Routes. Remove
+the corresponding template references when removing a Route, or use the default
+template to render the complete Route set automatically. Validate and Apply check
+these references before publishing resources. A permanent router configuration
+error found during execution preparation fails the unstarted work with guidance;
+it does not keep waiting for an input that cannot become valid.
+
 Use the Environment Blueprint editor in the Console, or the CLI workflow below.
 Choose **Edit Blueprint**, adjust the YAML, select one Service or the entire
 Environment under **Apply scope**, then review changes before confirming Apply.

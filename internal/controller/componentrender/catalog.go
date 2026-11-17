@@ -35,13 +35,14 @@ type EnvironmentManagedConfigurationRegistration struct {
 // EnvironmentComponentRegistration is the composition-root seam between one
 // build-time registered implementation and Controller-owned plan validation.
 type EnvironmentComponentRegistration struct {
-	Kind                 core.ComponentKind
-	Definition           componentsdk.Definition
-	CatalogDigest        [sha256.Size]byte
-	Plan                 EnvironmentComponentPlanFunc
-	ProjectHTTPRouter    EnvironmentHTTPRouterProjectionFunc
-	PlanHTTPRouter       EnvironmentHTTPRouterPlanFunc
-	ManagedConfiguration *EnvironmentManagedConfigurationRegistration
+	Kind                   core.ComponentKind
+	Definition             componentsdk.Definition
+	CatalogDigest          [sha256.Size]byte
+	Plan                   EnvironmentComponentPlanFunc
+	ProjectHTTPRouter      EnvironmentHTTPRouterProjectionFunc
+	PlanHTTPRouter         EnvironmentHTTPRouterPlanFunc
+	ValidateAuthoredRoutes func(core.ComponentSpec, []core.RouteSpec) error
+	ManagedConfiguration   *EnvironmentManagedConfigurationRegistration
 }
 
 type GeneratedEnvironmentService struct {

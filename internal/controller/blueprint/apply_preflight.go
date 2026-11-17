@@ -65,6 +65,9 @@ func (service *Service) prepareAuthoredApplyPreflight(
 	if err := taskplanning.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return applyPreflight{}, err
 	}
+	if err := taskplanning.ValidateBlueprintRouterConfiguration(parsed, service.componentCatalog); err != nil {
+		return applyPreflight{}, err
+	}
 	if err := service.validateServiceSelection(ctx, environmentID, bundle, parsed); err != nil {
 		return applyPreflight{}, err
 	}

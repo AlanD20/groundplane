@@ -130,6 +130,9 @@ func (service *Service) ValidateBlueprint(
 	if err := taskplanning.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
+	if err := taskplanning.ValidateBlueprintRouterConfiguration(parsed, service.componentCatalog); err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
 	if err := service.validateServiceSelection(ctx, environmentID, bundle, parsed); err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}

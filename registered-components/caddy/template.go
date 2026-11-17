@@ -26,6 +26,13 @@ type templateRenderer struct {
 	aggregate string
 }
 
+// ValidateRouteTemplate checks authored Route references without requiring
+// runtime identities, network allocation or an executable Component plan.
+func ValidateRouteTemplate(templateBody string, routes []component.HTTPRoute) error {
+	_, err := renderCaddyfile(templateBody, routes)
+	return err
+}
+
 func renderCaddyfile(templateBody string, routes []component.HTTPRoute) ([]byte, error) {
 	// ADR0075 defines empty as the all-Route default, not an empty serving file.
 	if templateBody == "" {

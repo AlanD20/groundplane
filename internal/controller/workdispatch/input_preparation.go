@@ -113,6 +113,9 @@ func (inputs *Inputs) Advance(ctx context.Context, entry workqueue.QueueEntry) e
 	bounded, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	prepareErr := owner.Prepare(bounded, task.ID, item.ID)
+	if errors.Is(prepareErr, errs.New(errs.KindRouterConfigurationInvalid, "")) {
+		return inputs.rejectInvalidRouterConfiguration(ctx, task.ID, item.ID, prepareErr)
+	}
 	if prepareErr == nil && item.Wait.Code == "" {
 		return nil
 	}
@@ -120,6 +123,37 @@ func (inputs *Inputs) Advance(ctx context.Context, entry workqueue.QueueEntry) e
 		return errs.WrapJoined(errs.KindInternal, prepareErr, err)
 	}
 	return prepareErr
+}
+
+func (inputs *Inputs) rejectInvalidRouterConfiguration(
+	ctx context.Context,
+	taskID, workID string,
+	failure error,
+) error {
+	view, err := inputs.queue.ReadWork(ctx, taskID, workID, 0)
+	if err != nil {
+		return err
+	}
+	task, item := view.Task.Task, view.Item.Item
+	at := time.Now().UTC()
+	if task.Stop != nil || task.FinishedAt != nil || task.CollectionStartedAt != nil ||
+		!at.Before(task.Deadline) || !at.Before(item.Deadline) || item.ForwardRevoked ||
+		item.Phase != workexecution.Waiting || item.Wait == nil || item.Wait.Reason != workexecution.WaitInput ||
+		item.Input != nil || item.AttemptNumber != 0 {
+		return nil
+	}
+	var domain *errs.Error
+	if !errors.As(failure, &domain) {
+		return errs.Wrap(errs.KindInternal, failure)
+	}
+	change, err := workqueue.PrepareInputRejection(view, domain.ToProblem().Detail, at)
+	if err != nil {
+		return err
+	}
+	defer keyvalue.ClearMutationValues(change.Mutations)
+	result, err := inputs.queue.Commit(ctx, change)
+	keyvalue.ClearValues(result.FailureReads)
+	return err
 }
 
 func (inputs *Inputs) recordDiagnostic(ctx context.Context, taskID, workID string, preparation error) error {

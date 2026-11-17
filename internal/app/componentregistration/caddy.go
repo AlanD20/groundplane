@@ -20,6 +20,18 @@ func registeredCaddyEnvironmentComponent(
 	}
 	return componentrender.EnvironmentComponentRegistration{
 		Kind: core.ComponentKindIngressCaddy, Definition: definition, CatalogDigest: actionCatalog.Digest(),
+		ValidateAuthoredRoutes: func(spec core.ComponentSpec, routes []core.RouteSpec) error {
+			input := make([]componentsdk.HTTPRoute, len(routes))
+			for index, route := range routes {
+				input[index] = componentsdk.HTTPRoute{Host: route.Hostname, Path: route.Path,
+					BackendServiceName: route.Target, TargetPort: route.TargetPort,
+					Exposure: componentsdk.HTTPRouteExposure(route.Exposure)}
+			}
+			if err := registeredcaddy.ValidateRouteTemplate(spec.ImplementationConfig.CaddyfileTemplate, input); err != nil {
+				return errs.Wrap(errs.KindRouterConfigurationInvalid, err)
+			}
+			return nil
+		},
 		ManagedConfiguration: &componentrender.EnvironmentManagedConfigurationRegistration{
 			SourcePath: registeredcaddy.CaddyfileSource,
 			ActionID:   registeredcaddy.ActivateConfigAction,
@@ -39,7 +51,7 @@ func registeredCaddyEnvironmentComponent(
 				registeredcaddy.Config{CaddyfileTemplate: config.CaddyfileTemplate, Alias: config.Alias},
 			)
 			if err != nil {
-				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err)
+				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindRouterConfigurationInvalid, err)
 			}
 			if err := actionCatalog.catalog.ValidateEnvironmentPlanImages(definition.Implementation(), plan); err != nil {
 				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindInternal, err)
@@ -65,7 +77,7 @@ func registeredCaddyEnvironmentComponent(
 				CaddyfileTemplate: instance.Config.Caddy.CaddyfileTemplate, Alias: instance.Config.Caddy.Alias,
 			})
 			if err != nil {
-				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err)
+				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindRouterConfigurationInvalid, err)
 			}
 			if err := actionCatalog.catalog.ValidateEnvironmentPlanImages(definition.Implementation(), plan); err != nil {
 				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindInternal, err)

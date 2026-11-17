@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Reject custom router templates that reference removed Routes during Blueprint
+  validation and Apply preparation. Keep router configuration errors actionable,
+  and settle permanently invalid unstarted input instead of waiting indefinitely.
+
 - Recognize software activation Tasks across Console activity, inspection and
   filtering instead of failing an entire activity card on a valid activation.
 

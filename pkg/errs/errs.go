@@ -261,6 +261,9 @@ func FromProblem(problem Problem) (*Error, bool) {
 }
 
 func defaultPublicDetail(kind Kind) string {
+	if kind == KindRouterConfigurationInvalid {
+		return "The HTTP router configuration cannot be rendered for the selected Routes. Update its custom template and Route declarations together, or use the default template."
+	}
 	value, _ := descriptorFor(normalizeKind(kind))
 	if detail := http.StatusText(value.Status); detail != "" {
 		return detail
