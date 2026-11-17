@@ -5,6 +5,12 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+## 0.0.1 — 2026-11-17
+
+Initial single-host release.
+
+### Staging validation and recovery corrections
+
 - Reject custom router templates that reference removed Routes during Blueprint
   validation and Apply preparation. Keep router configuration errors actionable,
   and settle permanently invalid unstarted input instead of waiting indefinitely.
@@ -23,10 +29,6 @@ that every deployment or failure scenario has been qualified.
   work and interrupting parallel operations.
 - Settle interrupted Volume creation when inspection proves its owned directory
   is ready and the Docker Volume is absent, preserving data for explicit Retry.
-
-## 0.0.1 — 2026-11-16
-
-Initial single-host release.
 
 ### CoreDNS recovery correction
 
