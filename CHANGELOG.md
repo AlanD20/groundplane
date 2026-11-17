@@ -5,6 +5,9 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Recognize software activation Tasks across Console activity, inspection and
+  filtering instead of failing an entire activity card on a valid activation.
+
 - Supersede queued CoreDNS work when its captured Blueprint sources change,
   recapture current inputs automatically, and settle expired work without
   requiring an available executor slot.

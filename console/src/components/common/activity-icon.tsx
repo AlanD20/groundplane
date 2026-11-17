@@ -39,6 +39,7 @@ const ICONS: Record<TaskType, React.ReactNode> = {
   fetch: <Download />,
   prepare: <Download />,
   apply: <ArrowUpCircle />,
+  activate: <ArrowUpCircle />,
   check: <PlugZap />,
 };
 

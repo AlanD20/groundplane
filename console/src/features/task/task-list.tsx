@@ -172,15 +172,18 @@ export function TaskList({
                 "fetch",
                 "prepare",
                 "apply",
+                "activate",
                 "check",
               ].map((value) => ({
                 value,
                 label:
-                  value === "destroy"
-                    ? "Remove containers"
-                    : value
-                        .replaceAll("_", " ")
-                        .replace(/^./, (letter) => letter.toUpperCase()),
+                  value === "activate"
+                    ? "Apply software"
+                    : value === "destroy"
+                      ? "Remove containers"
+                      : value
+                          .replaceAll("_", " ")
+                          .replace(/^./, (letter) => letter.toUpperCase()),
               })),
             ]}
           />

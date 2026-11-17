@@ -21,6 +21,7 @@ const taskTypes = new Set<TaskType>([
   "fetch",
   "prepare",
   "apply",
+  "activate",
   "check",
 ]);
 

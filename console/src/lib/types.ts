@@ -448,6 +448,7 @@ export type TaskType =
   | "fetch"
   | "prepare"
   | "apply"
+  | "activate"
   | "check";
 
 export type TaskStatus =

@@ -124,6 +124,7 @@ function taskTitle(
         : resourceKind === "etcd"
           ? "Apply configuration"
           : "Apply software",
+    activate: "Apply software",
     check: "Test connection",
   };
   return `${labels[type]} · ${target}`;
