@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entrywork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
@@ -19,25 +20,26 @@ import (
 )
 
 type EntryMetadataPublication struct {
-	Source   EntryMutationSource
-	Records  []entries.Record
-	Changed  []string
-	Accepted workqueue.TaskSnapshot
-	Task     workexecution.Task
-	Item     workexecution.Item
-	Marker   idempotency.IdempotencyMarker
-	At       time.Time
+	Source     EntryMutationSource
+	Records    []entries.Record
+	Projection *environmentprojection.EnvironmentComposeProjection
+	Changed    []string
+	Accepted   workqueue.TaskSnapshot
+	Task       workexecution.Task
+	Item       workexecution.Item
+	Marker     idempotency.IdempotencyMarker
+	At         time.Time
 }
 
-// PrepareUnrenderedEntryWork accepts metadata only after proving that it has no
-// acknowledged workload. An edit retains older configuration until the next
-// Deploy; a removal additionally requires no affected file. The desired head and epoch fence every fact
-// used by that proof. It never publishes a made-up runtime projection.
-func (repository *EnvironmentBlueprintRepository) PrepareUnrenderedEntryWork(
+// PrepareEntryDefinitionWork saves authored values without touching running
+// workloads or their acknowledged configuration. Removal additionally requires
+// no affected runtime or file. The desired head and epoch fence publication.
+func (repository *EnvironmentBlueprintRepository) PrepareEntryDefinitionWork(
 	ctx context.Context, request EntryMetadataPublication,
 ) (EntryWorkCapture, error) {
 	source, task := request.Source, request.Task
-	if source.Runtime != nil || source.Desired.ReadRevision <= 0 || task.Validate() != nil ||
+	if source.Desired.ReadRevision <= 0 || task.Validate() != nil ||
+		task.Action == workexecution.ActionRemove && source.Runtime != nil ||
 		request.Item.Validate() != nil || request.Item.Placement.Executor != workexecution.Controller ||
 		task.Scope.EnvironmentID != source.Desired.Record.EnvironmentID || request.Item.TaskID != task.ID ||
 		request.Marker.TaskID != task.ID || task.Intent.SHA256 != request.Marker.Intent.CiphertextDigest ||
@@ -52,7 +54,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareUnrenderedEntryWork(
 	if err != nil {
 		return EntryWorkCapture{}, err
 	}
-	if authority.Runtime != nil || authority.Desired.Revision != source.Desired.Revision ||
+	if task.Action == workexecution.ActionRemove && authority.Runtime != nil || authority.Desired.Revision != source.Desired.Revision ||
 		authority.Desired.Record.RevisionID != source.Desired.Record.RevisionID {
 		return EntryWorkCapture{}, errs.New(errs.KindStateConflict, "Entry metadata source changed")
 	}
@@ -73,8 +75,8 @@ func (repository *EnvironmentBlueprintRepository) PrepareUnrenderedEntryWork(
 	if err != nil {
 		return EntryWorkCapture{}, err
 	}
-	publication, err := desiredauthoring.PrepareUnrenderedEntries(ctx, repository.store,
-		task.Scope.EnvironmentID, request.Marker, source.Desired.Revision, request.Records)
+	publication, err := desiredauthoring.PrepareEntryDefinitions(ctx, repository.store,
+		task.Scope.EnvironmentID, request.Marker, source.Desired.Revision, request.Records, request.Projection)
 	if err != nil {
 		return EntryWorkCapture{}, err
 	}
@@ -135,6 +137,11 @@ func (repository *EnvironmentBlueprintRepository) entryMetadataHostProof(ctx con
 	if err != nil {
 		return 0, nil, err
 	}
+	// Saving a new selection leaves the entire acknowledged snapshot and every
+	// running consumer intact. Only an explicit deployment activates it.
+	if action != workexecution.ActionRemove {
+		return head, nil, nil
+	}
 	// Captured files can belong to a Service omitted by a later failed Apply.
 	// Its runtime must also remain absent before deferring file materialization.
 	serviceIDs := make([]string, 0, len(source.Owned.Services)+len(snapshot.Files))
@@ -189,12 +196,7 @@ func (repository *EnvironmentBlueprintRepository) entryMetadataHostProof(ctx con
 			)
 		}
 	}
-	// Value edits preserve the acknowledged snapshot, including its generation
-	// pins. With no workload, the next Deploy can materialize the new selection.
-	// Removal still needs its Agent-owned file cleanup before forgetting an Entry.
-	if action != workexecution.ActionRemove {
-		return head, guards, nil
-	}
+	// Removal needs Agent-owned cleanup before forgetting an applied file.
 	targets := make(map[string]bool, len(changed))
 	for _, id := range changed {
 		targets[id] = true

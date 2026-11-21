@@ -29,7 +29,7 @@ import (
 
 type entryDesiredMutationRepository interface {
 	ReadEntryMutationSource(context.Context, string) (etcd.EntryMutationSource, error)
-	PrepareUnrenderedEntryWork(
+	PrepareEntryDefinitionWork(
 		context.Context,
 		etcd.EntryMetadataPublication,
 	) (etcd.EntryWorkCapture, error)
@@ -169,8 +169,8 @@ func (service *entryDesiredMutationService) prepareEntryMutation(
 	if source.Desired.Revision != head.Revision || source.Desired.Record.RevisionID != head.Record.RevisionID {
 		return taskdependencies.Prepared{}, errs.New(errs.KindStateConflict, "Entry desired source changed")
 	}
-	if source.Runtime == nil {
-		return service.prepareUnrenderedEntry(ctx, request, source, project, environment)
+	if request.action != entryDesiredMutationRemove || source.Runtime == nil {
+		return service.prepareEntryDefinition(ctx, request, source, project, environment)
 	}
 	current, hasCurrent := *source.Runtime, true
 	expectedHeadRevision, generation, err := controllerrevision.NextGeneration(

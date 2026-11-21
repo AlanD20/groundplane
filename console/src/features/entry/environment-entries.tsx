@@ -564,8 +564,8 @@ export function EnvVarsCard({
         )}
         <TablePagination table={table} label="Variables & files" />
         <p className="mt-2 text-xs text-muted-foreground">
-          Changes update managed files. Running processes receive them on the
-          next Deploy.
+          Saving updates desired configuration only. Deploy or apply the
+          Blueprint to update managed files and running processes.
         </p>
       </ResourcePanel>
 

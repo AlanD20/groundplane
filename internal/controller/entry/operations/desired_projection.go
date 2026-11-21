@@ -75,6 +75,8 @@ func entryDesiredCandidateRecord(
 	}
 	if previous != nil {
 		record.BlueprintKey = previous.BlueprintKey
+	} else {
+		record.BlueprintKey = entryrecord.BlueprintIdentityKey(record)
 	}
 	return &record, previous, nil
 }

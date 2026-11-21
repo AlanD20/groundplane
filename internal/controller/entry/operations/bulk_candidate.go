@@ -83,6 +83,8 @@ func buildEntryBulkCandidate(
 		}
 		if prior != nil {
 			record.BlueprintKey = prior.BlueprintKey
+		} else {
+			record.BlueprintKey = entryrecord.BlueprintIdentityKey(record)
 		}
 		changes = append(changes, entryBulkChange{desired: desired, record: record, previous: prior})
 	}

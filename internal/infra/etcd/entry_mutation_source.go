@@ -58,7 +58,7 @@ func (repository *EnvironmentBlueprintRepository) readEntryMutationSourceAt(
 	}
 	if available {
 		runtime.Revision = desired.Revision
-		result.Runtime, result.Entries = &runtime, runtime.Record.Entries
+		result.Runtime = &runtime
 	}
 	return result, nil
 }

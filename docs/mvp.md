@@ -104,8 +104,11 @@ credentials, filesystem paths derived by GP, runtime observations or execution
 history. Canonical export reconstructs desired state rather than preserving
 uploaded formatting.
 
-Saving Service configuration does not deploy it. Runtime intent is separate:
-Start selects running, Stop selects stopped, and Destroy selects absent while
+Saving Service configuration does not deploy it.
+Saving Entry values or exposure also changes desired state only; it does not
+rewrite mounted files, recreate containers or acknowledge runtime configuration.
+An explicit Deploy or Blueprint Apply activates the saved selection.
+Runtime intent is separate: Start selects running, Stop selects stopped, and Destroy selects absent while
 retaining configuration. Blueprint edits preserve existing runtime intent.
 Removal remains dependency-checked whether requested directly or by Blueprint
 omission.

@@ -28,6 +28,13 @@ Environment leaf only after contained workload and data cleanup.
 
 ## Generated files use pinned sources and a narrow writer
 
+Entry create, edit and bulk-upsert publish desired definitions and value
+generations only. Their Controller-owned result does not advance the acknowledged
+configuration head or invoke Compose. A desired render remains available for a
+later explicit Deploy or Blueprint Apply, which owns file activation and the
+Service release strategy. Mounted files can be read live by applications, so
+even rewriting a file without restarting its consumer is an activation effect.
+
 Generated environment files and file Entries are written only below one
 authorized Environment directory. Durable plans retain metadata, exact source
 generation references, length and digest, never secret plaintext. Plaintext is

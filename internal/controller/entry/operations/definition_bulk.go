@@ -13,7 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
-func (service *entryBulkUpsertService) bulkUnrenderedEntries(ctx context.Context,
+func (service *entryBulkUpsertService) bulkEntryDefinitions(ctx context.Context,
 	input entryBulkUpsertInput, locator idempotency.IdempotencyLocator, intent idempotency.ProtectedIntentRecord,
 	source etcd.EntryMutationSource, project keyvalue.Versioned[hierarchy.ProjectRecord],
 	environment keyvalue.Versioned[hierarchy.EnvironmentRecord], accepted workqueue.TaskSnapshot, at time.Time,
@@ -46,8 +46,12 @@ func (service *entryBulkUpsertService) bulkUnrenderedEntries(ctx context.Context
 		Locator: locator, Intent: claim.Intent, Response: response, TaskID: task.ID,
 		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
-	capture, err := service.desired.repository.PrepareUnrenderedEntryWork(ctx, etcd.EntryMetadataPublication{
-		Source: source, Records: candidate.entries, Changed: changed, Task: task, Item: item, Marker: marker, At: at, Accepted: accepted,
+	projection, err := entryDefinitionProjection(source, candidate.entries, task.ID)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	capture, err := service.desired.repository.PrepareEntryDefinitionWork(ctx, etcd.EntryMetadataPublication{
+		Source: source, Records: candidate.entries, Projection: projection, Changed: changed, Task: task, Item: item, Marker: marker, At: at, Accepted: accepted,
 	})
 	if err != nil {
 		return taskdependencies.Prepared{}, err

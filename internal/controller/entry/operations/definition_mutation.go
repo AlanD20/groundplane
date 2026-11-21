@@ -43,7 +43,7 @@ func metadataEntryWork(
 	}, workexecution.Placement{Executor: workexecution.Controller}, claim, action, targetID, targetName, accepted, at)
 }
 
-func (service *entryDesiredMutationService) prepareUnrenderedEntry(ctx context.Context,
+func (service *entryDesiredMutationService) prepareEntryDefinition(ctx context.Context,
 	request entryDesiredMutationRequest, source etcd.EntryMutationSource,
 	project keyvalue.Versioned[hierarchy.ProjectRecord], environment keyvalue.Versioned[hierarchy.EnvironmentRecord],
 ) (taskdependencies.Prepared, error) {
@@ -105,8 +105,13 @@ func (service *entryDesiredMutationService) prepareUnrenderedEntry(ctx context.C
 		Locator: request.locator, Intent: claim.Intent, Response: response, ReplayTarget: &replayTarget,
 		TaskID: task.ID, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
-	capture, publicationErr := service.repository.PrepareUnrenderedEntryWork(ctx, etcd.EntryMetadataPublication{
-		Source: source, Records: replaceProjectedEntry(source.Entries, previous, next), Changed: []string{targetID},
+	records := replaceProjectedEntry(source.Entries, previous, next)
+	projection, err := entryDefinitionProjection(source, records, task.ID)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	capture, publicationErr := service.repository.PrepareEntryDefinitionWork(ctx, etcd.EntryMetadataPublication{
+		Source: source, Records: records, Projection: projection, Changed: []string{targetID},
 		Task: task, Item: item, Marker: marker, At: request.at, Accepted: request.accepted,
 	})
 	if publicationErr != nil {

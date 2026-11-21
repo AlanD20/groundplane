@@ -3,8 +3,12 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -23,8 +27,10 @@ import (
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	api "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -162,11 +168,14 @@ func TestNativeEntryEditPreservesShapeAndProtectsValue(t *testing.T) {
 		t.Fatalf("Entry creation capture failed: %+v", preparedCreate)
 	}
 	originalID := preparedCreate.TargetID
-	before, found, err := f.blueprint.GetEnvironmentComposeProjection(t.Context(), f.environmentID)
+	before, found, err := f.blueprint.GetEnvironmentEntryDeclarations(t.Context(), f.environmentID)
 	if err != nil || !found || len(before.Record.Entries) != 1 {
 		t.Fatalf("created Entry: %v", err)
 	}
 	previous := before.Record.Entries[0]
+	// A value already selected by an acknowledged file must remain pinned and
+	// byte-for-byte unchanged when a replacement is merely saved.
+	configurationHead := acknowledgeEntryEditConfiguration(t, f, previous)
 	input := api.EntryEditRequest{
 		Source:   api.EntrySource{Kind: "literal", Literal: "replacement-private-value"},
 		Exposure: []string{"all"},
@@ -182,14 +191,29 @@ func TestNativeEntryEditPreservesShapeAndProtectsValue(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &acceptedEdit); err != nil {
 		t.Fatal(err)
 	}
-	if prepared := nativePrepareEntry(t, f.queue, mutations.AcceptedPreparations(), acceptedEdit.TaskID); prepared.Outcome != "" {
-		t.Fatalf("Entry edit capture failed: %+v", prepared)
+	preparedEdit := nativePrepareEntry(t, f.queue, mutations.AcceptedPreparations(), acceptedEdit.TaskID)
+	if preparedEdit.Outcome != "" {
+		t.Fatalf("Entry edit capture failed: %+v", preparedEdit)
 	}
-	after, found, err := f.blueprint.GetEnvironmentComposeProjection(t.Context(), f.environmentID)
+	after, found, err := f.blueprint.GetEnvironmentEntryDeclarations(t.Context(), f.environmentID)
 	if err != nil || !found || len(after.Record.Entries) != 1 {
 		t.Fatalf("edited Entry: %v", err)
 	}
 	current := after.Record.Entries[0]
+	workID := ids.DeriveAt(ids.KindWorkItem, preparedEdit.CreatedAt, preparedEdit.ID, "entry-configuration")
+	view, err := f.queue.ReadWork(t.Context(), preparedEdit.ID, workID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Item.Item.Placement.Executor != workexecution.Controller ||
+		view.Item.Item.Phase != workexecution.Settled || view.Item.Item.AttemptNumber != 0 ||
+		view.Item.Item.Input != nil || view.Item.Item.Outcome != workexecution.Succeeded {
+		t.Fatal("saving an Entry scheduled host effects instead of settling its definition")
+	}
+	head, err := f.store.Get(t.Context(), runtimeconfiguration.HeadKey(f.environmentID))
+	if err != nil || head.Entry == nil || !bytes.Equal(head.Entry.Value, configurationHead) {
+		t.Fatal("saving a value rewrote its acknowledged file selection")
+	}
 	expected := previous.Entry
 	expected.Source = core.EntrySource{Kind: core.SourceLiteral}
 	if !reflect.DeepEqual(current.Entry, expected) || current.BlueprintKey != previous.BlueprintKey ||
@@ -239,6 +263,37 @@ func TestNativeEntryEditPreservesShapeAndProtectsValue(t *testing.T) {
 	) {
 		t.Fatalf("changed edit replay accepted: %v", err)
 	}
+}
+
+func acknowledgeEntryEditConfiguration(t *testing.T, f *nativeVolumeFixture, record entries.Record) []byte {
+	t.Helper()
+	content := []byte("original-private-value")
+	digest := sha256.Sum256(content)
+	uid, gid := *record.Entry.UID, *record.Entry.GID
+	snapshot := runtimeconfiguration.Snapshot{ID: ids.New(ids.KindConfig), EnvironmentID: f.environmentID, Generation: 1,
+		Files: []taskmaterialization.Record{{EnvironmentID: f.environmentID,
+			StepID: ids.New(ids.KindStep), MaterializationID: ids.New(ids.KindConfig),
+			Destination: record.Entry.Path, OutputKind: taskmaterialization.OutputSecretFile,
+			Mode: 0o600, UID: uid, GID: gid, Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]),
+			Source: taskmaterialization.Source{Kind: taskmaterialization.SourceEntryValue,
+				EntryValue: &taskmaterialization.EntryValueReference{EntryID: record.Entry.ID,
+					ValueGenerationID: record.CurrentValueGenerationID, Storage: taskmaterialization.EntryValueStorageSecret}}}}}
+	repository, err := runtimeconfiguration.New(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reference, err := repository.Stage(t.Context(), snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := runtimeconfiguration.EncodeReference(reference)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Put(t.Context(), runtimeconfiguration.HeadKey(f.environmentID), head); err != nil {
+		t.Fatal(err)
+	}
+	return head
 }
 
 type nativeEntryNoFacts struct{}

@@ -13,11 +13,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// PrepareUnrenderedEntries changes only authored Entry selection. The caller
-// must separately prove that no acknowledged consumer or file needs updating.
-// A nil runtime stays nil; this does not manufacture a rendered Environment.
-func PrepareUnrenderedEntries(ctx context.Context, store Store, environmentID string,
+// PrepareEntryDefinitions changes authored Entry selection and its desired
+// render, never the acknowledged files or serving runtime.
+func PrepareEntryDefinitions(ctx context.Context, store Store, environmentID string,
 	marker idempotency.IdempotencyMarker, expectedHead int64, records []entries.Record,
+	projection *environmentprojection.EnvironmentComposeProjection,
 ) (Publication, error) {
 	if marker.Kind != idempotency.IdempotencyMarkerTask || marker.State != idempotency.IdempotencyMarkerPending ||
 		marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID ||
@@ -28,8 +28,20 @@ func PrepareUnrenderedEntries(ctx context.Context, store Store, environmentID st
 	if err != nil {
 		return Publication{}, err
 	}
-	if snapshot.headRevision != expectedHead || snapshot.projection != nil {
+	if snapshot.headRevision != expectedHead {
 		return Publication{}, errs.New(errs.KindStateConflict, "Entry metadata or runtime changed before publication")
+	}
+	if (snapshot.projection == nil) != (projection == nil) {
+		return Publication{}, errs.New(errs.KindStateConflict, "Entry desired runtime availability changed")
+	}
+	if projection != nil {
+		if projection.EnvironmentID != environmentID || projection.RevisionID != marker.TaskID ||
+			projection.RenderGeneration <= snapshot.input.RenderGeneration {
+			return Publication{}, errs.New(errs.KindValidationFailed, "Entry desired projection has invalid authority")
+		}
+		prepared := environmentprojection.CloneEnvironmentComposeProjection(*projection)
+		snapshot.projection = &prepared
+		snapshot.input.RenderGeneration, snapshot.owned.RenderGeneration = projection.RenderGeneration, projection.RenderGeneration
 	}
 	previous := environmentprojection.CloneEnvironmentOwnedIdentities(snapshot.owned)
 	previous.RevisionID = snapshot.baseRevisionID

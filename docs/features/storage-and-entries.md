@@ -3,8 +3,9 @@
 The Service Entries view offers bulk variable editing for Entries exposed only to
 that Service. Shared Entries are excluded and their keys cannot be overwritten
 there. New variables are exposed only to the selected Service. Use Environment
-Entries to edit shared configuration. Changes update managed files; running
-processes receive them on their next Deploy.
+Entries to edit shared configuration. Save changes desired values only;
+managed files and running processes receive them on an explicit Deploy or
+Blueprint Apply.
 
 Volumes provide persistent Environment-owned storage. Entries provide explicit
 configuration values as environment variables or files. Reusable Project and
@@ -108,20 +109,18 @@ restart or reconfigure the Tunnel. Apply its configuration afterward.
 
 ## Applying changes
 
-Entry create, edit and bulk-upsert capture the acknowledged running workloads
-affected by the changed exposure. They materialize configuration and select only
-those workload instances, without restarting unrelated Services or stable
-proxies. A stopped or absent Service is not started merely because its previous
-Release remains in history. With no selected running workload, the operation only
-materializes files.
+Entry create, edit and bulk-upsert save desired definitions and immutable value
+generations in the Controller. They do not run Compose, rewrite mounted files,
+restart containers or change the acknowledged runtime selection. This also lets
+operators enter initial secrets before a first deployment or repair values after
+a failed setup hook. Existing runtime files retain their exact source generations
+until an explicit deployment activates the replacement.
 
-Before runtime configuration has been prepared, Entry changes can settle as
-Controller metadata when there is no acknowledged workload. This lets operators supply secret values needed by a first deployment or
-failed setup hook. Existing files and their protected generation references stay
-acknowledged exactly as they were; the next deployment prepares the new values.
-GP checks both declared Services and consumers of retained files. An acknowledged
-workload still requires the normal captured host operation. Removal also requires
-file cleanup; saving a new value does not prove older files have been removed.
+Deploy and Blueprint Apply capture the saved configuration and use each affected
+Service's declared release strategy. Saving values is non-disruptive; activating
+them can interrupt a Service that uses recreate. Stopped Services remain stopped
+unless the selected action explicitly starts them. Removal remains a separate
+cleanup action: saving a new value does not prove older files have been removed.
 
 Entry removal is different: it updates or removes the pinned configuration files
 without running Compose or restarting a Service. A running process keeps its

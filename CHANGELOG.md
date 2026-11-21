@@ -9,6 +9,10 @@ that every deployment or failure scenario has been qualified.
 
 ### Replacement release corrections
 
+- Save Environment Entry values and exposure without rewriting mounted files or
+  reconciling containers. Explicit Deploy or Blueprint Apply activates saved
+  configuration through the selected Service release strategy.
+
 - Import the authenticated native Agent manifest during published software
   preparation instead of retagging a multi-platform index, preserving strict
   identity verification on Docker's containerd image store.
