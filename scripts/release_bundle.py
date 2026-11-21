@@ -61,6 +61,23 @@ def write_archive(destination: Path, files: dict[str, bytes]) -> None:
                     archive.addfile(member, io.BytesIO(data))
 
 
+def write_release_archives(destination: Path, files: dict[str, bytes]) -> None:
+    """Keep bootstrap's Agent selection out of independently selectable Controller assets."""
+    selected = [(destination, files)]
+    manifest = json.loads(files["bundle.json"])
+    if manifest["agent_image"] is not None:
+        controller = destination.parent / "controller" / destination.name
+        controller.parent.mkdir(exist_ok=True)
+        manifest["agent_image"] = None
+        scoped = dict(files, **{"bundle.json": (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()})
+        selected.append((controller, scoped))
+    for archive, payload_files in selected:
+        write_archive(archive, payload_files)
+        checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
+        with archive.with_suffix(archive.suffix + ".sha256").open("x") as out:
+            out.write(f"{checksum}  {archive.name}\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True)
@@ -100,10 +117,8 @@ def main() -> None:
                     "SOURCE_KIND=release", f"SOURCE_COMMIT={source_commit}"],
                    cwd=ROOT, env=environment, check=True)
     files = payload(args.version, args.agent_image, args.runner_image, ARCHES[platform.machine()], postgres_catalog)
-    write_archive(destination, files)
+    write_release_archives(destination, files)
     checksum = hashlib.sha256(destination.read_bytes()).hexdigest()
-    with checksum_path.open("x") as out:
-        out.write(f"{checksum}  {destination.name}\n")
     print(f"Bundle: {destination}\nSHA256: {checksum}")
     print("Not published. Qualify these exact artifacts before uploading release assets.")
 

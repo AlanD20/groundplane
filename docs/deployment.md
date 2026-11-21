@@ -206,8 +206,13 @@ rejects both `--stage-only` and `--config`, including with `--ref`.
 | `controller/vX.Y.Z` | Controller/Console/CLI bundle and Runner dependency; no Agent build. |
 | `agent/vX.Y.Z` | Agent image, metadata and small installer archives. |
 
-Updates select only the component namespaces, never plain `v` releases. With no
-version specified, each selected component resolves its own latest stable version.
+Updates select only the component namespaces, never plain `v` releases. The
+Controller-scoped archive omits the combined bootstrap's Agent selection, so a
+combined tag remains usable by the independent-component updater. The Controller
+binary and payload files are identical across scopes; bundle manifests and
+archive checksums differ.
+
+With no version specified, each selected component resolves its own latest stable version.
 Pass numeric `--version X.Y.Z`, without a `v` or component prefix. On a combined
 update this pins both component releases to that version; use a component scope
 when their desired versions differ.

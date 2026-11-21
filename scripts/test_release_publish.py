@@ -17,6 +17,9 @@ class ReleasePublicationTests(unittest.TestCase):
                     for suffix in ("tar.gz", "tar.gz.sha256"):
                         (root / f"{component}-1.2.3-linux-{arch}.{suffix}").write_bytes(b"qualified artifact")
             (root / "agent.json").write_text("{}")
+            (root / "controller").mkdir()
+            for archive in root.glob("groundplane-1.2.3-*"):
+                (root / "controller" / archive.name).write_bytes(b"qualified Controller-only artifact")
             calls = []
 
             def run(*args):
@@ -53,6 +56,10 @@ class ReleasePublicationTests(unittest.TestCase):
         self.assertEqual(len(controller_files), 4)
         self.assertTrue(all(name.startswith("groundplane-agent-") for name in agent_files))
         self.assertTrue(all(name.startswith("groundplane-1.2.3-") for name in controller_files))
+        self.assertTrue(all(Path(arg).parent.name == "controller"
+                            for arg in releases["controller/v1.2.3"] if ".tar.gz" in arg))
+        self.assertTrue(all(Path(arg).parent.name != "controller"
+                            for arg in releases["v1.2.3"] if ".tar.gz" in arg))
 
     def test_conflicting_component_tag_prevents_every_publication_write(self):
         calls = self.exercise(conflict=True)

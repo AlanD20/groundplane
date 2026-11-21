@@ -26,7 +26,8 @@ def publish(tag, root, *, check=False):
     for role in roles:
         selected = f"{role}/v{version}" if role != "both" else f"v{version}"
         agent = sorted(root.glob(f"groundplane-agent-{version}-linux-*.tar.gz*"))
-        controller = sorted(root.glob(f"groundplane-{version}-linux-*.tar.gz*"))
+        controller_root = root / "controller" if role == "controller" and scope is None else root
+        controller = sorted(controller_root.glob(f"groundplane-{version}-linux-*.tar.gz*"))
         files = (agent + [root / "agent.json"] if role == "agent" else list(controller))
         if role == "both":
             files += agent + [root / "agent.json"]

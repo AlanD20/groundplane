@@ -9,6 +9,10 @@ that every deployment or failure scenario has been qualified.
 
 ### Replacement release corrections
 
+- Publish independently selectable Controller archives without the combined
+  bootstrap's Agent selection, so normal software preparation accepts component
+  releases created by a combined tag.
+
 - Preserve legacy Component configuration and idempotency fingerprints when the
   optional Environment credential source is unused, keeping in-place epoch 1
   updates from changing existing reconciliation or request replay identities.

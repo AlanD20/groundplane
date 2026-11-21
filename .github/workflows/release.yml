@@ -211,6 +211,7 @@ jobs:
           bash scripts/repo-env.sh python3 scripts/release_bundle.py "${args[@]}"
           cd .tmp/releases
           sha256sum --check -- *.sha256
+          if [[ -d controller ]]; then (cd controller && sha256sum --check -- *.sha256); fi
       - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.arch }}
@@ -242,5 +243,6 @@ jobs:
         run: |
           cd .tmp/releases
           sha256sum --check -- *.sha256
+          if [[ -d controller ]]; then (cd controller && sha256sum --check -- *.sha256); fi
           cd ../..
           bash scripts/repo-env.sh python3 scripts/release_publish.py "$RELEASE_TAG"

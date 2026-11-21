@@ -115,6 +115,21 @@ class BundleTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             release_bundle.write_archive(first, self.files)
 
+    def test_combined_publication_preserves_payload_but_omits_agent_from_controller_scope(self):
+        archive = self.root / "groundplane-1.2.3-linux-amd64.tar.gz"
+        release_bundle.write_release_archives(archive, self.files)
+        for scoped, expected_agent in ((archive, self.agent),
+                                       (archive.parent / "controller" / archive.name, None)):
+            checksum = scoped.with_suffix(scoped.suffix + ".sha256").read_text().split()
+            self.assertEqual(checksum, [hashlib.sha256(scoped.read_bytes()).hexdigest(), scoped.name])
+            with tarfile.open(scoped) as reader:
+                actual = {member.name: reader.extractfile(member).read() for member in reader}
+            manifest = json.loads(actual.pop("bundle.json"))
+            self.assertEqual(manifest["agent_image"], expected_agent)
+            self.assertEqual(actual, {name: data for name, data in self.files.items() if name != "bundle.json"})
+            self.assertEqual(manifest["files"], {name: hashlib.sha256(data).hexdigest()
+                                                 for name, data in actual.items()})
+
     def invoke(self, mode, stage=False, config=None):
         args = argparse.Namespace(version="1.2.3", stage_only=stage, config=config, listen_ip="127.0.0.1",
                                   controller_only=mode == "native", agent_tag=None)
