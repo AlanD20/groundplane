@@ -75,6 +75,14 @@ func (e Environment) Validate() error {
 		return err
 	}
 
+	for _, component := range e.Components {
+		if component.Config.CloudflareTunnel != nil && component.Config.CloudflareTunnel.TokenEntry != "" {
+			if _, err := e.TunnelTokenEntry(component.Config.CloudflareTunnel.TokenEntry); err != nil {
+				return err
+			}
+		}
+	}
+
 	// A service on a zone must reference a zone that exists — see
 	// blueprint.md's required-validation case "a service or network
 	// reference is invalid".
@@ -101,6 +109,18 @@ func (e Environment) Validate() error {
 						entry.ID,
 						target,
 					)
+				}
+				continue
+			}
+			if target == EntryExposureEdgeTunnel {
+				found := false
+				for _, component := range e.Components {
+					if component.Kind == ComponentKindEdgeCloudflare {
+						found = true
+					}
+				}
+				if !found {
+					return fmt.Errorf("entry %s: edge-tunnel Component is not declared", entry.ID)
 				}
 				continue
 			}
@@ -303,6 +323,15 @@ func (e EnvEntry) Validate() error {
 			"all",
 		)
 	}
+	for _, target := range e.Exposure {
+		if target == EntryExposureEdgeTunnel &&
+			(len(e.Exposure) != 1 || e.Kind != EntryKindEnv || !e.Secret || e.Source.Kind != SourceLiteral) {
+			return fmt.Errorf(
+				"entry %s: Component token must be an exclusively exposed protected Environment variable",
+				e.ID,
+			)
+		}
+	}
 	if e.Secret && e.Source.Kind == SourceLiteral && e.Source.Literal != "" {
 		return fmt.Errorf("entry %s: secret entries must not carry a plaintext literal value", e.ID)
 	}
@@ -453,9 +482,10 @@ func (c Component) Validate() error {
 	case ComponentKindEdgeCloudflare:
 		if c.Owner != ComponentOwnerEnvironment || c.Config.Caddy != nil || c.Config.Envoy != nil ||
 			c.Config.CoreDNS != nil ||
-			(c.Enabled && (c.Config.CloudflareTunnel == nil || c.Config.CloudflareTunnel.SecretID == "" ||
+			(c.Enabled && (c.Config.CloudflareTunnel == nil || (c.Config.CloudflareTunnel.SecretID == "" && c.Config.CloudflareTunnel.TokenEntry == "") ||
 				len(c.Config.CloudflareTunnel.ZoneIDs) == 0)) ||
-			(c.Config.CloudflareTunnel != nil && validateComponentZoneIDs(c.Config.CloudflareTunnel.ZoneIDs) != nil) {
+			(c.Config.CloudflareTunnel != nil && (validateComponentZoneIDs(c.Config.CloudflareTunnel.ZoneIDs) != nil ||
+				c.Config.CloudflareTunnel.TokenEntry != "" && (c.Config.CloudflareTunnel.SecretID != "" || !validTunnelTokenKey(c.Config.CloudflareTunnel.TokenEntry)))) {
 			return fmt.Errorf("component %s: Cloudflare Tunnel ownership or config is invalid", c.ID)
 		}
 	case ComponentKindCoreDNS:

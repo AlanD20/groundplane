@@ -139,6 +139,17 @@ func (service *Service) environmentFileSources(
 	for _, file := range projection.EnvironmentFiles {
 		values := make([]materializationrecord.GeneratedEnvironmentEntryReference, len(file.Values))
 		for index, binding := range file.Values {
+			if binding.EntryID != "" {
+				reference, err := service.componentEntryReference(ctx, environmentID, binding.EntryID, entries)
+				if err != nil {
+					return nil, err
+				}
+				values[index] = materializationrecord.GeneratedEnvironmentEntryReference{
+					Name:  binding.Name,
+					Value: reference,
+				}
+				continue
+			}
 			secret, err := service.materials.PinSecretValue(ctx, projectID, binding.SecretID)
 			if err != nil {
 				return nil, err

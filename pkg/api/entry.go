@@ -19,7 +19,7 @@ type Entry struct {
 	UID               *int64      `json:"uid,omitempty"`  // Type=file; required even when zero
 	GID               *int64      `json:"gid,omitempty"`  // Type=file; required even when zero
 	Source            EntrySource `json:"source"`
-	Exposure          []string    `json:"exposure"` // service names, or ["all"]
+	Exposure          []string    `json:"exposure"` // Service names, ["all"], or the closed ["component:edge-tunnel"] grant.
 	Secret            bool        `json:"secret"`
 	EmptySecretValue  bool        `json:"empty_secret_value,omitempty"` // True only for an empty selected secret generation.
 	ReconciliationKey string      `json:"reconciliation_key,omitempty"` // Immutable Blueprint key on metadata reads.

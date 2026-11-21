@@ -272,9 +272,12 @@ type ManagedDependency struct {
 	Condition   string
 }
 
+// ManagedSecretEnvironment selects exactly one opaque Secret or Environment Entry.
+// The host resolves and captures its value; the Component never sees plaintext.
 type ManagedSecretEnvironment struct {
 	Name     string
 	SecretID string
+	EntryID  string
 }
 
 type ManagedService struct {
@@ -367,6 +370,10 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 		for _, secret := range service.SecretEnvironment {
 			encoded = appendPlanString(encoded, secret.Name)
 			encoded = appendPlanString(encoded, secret.SecretID)
+			if secret.EntryID != "" {
+				encoded = appendPlanString(encoded, "environment-entry-binding-v1")
+				encoded = appendPlanString(encoded, secret.EntryID)
+			}
 		}
 		encoded = appendPlanString(encoded, string(service.ObservationAction))
 		encoded = appendPlanBool(encoded, service.Healthcheck != nil)

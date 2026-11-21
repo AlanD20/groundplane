@@ -74,6 +74,9 @@ func NewPlan(
 			byPath[file.Path] = output{metadata: metadata, values: []int{index}}
 			continue
 		}
+		if entry.Exposure.Kind == backupconfig.ExposureEdgeTunnel {
+			continue
+		}
 		if entry.Exposure.Kind == backupconfig.ExposureAll {
 			item := byPath[global]
 			item.values = append(item.values, index)

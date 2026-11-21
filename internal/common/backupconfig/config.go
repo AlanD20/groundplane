@@ -62,8 +62,9 @@ type Metadata struct {
 type ExposureKind uint8
 
 const (
-	ExposureAll      ExposureKind = 1
-	ExposureServices ExposureKind = 2
+	ExposureAll        ExposureKind = 1
+	ExposureServices   ExposureKind = 2
+	ExposureEdgeTunnel ExposureKind = 3
 )
 
 // Exposure is a closed union. ServiceIDs is populated only for

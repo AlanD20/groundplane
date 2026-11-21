@@ -36,6 +36,14 @@ func (service *MutationService) environmentComponentConfig(
 	if desired.Kind == core.ComponentKindEdgeCloudflare {
 		if input.CloudflareTunnel != nil {
 			credential := input.CloudflareTunnel.Credential
+			if credential.Mode == "environment" {
+				return apiTypes.ComponentConfig{
+					CloudflareTunnel: &apiTypes.CloudflareTunnelComponentConfig{
+						ZoneIDs:    append([]string(nil), input.CloudflareTunnel.ZoneIDs...),
+						TokenEntry: credential.TokenEntry,
+					},
+				}, nil
+			}
 			secretID, err := service.credentials.ResolveCredentialReference(ctx, desired.OwnerID,
 				OpaqueSecretReferenceInput{Mode: credential.Mode, SecretID: credential.SecretID,
 					Name: credential.SecretName, Value: credential.Token}, idempotencyKey)
@@ -71,6 +79,7 @@ func applyEnvironmentComponentConfig(spec *yaml.Node, config apiTypes.ComponentC
 		kind = core.ComponentKindEdgeCloudflare
 		settings.ZoneIDs = append([]string(nil), config.CloudflareTunnel.ZoneIDs...)
 		settings.SecretID = config.CloudflareTunnel.SecretID
+		settings.TokenEntry = config.CloudflareTunnel.TokenEntry
 	default:
 		return errs.New(errs.KindValidationFailed, "Environment Component config is required")
 	}

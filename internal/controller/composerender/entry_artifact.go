@@ -248,7 +248,7 @@ func entryArtifactFileMounts(volumeDir string, entries []entryrecord.Record) []e
 			continue
 		}
 		exposes := make(map[string]struct{}, len(entry.Exposure))
-		for _, service := range entry.Exposure {
+		for _, service := range entry.ServiceExposure() {
 			exposes[service] = struct{}{}
 		}
 		result = append(result, entryArtifactMount{
@@ -266,7 +266,7 @@ func entryArtifactServiceEnvironment(entries []entryrecord.Record) map[string]st
 		if entry.Kind != core.EntryKindEnv || entry.ExposesAll() {
 			continue
 		}
-		for _, service := range entry.Exposure {
+		for _, service := range entry.ServiceExposure() {
 			result[service] = struct{}{}
 		}
 	}

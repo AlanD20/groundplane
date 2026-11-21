@@ -1533,6 +1533,18 @@
             "additionalProperties": false,
             "maxProperties": 3,
             "minProperties": 3,
+            "oneOf": [
+              {
+                "required": [
+                  "secret_id"
+                ]
+              },
+              {
+                "required": [
+                  "token_entry"
+                ]
+              }
+            ],
             "properties": {
               "implementation": {
                 "enum": [
@@ -1542,6 +1554,10 @@
               },
               "secret_id": {
                 "pattern": "^sec_[0-9A-HJKMNP-TV-Z]{26}$",
+                "type": "string"
+              },
+              "token_entry": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
                 "type": "string"
               },
               "zone_ids": {
@@ -1557,8 +1573,7 @@
             },
             "required": [
               "implementation",
-              "zone_ids",
-              "secret_id"
+              "zone_ids"
             ],
             "type": "object"
           },
@@ -1770,6 +1785,28 @@
                 "properties": {
                   "credential": {
                     "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "maxProperties": 2,
+                        "minProperties": 2,
+                        "properties": {
+                          "mode": {
+                            "enum": [
+                              "environment"
+                            ],
+                            "type": "string"
+                          },
+                          "token_entry": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "token_entry"
+                        ],
+                        "type": "object"
+                      },
                       {
                         "additionalProperties": false,
                         "maxProperties": 2,
@@ -2123,6 +2160,28 @@
                 "properties": {
                   "credential": {
                     "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "maxProperties": 2,
+                        "minProperties": 2,
+                        "properties": {
+                          "mode": {
+                            "enum": [
+                              "environment"
+                            ],
+                            "type": "string"
+                          },
+                          "token_entry": {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "token_entry"
+                        ],
+                        "type": "object"
+                      },
                       {
                         "additionalProperties": false,
                         "maxProperties": 2,

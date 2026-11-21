@@ -143,6 +143,11 @@ func (service *entryDesiredMutationService) validateExposure(
 	if err != nil {
 		return err
 	}
+	for _, identity := range source.Owned.Components {
+		if identity.Name == string(core.ComponentCapabilityEdgeTunnel) {
+			delete(missing, core.EntryExposureEdgeTunnel)
+		}
+	}
 	for _, identity := range source.Owned.Services {
 		delete(missing, identity.Name)
 	}

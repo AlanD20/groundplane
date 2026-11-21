@@ -5,11 +5,19 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+## 0.0.1 — 2026-11-17
+
+### Replacement release corrections
+
+- Allow Cloudflare Tunnel credentials to use protected Environment variables
+  declared empty in Blueprint and filled in Environment Configuration. Keep
+  Component-only access through materialization and Config Backup/Restore; reject
+  missing, broadly exposed or empty token inputs before execution.
+
 - Fix Release Group Deploy/Rollback preparation to reserve resources while
   promoting the original accepted Task, instead of comparing that Task as both
   present and absent and rejecting the release before execution.
 
-## 0.0.1 — 2026-11-17
 
 Initial single-host release.
 

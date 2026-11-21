@@ -46,6 +46,10 @@ func EncodeRestoreMetadata(ctx context.Context, direction backupconfig.TransferD
 	switch entry.Exposure.Kind {
 	case backupconfig.ExposureAll:
 		value.Exposure.Exposure = &agentpb.BackupConfigEntryExposure_All{All: &agentpb.BackupConfigExposureAll{}}
+	case backupconfig.ExposureEdgeTunnel:
+		value.Exposure.Exposure = &agentpb.BackupConfigEntryExposure_EdgeTunnel{
+			EdgeTunnel: &agentpb.BackupConfigExposureEdgeTunnel{},
+		}
 	case backupconfig.ExposureServices:
 		value.Exposure.Exposure = &agentpb.BackupConfigEntryExposure_Services{
 			Services: &agentpb.BackupConfigExposureServices{

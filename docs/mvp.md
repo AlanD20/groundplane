@@ -129,7 +129,10 @@ lifecycle journeys and remaining qualification limits.
 
 Reusable Project and Platform Secrets are separate resources; an Environment
 Blueprint declares their Entry references, never their values.
-Secret literal Entries carry a key and empty value in authored YAML. Accepted
+Secret literal Entries carry a key and empty value in authored YAML.
+Environment-specific Component credentials may reference those protected Entries
+through an explicit closed Component-only grant; they do not require Project
+ownership or application Service exposure. Accepted
 work captures exact inputs; Retry and recovery cannot silently use later desired
 state. [Current limitations](capabilities.md) distinguish this contract from
 behavior that has not yet been qualified.

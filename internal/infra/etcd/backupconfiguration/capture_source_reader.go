@@ -172,7 +172,7 @@ func (reader *CaptureSourceReader) readEntry(
 	clear(value.Value)
 	services := environmentqueries.NewServiceReader(reader)
 	if !record.Entry.ExposesAll() {
-		for _, reference := range record.Entry.Exposure {
+		for _, reference := range record.Entry.ServiceExposure() {
 			var id string
 			if ids.Validate(ids.KindService, reference) == nil {
 				selected, err := services.GetService(ctx, reference)

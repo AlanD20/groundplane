@@ -29,7 +29,7 @@ func PlanEntryRemovals(
 			continue
 		}
 		if record.Entry.Kind == core.EntryKindEnv && !record.Entry.ExposesAll() {
-			for _, scope := range record.Entry.Exposure {
+			for _, scope := range record.Entry.ServiceExposure() {
 				nextScopes[scope] = struct{}{}
 			}
 		}
@@ -67,7 +67,7 @@ func PlanEntryRemovals(
 		if entry.Kind != core.EntryKindEnv || entry.ExposesAll() {
 			continue
 		}
-		for _, scope := range entry.Exposure {
+		for _, scope := range entry.ServiceExposure() {
 			if _, retained := nextScopes[scope]; retained {
 				continue
 			}

@@ -100,6 +100,12 @@ retains its selected value; a new one starts empty. Set or rotate secret values
 through the Entry action, not Blueprint YAML. A reusable Project or Platform
 Secret is a separate resource and appears only as an Entry reference.
 
+A protected literal variable can instead be available only to the Environment
+Cloudflare Tunnel. It remains an Environment Entry, visible in Environment
+Configuration, and is excluded from application configuration files. Config
+Backup/Restore retains that Component-only grant; restoring the value does not
+restart or reconfigure the Tunnel. Apply its configuration afterward.
+
 ## Applying changes
 
 Entry create, edit and bulk-upsert capture the acknowledged running workloads

@@ -21,6 +21,7 @@ func EqualComponentConfig(left, right ComponentConfig) bool {
 		return false
 	}
 	if left.CloudflareTunnel != nil && (left.CloudflareTunnel.SecretID != right.CloudflareTunnel.SecretID ||
+		left.CloudflareTunnel.TokenEntry != right.CloudflareTunnel.TokenEntry ||
 		!equalComponentSlice(left.CloudflareTunnel.ZoneIDs, right.CloudflareTunnel.ZoneIDs)) {
 		return false
 	}

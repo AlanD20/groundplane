@@ -179,6 +179,7 @@ func cloudflareTunnelComponentConfigSchema() *huma.Schema {
 			"zone_ids":       componentZoneIDsSchema(),
 			"credential": {
 				OneOf: []*huma.Schema{
+					cloudflareTunnelEnvironmentCredentialSchema(),
 					cloudflareTunnelExistingCredentialSchema(),
 					cloudflareTunnelNewCredentialSchema(),
 				},
@@ -198,12 +199,14 @@ func cloudflareTunnelComponentConfigResponseSchema() *huma.Schema {
 		Properties: map[string]*huma.Schema{
 			"implementation": componentImplementationSchema("cloudflare-tunnel"),
 			"zone_ids":       componentZoneIDsSchema(),
+			"token_entry":    {Type: huma.TypeString, Pattern: "^[A-Za-z_][A-Za-z0-9_]*$"},
 			"secret_id": {
 				Type:    huma.TypeString,
 				Pattern: "^sec_[0-9A-HJKMNP-TV-Z]{26}$",
 			},
 		},
-		Required:      []string{"implementation", "zone_ids", "secret_id"},
+		Required:      []string{"implementation", "zone_ids"},
+		OneOf:         []*huma.Schema{{Required: []string{"secret_id"}}, {Required: []string{"token_entry"}}},
 		MinProperties: &three,
 		MaxProperties: &three,
 	}
@@ -260,5 +263,16 @@ func cloudflareTunnelNewCredentialSchema() *huma.Schema {
 		Required:      []string{"mode", "secret_name", "token"},
 		MinProperties: &three,
 		MaxProperties: &three,
+	}
+}
+
+func cloudflareTunnelEnvironmentCredentialSchema() *huma.Schema {
+	two := 2
+	return &huma.Schema{Type: huma.TypeObject, AdditionalProperties: false,
+		Properties: map[string]*huma.Schema{
+			"mode":        {Type: huma.TypeString, Enum: []any{"environment"}},
+			"token_entry": {Type: huma.TypeString, Pattern: "^[A-Za-z_][A-Za-z0-9_]*$"},
+		},
+		Required: []string{"mode", "token_entry"}, MinProperties: &two, MaxProperties: &two,
 	}
 }

@@ -4123,6 +4123,7 @@ message BackupConfigEntry {
   oneof exposure {
     BackupConfigExposureAll exposure_all = 20;
     BackupConfigExposureServices exposure_services = 21;
+    BackupConfigExposureEdgeTunnel exposure_edge_tunnel = 22;
   }
   oneof source {
     BackupConfigLiteral literal = 30;
@@ -4145,6 +4146,8 @@ message BackupConfigFile {
 }
 
 message BackupConfigExposureAll {}
+
+message BackupConfigExposureEdgeTunnel {}
 
 message BackupConfigExposureServices {
   repeated string service_ids = 1;
@@ -4186,6 +4189,7 @@ message BackupConfigEntryExposure {
   oneof exposure {
     BackupConfigExposureAll all = 1;
     BackupConfigExposureServices services = 2;
+    BackupConfigExposureEdgeTunnel edge_tunnel = 3;
   }
 }
 

@@ -334,7 +334,7 @@ func blueprintDisabledComponentAbsenceProven(
 
 func equalBlueprintComponentSpec(left, right core.ComponentSpec) bool {
 	return left.Implementation == right.Implementation && left.Enabled == right.Enabled &&
-		left.Settings.Alias == right.Settings.Alias && left.Settings.SecretID == right.Settings.SecretID &&
+		left.Settings.Alias == right.Settings.Alias && left.Settings.SecretID == right.Settings.SecretID && left.Settings.TokenEntry == right.Settings.TokenEntry &&
 		(left.Settings.ZoneIDs == nil) == (right.Settings.ZoneIDs == nil) &&
 		slices.Equal(left.Settings.ZoneIDs, right.Settings.ZoneIDs) &&
 		left.ImplementationConfig.CaddyfileTemplate == right.ImplementationConfig.CaddyfileTemplate

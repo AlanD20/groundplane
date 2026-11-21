@@ -48,14 +48,15 @@ export function EntryRow({
   editing?: boolean;
   onRemove?: () => void;
 }) {
-  const exposureLabel = exposure.includes("all")
+  const componentOnly = exposure.includes("component:edge-tunnel");
+  const exposureLabel = componentOnly ? "Cloudflare Tunnel only" : exposure.includes("all")
     ? "All Services"
     : exposure.length === 1
       ? `Only ${exposure[0]}`
       : exposure.length
         ? `Shared · ${exposure.length} Services`
         : "No Services";
-  const exposureDescription = exposure.includes("all")
+  const exposureDescription = componentOnly ? "Cloudflare Tunnel only" : exposure.includes("all")
     ? "all Services"
     : exposure.join(", ") || "no Services";
   const preview = (

@@ -13,6 +13,62 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
+// Permanent preparation errors must fail unstarted work without creating an
+// attempt, and must not overwrite a concurrent operator Stop.
+func TestInputRejectionSettlesUnstartedWorkAndFencesStop(t *testing.T) {
+	for _, stop := range []bool{false, true} {
+		store := &assignmentStore{revision: 1, values: make(map[string]keyvalue.KeyValue)}
+		fixture := assignmentFixture(t, store, workexecution.Release, nil)
+		view := View{Task: fixture.Task, Item: fixture.Item, ReadRevision: 1}
+		view.Task.Task.Progress = workexecution.Progress{Waiting: 1}
+		view.Item.Item.Phase, view.Item.Item.Input = workexecution.Waiting, nil
+		view.Item.Item.Wait = &workexecution.Wait{Reason: workexecution.WaitInput}
+		for key, encode := range map[string]func() ([]byte, error){
+			TaskKey(view.Task.Task.ID): func() ([]byte, error) { return EncodeTask(view.Task.Task) },
+			ItemKey(view.Item.Item.ID): func() ([]byte, error) { return EncodeItem(view.Item.Item) },
+		} {
+			value, err := encode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			store.values[key] = keyvalue.KeyValue{Key: key, Value: value, ModRevision: 1}
+		}
+		delete(store.values, QueueKey(fixture.Item.Item))
+		repository, err := NewRepository(store)
+		if err != nil {
+			t.Fatal(err)
+		}
+		change, err := PrepareInputRejection(view, "Cloudflare Tunnel token is empty", fixture.At)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stop {
+			winner, err := PrepareStop(view.Task, workexecution.Cancelled, fixture.At)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := repository.Commit(t.Context(), winner)
+			if err != nil || !result.Succeeded {
+				t.Fatalf("Stop failed: %v", err)
+			}
+		}
+		result, err := repository.Commit(t.Context(), change)
+		if err != nil || result.Succeeded == stop {
+			t.Fatalf("rejection CAS: stop=%t succeeded=%t err=%v", stop, result.Succeeded, err)
+		}
+		item, err := DecodeItem(store.values[ItemKey(view.Item.Item.ID)].Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if item.Input != nil || item.AttemptNumber != 0 || item.ActiveAttemptID != "" {
+			t.Fatal("rejection gained execution authority")
+		}
+		if !stop && (item.Phase != workexecution.Settled || item.Outcome != workexecution.Failed) {
+			t.Fatal("permanent input did not settle as failed")
+		}
+	}
+}
+
 // A preparation issue is metadata, and cannot overwrite a concurrent input
 // publication or Stop, authorize an attempt, or churn storage on every poll.
 func TestInputDiagnosticDeduplicatesAndPreservesExecutionAuthority(t *testing.T) {

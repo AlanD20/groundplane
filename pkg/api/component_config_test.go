@@ -166,6 +166,10 @@ func TestCloudflareTunnelCredentialRequiresKnownExclusiveMode(t *testing.T) {
 		want  CloudflareTunnelCredentialInput
 	}{
 		{
+			value: `{"mode":"environment","token_entry":"TUNNEL_TOKEN"}`,
+			want:  CloudflareTunnelCredentialInput{Mode: "environment", TokenEntry: "TUNNEL_TOKEN"},
+		},
+		{
 			value: `{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
 			want: CloudflareTunnelCredentialInput{
 				Mode: "existing", SecretID: "sec_01ARZ3NDEKTSV4RRFFQ69G5FAX",
@@ -188,6 +192,9 @@ func TestCloudflareTunnelCredentialRequiresKnownExclusiveMode(t *testing.T) {
 		}
 	}
 	for _, value := range []string{
+		`{"mode":"environment","token_entry":"TOKEN","secret_id":null}`,
+		`{"mode":"environment","token_entry":""}`,
+		`{"mode":"existing","token_entry":"TOKEN","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
 		`{"mode":"unknown","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
 		`{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX","token":null}`,
 		`{"mode":"existing","secret_id":null}`,

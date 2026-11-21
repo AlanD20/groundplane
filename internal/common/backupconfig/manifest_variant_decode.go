@@ -51,6 +51,8 @@ func parseExposure(payload []byte, entry *Entry) error {
 		return archiveError("Config manifest exposure is invalid JSON")
 	}
 	switch probe.Kind {
+	case "edge_tunnel":
+		entry.Exposure = Exposure{Kind: ExposureEdgeTunnel}
 	case "all":
 		var value struct {
 			Kind string `json:"kind"`

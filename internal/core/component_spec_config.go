@@ -21,11 +21,13 @@ func ComponentConfigForSpec(spec ComponentSpec) ComponentConfig {
 			ZoneIDs: append([]string(nil), spec.Settings.ZoneIDs...), Alias: spec.Settings.Alias,
 		}}
 	case ComponentKindEdgeCloudflare:
-		if spec.Settings.SecretID == "" && len(spec.Settings.ZoneIDs) == 0 {
+		if spec.Settings.SecretID == "" && spec.Settings.TokenEntry == "" && len(spec.Settings.ZoneIDs) == 0 {
 			return ComponentConfig{}
 		}
 		return ComponentConfig{CloudflareTunnel: &CloudflareTunnelComponentConfig{
-			ZoneIDs: append([]string(nil), spec.Settings.ZoneIDs...), SecretID: spec.Settings.SecretID,
+			ZoneIDs: append(
+				[]string(nil),
+				spec.Settings.ZoneIDs...), SecretID: spec.Settings.SecretID, TokenEntry: spec.Settings.TokenEntry,
 		}}
 	default:
 		return ComponentConfig{}

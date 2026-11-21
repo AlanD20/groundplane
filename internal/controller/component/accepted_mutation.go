@@ -96,7 +96,7 @@ func (service *MutationService) submitComponent(ctx context.Context, record comp
 	}
 	defer clear(input.Intent.Ciphertext)
 	submission := intent.Submission(task, "component-mutation")
-	if config != nil && config.CloudflareTunnel != nil {
+	if config != nil && config.CloudflareTunnel != nil && config.CloudflareTunnel.SecretID != "" {
 		submission.SecretIDs = []string{config.CloudflareTunnel.SecretID}
 	}
 	return acceptedaction.Submit(ctx, service.acceptedActions, submission, input)
@@ -216,6 +216,7 @@ func componentMutationConfigValue(config *api.ComponentConfig) (requestidempoten
 				componentStringList(config.CloudflareTunnel.ZoneIDs),
 			),
 			field("secret_id", requestidempotency.String(config.CloudflareTunnel.SecretID)),
+			field("token_entry", requestidempotency.String(config.CloudflareTunnel.TokenEntry)),
 		), nil
 	default:
 		return requestidempotency.Value{}, errs.New(

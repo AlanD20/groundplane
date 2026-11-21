@@ -30,6 +30,7 @@ import { Plus, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { BulkEntryDrawer } from "./bulk-entry-drawer";
+import { EntryExposure } from "./entry-exposure";
 import { EntryProtection } from "./entry-protection";
 import { EntryRow } from "./entry-row";
 import { entrySourceLabel } from "./entry-source-label";
@@ -172,15 +173,6 @@ export function EnvVarsCard({
     setSaveError(null);
   }
 
-  function toggleServiceExposure(serviceName: string) {
-    setExposure((current) => {
-      const services = current.filter((candidate) => candidate !== "all");
-      if (services.includes(serviceName)) {
-        return services.filter((candidate) => candidate !== serviceName);
-      }
-      return [...services, serviceName];
-    });
-  }
 
   async function saveEntry() {
     if (exposure.length === 0) {
@@ -262,6 +254,9 @@ export function EnvVarsCard({
             value={kind === "file" ? "file" : secret ? "secret" : "variable"}
             disabled={!!editing}
             onChange={(type) => {
+              if (type !== "secret" && exposure.includes("component:edge-tunnel")) {
+                setExposure([]);
+              }
               setKind(type === "file" ? "file" : "env");
               setSecret(type === "secret");
             }}
@@ -329,6 +324,7 @@ export function EnvVarsCard({
                 variant={sourceKind === candidate ? "default" : "outline"}
                 size="sm"
                 aria-pressed={sourceKind === candidate}
+                disabled={exposure.includes("component:edge-tunnel") && candidate !== "literal"}
                 onClick={() => setSourceKind(candidate)}
               >
                 {
@@ -402,30 +398,14 @@ export function EnvVarsCard({
           />
         )}
 
-        <div className="flex flex-col gap-1.5 md:col-span-2">
-          <Label>Available to</Label>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant={exposure.includes("all") ? "default" : "outline"}
-              size="sm"
-              onClick={() => setExposure(["all"])}
-            >
-              All services
-            </Button>
-            {env.services.map((service) => (
-              <Button
-                key={service.id}
-                variant={
-                  exposure.includes(service.name) ? "default" : "outline"
-                }
-                size="sm"
-                onClick={() => toggleServiceExposure(service.name)}
-              >
-                {service.name}
-              </Button>
-            ))}
-          </div>
-        </div>
+        <EntryExposure
+          services={env.services}
+          value={exposure}
+          onChange={setExposure}
+          allowTunnel={!service && kind === "env" && secret &&
+            env.components.some((component) => component.kind === "cloudflare-tunnel")}
+          onTunnelSelect={() => setSourceKind("literal")}
+        />
 
         {kind === "file" && (
           <EntryProtection

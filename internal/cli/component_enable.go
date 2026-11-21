@@ -226,6 +226,12 @@ func componentEnableConfig(
 				},
 			}
 		}
+		if configFile == "" && component.Config.CloudflareTunnel.TokenEntry != "" {
+			input.CloudflareTunnel.Credential = apiTypes.CloudflareTunnelCredentialInput{
+				Mode:       "environment",
+				TokenEntry: component.Config.CloudflareTunnel.TokenEntry,
+			}
+		}
 		if zoneIDs != nil {
 			input.CloudflareTunnel.ZoneIDs = append([]string(nil), zoneIDs...)
 		}

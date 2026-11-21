@@ -66,7 +66,9 @@ func validateGeneratedEnvironmentService(
 	secretNames := make(map[string]struct{}, len(service.SecretEnvironment))
 	for _, binding := range service.SecretEnvironment {
 		if !validGeneratedEnvironmentVariable(binding.Name) ||
-			ids.Validate(ids.KindSecret, binding.SecretID) != nil {
+			((binding.SecretID == "") == (binding.EntryID == "")) ||
+			(binding.SecretID != "" && ids.Validate(ids.KindSecret, binding.SecretID) != nil) ||
+			(binding.EntryID != "" && ids.Validate(ids.KindEnvEntry, binding.EntryID) != nil) {
 			return errs.New(errs.KindValidationFailed, "Component planner emitted an invalid Secret binding")
 		}
 		if _, duplicate := secretNames[binding.Name]; duplicate {

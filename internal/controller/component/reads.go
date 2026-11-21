@@ -225,7 +225,7 @@ func projectComponentConfig(component core.Component) *apiTypes.ComponentConfig 
 	if config.CloudflareTunnel != nil {
 		return &apiTypes.ComponentConfig{CloudflareTunnel: &apiTypes.CloudflareTunnelComponentConfig{
 			ZoneIDs:  append([]string(nil), config.CloudflareTunnel.ZoneIDs...),
-			SecretID: config.CloudflareTunnel.SecretID,
+			SecretID: config.CloudflareTunnel.SecretID, TokenEntry: config.CloudflareTunnel.TokenEntry,
 		}}
 	}
 	if config.CoreDNS == nil {

@@ -176,7 +176,7 @@ export type CaddyComponent = EnvironmentComponentBase & {
 
 export type CloudflareTunnelComponent = EnvironmentComponentBase & {
   kind: "cloudflare-tunnel";
-  config: { zone_ids: string[]; secret_id: string } | null;
+  config: { zone_ids: string[]; secret_id?: string; token_entry?: string } | null;
   state: Record<string, never>;
 };
 

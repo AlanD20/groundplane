@@ -116,6 +116,11 @@ func captureExposure(value *agentpb.BackupConfigEntry, entry *backupconfig.Entry
 			return invalid("capture Config all-services exposure is invalid")
 		}
 		entry.Exposure.Kind = backupconfig.ExposureAll
+	case *agentpb.BackupConfigEntry_ExposureEdgeTunnel:
+		if exposure == nil || exposure.ExposureEdgeTunnel == nil {
+			return invalid("Config Tunnel exposure is invalid")
+		}
+		entry.Exposure.Kind = backupconfig.ExposureEdgeTunnel
 	case *agentpb.BackupConfigEntry_ExposureServices:
 		if exposure == nil || exposure.ExposureServices == nil {
 			return invalid("capture Config services exposure is invalid")
@@ -200,6 +205,11 @@ func restoreExposure(value *agentpb.BackupConfigEntryExposure, entry *backupconf
 			return invalid("restore Config all-services exposure is invalid")
 		}
 		entry.Exposure.Kind = backupconfig.ExposureAll
+	case *agentpb.BackupConfigEntryExposure_EdgeTunnel:
+		if exposure == nil || exposure.EdgeTunnel == nil {
+			return invalid("restore Config Tunnel exposure is invalid")
+		}
+		entry.Exposure.Kind = backupconfig.ExposureEdgeTunnel
 	case *agentpb.BackupConfigEntryExposure_Services:
 		if exposure == nil || exposure.Services == nil {
 			return invalid("restore Config services exposure is invalid")

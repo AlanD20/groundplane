@@ -10,7 +10,7 @@ import (
 func PlanCloudflareTunnel(
 	environment core.Environment,
 	instance core.Component,
-	plan func(string, string, []component.NetworkInput) (component.EnvironmentPlan, error),
+	plan func(string, string, string, []component.NetworkInput) (component.EnvironmentPlan, error),
 ) (component.EnvironmentPlan, error) {
 	if environment.ID == "" || instance.ID == "" || instance.Owner != core.ComponentOwnerEnvironment ||
 		instance.OwnerID != environment.ID || instance.Kind != core.ComponentKindEdgeCloudflare || instance.Validate() != nil {
@@ -22,14 +22,23 @@ func PlanCloudflareTunnel(
 	if !instance.Enabled {
 		return component.EnvironmentPlan{}, nil
 	}
-	if instance.Config.CloudflareTunnel == nil ||
-		ids.Validate(ids.KindSecret, instance.Config.CloudflareTunnel.SecretID) != nil {
+	if instance.Config.CloudflareTunnel == nil {
 		return component.EnvironmentPlan{}, errs.New(
 			errs.KindValidationFailed,
-			"cloudflare tunnel: secret_id is invalid",
+			"cloudflare tunnel: credential configuration is required",
 		)
 	}
 	secretID := instance.Config.CloudflareTunnel.SecretID
+	entryID := ""
+	if key := instance.Config.CloudflareTunnel.TokenEntry; key != "" {
+		entry, err := environment.TunnelTokenEntry(key)
+		if err != nil {
+			return component.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err)
+		}
+		entryID = entry.ID
+	} else if ids.Validate(ids.KindSecret, secretID) != nil {
+		return component.EnvironmentPlan{}, errs.New(errs.KindValidationFailed, "cloudflare tunnel: secret_id is invalid")
+	}
 	zones := make([]component.NetworkInput, len(instance.Config.CloudflareTunnel.ZoneIDs))
 	for index, zoneID := range instance.Config.CloudflareTunnel.ZoneIDs {
 		found := false
@@ -60,7 +69,7 @@ func PlanCloudflareTunnel(
 			"cloudflare tunnel: one stable generated Service id is required",
 		)
 	}
-	planned, err := plan(instance.GeneratedServices[0], secretID, zones)
+	planned, err := plan(instance.GeneratedServices[0], secretID, entryID, zones)
 	if err != nil {
 		return component.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err)
 	}

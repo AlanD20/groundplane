@@ -46,6 +46,7 @@ export function RouterCard({ env }: { env: Environment }) {
   const tunnel = env.components.find(
     (component) => component.kind === "cloudflare-tunnel",
   );
+  const tunnelEntries = env.entries.filter((entry) => entry.type === "env" && entry.secret && entry.source.kind === "literal" && entry.exposure.length === 1 && entry.exposure[0] === "component:edge-tunnel");
   const tunnelSecrets = store.reusableSecrets.filter(
     (secret) =>
       secret.kind === "env" &&
@@ -69,8 +70,9 @@ export function RouterCard({ env }: { env: Environment }) {
   );
   const [caddyTemplateBlocked, setCaddyTemplateBlocked] = useState(false);
   const [tunnelCredentialMode, setTunnelCredentialMode] = useState<
-    "existing" | "new"
-  >("existing");
+    "environment" | "existing" | "new"
+  >(tunnel?.config?.token_entry || !tunnel?.config?.secret_id ? "environment" : "existing");
+  const [tunnelEntry, setTunnelEntry] = useState(tunnel?.config?.token_entry ?? "");
   const [tunnelSecret, setTunnelSecret] = useState(
     tunnel?.config?.secret_id ?? "",
   );
@@ -96,7 +98,8 @@ export function RouterCard({ env }: { env: Environment }) {
       );
       setCaddyTemplateBlocked(false);
     } else {
-      setTunnelCredentialMode("existing");
+      setTunnelCredentialMode(component.config?.token_entry || !component.config?.secret_id ? "environment" : "existing");
+      setTunnelEntry(component.config?.token_entry ?? "");
       setTunnelSecret(component.config?.secret_id ?? "");
       setTunnelToken("");
     }
@@ -123,7 +126,9 @@ export function RouterCard({ env }: { env: Environment }) {
             !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(routerAlias)) ||
           (routerImplementation === "caddy" && caddyTemplateBlocked)
         : !tunnelHasEgress ||
-          (tunnelCredentialMode === "existing"
+          (tunnelCredentialMode === "environment"
+            ? !tunnelEntry
+            : tunnelCredentialMode === "existing"
             ? !tunnelSecret
             : !tunnelSecretName || !tunnelToken)));
   const componentName =
@@ -286,18 +291,25 @@ export function RouterCard({ env }: { env: Environment }) {
                       id="component-credential-source"
                       value={tunnelCredentialMode}
                       onValueChange={(value) =>
-                        setTunnelCredentialMode(value as "existing" | "new")
+                        setTunnelCredentialMode(value as "environment" | "existing" | "new")
                       }
                       options={[
+                        {value: "environment", label: "Environment variable"},
                         {
                           value: "existing",
                           label: "Existing configuration value",
                         },
-                        { value: "new", label: "New token" },
+                        { value: "new", label: "New Project token" },
                       ]}
                     />
                   </div>
-                  {tunnelCredentialMode === "existing" ? (
+                  {tunnelCredentialMode === "environment" ? (
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="tunnel-environment-token">Environment token</Label>
+                      <Select searchable id="tunnel-environment-token" value={tunnelEntry} onValueChange={setTunnelEntry} options={tunnelEntries.flatMap((entry) => entry.key ? [{value: entry.key, label: entry.key + (entry.emptySecretValue ? " · Empty" : "")}] : [])} />
+                      <p className="text-xs text-muted-foreground">Use a protected variable from this Environment, available only to Cloudflare Tunnel. Set its value in Environment Configuration before enabling.</p>
+                    </div>
+                  ) : tunnelCredentialMode === "existing" ? (
                     <div className="flex flex-col gap-1">
                       <Label htmlFor="component-reusable-secret">
                         Token value
@@ -315,7 +327,7 @@ export function RouterCard({ env }: { env: Environment }) {
                       {tunnelSecrets.length === 0 && (
                         <p className="text-xs text-warning">
                           Add a Project or Platform variable or Secret first, or
-                          choose New token.
+                          choose New Project token.
                         </p>
                       )}
                     </div>
@@ -386,7 +398,9 @@ export function RouterCard({ env }: { env: Environment }) {
                   implementation: "cloudflare-tunnel" as const,
                   zone_ids: selectedZoneIds,
                   credential:
-                    tunnelCredentialMode === "existing"
+                    tunnelCredentialMode === "environment"
+                      ? {mode: "environment" as const, token_entry: tunnelEntry}
+                      : tunnelCredentialMode === "existing"
                       ? { mode: "existing" as const, secret_id: tunnelSecret }
                       : {
                           mode: "new" as const,
@@ -516,7 +530,7 @@ export function RouterCard({ env }: { env: Environment }) {
                     <div className="grid gap-3 border-t border-border pt-4 text-sm text-muted-foreground [overflow-wrap:anywhere] sm:grid-cols-2">
                       <span>
                         Token reference:{" "}
-                        {component.config?.secret_id || "not configured"}
+                        {component.config?.token_entry ? component.config.token_entry + " · Environment" : component.config?.secret_id || "not configured"}
                       </span>
                       <span>
                         Networks:{" "}

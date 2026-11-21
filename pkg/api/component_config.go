@@ -21,6 +21,7 @@ type componentConfigWire struct {
 	CaddyfileTemplate json.RawMessage `json:"caddyfile_template"`
 	Alias             json.RawMessage `json:"alias"`
 	SecretID          json.RawMessage `json:"secret_id"`
+	TokenEntry        json.RawMessage `json:"token_entry"`
 	UpstreamAuto      json.RawMessage `json:"upstream_auto"`
 	UpstreamResolvers json.RawMessage `json:"upstream_resolvers"`
 	Forwarders        json.RawMessage `json:"forwarders"`
@@ -49,8 +50,9 @@ func (config ComponentConfig) MarshalJSON() ([]byte, error) {
 		return json.Marshal(struct {
 			Implementation string   `json:"implementation"`
 			ZoneIDs        []string `json:"zone_ids"`
-			SecretID       string   `json:"secret_id"`
-		}{"cloudflare-tunnel", config.CloudflareTunnel.ZoneIDs, config.CloudflareTunnel.SecretID})
+			SecretID       string   `json:"secret_id,omitempty"`
+			TokenEntry     string   `json:"token_entry,omitempty"`
+		}{"cloudflare-tunnel", config.CloudflareTunnel.ZoneIDs, config.CloudflareTunnel.SecretID, config.CloudflareTunnel.TokenEntry})
 	default:
 		// Do not use omitempty here: empty resolver and forwarder lists are
 		// meaningful configured state and must remain JSON arrays.
@@ -85,9 +87,12 @@ func (config *ComponentConfig) UnmarshalJSON(data []byte) error {
 	}
 	switch implementation {
 	case "caddy", "envoy":
-		if present(wire.SecretID) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+		if (present(wire.SecretID) || present(wire.TokenEntry)) || present(wire.UpstreamAuto) ||
+			present(wire.UpstreamResolvers) ||
 			present(wire.Forwarders) ||
-			present(wire.TailnetDelegation) || present(wire.Records) || present(wire.CorefileTemplate) {
+			present(wire.TailnetDelegation) ||
+			present(wire.Records) ||
+			present(wire.CorefileTemplate) {
 			return malformedComponentConfig("component config router variant is incomplete or mixed")
 		}
 		zoneIDs, err := decodeStringArray(wire.ZoneIDs, "zone_ids")
@@ -121,20 +126,34 @@ func (config *ComponentConfig) UnmarshalJSON(data []byte) error {
 			present(wire.TailnetDelegation) || present(wire.Records) || present(wire.CorefileTemplate) {
 			return malformedComponentConfig("component config Cloudflare Tunnel variant is mixed")
 		}
-		var secretID string
-		if err := decodeRequiredField(wire.SecretID, "secret_id", &secretID); err != nil {
-			return err
+		var secretID, tokenEntry string
+		if present(wire.SecretID) == present(wire.TokenEntry) {
+			return malformedComponentConfig("Cloudflare Tunnel requires exactly one credential reference")
+		}
+		if present(wire.SecretID) {
+			if err := decodeRequiredField(wire.SecretID, "secret_id", &secretID); err != nil {
+				return err
+			}
+		}
+		if present(wire.TokenEntry) {
+			if err := decodeRequiredField(wire.TokenEntry, "token_entry", &tokenEntry); err != nil {
+				return err
+			}
 		}
 		zoneIDs, err := decodeStringArray(wire.ZoneIDs, "zone_ids")
 		if err != nil {
 			return err
 		}
 		*config = ComponentConfig{
-			CloudflareTunnel: &CloudflareTunnelComponentConfig{ZoneIDs: zoneIDs, SecretID: secretID},
+			CloudflareTunnel: &CloudflareTunnelComponentConfig{
+				ZoneIDs:    zoneIDs,
+				SecretID:   secretID,
+				TokenEntry: tokenEntry,
+			},
 		}
 	case "coredns":
 		if present(wire.ZoneIDs) || (present(wire.CaddyfileTemplate) || present(wire.Alias)) ||
-			present(wire.SecretID) ||
+			(present(wire.SecretID) || present(wire.TokenEntry)) ||
 			!present(wire.CorefileTemplate) ||
 			!present(wire.UpstreamAuto) ||
 			!present(wire.UpstreamResolvers) ||
@@ -201,8 +220,10 @@ func (config ComponentConfig) validate() error {
 	if config.Caddy != nil && (!validComponentZoneIDs(config.Caddy.ZoneIDs) || !validRouterAlias(config.Caddy.Alias)) {
 		return invalidComponentConfig("component config Caddy zone_ids is invalid")
 	}
-	if config.CloudflareTunnel != nil && (!validStableID(config.CloudflareTunnel.SecretID, "sec_") ||
-		!validComponentZoneIDs(config.CloudflareTunnel.ZoneIDs)) {
+	if config.CloudflareTunnel != nil &&
+		(((config.CloudflareTunnel.SecretID == "") == (config.CloudflareTunnel.TokenEntry == "")) ||
+			(config.CloudflareTunnel.SecretID != "" && !validStableID(config.CloudflareTunnel.SecretID, "sec_")) ||
+			!validComponentZoneIDs(config.CloudflareTunnel.ZoneIDs)) {
 		return invalidComponentConfig("component config Cloudflare Tunnel zone_ids or secret_id is invalid")
 	}
 	if config.CoreDNS != nil {

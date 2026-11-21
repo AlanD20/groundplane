@@ -550,7 +550,10 @@ the Environment's managed volume directory and always supplies explicit numeric
 `uid` and `gid`, including when either is zero. Ownership is never inferred
 from an image.
 
-`exposure` is a nonempty list of Service names, or the sole value `all`.
+`exposure` is a nonempty list of Service names, the sole value `all`, or
+`[component:edge-tunnel]`. The Component grant is restricted to protected literal
+variables, grants only the Environment Cloudflare Tunnel access, and cannot be
+combined with Service grants. `all` does not grant a token Entry to a Component.
 Groundplane never exposes an Entry merely because a Service has an Attach.
 Script Entry grants are also limited to Entries already exposed to that
 Script's associated Service.
@@ -734,7 +737,7 @@ Current Environment choices are:
 | --- | --- | --- |
 | `http-router` | `caddy` | Nonempty ordered `zone_ids`; optional `alias`; optional `implementation_config.caddyfile_template` |
 | `http-router` | `envoy` | Nonempty ordered `zone_ids`; optional `alias`; no Caddy template |
-| `edge-tunnel` | `cloudflare-tunnel` | Nonempty ordered `zone_ids` and `secret_id`; no alias or Caddy template |
+| `edge-tunnel` | `cloudflare-tunnel` | Nonempty ordered `zone_ids` and exactly one of `token_entry` or `secret_id`; no alias or Caddy template |
 
 Both implementations retain the same router identity. An engine change captures
 the affected Service rollouts and requires Recreate when replacing a running
@@ -755,8 +758,33 @@ it; unchanged configuration can retain its runtime. See
 [Components](features/components.md) for lifecycle and implementation settings.
 Blueprint input never contains a
 Component's generated Services, addresses, grants, artifacts, Tasks, or
-observations. Secret material is referenced by stable `secret_id`; it is not
-embedded in Component configuration.
+observations. `token_entry` selects an Environment Entry key with the sole
+`component:edge-tunnel` grant. Alternatively, `secret_id` selects an explicit
+Project or Platform reusable Secret. Neither embeds token material in Component
+configuration. A selected Entry cannot be removed or have its grant widened
+until the Component reference is changed.
+
+Declare a token without committing its value:
+
+```yaml
+x-gp-entry:
+  CLOUDFLARE_TUNNEL_TOKEN:
+    kind: env
+    source: {literal: ""}
+    secret: true
+    exposure: [component:edge-tunnel]
+x-gp-components:
+  edge-tunnel:
+    implementation: cloudflare-tunnel
+    enabled: false
+    settings:
+      token_entry: CLOUDFLARE_TUNNEL_TOKEN
+```
+
+Fill the Entry in Environment Configuration, select an outbound-capable Zone,
+then enable the Tunnel. An enabled Tunnel with an empty token fails preparation
+before Tunnel execution. Reapplying the empty declaration preserves the value
+set through Configuration.
 
 ### `x-gp-backup`
 

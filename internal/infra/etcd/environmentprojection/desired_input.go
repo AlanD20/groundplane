@@ -83,6 +83,9 @@ func ValidateEnvironmentDesiredInput(value EnvironmentDesiredInput) error {
 	if err := validateDesiredComponents(input.Components); err != nil {
 		return err
 	}
+	if err := input.ValidateComponentEntryReferences(); err != nil {
+		return errs.Wrap(errs.KindValidationFailed, err)
+	}
 	if err := validateDesiredBackup(input.Backup); err != nil {
 		return err
 	}

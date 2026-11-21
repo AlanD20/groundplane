@@ -75,8 +75,9 @@ type EnvoyComponentConfig struct {
 }
 
 type CloudflareTunnelComponentConfig struct {
-	ZoneIDs  []string `json:"zone_ids"`
-	SecretID string   `json:"secret_id"`
+	ZoneIDs    []string `json:"zone_ids"`
+	SecretID   string   `json:"secret_id,omitempty"`
+	TokenEntry string   `json:"token_entry,omitempty"`
 }
 
 type CoreDNSComponentConfig struct {
@@ -133,6 +134,7 @@ type CoreDNSComponentConfigMutationInput struct {
 type CloudflareTunnelCredentialInput struct {
 	Mode       string `json:"mode"`
 	SecretID   string `json:"secret_id,omitempty"`
+	TokenEntry string `json:"token_entry,omitempty"`
 	SecretName string `json:"secret_name,omitempty"`
 	Token      string `json:"token,omitempty"`
 }

@@ -219,7 +219,9 @@ func configSnapshotEntry(source backupconfiguration.CaptureSourceEntry) (backupc
 		return backupconfig.Entry{}, configSnapshotInvalid()
 	}
 	entry.Exposure = backupconfig.Exposure{Kind: backupconfig.ExposureAll}
-	if !desired.ExposesAll() {
+	if len(desired.Exposure) == 1 && desired.Exposure[0] == core.EntryExposureEdgeTunnel {
+		entry.Exposure.Kind = backupconfig.ExposureEdgeTunnel
+	} else if !desired.ExposesAll() {
 		entry.Exposure = backupconfig.Exposure{
 			Kind:       backupconfig.ExposureServices,
 			ServiceIDs: append([]string(nil), source.ServiceIDs...),
@@ -271,7 +273,11 @@ func configSnapshotMetadata(
 		file := entry.Metadata.File
 		metadata.Metadata = &agentpb.BackupConfigEntry_File{File: &agentpb.BackupConfigFile{Path: file.Path, Mode: file.Mode, Uid: file.UID, Gid: file.GID}}
 	}
-	if entry.Exposure.Kind == backupconfig.ExposureAll {
+	if entry.Exposure.Kind == backupconfig.ExposureEdgeTunnel {
+		metadata.Exposure = &agentpb.BackupConfigEntry_ExposureEdgeTunnel{
+			ExposureEdgeTunnel: &agentpb.BackupConfigExposureEdgeTunnel{},
+		}
+	} else if entry.Exposure.Kind == backupconfig.ExposureAll {
 		metadata.Exposure = &agentpb.BackupConfigEntry_ExposureAll{ExposureAll: &agentpb.BackupConfigExposureAll{}}
 	} else {
 		metadata.Exposure = &agentpb.BackupConfigEntry_ExposureServices{ExposureServices: &agentpb.BackupConfigExposureServices{ServiceIds: append([]string(nil), entry.Exposure.ServiceIDs...)}}

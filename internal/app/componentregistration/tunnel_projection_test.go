@@ -45,6 +45,31 @@ func TestPlanRegisteredCloudflareTunnelIsRouterIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanCloudflareTunnel() error = %v", err)
 	}
+	// Switching the same Component to its Environment Entry must select only
+	// that opaque Entry, without retaining the former Project Secret.
+	environment.Entries = []core.EnvEntry{
+		{
+			ID:       "ev_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			Kind:     core.EntryKindEnv,
+			Key:      "TOKEN",
+			Secret:   true,
+			Source:   core.EntrySource{Kind: core.SourceLiteral},
+			Exposure: []string{core.EntryExposureEdgeTunnel},
+		},
+	}
+	tunnel.Config.CloudflareTunnel.SecretID = ""
+	tunnel.Config.CloudflareTunnel.TokenEntry = "TOKEN"
+	entryPlan, err := testCloudflareTunnelPlan(environment, tunnel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := entryPlan.Services[0].SecretEnvironment[0]
+	if binding.EntryID != environment.Entries[0].ID || binding.SecretID != "" {
+		t.Fatal("planner retained another credential source")
+	}
+	if componentsdk.DigestEnvironmentPlan(entryPlan) == componentsdk.DigestEnvironmentPlan(plan) {
+		t.Fatal("credential switch did not change the plan digest")
+	}
 	service := plan.Services[0]
 	if service.NetworkMode != componentsdk.ManagedNetworkModeZones || len(service.Networks) != 2 ||
 		service.Networks[0].Name != "private" || service.Networks[0].GatewayPriority != 0 ||
@@ -93,10 +118,11 @@ func testCloudflareTunnelPlan(
 	return componentrender.PlanCloudflareTunnel(
 		environment,
 		tunnel,
-		func(serviceID, secretID string, zones []componentsdk.NetworkInput) (componentsdk.EnvironmentPlan, error) {
+		func(serviceID, secretID, entryID string, zones []componentsdk.NetworkInput) (componentsdk.EnvironmentPlan, error) {
 			return registeredtunnel.Plan(registeredtunnel.Input{
 				GeneratedServiceID: serviceID,
 				SecretID:           secretID,
+				EntryID:            entryID,
 				Zones:              zones,
 			})
 		},

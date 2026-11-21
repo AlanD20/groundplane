@@ -174,7 +174,9 @@ func restoreConfigEntryRecord(environmentID, generationID string, archived backu
 		uid, gid := file.UID, file.GID
 		desired.Kind, desired.Path, desired.UID, desired.GID = core.EntryKindFile, file.Path, &uid, &gid
 	}
-	if archived.Exposure.Kind == backupconfig.ExposureAll {
+	if archived.Exposure.Kind == backupconfig.ExposureEdgeTunnel {
+		desired.Exposure = []string{core.EntryExposureEdgeTunnel}
+	} else if archived.Exposure.Kind == backupconfig.ExposureAll {
 		desired.Exposure = []string{"all"}
 	} else {
 		for _, serviceID := range archived.Exposure.ServiceIDs {

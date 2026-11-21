@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -113,6 +114,10 @@ func (owner *ComponentWorkPreparation) Prepare(ctx context.Context, taskID, work
 	}
 	prepared, err := owner.service.prepareComponentWork(ctx, work, services, *unit, snapshot)
 	if err != nil {
+		var invalid *errs.Error
+		if errors.As(err, &invalid) && invalid.Kind() == errs.KindValidationFailed {
+			return owner.inputs.RejectInvalidInput(ctx, work, snapshot.HeadRevision, invalid.ToProblem().Detail)
+		}
 		return err
 	}
 	defer keyvalue.ClearMutationValues(prepared.Placement.Change.Mutations)

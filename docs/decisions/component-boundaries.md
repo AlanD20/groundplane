@@ -173,3 +173,14 @@ Current source: [Component SDK](../../component-sdk),
 The architecture is accepted; capability acceptance still depends on generated
 surfaces and live behavior recorded in the feature status. Tests for these
 boundaries must be behavioral or architectural, not static source-text checks.
+
+## Environment-owned Component credentials
+
+Cloudflare Tunnel may consume a protected literal Environment Entry through the
+closed edge-tunnel grant. The SDK receives only an opaque Entry id, mutually
+exclusive with a reusable Secret id. Controller materialization validates the
+Environment and grant, captures an immutable encrypted value generation and
+clears transient plaintext. Registered code never reads Entries or storage.
+This reuses the existing configuration store instead of creating another Secret
+owner scope. Config archives preserve the closed grant so Restore cannot widen
+it into application access.

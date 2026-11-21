@@ -58,7 +58,7 @@ func PrepareUnrenderedEntries(ctx context.Context, store Store, environmentID st
 		}
 		value := record.Entry
 		if len(value.Exposure) != 1 || value.Exposure[0] != "all" {
-			for _, name := range value.Exposure {
+			for _, name := range value.ServiceExposure() {
 				if !services[name] {
 					return Publication{}, errs.New(errs.KindServiceNotFound, "Entry exposure Service was not found")
 				}

@@ -106,7 +106,7 @@ func ProjectEnvironmentEntries(
 				allValues = append(allValues, reference)
 				continue
 			}
-			for _, serviceName := range entry.Exposure {
+			for _, serviceName := range entry.ServiceExposure() {
 				if _, _, exists := environmentComposeService(projected, serviceName); !exists {
 					return EnvironmentEntryComposeProjection{}, errs.New(
 						errs.KindValidationFailed,
@@ -138,7 +138,7 @@ func ProjectEnvironmentEntries(
 				Kind: materializationrecord.SourceEntryValue, EntryValue: &value,
 			},
 		})
-		targets := entry.Exposure
+		targets := entry.ServiceExposure()
 		if entry.ExposesAll() {
 			targets = sortedEnvironmentComposeServiceNames(projected)
 		}

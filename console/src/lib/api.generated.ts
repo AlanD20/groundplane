@@ -2472,13 +2472,14 @@ export interface components {
             implementation: "envoy";
             /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
             zone_ids: string[];
-        } | {
+        } | ({
             /** @enum {string} */
             implementation: "cloudflare-tunnel";
-            secret_id: string;
+            secret_id?: string;
+            token_entry?: string;
             /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
             zone_ids: string[];
-        } | {
+        } & (unknown | unknown)) | {
             corefile_template: string;
             forwarders: {
                 domain: string;
@@ -2522,6 +2523,10 @@ export interface components {
                 zone_ids: string[];
             } | {
                 credential: {
+                    /** @enum {string} */
+                    mode: "environment";
+                    token_entry: string;
+                } | {
                     /** @enum {string} */
                     mode: "existing";
                     secret_id: string;
@@ -2601,6 +2606,10 @@ export interface components {
                 zone_ids: string[];
             } | {
                 credential: {
+                    /** @enum {string} */
+                    mode: "environment";
+                    token_entry: string;
+                } | {
                     /** @enum {string} */
                     mode: "existing";
                     secret_id: string;

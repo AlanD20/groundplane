@@ -40,6 +40,16 @@ func TestProjectEnvironmentEntriesInjectsEnvironmentAndFileEntries(t *testing.T)
 		entryComposeTestRecord(
 			t,
 			environmentID,
+			"CLOUDFLARE_TUNNEL_TOKEN",
+			"",
+			[]string{core.EntryExposureEdgeTunnel},
+			true,
+			nil,
+			nil,
+		),
+		entryComposeTestRecord(
+			t,
+			environmentID,
 			"",
 			"etc/ssl/app.pem",
 			[]string{"api"},

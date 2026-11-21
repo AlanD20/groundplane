@@ -48,7 +48,7 @@ func BuildConfigRestoreFileContext(
 			files.PriorFiles = append(files.PriorFiles, &agentpb.BackupConfigPriorFile{EntryId: entry.ID,
 				Destination: entry.Path, Secret: entry.Secret, Uid: *entry.UID, Gid: *entry.GID})
 		} else if entry.Kind == core.EntryKindEnv && !entry.ExposesAll() {
-			for _, name := range entry.Exposure {
+			for _, name := range entry.ServiceExposure() {
 				service := byName[name]
 				if service == nil {
 					return nil, configSnapshotGuardConflict()

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,9 +11,10 @@ import (
 // EntryMutationBindings contains identities only, never a selected generation,
 // value, runtime projection, or permission to execute work.
 type EntryMutationBindings struct {
-	SecretID    string   `json:"secret_id,omitempty"`
-	ServiceIDs  []string `json:"service_ids,omitempty"`
-	AllServices bool     `json:"all_services,omitempty"`
+	SecretID     string   `json:"secret_id,omitempty"`
+	ComponentIDs []string `json:"component_ids,omitempty"`
+	ServiceIDs   []string `json:"service_ids,omitempty"`
+	AllServices  bool     `json:"all_services,omitempty"`
 }
 
 func (repository *HierarchyRepository) BindEntryMutationReferences(ctx context.Context, environmentID, projectID,
@@ -45,6 +47,22 @@ func (repository *HierarchyRepository) BindEntryMutationReferences(ctx context.C
 		byName[service.Name] = service.ID
 	}
 	for _, name := range exposure {
+		if name == core.EntryExposureEdgeTunnel {
+			found := false
+			for _, component := range owned.Record.Components {
+				if component.Name == string(core.ComponentCapabilityEdgeTunnel) {
+					result.ComponentIDs = append(result.ComponentIDs, component.ID)
+					found = true
+				}
+			}
+			if !found {
+				return EntryMutationBindings{}, errs.New(
+					errs.KindValidationFailed,
+					"Entry exposure Component was not found",
+				)
+			}
+			continue
+		}
 		id := byName[name]
 		if id == "" {
 			return EntryMutationBindings{}, errs.New(errs.KindServiceNotFound, "Entry exposure Service was not found")
@@ -60,7 +78,7 @@ func (repository *HierarchyRepository) ResolveEntryMutationExposure(ctx context.
 	if bindings.AllServices {
 		return []string{"all"}, nil
 	}
-	if len(bindings.ServiceIDs) == 0 {
+	if len(bindings.ServiceIDs) == 0 && len(bindings.ComponentIDs) == 0 {
 		return nil, nil
 	}
 	owned, found, err := blueprints.ReadCurrentOwnedIdentities(ctx, repository.store, environmentID, 0)
@@ -75,6 +93,18 @@ func (repository *HierarchyRepository) ResolveEntryMutationExposure(ctx context.
 		byID[service.ID] = service.Name
 	}
 	result := make([]string, 0, len(bindings.ServiceIDs))
+	for _, id := range bindings.ComponentIDs {
+		found := false
+		for _, component := range owned.Record.Components {
+			if component.ID == id && component.Name == string(core.ComponentCapabilityEdgeTunnel) {
+				result = append(result, core.EntryExposureEdgeTunnel)
+				found = true
+			}
+		}
+		if !found {
+			return nil, errs.New(errs.KindValidationFailed, "Accepted Entry exposure Component no longer exists")
+		}
+	}
 	for _, id := range bindings.ServiceIDs {
 		name := byID[id]
 		if name == "" {

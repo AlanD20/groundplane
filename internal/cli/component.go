@@ -277,6 +277,9 @@ func newComponentCmd() *cobra.Command {
 								Mode: "existing", SecretID: current.Config.CloudflareTunnel.SecretID,
 							},
 						}
+						if current.Config.CloudflareTunnel.TokenEntry != "" {
+							body.CloudflareTunnel.Credential = apiTypes.CloudflareTunnelCredentialInput{Mode: "environment", TokenEntry: current.Config.CloudflareTunnel.TokenEntry}
+						}
 					}
 					if componentZone {
 						body.CloudflareTunnel.ZoneIDs = append([]string(nil), zoneIDs...)

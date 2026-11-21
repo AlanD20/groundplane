@@ -65,6 +65,13 @@ func ValidateEntry(entry Entry) error {
 	}
 
 	switch entry.Exposure.Kind {
+	case ExposureEdgeTunnel:
+		if len(entry.Exposure.ServiceIDs) != 0 || entry.Metadata.Kind != MetadataEnvironment || !entry.Secret ||
+			entry.Source.Kind != SourceLiteral {
+			return archiveError(
+				"Config Tunnel exposure must be a protected literal Environment variable without Service IDs",
+			)
+		}
 	case ExposureAll:
 		if len(entry.Exposure.ServiceIDs) != 0 {
 			return archiveError("Config Entry all-services exposure carries service IDs")

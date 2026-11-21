@@ -423,13 +423,13 @@ func (e ComponentConfigMutationRequestConfig1Implementation) Valid() bool {
 
 // Defines values for ComponentConfigMutationRequestConfig2Credential0Mode.
 const (
-	ComponentConfigMutationRequestConfig2Credential0ModeExisting ComponentConfigMutationRequestConfig2Credential0Mode = "existing"
+	ComponentConfigMutationRequestConfig2Credential0ModeEnvironment ComponentConfigMutationRequestConfig2Credential0Mode = "environment"
 )
 
 // Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig2Credential0Mode enum.
 func (e ComponentConfigMutationRequestConfig2Credential0Mode) Valid() bool {
 	switch e {
-	case ComponentConfigMutationRequestConfig2Credential0ModeExisting:
+	case ComponentConfigMutationRequestConfig2Credential0ModeEnvironment:
 		return true
 	default:
 		return false
@@ -438,13 +438,28 @@ func (e ComponentConfigMutationRequestConfig2Credential0Mode) Valid() bool {
 
 // Defines values for ComponentConfigMutationRequestConfig2Credential1Mode.
 const (
-	ComponentConfigMutationRequestConfig2Credential1ModeNew ComponentConfigMutationRequestConfig2Credential1Mode = "new"
+	ComponentConfigMutationRequestConfig2Credential1ModeExisting ComponentConfigMutationRequestConfig2Credential1Mode = "existing"
 )
 
 // Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig2Credential1Mode enum.
 func (e ComponentConfigMutationRequestConfig2Credential1Mode) Valid() bool {
 	switch e {
-	case ComponentConfigMutationRequestConfig2Credential1ModeNew:
+	case ComponentConfigMutationRequestConfig2Credential1ModeExisting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentConfigMutationRequestConfig2Credential2Mode.
+const (
+	ComponentConfigMutationRequestConfig2Credential2ModeNew ComponentConfigMutationRequestConfig2Credential2Mode = "new"
+)
+
+// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig2Credential2Mode enum.
+func (e ComponentConfigMutationRequestConfig2Credential2Mode) Valid() bool {
+	switch e {
+	case ComponentConfigMutationRequestConfig2Credential2ModeNew:
 		return true
 	default:
 		return false
@@ -513,13 +528,13 @@ func (e ComponentEnableRequestConfig1Implementation) Valid() bool {
 
 // Defines values for ComponentEnableRequestConfig2Credential0Mode.
 const (
-	ComponentEnableRequestConfig2Credential0ModeExisting ComponentEnableRequestConfig2Credential0Mode = "existing"
+	ComponentEnableRequestConfig2Credential0ModeEnvironment ComponentEnableRequestConfig2Credential0Mode = "environment"
 )
 
 // Valid indicates whether the value is a known member of the ComponentEnableRequestConfig2Credential0Mode enum.
 func (e ComponentEnableRequestConfig2Credential0Mode) Valid() bool {
 	switch e {
-	case ComponentEnableRequestConfig2Credential0ModeExisting:
+	case ComponentEnableRequestConfig2Credential0ModeEnvironment:
 		return true
 	default:
 		return false
@@ -528,13 +543,28 @@ func (e ComponentEnableRequestConfig2Credential0Mode) Valid() bool {
 
 // Defines values for ComponentEnableRequestConfig2Credential1Mode.
 const (
-	ComponentEnableRequestConfig2Credential1ModeNew ComponentEnableRequestConfig2Credential1Mode = "new"
+	ComponentEnableRequestConfig2Credential1ModeExisting ComponentEnableRequestConfig2Credential1Mode = "existing"
 )
 
 // Valid indicates whether the value is a known member of the ComponentEnableRequestConfig2Credential1Mode enum.
 func (e ComponentEnableRequestConfig2Credential1Mode) Valid() bool {
 	switch e {
-	case ComponentEnableRequestConfig2Credential1ModeNew:
+	case ComponentEnableRequestConfig2Credential1ModeExisting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentEnableRequestConfig2Credential2Mode.
+const (
+	ComponentEnableRequestConfig2Credential2ModeNew ComponentEnableRequestConfig2Credential2Mode = "new"
+)
+
+// Valid indicates whether the value is a known member of the ComponentEnableRequestConfig2Credential2Mode enum.
+func (e ComponentEnableRequestConfig2Credential2Mode) Valid() bool {
+	switch e {
+	case ComponentEnableRequestConfig2Credential2ModeNew:
 		return true
 	default:
 		return false
@@ -2544,14 +2574,22 @@ type ComponentConfig1Implementation string
 // ComponentConfig2 defines model for ComponentConfig.2.
 type ComponentConfig2 struct {
 	Implementation ComponentConfig2Implementation `json:"implementation"`
-	SecretId       string                         `json:"secret_id"`
+	SecretId       *string                        `json:"secret_id,omitempty"`
+	TokenEntry     *string                        `json:"token_entry,omitempty"`
 
 	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
 	ZoneIds []string `json:"zone_ids"`
+	union   json.RawMessage
 }
 
 // ComponentConfig2Implementation defines model for ComponentConfig.2.Implementation.
 type ComponentConfig2Implementation string
+
+// ComponentConfig20 defines model for ComponentConfig.2.0.
+type ComponentConfig20 = interface{}
+
+// ComponentConfig21 defines model for ComponentConfig.2.1.
+type ComponentConfig21 = interface{}
 
 // ComponentConfig3 defines model for ComponentConfig.3.
 type ComponentConfig3 struct {
@@ -2634,8 +2672,8 @@ type ComponentConfigMutationRequestConfig2 struct {
 
 // ComponentConfigMutationRequestConfig2Credential0 defines model for ComponentConfigMutationRequest.Config.2.Credential.0.
 type ComponentConfigMutationRequestConfig2Credential0 struct {
-	Mode     ComponentConfigMutationRequestConfig2Credential0Mode `json:"mode"`
-	SecretId string                                               `json:"secret_id"`
+	Mode       ComponentConfigMutationRequestConfig2Credential0Mode `json:"mode"`
+	TokenEntry string                                               `json:"token_entry"`
 }
 
 // ComponentConfigMutationRequestConfig2Credential0Mode defines model for ComponentConfigMutationRequest.Config.2.Credential.0.Mode.
@@ -2643,13 +2681,22 @@ type ComponentConfigMutationRequestConfig2Credential0Mode string
 
 // ComponentConfigMutationRequestConfig2Credential1 defines model for ComponentConfigMutationRequest.Config.2.Credential.1.
 type ComponentConfigMutationRequestConfig2Credential1 struct {
-	Mode       ComponentConfigMutationRequestConfig2Credential1Mode `json:"mode"`
-	SecretName string                                               `json:"secret_name"`
-	Token      *string                                              `json:"token,omitempty"`
+	Mode     ComponentConfigMutationRequestConfig2Credential1Mode `json:"mode"`
+	SecretId string                                               `json:"secret_id"`
 }
 
 // ComponentConfigMutationRequestConfig2Credential1Mode defines model for ComponentConfigMutationRequest.Config.2.Credential.1.Mode.
 type ComponentConfigMutationRequestConfig2Credential1Mode string
+
+// ComponentConfigMutationRequestConfig2Credential2 defines model for ComponentConfigMutationRequest.Config.2.Credential.2.
+type ComponentConfigMutationRequestConfig2Credential2 struct {
+	Mode       ComponentConfigMutationRequestConfig2Credential2Mode `json:"mode"`
+	SecretName string                                               `json:"secret_name"`
+	Token      *string                                              `json:"token,omitempty"`
+}
+
+// ComponentConfigMutationRequestConfig2Credential2Mode defines model for ComponentConfigMutationRequest.Config.2.Credential.2.Mode.
+type ComponentConfigMutationRequestConfig2Credential2Mode string
 
 // ComponentConfigMutationRequest_Config_2_Credential defines model for ComponentConfigMutationRequest.Config.2.Credential.
 type ComponentConfigMutationRequest_Config_2_Credential struct {
@@ -2766,8 +2813,8 @@ type ComponentEnableRequestConfig2 struct {
 
 // ComponentEnableRequestConfig2Credential0 defines model for ComponentEnableRequest.Config.2.Credential.0.
 type ComponentEnableRequestConfig2Credential0 struct {
-	Mode     ComponentEnableRequestConfig2Credential0Mode `json:"mode"`
-	SecretId string                                       `json:"secret_id"`
+	Mode       ComponentEnableRequestConfig2Credential0Mode `json:"mode"`
+	TokenEntry string                                       `json:"token_entry"`
 }
 
 // ComponentEnableRequestConfig2Credential0Mode defines model for ComponentEnableRequest.Config.2.Credential.0.Mode.
@@ -2775,13 +2822,22 @@ type ComponentEnableRequestConfig2Credential0Mode string
 
 // ComponentEnableRequestConfig2Credential1 defines model for ComponentEnableRequest.Config.2.Credential.1.
 type ComponentEnableRequestConfig2Credential1 struct {
-	Mode       ComponentEnableRequestConfig2Credential1Mode `json:"mode"`
-	SecretName string                                       `json:"secret_name"`
-	Token      *string                                      `json:"token,omitempty"`
+	Mode     ComponentEnableRequestConfig2Credential1Mode `json:"mode"`
+	SecretId string                                       `json:"secret_id"`
 }
 
 // ComponentEnableRequestConfig2Credential1Mode defines model for ComponentEnableRequest.Config.2.Credential.1.Mode.
 type ComponentEnableRequestConfig2Credential1Mode string
+
+// ComponentEnableRequestConfig2Credential2 defines model for ComponentEnableRequest.Config.2.Credential.2.
+type ComponentEnableRequestConfig2Credential2 struct {
+	Mode       ComponentEnableRequestConfig2Credential2Mode `json:"mode"`
+	SecretName string                                       `json:"secret_name"`
+	Token      *string                                      `json:"token,omitempty"`
+}
+
+// ComponentEnableRequestConfig2Credential2Mode defines model for ComponentEnableRequest.Config.2.Credential.2.Mode.
+type ComponentEnableRequestConfig2Credential2Mode string
 
 // ComponentEnableRequest_Config_2_Credential defines model for ComponentEnableRequest.Config.2.Credential.
 type ComponentEnableRequest_Config_2_Credential struct {
@@ -7157,6 +7213,142 @@ func (t *ComponentConfig) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsComponentConfig20 returns the union data inside the ComponentConfig2 as a ComponentConfig20
+func (t ComponentConfig2) AsComponentConfig20() (ComponentConfig20, error) {
+	var body ComponentConfig20
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfig20 overwrites any union data inside the ComponentConfig2 as the provided ComponentConfig20
+func (t *ComponentConfig2) FromComponentConfig20(v ComponentConfig20) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfig20 performs a merge with any union data inside the ComponentConfig2, using the provided ComponentConfig20
+func (t *ComponentConfig2) MergeComponentConfig20(v ComponentConfig20) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentConfig21 returns the union data inside the ComponentConfig2 as a ComponentConfig21
+func (t ComponentConfig2) AsComponentConfig21() (ComponentConfig21, error) {
+	var body ComponentConfig21
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfig21 overwrites any union data inside the ComponentConfig2 as the provided ComponentConfig21
+func (t *ComponentConfig2) FromComponentConfig21(v ComponentConfig21) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfig21 performs a merge with any union data inside the ComponentConfig2, using the provided ComponentConfig21
+func (t *ComponentConfig2) MergeComponentConfig21(v ComponentConfig21) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ComponentConfig2) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["implementation"], err = json.Marshal(t.Implementation)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'implementation': %w", err)
+	}
+
+	if t.SecretId != nil {
+		object["secret_id"], err = json.Marshal(t.SecretId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'secret_id': %w", err)
+		}
+	}
+
+	if t.TokenEntry != nil {
+		object["token_entry"], err = json.Marshal(t.TokenEntry)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'token_entry': %w", err)
+		}
+	}
+
+	if t.ZoneIds != nil {
+		object["zone_ids"], err = json.Marshal(t.ZoneIds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'zone_ids': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *ComponentConfig2) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["implementation"]; found {
+		err = json.Unmarshal(raw, &t.Implementation)
+		if err != nil {
+			return fmt.Errorf("error reading 'implementation': %w", err)
+		}
+	}
+
+	if raw, found := object["secret_id"]; found {
+		err = json.Unmarshal(raw, &t.SecretId)
+		if err != nil {
+			return fmt.Errorf("error reading 'secret_id': %w", err)
+		}
+	}
+
+	if raw, found := object["token_entry"]; found {
+		err = json.Unmarshal(raw, &t.TokenEntry)
+		if err != nil {
+			return fmt.Errorf("error reading 'token_entry': %w", err)
+		}
+	}
+
+	if raw, found := object["zone_ids"]; found {
+		err = json.Unmarshal(raw, &t.ZoneIds)
+		if err != nil {
+			return fmt.Errorf("error reading 'zone_ids': %w", err)
+		}
+	}
+
+	return err
+}
+
 // AsComponentConfig3Records0 returns the union data inside the ComponentConfig_3_Records_Item as a ComponentConfig3Records0
 func (t ComponentConfig_3_Records_Item) AsComponentConfig3Records0() (ComponentConfig3Records0, error) {
 	var body ComponentConfig3Records0
@@ -7261,6 +7453,32 @@ func (t *ComponentConfigMutationRequest_Config_2_Credential) FromComponentConfig
 
 // MergeComponentConfigMutationRequestConfig2Credential1 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_2_Credential, using the provided ComponentConfigMutationRequestConfig2Credential1
 func (t *ComponentConfigMutationRequest_Config_2_Credential) MergeComponentConfigMutationRequestConfig2Credential1(v ComponentConfigMutationRequestConfig2Credential1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentConfigMutationRequestConfig2Credential2 returns the union data inside the ComponentConfigMutationRequest_Config_2_Credential as a ComponentConfigMutationRequestConfig2Credential2
+func (t ComponentConfigMutationRequest_Config_2_Credential) AsComponentConfigMutationRequestConfig2Credential2() (ComponentConfigMutationRequestConfig2Credential2, error) {
+	var body ComponentConfigMutationRequestConfig2Credential2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfigMutationRequestConfig2Credential2 overwrites any union data inside the ComponentConfigMutationRequest_Config_2_Credential as the provided ComponentConfigMutationRequestConfig2Credential2
+func (t *ComponentConfigMutationRequest_Config_2_Credential) FromComponentConfigMutationRequestConfig2Credential2(v ComponentConfigMutationRequestConfig2Credential2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfigMutationRequestConfig2Credential2 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_2_Credential, using the provided ComponentConfigMutationRequestConfig2Credential2
+func (t *ComponentConfigMutationRequest_Config_2_Credential) MergeComponentConfigMutationRequestConfig2Credential2(v ComponentConfigMutationRequestConfig2Credential2) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -7499,6 +7717,32 @@ func (t *ComponentEnableRequest_Config_2_Credential) FromComponentEnableRequestC
 
 // MergeComponentEnableRequestConfig2Credential1 performs a merge with any union data inside the ComponentEnableRequest_Config_2_Credential, using the provided ComponentEnableRequestConfig2Credential1
 func (t *ComponentEnableRequest_Config_2_Credential) MergeComponentEnableRequestConfig2Credential1(v ComponentEnableRequestConfig2Credential1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentEnableRequestConfig2Credential2 returns the union data inside the ComponentEnableRequest_Config_2_Credential as a ComponentEnableRequestConfig2Credential2
+func (t ComponentEnableRequest_Config_2_Credential) AsComponentEnableRequestConfig2Credential2() (ComponentEnableRequestConfig2Credential2, error) {
+	var body ComponentEnableRequestConfig2Credential2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentEnableRequestConfig2Credential2 overwrites any union data inside the ComponentEnableRequest_Config_2_Credential as the provided ComponentEnableRequestConfig2Credential2
+func (t *ComponentEnableRequest_Config_2_Credential) FromComponentEnableRequestConfig2Credential2(v ComponentEnableRequestConfig2Credential2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentEnableRequestConfig2Credential2 performs a merge with any union data inside the ComponentEnableRequest_Config_2_Credential, using the provided ComponentEnableRequestConfig2Credential2
+func (t *ComponentEnableRequest_Config_2_Credential) MergeComponentEnableRequestConfig2Credential2(v ComponentEnableRequestConfig2Credential2) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

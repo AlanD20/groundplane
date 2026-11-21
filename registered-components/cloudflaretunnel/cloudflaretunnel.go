@@ -36,6 +36,7 @@ var Image = component.OCIImage{
 type Input struct {
 	GeneratedServiceID string
 	SecretID           string
+	EntryID            string
 	Zones              []component.NetworkInput
 }
 
@@ -82,7 +83,9 @@ func Definition() (component.Definition, error) {
 }
 
 func Plan(input Input) (component.EnvironmentPlan, error) {
-	if input.GeneratedServiceID == "" || input.SecretID == "" || len(input.Zones) == 0 {
+	if input.GeneratedServiceID == "" || (input.SecretID == "" && input.EntryID == "") ||
+		(input.SecretID != "" && input.EntryID != "") ||
+		len(input.Zones) == 0 {
 		return component.EnvironmentPlan{}, fmt.Errorf("cloudflare tunnel: planner input is incomplete")
 	}
 	networks := make([]component.ManagedNetworkAttachment, len(input.Zones))
@@ -125,9 +128,11 @@ func Plan(input Input) (component.EnvironmentPlan, error) {
 				Command:         []string{"cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"},
 				IntervalSeconds: 5, TimeoutSeconds: 3, StartPeriodSeconds: 10, Retries: 3,
 			},
-			Restart:           "unless-stopped",
-			Replicas:          1,
-			SecretEnvironment: []component.ManagedSecretEnvironment{{Name: tokenName, SecretID: input.SecretID}},
+			Restart:  "unless-stopped",
+			Replicas: 1,
+			SecretEnvironment: []component.ManagedSecretEnvironment{
+				{Name: tokenName, SecretID: input.SecretID, EntryID: input.EntryID},
+			},
 		},
 	}}, nil
 }

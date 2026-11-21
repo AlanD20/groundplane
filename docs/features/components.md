@@ -56,8 +56,21 @@ request policy; a template cannot grant access absent from GP's Routes.
 
 Tunnel has its own Zone selection. Its gateway is the first non-internal Zone;
 it does not automatically follow Caddy's memberships. GP configures the connector
-and its opaque Secret reference. The operator still configures provider DNS,
+and its opaque credential reference. Choose an encrypted Environment variable
+exposed only to Cloudflare Tunnel, or explicitly select a reusable Project or
+Platform Secret. A new inline token creates a Project Secret; use Environment
+Configuration for Environment ownership. The token is never exposed to authored
+application Services. An Environment placeholder may be empty while disabled;
+fill it before enabling. After changing its value, apply the Tunnel configuration
+to capture the new generation. Already accepted work keeps its captured value.
+The operator still configures provider DNS,
 public hostnames, ingress and origin policy. Tunnel is not an HTTP router.
+
+CLI `component enable` and `component config --file` accept the same credential
+selection as the Console. For an Environment Entry, the Tunnel configuration
+contains `credential: {"mode":"environment","token_entry":"CLOUDFLARE_TUNNEL_TOKEN"}`
+with implementation `cloudflare-tunnel` and the selected `zone_ids`.
+See [Blueprint syntax](../blueprint.md#x-gp-components) for empty declarations.
 
 ### Test public access
 

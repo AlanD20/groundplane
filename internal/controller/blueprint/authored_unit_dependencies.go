@@ -59,6 +59,12 @@ func (planner *authoredUnitPlanner) entryReads(spec core.EntrySpec) ([]blueprint
 	// their applied runtime: Services depend on their Entries, so adding the
 	// inverse read would deadlock an Entry when a prior Service is diverged.
 	for _, name := range planner.entryExposureNames(spec) {
+		if name == core.EntryExposureEdgeTunnel {
+			if _, found := planner.identities[ids.KindComponent][string(core.ComponentCapabilityEdgeTunnel)]; !found {
+				return nil, planner.missingInput("Entry Component", name)
+			}
+			continue
+		}
 		if _, found := planner.identities[ids.KindService][name]; !found {
 			return nil, planner.missingInput("Entry exposure Service", name)
 		}
@@ -211,6 +217,13 @@ func (planner *authoredUnitPlanner) componentDependencies(
 			return nil, nil, false, planner.missingInput("Component Zone", zoneID)
 		}
 		dependencies = append(dependencies, authoredResourceKey(ids.KindNetwork, zoneID))
+	}
+	if spec.Settings.TokenEntry != "" {
+		entry, found := planner.identities[ids.KindEnvEntry][spec.Settings.TokenEntry]
+		if !found {
+			return nil, nil, false, planner.missingInput("Component token Entry", spec.Settings.TokenEntry)
+		}
+		dependencies = append(dependencies, authoredResourceKey(ids.KindEnvEntry, entry.ID))
 	}
 	if spec.Settings.SecretID != "" {
 		dependencies = append(dependencies, authoredResourceKey(ids.KindSecret, spec.Settings.SecretID))

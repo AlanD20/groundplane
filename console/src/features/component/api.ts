@@ -129,9 +129,11 @@ function environmentComponentFromAPI(
       );
     }
     const secretID = "secret_id" in config ? config.secret_id : undefined;
+    const tokenEntry = "token_entry" in config ? config.token_entry : undefined;
     const zoneIDs = "zone_ids" in config ? config.zone_ids : undefined;
     if (
-      typeof secretID !== "string" ||
+      (typeof secretID !== "string" && typeof tokenEntry !== "string") ||
+      (typeof secretID === "string" && typeof tokenEntry === "string") ||
       !Array.isArray(zoneIDs) ||
       zoneIDs.length === 0 ||
       zoneIDs.some((id) => typeof id !== "string") ||
@@ -144,7 +146,7 @@ function environmentComponentFromAPI(
     return {
       ...common,
       kind: "cloudflare-tunnel",
-      config: { zone_ids: [...zoneIDs], secret_id: secretID },
+      config: { zone_ids: [...zoneIDs], ...(typeof tokenEntry === "string" ? {token_entry: tokenEntry} : {secret_id: secretID}) },
       state: {},
     };
   }

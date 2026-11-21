@@ -22,7 +22,7 @@ func registeredCloudflareTunnelEnvironmentComponent(
 			plan, err := componentrender.PlanCloudflareTunnel(
 				environment,
 				instance,
-				func(serviceID, secretID string, zones []component.NetworkInput) (component.EnvironmentPlan, error) {
+				func(serviceID, secretID, entryID string, zones []component.NetworkInput) (component.EnvironmentPlan, error) {
 					return registeredtunnel.Plan(
 						registeredtunnel.Input{GeneratedServiceID: serviceID, SecretID: secretID, Zones: zones},
 					)

@@ -340,8 +340,9 @@ type CaddyComponentConfig struct {
 }
 
 type CloudflareTunnelComponentConfig struct {
-	ZoneIDs  []string `yaml:"zone_ids" json:"zone_ids"`
-	SecretID string   `yaml:"secret_id" json:"secret_id"`
+	ZoneIDs    []string `yaml:"zone_ids" json:"zone_ids"`
+	SecretID   string   `yaml:"secret_id,omitempty" json:"secret_id,omitempty"`
+	TokenEntry string   `yaml:"token_entry,omitempty" json:"token_entry,omitempty"`
 }
 
 type DNSResolverEndpoint struct {

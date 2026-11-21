@@ -45,6 +45,9 @@ func appendMetadata(destination []byte, metadata Metadata) []byte {
 }
 
 func appendExposure(destination []byte, exposure Exposure) []byte {
+	if exposure.Kind == ExposureEdgeTunnel {
+		return append(destination, `{"kind":"edge_tunnel"}`...)
+	}
 	if exposure.Kind == ExposureAll {
 		return append(destination, `{"kind":"all"}`...)
 	}

@@ -45,7 +45,7 @@ func (spec ComponentSpec) Validate(capability ComponentCapability) error {
 	}
 	switch capability {
 	case ComponentCapabilityHTTPRouter:
-		if spec.Settings.SecretID != "" {
+		if spec.Settings.SecretID != "" || spec.Settings.TokenEntry != "" {
 			return fmt.Errorf("http-router: secret_id is not supported")
 		}
 		if !validHTTPRouterAlias(spec.Settings.Alias) {
@@ -58,8 +58,14 @@ func (spec ComponentSpec) Validate(capability ComponentCapability) error {
 		if spec.Settings.Alias != "" || spec.ImplementationConfig.CaddyfileTemplate != "" {
 			return fmt.Errorf("edge-tunnel: alias and caddyfile_template are not supported")
 		}
-		if spec.Enabled && spec.Settings.SecretID == "" {
-			return fmt.Errorf("edge-tunnel: secret_id is required while enabled")
+		if spec.Enabled && spec.Settings.SecretID == "" && spec.Settings.TokenEntry == "" {
+			return fmt.Errorf("edge-tunnel: token_entry or secret_id is required while enabled")
+		}
+		if spec.Settings.TokenEntry != "" &&
+			(spec.Settings.SecretID != "" || !validTunnelTokenKey(spec.Settings.TokenEntry)) {
+			return fmt.Errorf(
+				"edge-tunnel: token_entry must be an Environment key and cannot be combined with secret_id",
+			)
 		}
 		if spec.Settings.SecretID != "" && ids.Validate(ids.KindSecret, spec.Settings.SecretID) != nil {
 			return fmt.Errorf("edge-tunnel: secret_id must be a Secret id")

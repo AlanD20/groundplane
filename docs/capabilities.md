@@ -76,3 +76,8 @@ availability or unconditional zero interruption.
 [Remaining qualification](issues/runtime-qualification.md) records the actionable
 proof gaps and known unresolved observations. Historical incidents do not describe
 the current host or impose a permanent QA pause.
+
+Cloudflare Tunnel Environment Entry credentials have local scope, generation,
+empty-input and archive checks. This new credential source has not yet been
+qualified through a live Tunnel or Config Backup/Restore journey. Existing
+qualification does not extend to this source automatically.
