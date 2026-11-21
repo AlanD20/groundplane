@@ -44,7 +44,8 @@ def validate(bundle: Path, version: str, arch: str) -> dict:
     if postgres_catalog.name not in manifest["files"] or postgres_catalog.stat().st_size > 16384:
         raise ValueError("managed PostgreSQL catalog is missing or exceeds its bound")
     postgres = json.loads(postgres_catalog.read_bytes())
-    if (postgres.get("schema") != 1 or postgres.get("database_image") != manifest["postgres_image"]
+    if (postgres.get("schema") != 1
+            or postgres16_tools.database_runtime_image(postgres.get("database_image", "")) != manifest["postgres_image"]
             or postgres.get("image") != manifest["postgres_tools_image"]
             or [image["manifest"]["architecture"] for image in postgres.get("images", [])] != ["amd64", "arm64"]):
         raise ValueError("managed PostgreSQL catalog does not match the bundle")

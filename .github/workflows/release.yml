@@ -212,6 +212,13 @@ jobs:
           cd .tmp/releases
           sha256sum --check -- *.sha256
           if [[ -d controller ]]; then (cd controller && sha256sum --check -- *.sha256); fi
+          cd ../..
+          archive="$PWD/.tmp/releases/groundplane-$VERSION-linux-${{ matrix.arch }}.tar.gz"
+          if [[ -d .tmp/releases/controller ]]; then archive="$PWD/.tmp/releases/controller/$(basename "$archive")"; fi
+          GROUNDPLANE_RELEASE_BUNDLE="$archive" GROUNDPLANE_RELEASE_VERSION="$VERSION" \
+            GROUNDPLANE_RELEASE_COMMIT="${{ github.sha }}" \
+            bash scripts/repo-env.sh go test ./internal/infra/softwarepreparation \
+              -run '^TestPublishedControllerBundleAdmission$' -count=1
       - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.arch }}

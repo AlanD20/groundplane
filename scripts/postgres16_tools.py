@@ -17,6 +17,13 @@ MEMBER = re.compile(r"(?:bin|lib)/[A-Za-z0-9._+-]+|helper|client-gate|release\.j
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
 
+def database_runtime_image(reference: str) -> str:
+    """Preserve the catalog's authenticated PostgreSQL family pin as a runtime identity."""
+    if not re.fullmatch(r"postgres:16-alpine@sha256:[0-9a-f]{64}", reference):
+        raise ValueError("managed PostgreSQL database catalog image is invalid")
+    return reference.replace(":16-alpine@", "@", 1)
+
+
 def verify(directory: Path, manifest: dict) -> None:
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("PostgreSQL backup tools directory is unsafe")

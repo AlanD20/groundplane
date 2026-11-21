@@ -211,6 +211,8 @@ Controller-scoped archive omits the combined bootstrap's Agent selection, so a
 combined tag remains usable by the independent-component updater. The Controller
 binary and payload files are identical across scopes; bundle manifests and
 archive checksums differ.
+Before publication, each native Controller archive must pass the normal software
+preparation reader against the selected version, architecture and source commit.
 
 With no version specified, each selected component resolves its own latest stable version.
 Pass numeric `--version X.Y.Z`, without a `v` or component prefix. On a combined

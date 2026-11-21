@@ -16,6 +16,7 @@ import unittest
 from unittest import mock
 
 import install_bundle
+from postgres16_tools import database_runtime_image
 from postgres16_test_fixture import postgres16_catalog
 import release_bundle
 
@@ -73,6 +74,7 @@ class BundleTests(unittest.TestCase):
         manifest = install_bundle.validate(target, "1.2.3", "amd64")
         self.assertEqual(manifest["agent_image"], self.agent)
         self.assertEqual(manifest["runner_image"], self.runner)
+        self.assertEqual(manifest["postgres_image"], "postgres@sha256:" + "b" * 64)
         self.assertEqual((target / "controller").read_bytes(), b"test controller bytes")
 
     def test_wrong_version_and_architecture_refuse_before_extraction(self):
@@ -138,7 +140,7 @@ class BundleTests(unittest.TestCase):
         manifest = {
             "agent_image": self.agent,
             "runner_image": self.runner,
-            "postgres_image": self.postgres["database_image"],
+            "postgres_image": database_runtime_image(self.postgres["database_image"]),
             "postgres_tools_image": self.postgres["image"],
             "arch": "amd64",
         }
@@ -158,7 +160,8 @@ class BundleTests(unittest.TestCase):
             run, execute = self.invoke("native", stage)
             run.assert_any_call(["docker", "pull", self.agent], check=True, timeout=600)
             run.assert_any_call(["docker", "pull", self.postgres["image"]], check=True, timeout=600)
-            run.assert_any_call(["docker", "pull", self.postgres["database_image"]], check=True, timeout=600)
+            run.assert_any_call(["docker", "pull", database_runtime_image(self.postgres["database_image"])],
+                                check=True, timeout=600)
             self.assertEqual(run.call_count, 4)
             argv = run.call_args.args[0]
             self.assertEqual(argv[1], str(self.root / "install-runtime.sh"))
@@ -171,7 +174,8 @@ class BundleTests(unittest.TestCase):
             mock.call(["sh", str(self.root / "setup-host.sh")], check=True),
             mock.call(["docker", "pull", self.agent], check=True, timeout=600),
             mock.call(["docker", "pull", self.runner], check=True, timeout=600),
-            mock.call(["docker", "pull", self.postgres["database_image"]], check=True, timeout=600)])
+            mock.call(["docker", "pull", database_runtime_image(self.postgres["database_image"])],
+                      check=True, timeout=600)])
         run.assert_any_call(["docker", "pull", self.postgres["image"]], check=True, timeout=600)
 
     def test_stage_on_fresh_host_and_config_on_native_refuse(self):
@@ -187,7 +191,7 @@ class BundleTests(unittest.TestCase):
         manifest = {
             "agent_image": self.agent,
             "runner_image": self.runner,
-            "postgres_image": self.postgres["database_image"],
+            "postgres_image": database_runtime_image(self.postgres["database_image"]),
             "postgres_tools_image": self.postgres["image"],
             "arch": "amd64",
         }

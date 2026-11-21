@@ -11,7 +11,8 @@ that every deployment or failure scenario has been qualified.
 
 - Publish independently selectable Controller archives without the combined
   bootstrap's Agent selection, so normal software preparation accepts component
-  releases created by a combined tag.
+  releases created by a combined tag. Use digest-only PostgreSQL runtime image
+  identity while retaining its authenticated version-family catalog pin.
 
 - Preserve legacy Component configuration and idempotency fingerprints when the
   optional Environment credential source is unused, keeping in-place epoch 1

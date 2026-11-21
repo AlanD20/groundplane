@@ -15,6 +15,7 @@ import subprocess
 import tarfile
 
 import deploy
+from postgres16_tools import database_runtime_image
 from controller_release import build_metadata
 from release_postgres16 import load_catalog
 
@@ -42,7 +43,8 @@ def payload(version: str, agent: str | None, runner: str, arch: str, postgres_ca
     files["postgres16-release.json"] = postgres_catalog
     postgres = json.loads(postgres_catalog)
     manifest = {"schema": 1, "version": version, "os": "linux", "arch": arch,
-                "agent_image": agent, "runner_image": runner, "postgres_image": postgres["database_image"],
+                "agent_image": agent, "runner_image": runner,
+                "postgres_image": database_runtime_image(postgres["database_image"]),
                 "postgres_tools_image": postgres["image"],
                 "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
     files["bundle.json"] = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
