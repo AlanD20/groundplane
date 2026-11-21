@@ -1,4 +1,4 @@
-import { Select } from "@/components/ui/select";
+import { ConfigurationTypeFilter } from "@/components/common/configuration-type-filter";
 import { EmptyState } from "@/components/common/empty-state";
 import { CompactReference } from "@/components/common/compact-reference";
 import { HelpHint } from "@/components/common/resource-panel";
@@ -95,18 +95,7 @@ export function ReusableSecretOwnerList({
             onQueryChange={setQuery}
             label="configuration"
           >
-            <Select
-              className="w-full shrink-0 sm:w-40"
-              value={kind}
-              onValueChange={setKind}
-              aria-label="Configuration type"
-              options={[
-                { value: "all", label: "All types" },
-                { value: "variable", label: "Variables" },
-                { value: "secret", label: "Secrets" },
-                { value: "file", label: "Files" },
-              ]}
-            />
+            <ConfigurationTypeFilter value={kind} onChange={setKind} />
           </CollectionToolbar>
           <ResourceTable>
             <Table className="min-w-[46rem]">

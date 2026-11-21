@@ -1,4 +1,5 @@
 import { ConfigurationTypeOptions } from "@/components/common/configuration-type-options";
+import { ConfigurationTypeFilter } from "@/components/common/configuration-type-filter";
 import { EntryRemoveDialog } from "./entry-remove-dialog";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { EmptyState } from "@/components/common/empty-state";
@@ -76,6 +77,7 @@ export function EnvVarsCard({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
   const project = store.getProject(params.tenant, params.project);
   const [search, setSearch] = useSearchParams();
   const fromConnection = search.get("fromConnection");
@@ -112,6 +114,8 @@ export function EnvVarsCard({
 
   const table = useTableView(
     entries.filter((entry) =>
+      (typeFilter === "all" ||
+        (entry.type === "file" ? "file" : entry.secret ? "secret" : "variable") === typeFilter) &&
       `${entry.key ?? entry.path ?? ""} ${entry.exposure.join(" ")} ${entry.source.kind}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()),
@@ -122,7 +126,7 @@ export function EnvVarsCard({
     },
     "name",
     "asc",
-    `${env.id}/${query}`,
+    `${env.id}/${query}/${typeFilter}`,
   );
 
   function startEdit(entry: EnvironmentEntry) {
@@ -533,7 +537,9 @@ export function EnvVarsCard({
             { value: "name", label: "Key / path" },
             { value: "type", label: "Type" },
           ]}
-        />
+        >
+          <ConfigurationTypeFilter value={typeFilter} onChange={setTypeFilter} />
+        </ListToolbar>
         <ul aria-label="Variables & files" className="min-w-0 space-y-2">
           {editing &&
             open &&
@@ -551,7 +557,7 @@ export function EnvVarsCard({
             }
             description={
               entries.length
-                ? "Try another search."
+                ? "Try another search or type filter."
                 : "Add configuration values or files and select the Services that receive them."
             }
           />

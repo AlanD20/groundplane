@@ -57,12 +57,14 @@ export function ListToolbar({
   sort,
   fields,
   label,
+  children,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
   sort: SortState;
   fields: { value: string; label: string }[];
   label: string;
+  children?: ReactNode;
 }) {
   return (
     <CollectionToolbar
@@ -70,6 +72,7 @@ export function ListToolbar({
       onQueryChange={onQueryChange}
       label={label}
     >
+      {children}
       <Select
         aria-label={`Sort ${label} by`}
         className="w-36"
