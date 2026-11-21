@@ -9,6 +9,10 @@ that every deployment or failure scenario has been qualified.
 
 ### Replacement release corrections
 
+- Import the authenticated native Agent manifest during published software
+  preparation instead of retagging a multi-platform index, preserving strict
+  identity verification on Docker's containerd image store.
+
 - Publish independently selectable Controller archives without the combined
   bootstrap's Agent selection, so normal software preparation accepts component
   releases created by a combined tag. Use digest-only PostgreSQL runtime image

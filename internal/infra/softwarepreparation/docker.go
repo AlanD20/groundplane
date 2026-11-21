@@ -253,11 +253,38 @@ func (operation *dockerOperation) pullAgent(
 		!digestPattern.MatchString(reference[strings.LastIndexByte(reference, '@')+1:]) {
 		return "", errs.New(errs.KindStateConflict, "published Agent image reference is invalid")
 	}
+	plan, err := (registryimages.Local{}).Resolve(ctx, reference)
+	if err != nil {
+		return "", err
+	}
+	return operation.pullAgentManifest(ctx, plan, source, version)
+}
+
+func (operation *dockerOperation) pullAgentManifest(
+	ctx context.Context,
+	plan imagefetch.Plan,
+	source ResolvedSource,
+	version string,
+) (string, error) {
+	if err := plan.Validate(); err != nil {
+		return "", err
+	}
+	if plan.Architecture != source.Platform.Architecture {
+		return "", errs.New(errs.KindStateConflict, "published Agent platform differs from preparation")
+	}
+	// An index remains an index in Docker's containerd store even with
+	// --platform. Import its authenticated native child, never retag the index.
+	reference := plan.Reference()
 	if _, err := operation.run(ctx, buildTimeout, "image", "pull", "--platform",
 		source.Platform.OS+"/"+source.Platform.Architecture, reference); err != nil {
 		return "", err
 	}
-	if _, err := operation.inspect(ctx, reference, source.Platform, version); err != nil {
+	inspection, err := operation.inspect(ctx, reference, source.Platform, version)
+	if err != nil {
+		return "", err
+	}
+	if err := managedimage.Verify(inspection.ID, inspection.Descriptor, plan.ManifestDigest, plan.ConfigDigest,
+		ocispec.Platform{OS: source.Platform.OS, Architecture: plan.Architecture, Variant: plan.Variant}); err != nil {
 		return "", err
 	}
 	tag := operation.localTag("agent", source)
