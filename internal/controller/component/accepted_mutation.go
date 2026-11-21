@@ -209,15 +209,15 @@ func componentMutationConfigValue(config *api.ComponentConfig) (requestidempoten
 			field("alias", requestidempotency.String(config.Envoy.Alias)),
 		), nil
 	case config.CloudflareTunnel != nil:
-		return requestidempotency.Object(
+		fields := []requestidempotency.Field{
 			field("implementation", requestidempotency.String("cloudflare-tunnel")),
-			field(
-				"zone_ids",
-				componentStringList(config.CloudflareTunnel.ZoneIDs),
-			),
+			field("zone_ids", componentStringList(config.CloudflareTunnel.ZoneIDs)),
 			field("secret_id", requestidempotency.String(config.CloudflareTunnel.SecretID)),
-			field("token_entry", requestidempotency.String(config.CloudflareTunnel.TokenEntry)),
-		), nil
+		}
+		if config.CloudflareTunnel.TokenEntry != "" {
+			fields = append(fields, field("token_entry", requestidempotency.String(config.CloudflareTunnel.TokenEntry)))
+		}
+		return requestidempotency.Object(fields...), nil
 	default:
 		return requestidempotency.Value{}, errs.New(
 			errs.KindValidationFailed,

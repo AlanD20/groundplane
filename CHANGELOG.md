@@ -9,6 +9,10 @@ that every deployment or failure scenario has been qualified.
 
 ### Replacement release corrections
 
+- Preserve legacy Component configuration and idempotency fingerprints when the
+  optional Environment credential source is unused, keeping in-place epoch 1
+  updates from changing existing reconciliation or request replay identities.
+
 - Allow Cloudflare Tunnel credentials to use protected Environment variables
   declared empty in Blueprint and filled in Environment Configuration. Keep
   Component-only access through materialization and Config Backup/Restore; reject

@@ -192,7 +192,7 @@ type ComponentCapabilitySettings struct {
 	Alias      string   `yaml:"alias,omitempty"`
 	ZoneIDs    []string `yaml:"zone_ids,omitempty"`
 	SecretID   string   `yaml:"secret_id,omitempty"`
-	TokenEntry string   `yaml:"token_entry,omitempty"`
+	TokenEntry string   `yaml:"token_entry,omitempty" json:",omitempty"`
 }
 
 type ComponentImplementationConfig struct {
