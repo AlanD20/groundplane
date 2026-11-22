@@ -408,7 +408,7 @@ func storedMetricValues(measurement monitoring.ServiceMeasurement) ([]any, error
 	if !measurement.Available {
 		point = monitoring.MetricPoint{At: point.At}
 	}
-	values := make([]any, 0, 44)
+	values := make([]any, 0, 48)
 	appendFloat := func(value *float64) error {
 		if value == nil {
 			values = append(values, float64(0), int64(0), nil, nil)
@@ -440,6 +440,7 @@ func storedMetricValues(measurement monitoring.ServiceMeasurement) ([]any, error
 		func() error { return appendFloat(point.BlockWriteBytesPerSecond) },
 		func() error { return appendFloat(point.BlockReadOperationsPerSecond) },
 		func() error { return appendFloat(point.BlockWriteOperationsPerSecond) },
+		func() error { return appendUint(point.PersistentVolumeUsedBytes) },
 	} {
 		if err := appendValue(); err != nil {
 			return nil, err

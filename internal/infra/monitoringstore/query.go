@@ -259,7 +259,7 @@ func scanMeasurements(
 		var bucket, sampled, eligible int64
 		var owner monitoring.Ownership
 		var class string
-		values := make([]metricValue, 11)
+		values := make([]metricValue, 12)
 		destinations := []any{
 			&bucket, &owner.TenantID, &owner.ProjectID, &owner.EnvironmentID, &owner.ServiceID, &class,
 			&sampled, &eligible,
@@ -373,7 +373,7 @@ type metricValue struct {
 }
 
 func pointFromValues(at time.Time, values []metricValue) (monitoring.MetricPoint, error) {
-	if len(values) != 11 {
+	if len(values) != 12 {
 		return monitoring.MetricPoint{}, errs.New(errs.KindInternal, "monitoring metric column count is invalid")
 	}
 	uintValue := func(index int) (*uint64, error) {
@@ -395,9 +395,14 @@ func pointFromValues(at time.Time, values []metricValue) (monitoring.MetricPoint
 	if err != nil {
 		return monitoring.MetricPoint{}, err
 	}
+	volume, err := uintValue(11)
+	if err != nil {
+		return monitoring.MetricPoint{}, err
+	}
 	return monitoring.MetricPoint{
-		At:       at,
-		CPUCores: averageFloat(values[0]), CPULimitCores: averageFloat(values[1]),
+		PersistentVolumeUsedBytes: volume,
+		At:                        at,
+		CPUCores:                  averageFloat(values[0]), CPULimitCores: averageFloat(values[1]),
 		MemoryWorkingSetBytes: memory, MemoryLimitBytes: memoryLimit,
 		NetworkReceiveBytesPerSecond:  averageFloat(values[4]),
 		NetworkTransmitBytesPerSecond: averageFloat(values[5]),
@@ -413,7 +418,7 @@ func pointFromScopeValues(at time.Time, values []metricValue) (monitoring.Metric
 	if len(values) != 12 {
 		return monitoring.MetricPoint{}, errs.New(errs.KindInternal, "monitoring scope column count is invalid")
 	}
-	point, err := pointFromValues(at, values[:11])
+	point, err := pointFromValues(at, values)
 	if err != nil {
 		return monitoring.MetricPoint{}, err
 	}

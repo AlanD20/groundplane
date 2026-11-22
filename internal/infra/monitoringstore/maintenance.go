@@ -207,6 +207,7 @@ func serviceRollupSQL() string {
 		"block_read_operations_min", "block_read_operations_max",
 		"block_write_operations_sum", "block_write_operations_count",
 		"block_write_operations_min", "block_write_operations_max",
+		"volume_sum", "volume_count", "volume_min", "volume_max",
 	}
 	selected := rollupExpressions(columns)
 	return fmt.Sprintf(`INSERT INTO monitoring_service_samples (

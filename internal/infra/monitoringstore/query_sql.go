@@ -14,7 +14,8 @@ const serviceSelect = `SELECT bucket_unix, tenant_id, project_id, environment_id
 	block_read_sum, block_read_count, block_read_min, block_read_max,
 	block_write_sum, block_write_count, block_write_min, block_write_max,
 	block_read_operations_sum, block_read_operations_count, block_read_operations_min, block_read_operations_max,
-	block_write_operations_sum, block_write_operations_count, block_write_operations_min, block_write_operations_max
+	block_write_operations_sum, block_write_operations_count, block_write_operations_min, block_write_operations_max,
+	CAST(volume_sum AS REAL), volume_count, volume_min, volume_max
 	FROM monitoring_service_samples`
 
 func scopeSelect() string {

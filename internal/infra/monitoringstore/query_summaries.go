@@ -25,7 +25,7 @@ func metricSummary(value metricValue, expected uint32) monitoring.MetricSummary 
 }
 
 func scopeSummaries(values []metricValue, expected uint32) monitoring.MetricSummaries {
-	result := serviceSummaries(values[:11], expected)
+	result := serviceSummaries(values, expected)
 	result.PersistentVolumeUsedBytes = metricSummary(values[11], expected)
 	return result
 }
@@ -45,6 +45,7 @@ func serviceSummaries(values []metricValue, expected uint32) monitoring.MetricSu
 		BlockWriteBytesPerSecond:      metricSummary(values[8], expected),
 		BlockReadOperationsPerSecond:  metricSummary(values[9], expected),
 		BlockWriteOperationsPerSecond: metricSummary(values[10], expected),
+		PersistentVolumeUsedBytes:     metricSummary(values[11], expected),
 	}
 }
 

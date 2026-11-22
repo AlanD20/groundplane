@@ -20,6 +20,7 @@ const serviceSchema = `CREATE TABLE monitoring_service_samples (
 	block_read_operations_min REAL, block_read_operations_max REAL,
 	block_write_operations_sum REAL NOT NULL, block_write_operations_count INTEGER NOT NULL,
 	block_write_operations_min REAL, block_write_operations_max REAL,
+	volume_sum INTEGER NOT NULL, volume_count INTEGER NOT NULL, volume_min INTEGER, volume_max INTEGER,
 	PRIMARY KEY (tier_seconds, bucket_unix, service_id)
 ) STRICT`
 
@@ -56,7 +57,7 @@ const insertVolumeSample = `INSERT INTO monitoring_volume_samples VALUES (?, ?, 
 
 var serviceMetricColumns = []string{
 	"cpu", "cpu_limit", "memory", "memory_limit", "network_receive", "network_transmit",
-	"writable_layer", "block_read", "block_write", "block_read_operations", "block_write_operations",
+	"writable_layer", "block_read", "block_write", "block_read_operations", "block_write_operations", "volume",
 }
 
 var hostMetricColumns = []string{
