@@ -12,11 +12,17 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/internal/infra/monitoringstore"
 	"github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (reader *Reader) environment(ctx context.Context, query Query, response *api.MonitoringResponse) error {
+func (reader *Reader) environment(
+	ctx context.Context,
+	query Query,
+	window Window,
+	response *api.MonitoringResponse,
+) error {
 	if ids.Validate(ids.KindEnvironment, query.ID) != nil {
 		return invalidScope()
 	}
@@ -28,7 +34,7 @@ func (reader *Reader) environment(ctx context.Context, query Query, response *ap
 	if err != nil {
 		return err
 	}
-	if project.Record.Kind != hierarchyrecord.ProjectKindTenant {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant || project.Record.TenantID == "" {
 		return invalidScope()
 	}
 	services, err := reader.services.ListServices(ctx, environment.Record.ID,
@@ -40,8 +46,9 @@ func (reader *Reader) environment(ctx context.Context, query Query, response *ap
 	if len(observations) != len(services.Items) {
 		return errs.New(errs.KindInternal, "monitoring health observation count is invalid")
 	}
-	value := api.EnvironmentMonitoring{Services: api.Page[api.MonitoringServiceHealth]{
+	value := api.EnvironmentMonitoring{Live: unavailableLive(), Services: api.Page[api.MonitoringServiceHealth]{
 		Items: make([]api.MonitoringServiceHealth, 0, len(services.Items)), NextCursor: services.NextCursor,
+		Revision: services.Revision,
 	}}
 	for index, service := range services.Items {
 		row := api.MonitoringServiceHealth{ID: service.Record.Desired.ID, Name: service.Record.Desired.Name,
@@ -56,6 +63,16 @@ func (reader *Reader) environment(ctx context.Context, query Query, response *ap
 			row.RestartCount, row.RestartObservedAt = &count, &at
 		}
 		value.Services.Items = append(value.Services.Items, row)
+	}
+	scope := monitoringstore.AggregateScope{
+		TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID,
+	}
+	if snapshot, ok := reader.workloads.Snapshot(); ok {
+		value.Live = aggregateLive(snapshot, scope, reader.now())
+	}
+	value.History, err = ReadAggregateHistory(ctx, reader.history, scope, window)
+	if err != nil {
+		response.HistoryStatus = "unavailable"
 	}
 	response.Scope = api.MonitoringScope{Kind: "environment", ID: environment.Record.ID, Name: environment.Record.Name}
 	response.Environment = &value

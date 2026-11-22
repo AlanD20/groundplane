@@ -3279,6 +3279,8 @@ export interface components {
             network_pool: string;
         };
         EnvironmentMonitoring: {
+            history: components["schemas"]["MonitoringBucket"][] | null;
+            live: components["schemas"]["MonitoringLive"];
             services: components["schemas"]["PageMonitoringServiceHealth"];
         };
         EnvironmentNetworkCapacity: {

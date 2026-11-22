@@ -137,6 +137,8 @@ type MonitoringServiceHealth struct {
 }
 
 type EnvironmentMonitoring struct {
+	Live     MonitoringLive                `json:"live"`
+	History  []MonitoringBucket            `json:"history"`
 	Services Page[MonitoringServiceHealth] `json:"services"`
 }
 
@@ -145,8 +147,7 @@ type BackingMonitoring struct {
 	Consumers Page[MonitoringScope] `json:"consumers"`
 }
 
-// Exactly the payload named by Scope.Kind is populated. Environment monitoring
-// is health-only; it never substitutes stored telemetry for live observations.
+// Exactly the payload named by Scope.Kind is populated.
 type MonitoringResponse struct {
 	Scope         MonitoringScope        `json:"scope"`
 	Window        MonitoringWindow       `json:"window"`

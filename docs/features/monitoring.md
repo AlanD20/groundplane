@@ -1,9 +1,8 @@
 # Monitoring
 
-Resource monitoring is integrated in source; live qualification is in progress. The
-released 0.0.1 does not yet include the new resource charts. Existing Environment
-health and Service/Backing monitoring destinations use real runtime observations;
-they do not substitute demonstration values for unavailable measurements.
+Groundplane shows runtime health and resource usage for each scope. Readings
+include their sample time and coverage so you can see how much of the selected
+scope is reporting.
 
 ## Choose a scope
 
@@ -16,7 +15,7 @@ open that Service's charts.
 | Host | Whole-host utilization, including non-GP processes; interface and block-device details. |
 | Tenant | Owned workload totals and Projects. |
 | Project | Owned workload totals and Environments. |
-| Environment | Health of every Service, replica readiness, restarts and observation freshness. |
+| Environment | Workload totals, Service health, replica readiness, restarts and observation freshness. |
 | Service | Its resource history, limits, containers and persistent storage. |
 | Backing Service | Instance-wide readings and consumer connections. |
 
@@ -60,7 +59,9 @@ Deploy Task proves current health.
 Select **Fullscreen** to expand the chart inside the Console tab while keeping
 the time range, metric and live refresh controls available. Press Escape to exit.
 
-Hover a point to inspect its exact UTC interval, units, average, minimum, maximum,
+Charts default to UTC. Use the time zone control to display times in your browser's
+local zone. Groundplane remembers this choice in the browser. Hover a point to
+inspect its exact interval, units, average, minimum, maximum,
 sample counts and available contributor coverage. The line represents averages;
 the band represents recorded extrema. Missing buckets are gaps rather than zero.
 A parent total's extrema come from aligned total measurements, not the sum of
@@ -77,6 +78,9 @@ One shared collector supplies all viewers. Host and workload live reads normally
 run every five seconds. History keeps the latest accepted reading in each closed
 15-second bucket. Storage is collected once per UTC minute; startup outside its
 collection slot can leave storage unavailable until the next minute.
+
+Environment totals begin recording when the feature is installed. Existing Host,
+Tenant, Project and Service history stays available across the update.
 
 History retains 15-second samples for two hours, one-minute buckets for 24 hours,
 and five-minute buckets for seven days. Queries select 1h, 6h, 24h or 7d and return

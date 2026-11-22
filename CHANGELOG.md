@@ -10,6 +10,11 @@ that every deployment or failure scenario has been qualified.
   contains no samples.
 - Expand monitoring charts within the Console using the same fullscreen
   behavior as Zones & topology.
+- Show Environment workload totals alongside Service health, with live and
+  historical CPU, memory, network, disk and storage. Keep chart readings
+  attached to the plot and choose UTC or browser local time.
+- Show the Backing Service lifecycle action that changes its current intent.
+  Queue a later Start or Stop from Runtime & image.
 - Dismiss Task notification popups automatically after five seconds. Keep
   their entries in a compact drawer with direct links to Task Inspect.
 - Keep Service health steady during overlapping observations. Refresh Task

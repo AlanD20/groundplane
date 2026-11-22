@@ -18,17 +18,17 @@ const serviceSelect = `SELECT bucket_unix, tenant_id, project_id, environment_id
 	CAST(volume_sum AS REAL), volume_count, volume_min, volume_max
 	FROM monitoring_service_samples`
 
-func scopeSelect() string {
+func scopeSelect(table scopeTable) string {
 	columns := make([]string, 0, len(scopeMetricColumns)*6)
 	for _, metric := range scopeMetricColumns {
 		for _, suffix := range []string{"sum", "count", "min", "max", "contributor_valid", "contributor_expected"} {
 			columns = append(columns, metric+"_"+suffix)
 		}
 	}
-	return `SELECT bucket_unix, tenant_id, project_id,
+	return `SELECT bucket_unix, ` + table.ownerColumns() + `,
 		sampled_count, eligible_count, cpu_limited_count, memory_limited_count,
 		volume_sampled_count, volume_eligible_count, ` + strings.Join(columns, ",") +
-		` FROM monitoring_scope_samples `
+		` FROM ` + table.name
 }
 
 const hostSelect = `SELECT bucket_unix, host_id, sampled_count, eligible_count,

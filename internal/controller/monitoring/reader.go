@@ -138,7 +138,7 @@ func (reader *Reader) Show(ctx context.Context, query Query) (api.MonitoringResp
 		err = reader.aggregate(bounded, query, window, &response)
 		return response, err
 	case "environment":
-		err = reader.environment(bounded, query, &response)
+		err = reader.environment(bounded, query, window, &response)
 		return response, err
 	case "service", "backing":
 		err = reader.service(bounded, query, window, &response)

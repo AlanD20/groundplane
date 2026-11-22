@@ -8,6 +8,7 @@ import (
 
 	metrics "github.com/AlanD20/groundplane/internal/common/monitoring"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
+	"github.com/AlanD20/groundplane/internal/infra/monitoringstore"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -76,17 +77,27 @@ func TestMonitoringAggregateRejectsIncompleteInventoryAndForeignOwners(t *testin
 		makeSample("", "backing", "database", metrics.OwnerBacking, 9000),
 		makeSample("another-tenant", "unrelated", "three", metrics.OwnerWorkload, 8000),
 	}}
-	all := aggregateLive(snapshot, "tenant", "", at)
-	project := aggregateLive(snapshot, "tenant", "project", at)
-	if all.Values.MemoryWorkingSetBytes == nil || *all.Values.MemoryWorkingSetBytes.Average != 300 ||
-		all.Coverage.EligibleResources != 2 {
+	otherEnvironment := makeSample("tenant", "project", "four", metrics.OwnerWorkload, 50)
+	otherEnvironment.Ownership.EnvironmentID = "another-env"
+	snapshot.Services = append(snapshot.Services, otherEnvironment)
+	scope := monitoringstore.AggregateScope{TenantID: "tenant", ProjectID: "project"}
+	all := aggregateLive(snapshot, monitoringstore.AggregateScope{TenantID: "tenant"}, at)
+	project := aggregateLive(snapshot, scope, at)
+	scope.EnvironmentID = "env"
+	environment := aggregateLive(snapshot, scope, at)
+	if all.Values.MemoryWorkingSetBytes == nil || *all.Values.MemoryWorkingSetBytes.Average != 350 ||
+		all.Coverage.EligibleResources != 3 {
 		t.Fatalf("Tenant total charged wrong ownership: %#v", all)
 	}
-	if project.Values.MemoryWorkingSetBytes == nil || *project.Values.MemoryWorkingSetBytes.Average != 100 {
+	if project.Values.MemoryWorkingSetBytes == nil || *project.Values.MemoryWorkingSetBytes.Average != 150 {
 		t.Fatalf("Project total = %#v", project)
 	}
+	if environment.Values.MemoryWorkingSetBytes == nil || *environment.Values.MemoryWorkingSetBytes.Average != 100 ||
+		environment.Coverage.EligibleResources != 1 {
+		t.Fatalf("Environment total charged the sibling Environment: %#v", environment)
+	}
 	snapshot.Complete = false
-	if partial := aggregateLive(snapshot, "tenant", "", at); partial.Status != "unavailable" ||
+	if partial := aggregateLive(snapshot, scope, at); partial.Status != "unavailable" ||
 		partial.Values.MemoryWorkingSetBytes != nil {
 		t.Fatalf("partial inventory claimed a total: %#v", partial)
 	}

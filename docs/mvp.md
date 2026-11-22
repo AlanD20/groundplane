@@ -101,9 +101,10 @@ operation success. Loading, failures and unavailable observations stay visible.
 
 Monitoring is read-only and scoped to the Host, Tenant, Project, Environment,
 Service or Backing instance. Host utilization includes infrastructure outside GP.
-Tenant and Project totals include their owned workloads; shared Backing usage
-remains Platform-owned. Environment monitoring shows Service health; detailed
-resource history belongs to each Service or Backing instance.
+Tenant, Project and Environment totals include their owned workloads. Shared
+Backing usage remains Platform-owned. Environment monitoring shows those totals
+alongside Service health. Individual Service and Backing views show container
+and persistent storage details.
 
 Metric history is derived data outside etcd. Missing, stale or unsupported
 readings remain distinguishable from zero, and monitoring failures cannot become

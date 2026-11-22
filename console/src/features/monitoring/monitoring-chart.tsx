@@ -43,6 +43,7 @@ export type MonitoringChartProps = {
   readonly scopedLabel: string;
   readonly height?: CSSProperties["height"];
   readonly className?: string;
+  readonly timeZone?: string;
 };
 
 type Interaction = {
@@ -58,15 +59,15 @@ type PendingPointer = {
   readonly width: number;
 };
 
-const viewBoxWidth = 800;
 const viewBoxHeight = 248;
+const plotWidth = chartPlot.right - chartPlot.left;
+const valueTickCount = 4;
 
 const valueFormatter = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 2,
 });
 
-const timestampFormatter = new Intl.DateTimeFormat(undefined, {
-  timeZone: "UTC",
+const timestampFormat = {
   day: "2-digit",
   month: "short",
   year: "numeric",
@@ -74,16 +75,59 @@ const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   minute: "2-digit",
   second: "2-digit",
   hourCycle: "h23",
-});
+  timeZoneName: "shortOffset",
+} satisfies Intl.DateTimeFormatOptions;
 
-const axisTimestampFormatter = new Intl.DateTimeFormat(undefined, {
-  timeZone: "UTC",
+const axisDateFormat = {
   day: "2-digit",
   month: "short",
+} satisfies Intl.DateTimeFormatOptions;
+
+const axisTimeFormat = {
   hour: "2-digit",
   minute: "2-digit",
   hourCycle: "h23",
-});
+} satisfies Intl.DateTimeFormatOptions;
+
+function chartTimeTicks(window: MonitoringChartWindow, timeZone: string) {
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const span = window.to - window.from;
+  if (!(span > 0)) return [];
+  const step =
+    span <= hour
+      ? 15 * minute
+      : span <= 6 * hour
+        ? hour
+        : span <= 24 * hour
+          ? 4 * hour
+          : 24 * hour;
+  const formatter = new Intl.DateTimeFormat(undefined, {
+    ...(span <= 24 * hour ? axisTimeFormat : axisDateFormat),
+    timeZone,
+  });
+  const ticks = [];
+  for (
+    let time = Math.ceil(window.from / step) * step;
+    time <= window.to;
+    time += step
+  ) {
+    ticks.push({
+      time,
+      label: formatter.format(time),
+      fraction: (time - window.from) / span,
+    });
+  }
+  return ticks;
+}
+
+function readableMaximum(maximum: number) {
+  const interval = maximum / valueTickCount;
+  const order = 10 ** Math.floor(Math.log10(interval));
+  const step =
+    [1, 2, 2.5, 5, 10].find((value) => value * order >= interval) ?? 10;
+  return step * order * valueTickCount;
+}
 
 function pointCenter(point: MonitoringChartBucketPoint): number {
   return point.from + (point.to - point.from) / 2;
@@ -127,94 +171,105 @@ function pointForTime(
   return time >= point.from && time < point.to ? point : null;
 }
 
-function MonitoringTooltip({
+function MonitoringBucketDetails({
   id,
   series,
-  selected,
+  bucket,
+  label,
   pinned,
+  timeZone,
 }: {
   readonly id: string;
   readonly series: readonly MonitoringChartSeries[];
-  readonly selected: MonitoringChartBucketPoint;
+  readonly bucket: MonitoringChartBucketPoint;
+  readonly label: string;
   readonly pinned: boolean;
+  readonly timeZone: string;
 }) {
-  const time = pointCenter(selected);
+  const time = pointCenter(bucket);
   return (
-    <div
-      id={id}
-      role="tooltip"
-      className="ml-auto max-h-[min(28rem,calc(100dvh-2rem))] w-full max-w-[26rem] overflow-y-auto rounded-lg border border-border bg-popover p-3 text-popover-foreground"
-    >
-      <div className="flex items-start justify-between gap-3 border-b border-border pb-2">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-primary">
-            {pinned ? "Pinned bucket" : "Selected bucket"}
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {timestampFormatter.format(selected.from)} –{" "}
-            {timestampFormatter.format(selected.to)} UTC
-          </p>
-        </div>
-        <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+    <div id={id} className="min-w-0 border-t border-border bg-card px-3 py-2">
+      <div className="flex min-w-0 items-center gap-2 text-xs">
+        <span className="shrink-0 font-semibold text-primary">{label}</span>
+        <time
+          className="min-w-0 truncate text-muted-foreground"
+          dateTime={new Date(bucket.from).toISOString()}
+        >
+          {new Intl.DateTimeFormat(undefined, {
+            ...timestampFormat,
+            timeZone,
+          }).formatRange(bucket.from, bucket.to)}
+        </time>
+        <span className="ml-auto hidden shrink-0 text-muted-foreground sm:inline">
           {pinned ? "Enter to unpin" : "Enter to pin"}
         </span>
       </div>
-      <div className="divide-y divide-border">
-        {series.map((item) => {
-          const point = pointForTime(item, time);
-          return (
-            <section key={item.id} className="space-y-2 py-3">
-              <div className="flex items-center gap-2 text-xs font-semibold">
-                <span
-                  aria-hidden="true"
-                  className="size-2 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
-                {item.label}
-              </div>
-              {point?.average === null || !point ? (
-                <p className="text-xs text-muted-foreground">
-                  No samples in this interval.
-                </p>
-              ) : (
-                <dl className="grid grid-cols-3 gap-2 text-xs">
-                  {[
-                    ["Average", point?.average ?? null],
-                    ["Minimum", point?.minimum ?? null],
-                    ["Maximum", point?.maximum ?? null],
-                  ].map(([label, value]) => (
-                    <div key={String(label)} className="min-w-0">
-                      <dt className="text-muted-foreground">{label}</dt>
-                      <dd className="mt-0.5 truncate font-mono text-xs tabular-nums">
-                        {formatValue(value as number | null, item.unit)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+      <div className="mt-1 overflow-x-auto">
+        <table className="w-full min-w-[31rem] text-left text-xs tabular-nums">
+          <thead className="text-muted-foreground">
+            <tr>
+              <th scope="col" className="py-1 font-medium">
+                Series
+              </th>
+              {["Average", "Min", "Max", "Samples", "Contributors"].map(
+                (name) => (
+                  <th scope="col" key={name} className="px-1 py-1 font-medium">
+                    {name}
+                  </th>
+                ),
               )}
-              <dl className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-                <div className="flex justify-between gap-3">
-                  <dt>Samples</dt>
-                  <dd className="font-mono tabular-nums text-foreground">
+            </tr>
+          </thead>
+          <tbody>
+            {series.map((item) => {
+              const point = pointForTime(item, time);
+              return (
+                <tr key={item.id} className="border-t border-border">
+                  <th scope="row" className="py-1 font-medium">
+                    <span className="flex items-center gap-1.5 whitespace-nowrap">
+                      <span
+                        aria-hidden="true"
+                        className="size-2 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      {item.label}
+                    </span>
+                  </th>
+                  {point?.average != null ? (
+                    <>
+                      {[point.average, point.minimum, point.maximum].map(
+                        (value, index) => (
+                          <td
+                            key={index}
+                            className="whitespace-nowrap px-1 py-1"
+                          >
+                            {formatValue(value, item.unit)}
+                          </td>
+                        ),
+                      )}
+                    </>
+                  ) : (
+                    <td colSpan={3} className="px-1 py-1 text-muted-foreground">
+                      No samples in this interval
+                    </td>
+                  )}
+                  <td className="whitespace-nowrap px-1 py-1">
                     {formatCoverage(
                       point?.validSamples ?? 0,
                       point?.expectedSamples ?? 0,
                     )}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt>Contributions</dt>
-                  <dd className="font-mono tabular-nums text-foreground">
+                  </td>
+                  <td className="whitespace-nowrap px-1 py-1">
                     {formatCoverage(
                       point?.validContributions ?? 0,
                       point?.expectedContributions ?? 0,
                     )}
-                  </dd>
-                </div>
-              </dl>
-            </section>
-          );
-        })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -228,11 +283,13 @@ export function MonitoringChart({
   scopedLabel,
   height = 304,
   className,
+  timeZone = "UTC",
 }: MonitoringChartProps) {
-  const tooltipId = `${useId().replaceAll(":", "")}-monitoring-tooltip`;
+  const detailsId = `${useId().replaceAll(":", "")}-monitoring-bucket`;
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const frame = useRef<number | null>(null);
   const pendingPointer = useRef<PendingPointer | null>(null);
+  const plot = useRef<SVGSVGElement>(null);
   const identity = selectionIdentity(scopeKey, scopedLabel, rangeLabel, series);
 
   useEffect(() => {
@@ -249,23 +306,52 @@ export function MonitoringChart({
   const displayedSeries = interaction?.series ?? series;
   const displayedWindow = interaction?.window ?? window;
   const reference = displayedSeries.find((item) => item.points.length > 0);
-  const maximum = useMemo(
-    () => chartDomainMaximum(displayedSeries),
-    [displayedSeries],
+  const scale = useMemo(() => {
+    const maximum = chartDomainMaximum(displayedSeries);
+    const unit = displayedSeries[0]?.unit;
+    const useGiB =
+      maximum >= 1024 && displayedSeries.every((item) => item.unit === "MiB");
+    const factor = useGiB ? 1024 : 1;
+    const top = readableMaximum(maximum / factor);
+    return {
+      unit: useGiB ? "GiB" : unit,
+      maximum: top * factor,
+      labels: Array.from(
+        { length: valueTickCount + 1 },
+        (_, index) => top * (1 - index / valueTickCount),
+      ),
+    };
+  }, [displayedSeries]);
+  const valueTicks = scale.labels.map((value, index) => ({
+    value,
+    y:
+      chartPlot.top +
+      (index / valueTickCount) * (chartPlot.bottom - chartPlot.top),
+  }));
+  const timeTicks = useMemo(
+    () => chartTimeTicks(displayedWindow, timeZone),
+    [displayedWindow, timeZone],
   );
   const geometry = useMemo(
     () =>
       displayedSeries.map((item, index) => ({
         item,
         dash: seriesDash(index),
-        average: averagePath(item.points, displayedWindow, maximum),
-        band: rangeBandPath(item.points, displayedWindow, maximum),
+        average: averagePath(item.points, displayedWindow, scale.maximum),
+        band: rangeBandPath(item.points, displayedWindow, scale.maximum),
       })),
-    [displayedSeries, displayedWindow, maximum],
+    [displayedSeries, displayedWindow, scale.maximum],
   );
-  const hasValues = displayedSeries.some((item) =>
-    item.points.some((point) => point.average !== null),
-  );
+  const latestBucket = useMemo(() => {
+    let latest: MonitoringChartBucketPoint | null = null;
+    for (const item of displayedSeries) {
+      for (const point of item.points) {
+        if (point.average !== null && (!latest || point.from > latest.from))
+          latest = point;
+      }
+    }
+    return latest;
+  }, [displayedSeries]);
   const selected =
     reference && interaction
       ? (reference.points[interaction.index] ?? null)
@@ -285,14 +371,7 @@ export function MonitoringChart({
         (item) => item.points.length > 0,
       );
       if (!activeReference || width <= 0) return;
-      const svgX = ((clientX - left) / width) * viewBoxWidth;
-      const plotFraction = Math.min(
-        1,
-        Math.max(
-          0,
-          (svgX - chartPlot.left) / (chartPlot.right - chartPlot.left),
-        ),
-      );
+      const plotFraction = Math.min(1, Math.max(0, (clientX - left) / width));
       const activeWindow = interaction?.window ?? window;
       const time =
         activeWindow.from +
@@ -311,7 +390,9 @@ export function MonitoringChart({
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (interaction?.pinned || event.pointerType === "touch") return;
-    const bounds = event.currentTarget.getBoundingClientRect();
+    const bounds = plot.current?.getBoundingClientRect();
+    if (!bounds || event.clientX < bounds.left || event.clientX > bounds.right)
+      return;
     pendingPointer.current = {
       clientX: event.clientX,
       left: bounds.left,
@@ -331,7 +412,9 @@ export function MonitoringChart({
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
     pendingPointer.current = null;
-    const bounds = event.currentTarget.getBoundingClientRect();
+    const bounds = plot.current?.getBoundingClientRect();
+    if (!bounds || event.clientX < bounds.left || event.clientX > bounds.right)
+      return;
     selectAtClientX(
       event.clientX,
       bounds.left,
@@ -341,7 +424,7 @@ export function MonitoringChart({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!reference) return;
+    if (!reference || !latestBucket) return;
     if (event.key === "Escape") {
       dismiss();
       return;
@@ -349,7 +432,9 @@ export function MonitoringChart({
     if (event.key === "Enter") {
       event.preventDefault();
       const index =
-        interaction?.index ?? Math.floor(reference.points.length / 2);
+        interaction?.index ??
+        bucketIndexAtTime(reference.points, pointCenter(latestBucket));
+      if (index === null) return;
       setInteraction({
         index,
         pinned: !interaction?.pinned,
@@ -361,7 +446,9 @@ export function MonitoringChart({
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     const current =
-      interaction?.index ?? Math.floor(reference.points.length / 2);
+      interaction?.index ??
+      bucketIndexAtTime(reference.points, pointCenter(latestBucket));
+    if (current === null) return;
     const direction = event.key === "ArrowRight" ? 1 : -1;
     setInteraction({
       index: Math.min(
@@ -374,7 +461,7 @@ export function MonitoringChart({
     });
   };
 
-  if (!reference || !hasValues) {
+  if (!reference || !latestBucket) {
     return (
       <div
         role="status"
@@ -396,22 +483,24 @@ export function MonitoringChart({
 
   return (
     <div
-      className="grid min-w-0 gap-2"
+      className={cn(
+        "min-w-0 overflow-hidden rounded-lg border border-border bg-surface/30",
+        className,
+      )}
       onPointerLeave={() => {
         if (!interaction?.pinned) dismiss();
       }}
     >
       <div
         className={cn(
-          "relative min-w-0 overflow-visible rounded-lg border border-border bg-surface/30",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          className,
+          "relative min-w-0 overflow-hidden",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         )}
         style={rootStyle}
         role="group"
         tabIndex={0}
         aria-label={`${scopedLabel} ${rangeLabel} monitoring chart. Use the arrow keys to inspect buckets, Enter to pin, and Escape to dismiss.`}
-        aria-describedby={selected ? tooltipId : undefined}
+        aria-describedby={detailsId}
         onKeyDown={handleKeyDown}
         onPointerMove={handlePointerMove}
         onClick={handleClick}
@@ -439,124 +528,132 @@ export function MonitoringChart({
             ))}
           </div>
           <span className="text-muted-foreground">
-            {rangeLabel} · line average · band min–max
+            {timeZone} · Line average · Band min–max
           </span>
         </div>
-        <svg
-          className="size-full"
-          viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
-          preserveAspectRatio="none"
+        <div
           aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 w-12 text-right text-xs tabular-nums text-muted-foreground"
         >
-          {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
-            const y =
-              chartPlot.top + fraction * (chartPlot.bottom - chartPlot.top);
-            const value = maximum * (1 - fraction);
-            return (
-              <g key={fraction}>
-                <line
-                  x1={chartPlot.left}
-                  x2={chartPlot.right}
-                  y1={y}
-                  y2={y}
-                  stroke="var(--border)"
-                  strokeDasharray="3 5"
-                  vectorEffect="non-scaling-stroke"
-                />
-                <text
-                  x={chartPlot.left - 8}
-                  y={y + 4}
-                  textAnchor="end"
-                  fill="var(--muted-foreground)"
-                  fontSize="11"
-                >
-                  {valueFormatter.format(value)}
-                </text>
-              </g>
-            );
-          })}
-          {geometry.map(({ item, dash, band, average }) => (
-            <g key={item.id}>
-              {band && <path d={band} fill={item.color} opacity={0.1} />}
-              {average && (
-                <path
-                  d={average}
-                  fill="none"
-                  stroke={item.color}
-                  strokeWidth={2}
-                  strokeDasharray={dash}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-              )}
-            </g>
+          <span className="absolute right-0 top-[10%]">{scale.unit}</span>
+          {valueTicks.map(({ value, y }) => (
+            <span
+              className="absolute right-0 -translate-y-1/2"
+              style={{ top: `${(y / viewBoxHeight) * 100}%` }}
+              key={y}
+            >
+              {valueFormatter.format(value)}
+            </span>
           ))}
-          {selectedX !== null && (
-            <g>
+        </div>
+        <div className="absolute inset-y-0 left-14 right-5">
+          <svg
+            ref={plot}
+            className="size-full"
+            viewBox={`${chartPlot.left} 0 ${plotWidth} ${viewBoxHeight}`}
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            {valueTicks.map(({ y }) => (
               <line
-                x1={selectedX}
-                x2={selectedX}
-                y1={chartPlot.top}
-                y2={chartPlot.bottom}
-                stroke="var(--foreground)"
-                strokeDasharray="3 4"
-                opacity={0.55}
+                key={y}
+                x1={chartPlot.left}
+                x2={chartPlot.right}
+                y1={y}
+                y2={y}
+                stroke="var(--border)"
+                strokeDasharray="3 5"
                 vectorEffect="non-scaling-stroke"
               />
-              {displayedSeries.map((item) => {
-                const point = selected
-                  ? pointForTime(item, pointCenter(selected))
-                  : null;
-                if (point?.average === null || point?.average === undefined)
-                  return null;
-                return (
-                  <circle
-                    key={item.id}
-                    cx={selectedX}
-                    cy={chartY(point.average, maximum)}
-                    r={4}
-                    fill={item.color}
-                    stroke="var(--card)"
+            ))}
+            {geometry.map(({ item, dash, band, average }) => (
+              <g key={item.id}>
+                {band && <path d={band} fill={item.color} opacity={0.1} />}
+                {average && (
+                  <path
+                    d={average}
+                    fill="none"
+                    stroke={item.color}
                     strokeWidth={2}
+                    strokeDasharray={dash}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
                   />
-                );
-              })}
-            </g>
-          )}
-          {[
-            displayedWindow.from,
-            (displayedWindow.from + displayedWindow.to) / 2,
-            displayedWindow.to,
-          ].map((time, index) => (
-            <text
-              key={time}
-              x={chartX(time, displayedWindow)}
-              y={viewBoxHeight - 8}
-              textAnchor={
-                index === 0 ? "start" : index === 2 ? "end" : "middle"
-              }
-              fill="var(--muted-foreground)"
-              fontSize="11"
-            >
-              {axisTimestampFormatter.format(time)}
-            </text>
-          ))}
-        </svg>
+                )}
+              </g>
+            ))}
+            {selectedX !== null && (
+              <g>
+                <line
+                  x1={selectedX}
+                  x2={selectedX}
+                  y1={chartPlot.top}
+                  y2={chartPlot.bottom}
+                  stroke="var(--foreground)"
+                  strokeDasharray="3 4"
+                  opacity={0.55}
+                  vectorEffect="non-scaling-stroke"
+                />
+                {displayedSeries.map((item) => {
+                  const point = selected
+                    ? pointForTime(item, pointCenter(selected))
+                    : null;
+                  if (point?.average === null || point?.average === undefined)
+                    return null;
+                  return (
+                    <circle
+                      key={item.id}
+                      cx={selectedX}
+                      cy={chartY(point.average, scale.maximum)}
+                      r={4}
+                      fill={item.color}
+                      stroke="var(--card)"
+                      strokeWidth={2}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  );
+                })}
+              </g>
+            )}
+          </svg>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-[89%] whitespace-nowrap text-xs tabular-nums text-muted-foreground"
+          >
+            {timeTicks.map(({ time, label, fraction }, index) => (
+              <span
+                key={time}
+                className={cn("absolute", index % 2 === 1 && "max-sm:hidden")}
+                style={{
+                  left: `${fraction * 100}%`,
+                  transform: `translateX(${fraction < 0.07 ? 0 : fraction > 0.93 ? -100 : -50}%)`,
+                }}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
         <p className="sr-only">
           Lines show bucket averages. Shaded bands show recorded minimum and
           maximum values. Missing buckets are gaps, not zero values.
         </p>
       </div>
-      {selected && interaction && (
-        <MonitoringTooltip
-          id={tooltipId}
-          series={displayedSeries}
-          selected={selected}
-          pinned={interaction.pinned}
-        />
-      )}
+      <MonitoringBucketDetails
+        id={detailsId}
+        series={displayedSeries}
+        bucket={selected ?? latestBucket}
+        label={
+          interaction?.pinned
+            ? "Pinned bucket"
+            : selected
+              ? "Selected bucket"
+              : "Latest bucket"
+        }
+        pinned={interaction?.pinned ?? false}
+        timeZone={timeZone}
+      />
     </div>
   );
 }

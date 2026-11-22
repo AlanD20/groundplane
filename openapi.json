@@ -4440,11 +4440,25 @@
       "EnvironmentMonitoring": {
         "additionalProperties": false,
         "properties": {
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringBucket"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "live": {
+            "$ref": "#/components/schemas/MonitoringLive"
+          },
           "services": {
             "$ref": "#/components/schemas/PageMonitoringServiceHealth"
           }
         },
         "required": [
+          "live",
+          "history",
           "services"
         ],
         "type": "object"

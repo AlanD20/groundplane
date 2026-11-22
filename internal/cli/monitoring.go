@@ -94,6 +94,8 @@ func monitoringFields(response apiTypes.MonitoringResponse) map[string]any {
 		monitoringAggregateFields(fields, response.Project)
 	case "environment":
 		if response.Environment != nil {
+			monitoringLiveFields(fields, response.Environment.Live)
+			fields["history_points"] = len(response.Environment.History)
 			fields["services"] = len(response.Environment.Services.Items)
 			fields["next_cursor"] = response.Environment.Services.NextCursor
 		}

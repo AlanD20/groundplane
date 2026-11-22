@@ -18,8 +18,16 @@ const (
 )
 
 type AggregateScope struct {
-	TenantID  string
-	ProjectID string
+	TenantID      string
+	ProjectID     string
+	EnvironmentID string
+}
+
+func (scope AggregateScope) storage() (scopeTable, string, string) {
+	if scope.EnvironmentID != "" {
+		return environmentScopeTable, scope.ProjectID, scope.EnvironmentID
+	}
+	return hierarchyScopeTable, scope.TenantID, scope.ProjectID
 }
 
 type Usage struct {
@@ -120,23 +128,24 @@ func (store *Store) ReadWorkloadAggregate(
 	if err := store.validateQuery(ctx, start, end, resolution); err != nil {
 		return nil, err
 	}
-	if scope.TenantID == "" {
-		return nil, errs.New(errs.KindValidationFailed, "monitoring aggregate Tenant identity is required")
+	if scope.TenantID == "" || scope.EnvironmentID != "" && scope.ProjectID == "" {
+		return nil, errs.New(errs.KindValidationFailed, "monitoring aggregate owner identity is required")
 	}
-	rows, err := store.database.QueryContext(ctx, scopeSelect()+`
-		WHERE tier_seconds = ? AND tenant_id = ? AND project_id = ?
+	table, parent, child := scope.storage()
+	rows, err := store.database.QueryContext(ctx, scopeSelect(table)+`
+		WHERE tier_seconds = ? AND `+table.parentColumn+` = ? AND `+table.childColumn+` = ?
 		AND bucket_unix >= ? AND bucket_unix < ? ORDER BY bucket_unix LIMIT ?`,
-		int64(resolution/time.Second), scope.TenantID, scope.ProjectID,
+		int64(resolution/time.Second), parent, child,
 		start.Unix(), end.Unix(), maximumStoredPoints+1)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindStorageUnavailable, err)
 	}
-	return scanScopeAggregates(rows, scope, maximumStoredPoints, resolution)
+	return scanScopeAggregates(rows, parent, child, maximumStoredPoints, resolution)
 }
 
 func scanScopeAggregates(
 	rows *sql.Rows,
-	scope AggregateScope,
+	parent, child string,
 	maximum int,
 	resolution time.Duration,
 ) ([]monitoring.AggregatePoint, error) {
@@ -147,10 +156,10 @@ func scanScopeAggregates(
 			return nil, errs.New(errs.KindResourceInUse, "monitoring aggregate query point limit exceeded")
 		}
 		var bucket, eligible, sampled, cpuLimited, memoryLimited, volumeSampled, volumeEligible int64
-		var tenantID, projectID string
+		var parentID, childID string
 		values := make([]metricValue, 12)
 		destinations := []any{
-			&bucket, &tenantID, &projectID, &sampled, &eligible, &cpuLimited, &memoryLimited,
+			&bucket, &parentID, &childID, &sampled, &eligible, &cpuLimited, &memoryLimited,
 			&volumeSampled, &volumeEligible,
 		}
 		for index := range values {
@@ -174,7 +183,7 @@ func scanScopeAggregates(
 			cpuLimited > eligible ||
 			memoryLimited < 0 ||
 			memoryLimited > eligible || volumeEligible < 0 || volumeSampled < 0 ||
-			volumeSampled > volumeEligible || tenantID != scope.TenantID || projectID != scope.ProjectID {
+			volumeSampled > volumeEligible || parentID != parent || childID != child {
 			if err != nil {
 				return nil, err
 			}

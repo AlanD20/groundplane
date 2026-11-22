@@ -3892,6 +3892,8 @@ type EnvironmentEdit struct {
 
 // EnvironmentMonitoring defines model for EnvironmentMonitoring.
 type EnvironmentMonitoring struct {
+	History  *[]MonitoringBucket         `json:"history"`
+	Live     MonitoringLive              `json:"live"`
 	Services PageMonitoringServiceHealth `json:"services"`
 }
 

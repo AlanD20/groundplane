@@ -127,7 +127,7 @@ func (store *Store) AppendBatch(ctx context.Context, measurements []monitoring.S
 	}
 	at := measurements[0].Point.At
 	services := make(map[string]struct{}, len(measurements))
-	groups := make(map[scopeKey][]monitoring.ServiceMeasurement)
+	groups := make(map[AggregateScope][]monitoring.ServiceMeasurement)
 	for _, measurement := range measurements {
 		if err := monitoring.ValidateMeasurement(measurement); err != nil {
 			return err
@@ -142,10 +142,15 @@ func (store *Store) AppendBatch(ctx context.Context, measurements []monitoring.S
 		if measurement.Ownership.Class != monitoring.OwnerWorkload {
 			continue
 		}
-		tenant := scopeKey{tenantID: measurement.Ownership.TenantID}
-		project := scopeKey{tenantID: measurement.Ownership.TenantID, projectID: measurement.Ownership.ProjectID}
+		owner := measurement.Ownership
+		tenant := AggregateScope{TenantID: owner.TenantID}
+		project := AggregateScope{TenantID: owner.TenantID, ProjectID: owner.ProjectID}
+		environment := AggregateScope{
+			TenantID: owner.TenantID, ProjectID: owner.ProjectID, EnvironmentID: owner.EnvironmentID,
+		}
 		groups[tenant] = append(groups[tenant], measurement)
 		groups[project] = append(groups[project], measurement)
+		groups[environment] = append(groups[environment], measurement)
 	}
 	tx, err := store.database.BeginTx(ctx, nil)
 	if err != nil {
@@ -318,6 +323,17 @@ func (store *Store) configure(ctx context.Context, cacheBytes int64) error {
 			return err
 		}
 	}
+	// Environment rollups are additive. A predecessor can continue to read the
+	// existing tables, and upgrading an existing database keeps its history.
+	for _, statement := range []string{
+		scopeSchema(environmentScopeTable),
+		`CREATE INDEX IF NOT EXISTS monitoring_environment_time ON monitoring_environment_samples
+			(tier_seconds, project_id, environment_id, bucket_unix)`,
+	} {
+		if _, err := store.database.ExecContext(ctx, statement); err != nil {
+			return errs.Wrap(errs.KindStorageUnavailable, err)
+		}
+	}
 	var pageSize, maximumPages, currentPages int64
 	if err := store.database.QueryRowContext(ctx, `PRAGMA page_size`).Scan(&pageSize); err != nil {
 		return errs.Wrap(errs.KindStorageUnavailable, err)
@@ -359,7 +375,7 @@ func (store *Store) createSchema(ctx context.Context) error {
 		serviceSchema,
 		volumeSchema,
 		hostSchema,
-		scopeSchema(),
+		scopeSchema(hierarchyScopeTable),
 		`CREATE INDEX monitoring_service_scope ON monitoring_service_samples
 			(tier_seconds, tenant_id, project_id, bucket_unix, owner_class)`,
 		`CREATE INDEX monitoring_volume_scope ON monitoring_volume_samples

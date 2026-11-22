@@ -189,6 +189,73 @@ func TestStoreWorkloadAggregateDeduplicatesVolumeAndExcludesBacking(t *testing.T
 	}
 }
 
+func TestEnvironmentRollupIsolatedFromSiblingAndBacking(t *testing.T) {
+	ctx := t.Context()
+	path := filepath.Join(t.TempDir(), "monitoring.sqlite")
+	store := openTestStore(t, path, 0)
+	at := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	prior := at.Add(-monitoring.SampleInterval)
+	previousCPU := 5.0
+	if err := store.AppendBatch(ctx, []monitoring.ServiceMeasurement{
+		testMeasurement("previous-workload", monitoring.OwnerWorkload, prior, &previousCPU, "", nil),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A previously installed store has the existing scope tables and version,
+	// with no Environment rollup table.
+	if _, err := store.database.ExecContext(ctx, `DROP TABLE monitoring_environment_samples`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store = openTestStore(t, path, 0)
+	defer store.Close()
+	project := AggregateScope{TenantID: "tenant-a", ProjectID: "project-a"}
+	preserved, err := store.ReadWorkloadAggregate(ctx, project, prior, at, monitoring.SampleInterval)
+	if err != nil || len(preserved) != 1 || preserved[0].Point.CPUCores == nil ||
+		*preserved[0].Point.CPUCores != previousCPU {
+		t.Fatalf("existing Project samples changed: samples=%v error=%v", preserved, err)
+	}
+	shared, backingStorage := uint64(100), uint64(10_000)
+	siblingCPU, backingCPU := 90.0, 100.0
+	for index, cpu := range [][2]float64{{9, 1}, {2, 7}} {
+		sampled := at.Add(time.Duration(index) * monitoring.SampleInterval)
+		sibling := testMeasurement("sibling", monitoring.OwnerWorkload, sampled, &siblingCPU, "", nil)
+		sibling.Ownership.EnvironmentID = "environment-b"
+		if err := store.AppendBatch(ctx, []monitoring.ServiceMeasurement{
+			testMeasurement("service-a", monitoring.OwnerWorkload, sampled, &cpu[0], "shared", &shared),
+			testMeasurement("service-b", monitoring.OwnerWorkload, sampled, &cpu[1], "shared", &shared),
+			sibling,
+			testMeasurement("backing", monitoring.OwnerBacking, sampled, &backingCPU, "backing", &backingStorage),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.Maintain(ctx, at.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	scope := AggregateScope{TenantID: "tenant-a", ProjectID: "project-a", EnvironmentID: "environment-a"}
+	samples, err := store.ReadWorkloadAggregate(ctx, scope, at, at.Add(time.Minute), monitoring.MediumResolution)
+	if err != nil || len(samples) != 1 {
+		t.Fatalf("Environment rollup: samples=%v error=%v", samples, err)
+	}
+	point := samples[0]
+	if cpu := point.Summaries.CPUCores; cpu.Average == nil || cpu.Minimum == nil || cpu.Maximum == nil ||
+		*cpu.Average != 9.5 || *cpu.Minimum != 9 || *cpu.Maximum != 10 || cpu.ContributorValid != 4 {
+		t.Fatalf("Environment CPU must use aligned owned samples: %+v", cpu)
+	}
+	if point.Point.PersistentVolumeUsedBytes == nil || *point.Point.PersistentVolumeUsedBytes != shared ||
+		point.Coverage.VolumeEligible != 2 {
+		t.Fatalf("Environment shared Volume was counted incorrectly: %+v", point)
+	}
+	scope.ProjectID = "other-project"
+	if foreign, err := store.ReadWorkloadAggregate(ctx, scope, at, at.Add(time.Minute), monitoring.MediumResolution); err != nil ||
+		len(foreign) != 0 {
+		t.Fatalf("Environment history escaped its Project: samples=%v error=%v", foreign, err)
+	}
+}
+
 // Rationale: parent extrema must come from synchronized totals. Summing child
 // maxima invents a peak when different Services peak in different samples.
 func TestAppendBatchPersistsSynchronizedParentExtremaAndCoverage(t *testing.T) {

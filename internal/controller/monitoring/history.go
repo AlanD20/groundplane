@@ -97,7 +97,9 @@ func ReadAggregateHistory(
 		return nil, err
 	}
 	if ids.Validate(ids.KindTenant, scope.TenantID) != nil ||
-		scope.ProjectID != "" && ids.Validate(ids.KindProject, scope.ProjectID) != nil {
+		scope.ProjectID != "" && ids.Validate(ids.KindProject, scope.ProjectID) != nil ||
+		scope.EnvironmentID != "" && (scope.ProjectID == "" ||
+			ids.Validate(ids.KindEnvironment, scope.EnvironmentID) != nil) {
 		return nil, errs.New(errs.KindValidationFailed, "monitoring aggregate owner is invalid")
 	}
 	values, err := reader.ReadWorkloadAggregate(

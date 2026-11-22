@@ -69,14 +69,20 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 		if executeErr != nil {
 			return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, executeErr)
 		}
-		scopeResult, executeErr := tx.ExecContext(
-			ctx,
-			scopeRollupSQL(),
-			int64(tier.target/time.Second), int64(tier.target/time.Second),
-			int64(tier.source/time.Second), cutoff, int64(tier.target/time.Second),
-		)
-		if executeErr != nil {
-			return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, executeErr)
+		for _, table := range []scopeTable{hierarchyScopeTable, environmentScopeTable} {
+			scopeResult, executeErr := tx.ExecContext(
+				ctx, scopeRollupSQL(table),
+				int64(tier.target/time.Second), int64(tier.target/time.Second),
+				int64(tier.source/time.Second), cutoff, int64(tier.target/time.Second),
+			)
+			if executeErr != nil {
+				return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, executeErr)
+			}
+			scopeRows, rowsErr := rowsAffected(scopeResult)
+			if rowsErr != nil {
+				return MaintenanceResult{}, rowsErr
+			}
+			result.RolledScopeRows += scopeRows
 		}
 		serviceRows, rowsErr := rowsAffected(serviceResult)
 		if rowsErr != nil {
@@ -90,14 +96,9 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 		if rowsErr != nil {
 			return MaintenanceResult{}, rowsErr
 		}
-		scopeRows, rowsErr := rowsAffected(scopeResult)
-		if rowsErr != nil {
-			return MaintenanceResult{}, rowsErr
-		}
 		result.RolledServiceRows += serviceRows
 		result.RolledVolumeRows += volumeRows
 		result.RolledHostRows += hostRows
-		result.RolledScopeRows += scopeRows
 	}
 	for _, expiry := range []struct {
 		resolution time.Duration
@@ -112,7 +113,8 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 			"monitoring_volume_samples",
 			"monitoring_service_samples",
 			"monitoring_host_samples",
-			"monitoring_scope_samples",
+			hierarchyScopeTable.name,
+			environmentScopeTable.name,
 		} {
 			expired, executeErr := tx.ExecContext(
 				ctx,
@@ -144,7 +146,7 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 	return result, nil
 }
 
-func scopeRollupSQL() string {
+func scopeRollupSQL(table scopeTable) string {
 	columns := []string{
 		"sampled_count", "eligible_count", "cpu_limited_count", "memory_limited_count",
 		"volume_sampled_count", "volume_eligible_count",
@@ -154,13 +156,13 @@ func scopeRollupSQL() string {
 			columns = append(columns, metric+"_"+suffix)
 		}
 	}
-	return fmt.Sprintf(`INSERT INTO monitoring_scope_samples (
-		tier_seconds, bucket_unix, tenant_id, project_id, %s
-	) SELECT ?, bucket_unix - (bucket_unix %% ?), tenant_id, project_id, %s
-	FROM monitoring_scope_samples WHERE tier_seconds = ? AND bucket_unix < ?
-	GROUP BY bucket_unix - (bucket_unix %% ?), tenant_id, project_id
-	ON CONFLICT(tier_seconds, bucket_unix, tenant_id, project_id) DO NOTHING`,
-		strings.Join(columns, ", "), strings.Join(rollupExpressions(columns), ", "))
+	return fmt.Sprintf(`INSERT INTO %[1]s (
+		tier_seconds, bucket_unix, %[2]s, %[3]s
+	) SELECT ?, bucket_unix - (bucket_unix %% ?), %[2]s, %[4]s
+	FROM %[1]s WHERE tier_seconds = ? AND bucket_unix < ?
+	GROUP BY bucket_unix - (bucket_unix %% ?), %[2]s
+	ON CONFLICT(tier_seconds, bucket_unix, %[2]s) DO NOTHING`,
+		table.name, table.ownerColumns(), strings.Join(columns, ", "), strings.Join(rollupExpressions(columns), ", "))
 }
 
 func hostRollupSQL() string {

@@ -70,7 +70,20 @@ var scopeMetricColumns = []string{
 	"writable_layer", "block_read", "block_write", "block_read_operations", "block_write_operations", "volume",
 }
 
-func scopeSchema() string {
+type scopeTable struct {
+	name, parentColumn, childColumn string
+}
+
+var (
+	hierarchyScopeTable   = scopeTable{"monitoring_scope_samples", "tenant_id", "project_id"}
+	environmentScopeTable = scopeTable{"monitoring_environment_samples", "project_id", "environment_id"}
+)
+
+func (table scopeTable) ownerColumns() string {
+	return table.parentColumn + ", " + table.childColumn
+}
+
+func scopeSchema(table scopeTable) string {
 	columns := make([]string, 0, len(scopeMetricColumns)*6)
 	for _, metric := range scopeMetricColumns {
 		columns = append(columns,
@@ -79,14 +92,14 @@ func scopeSchema() string {
 			metric+"_contributor_valid INTEGER NOT NULL", metric+"_contributor_expected INTEGER NOT NULL",
 		)
 	}
-	return `CREATE TABLE monitoring_scope_samples (
+	return `CREATE TABLE IF NOT EXISTS ` + table.name + ` (
 		tier_seconds INTEGER NOT NULL, bucket_unix INTEGER NOT NULL,
-		tenant_id TEXT NOT NULL, project_id TEXT NOT NULL,
+		` + table.parentColumn + ` TEXT NOT NULL, ` + table.childColumn + ` TEXT NOT NULL,
 		sampled_count INTEGER NOT NULL, eligible_count INTEGER NOT NULL,
 		cpu_limited_count INTEGER NOT NULL, memory_limited_count INTEGER NOT NULL,
 		volume_sampled_count INTEGER NOT NULL, volume_eligible_count INTEGER NOT NULL,
 		` + strings.Join(columns, ",") + `,
-		PRIMARY KEY (tier_seconds, bucket_unix, tenant_id, project_id)
+		PRIMARY KEY (tier_seconds, bucket_unix, ` + table.ownerColumns() + `)
 	) STRICT`
 }
 
@@ -101,7 +114,7 @@ func upsertHostSampleSQL() string {
 		[]string{"sampled_count", "eligible_count"}, hostMetricColumns, "tier_seconds, bucket_unix, host_id")
 }
 
-func upsertScopeSampleSQL() string {
+func upsertScopeSampleSQL(table scopeTable) string {
 	assignments := []string{
 		"sampled_count", "eligible_count", "cpu_limited_count", "memory_limited_count",
 		"volume_sampled_count", "volume_eligible_count",
@@ -115,9 +128,10 @@ func upsertScopeSampleSQL() string {
 	for index, column := range assignments {
 		set[index] = column + "=excluded." + column
 	}
-	return `INSERT INTO monitoring_scope_samples VALUES (` +
+	return `INSERT INTO ` + table.name + ` VALUES (` +
 		strings.TrimSuffix(strings.Repeat("?,", 10+len(scopeMetricColumns)*6), ",") +
-		`) ON CONFLICT(tier_seconds, bucket_unix, tenant_id, project_id) DO UPDATE SET ` + strings.Join(set, ",")
+		`) ON CONFLICT(tier_seconds, bucket_unix, ` + table.ownerColumns() +
+		`) DO UPDATE SET ` + strings.Join(set, ",")
 }
 
 func upsertSampleSQL(table string, valueCount int, assignments, metrics []string, key string) string {

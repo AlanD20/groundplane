@@ -20,12 +20,16 @@ import {
 import { formatTimestamp } from "@/lib/format-timestamp";
 import type { Environment } from "@/lib/types";
 import { serviceObservationFromAPI } from "@/features/service/service-observation";
-import { Activity, ArrowUpRight, Pause, Play } from "lucide-react";
+import { Activity, ArrowUpRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { HealthOverview } from "./health-overview";
 import { monitoringHealth } from "./health-summary";
-import { MonitoringCursorPagination } from "./scoped-monitoring";
+import type { MonitoringRange } from "./api";
+import {
+  MonitoringCursorPagination,
+  MonitoringMetrics,
+} from "./scoped-monitoring";
 import {
   useMonitoringCursor,
   useMonitoringQuery,
@@ -35,17 +39,19 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
   const [search] = useSearchParams();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [range, setRange] = useState<MonitoringRange>("1h");
   const monitoringPage = useMonitoringCursor(env.id);
   const monitoringRequest = useMemo(
     () =>
       ({
         scope: "environment" as const,
         id: env.id,
-        range: "1h" as const,
+        range,
+        points: 240,
         limit: 50,
         cursor: monitoringPage.cursor,
       }) as const,
-    [env.id, monitoringPage.cursor],
+    [env.id, monitoringPage.cursor, range],
   );
   const monitoring = useMonitoringQuery(monitoringRequest);
   const response =
@@ -93,15 +99,33 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
   };
   if (summary.total === 0)
     return (
-      <EmptyState
-        icon={<Activity />}
-        title="No Services to monitor"
-        description="Health appears here when this Environment has Services. Open Services to add a workload."
-      />
+      <div className="space-y-5">
+        {response && monitoring.value && (
+          <MonitoringMetrics
+            query={monitoring}
+            response={monitoring.value}
+            range={range}
+            onRangeChange={setRange}
+          />
+        )}
+        <EmptyState
+          icon={<Activity />}
+          title="No services in this environment"
+          description="Add a service to begin tracking its health and usage."
+        />
+      </div>
     );
   return (
     <div className="space-y-5">
       <HealthOverview summary={summary} />
+      {response && monitoring.value && (
+        <MonitoringMetrics
+          query={monitoring}
+          response={monitoring.value}
+          range={range}
+          onRangeChange={setRange}
+        />
+      )}
       <section
         aria-labelledby="monitoring-services-title"
         className="space-y-4"
@@ -115,8 +139,7 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
               Service health
             </h2>
             <p className="text-xs text-muted-foreground">
-              Runtime observations in this Environment. Inspect a Service for
-              its own monitoring and containers.
+              Open a Service to see its resource usage and containers.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -124,14 +147,6 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
               {summary.total} {summary.total === 1 ? "Service" : "Services"}
               {monitoring.paused ? " · live refresh paused" : ""}
             </span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => monitoring.setPaused(!monitoring.paused)}
-            >
-              {monitoring.paused ? <Play /> : <Pause />}
-              {monitoring.paused ? "Resume live" : "Pause live"}
-            </Button>
           </div>
         </div>
         {monitoring.error && (
@@ -142,7 +157,7 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
         <CollectionToolbar
           query={query}
           onQueryChange={setQuery}
-          label={response ? "Service health on this page" : "Service health"}
+          label={response ? "services on this page" : "services"}
         >
           <Select
             aria-label="Filter Service health"
@@ -242,7 +257,9 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
                         ) : (
                           <span>
                             {row.observation.replicas.healthy +
-                              row.observation.replicas.running}
+                              row.observation.replicas.running +
+                              row.observation.replicas.starting +
+                              row.observation.replicas.unhealthy}
                             /{row.observation.expectedReplicas} running{" "}
                             <span className="block text-xs text-muted-foreground">
                               {row.observation.replicas.healthy} healthy

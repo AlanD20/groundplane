@@ -10,15 +10,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type scopeKey struct {
-	tenantID  string
-	projectID string
-}
-
 func (store *Store) appendScope(
 	ctx context.Context,
 	tx *sql.Tx,
-	scope scopeKey,
+	scope AggregateScope,
 	aggregate monitoring.AggregatePoint,
 	members []monitoring.ServiceMeasurement,
 ) error {
@@ -26,17 +21,18 @@ func (store *Store) appendScope(
 	if err != nil {
 		return err
 	}
+	table, parent, child := scope.storage()
 	arguments := []any{
 		int64(
 			monitoring.SampleInterval / time.Second,
 		), aggregate.Point.At.UTC().Truncate(monitoring.SampleInterval).Unix(),
-		scope.tenantID, scope.projectID,
+		parent, child,
 		int64(aggregate.Coverage.Sampled), int64(aggregate.Coverage.Eligible),
 		int64(aggregate.Coverage.CPULimited), int64(aggregate.Coverage.MemoryLimited),
 		int64(aggregate.Coverage.VolumeSampled), int64(aggregate.Coverage.VolumeEligible),
 	}
 	arguments = append(arguments, values...)
-	if _, err = tx.ExecContext(ctx, upsertScopeSampleSQL(), arguments...); err != nil {
+	if _, err = tx.ExecContext(ctx, upsertScopeSampleSQL(table), arguments...); err != nil {
 		return errs.Wrap(errs.KindStorageUnavailable, err)
 	}
 	return nil

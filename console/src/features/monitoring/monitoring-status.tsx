@@ -31,11 +31,7 @@ export function MonitoringStatusBadge({
             : "unavailable"
       }
       label={
-        status === "fresh"
-          ? "Fresh"
-          : status === "stale"
-            ? "Stale"
-            : "Unavailable"
+        status === "fresh" ? "Live" : status === "stale" ? "Stale" : "No data"
       }
     />
   );

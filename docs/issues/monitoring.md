@@ -24,13 +24,12 @@ only a filter on a global dashboard.
 | Platform / Host | Live host utilization and history for CPU, memory, filesystems, interfaces and block devices, including processes outside GP. | Host resource breakdown. |
 | Tenant | Aggregate owned workload usage, health, missing observations and Projects. | Project monitoring. |
 | Project | Aggregate owned workload usage, health and Environments. | Environment monitoring. |
-| Environment | Health of every Service: observed state, ready replicas, restarts and observation freshness. | That Service's monitoring. |
+| Environment | Aggregate owned workload usage and each Service's health, replicas, restarts and observation freshness. | That Service's monitoring. |
 | Service | Its resource history, health, configured limits and individual containers. | Container readings within the same Service. |
 | Backing Service | Instance-wide resource history, health, containers and consuming connections. | Consumer context without inventing a usage allocation. |
 
-Environment monitoring is a health overview; detailed CPU, memory, network,
-storage and I/O charts belong to Service monitoring. Tenant and Project views
-can show aggregate usage because their purpose includes comparing descendants.
+Tenant, Project and Environment monitoring show progressively narrower totals.
+Service monitoring adds container and Volume details for a single workload.
 
 Backing Services remain Platform-owned. An Attach is a relationship, not a copy
 of the instance. Shared PostgreSQL, Valkey or ClamAV usage must not be counted

@@ -9,3 +9,22 @@ export function readDefaultTablePageSize(): TablePageSize {
     return 5;
   }
 }
+
+const chartTimeZoneKey = "groundplane-chart-time-zone";
+export type ChartTimeZone = "utc" | "local";
+
+export function readChartTimeZone(): ChartTimeZone {
+  try {
+    return localStorage.getItem(chartTimeZoneKey) === "local" ? "local" : "utc";
+  } catch {
+    return "utc";
+  }
+}
+
+export function saveChartTimeZone(value: ChartTimeZone) {
+  try {
+    localStorage.setItem(chartTimeZoneKey, value);
+  } catch {
+    // The current view still uses the chosen time zone.
+  }
+}

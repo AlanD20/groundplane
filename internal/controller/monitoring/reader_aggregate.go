@@ -81,14 +81,17 @@ func (reader *Reader) aggregate(
 		child.RuntimeState = reader.health.State(selector)
 	}
 	if snapshot, ok := reader.workloads.Snapshot(); ok && snapshot.Complete {
-		value.Live = aggregateLive(snapshot, scope.TenantID, scope.ProjectID, reader.now())
+		now := reader.now()
+		value.Live = aggregateLive(snapshot, scope, now)
 		for index := range value.Children.Items {
 			child := &value.Children.Items[index]
+			childScope := scope
 			if child.Scope.Kind == "project" {
-				child.Live = aggregateLive(snapshot, scope.TenantID, child.Scope.ID, reader.now())
+				childScope.ProjectID = child.Scope.ID
+			} else {
+				childScope.EnvironmentID = child.Scope.ID
 			}
-			// Environment destinations remain health-only. Detailed usage is
-			// inspected at Service scope rather than inventing a second total.
+			child.Live = aggregateLive(snapshot, childScope, now)
 		}
 	}
 	history, err := ReadAggregateHistory(ctx, reader.history, scope, window)
@@ -108,7 +111,11 @@ func invalidScope() error {
 	return errs.New(errs.KindValidationFailed, "monitoring scope does not match the resource owner")
 }
 
-func aggregateLive(snapshot CollectionSnapshot, tenantID, projectID string, now time.Time) api.MonitoringLive {
+func aggregateLive(
+	snapshot CollectionSnapshot,
+	scope monitoringstore.AggregateScope,
+	now time.Time,
+) api.MonitoringLive {
 	if !snapshot.Complete {
 		return unavailableLive()
 	}
@@ -116,8 +123,9 @@ func aggregateLive(snapshot CollectionSnapshot, tenantID, projectID string, now 
 	children := make([]metrics.MetricSummaries, 0, len(snapshot.Services))
 	for _, sample := range snapshot.Services {
 		owner := sample.Ownership
-		if owner.Class != metrics.OwnerWorkload || owner.TenantID != tenantID ||
-			projectID != "" && owner.ProjectID != projectID {
+		if owner.Class != metrics.OwnerWorkload || owner.TenantID != scope.TenantID ||
+			scope.ProjectID != "" && owner.ProjectID != scope.ProjectID ||
+			scope.EnvironmentID != "" && owner.EnvironmentID != scope.EnvironmentID {
 			continue
 		}
 		measurements = append(measurements, metrics.ServiceMeasurement{
