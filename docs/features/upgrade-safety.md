@@ -96,7 +96,7 @@ the fresh check after Controller handoff, before replacing the Agent.
 If that candidate never becomes ready, the recovered predecessor Controller uses
 the original native update journal and its continuously closed assignment hold
 to authorize rollback. It does not wait for an offline candidate to answer a
-probe. Recovery rejects work from outside the original Agent generation and
+probe. Recovery rejects work from outside the qualified executor-process generation and
 preserves the original failed Entry operation for explicit Retry afterward.
 
 Agent-only activation and other retained operation types still require full

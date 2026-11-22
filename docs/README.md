@@ -46,6 +46,9 @@ building and deploying a small application with Caddy and Cloudflare Tunnel.
 - [Releasing](releasing.md): version preparation, artifacts, publication and Pages.
 - [Agent workflow](agents.md): task authority, bounded delegation and local checkpoints.
 - [QA matrix](qa-matrix.md): behavioral cases and independent expected outcomes.
+- Design reviews: [scoped monitoring](issues/monitoring.md) and
+  [upgrade recovery](issues/upgrade-recovery.md) distinguish selected direction,
+  open decisions and implementation work from available capabilities.
 - [Qualification records](acceptance.md#historical-evidence-register) and [open limitations](issues/runtime-qualification.md):
   what earlier runs established and what still needs proof.
 
