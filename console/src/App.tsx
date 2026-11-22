@@ -1,5 +1,7 @@
 import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { EmptyState } from "@/components/common/empty-state";
+import { buttonVariants } from "@/components/ui/button";
 import { AppFrame } from "@/components/shell/app-frame";
 import { LinkedTask } from "@/features/task/task-access";
 
@@ -131,7 +133,20 @@ export default function App() {
           />
           <Route
             path="*"
-            element={<Navigate to="/platform/overview" replace />}
+            element={
+              <EmptyState
+                title="Page not found"
+                description="This Console link may be outdated."
+                action={
+                  <Link
+                    to="/platform/overview"
+                    className={buttonVariants({ variant: "outline" })}
+                  >
+                    Platform overview
+                  </Link>
+                }
+              />
+            }
           />
         </Routes>
       </Suspense>

@@ -1,4 +1,7 @@
-import { BulkConfigurationMenu, type BulkConfigurationKind } from "@/components/common/bulk-configuration-menu";
+import {
+  BulkConfigurationMenu,
+  type BulkConfigurationKind,
+} from "@/components/common/bulk-configuration-menu";
 import {
   ConfigurationFields,
   newConfigurationDraft,
@@ -10,7 +13,7 @@ import { CreationButton } from "@/components/common/creation-button";
 import { EmptyState } from "@/components/common/empty-state";
 import { MetaPill } from "@/components/common/meta-pill";
 import { PageHeader } from "@/components/common/page-header";
-import { HelpHint, ResourcePanel } from "@/components/common/resource-panel";
+import { ResourcePanel } from "@/components/common/resource-panel";
 import { Button } from "@/components/ui/button";
 import {
   ResourceFormFooter as DialogFooter,
@@ -103,7 +106,10 @@ export default function ProjectSecretsPage() {
         }
         actions={
           <div className="flex flex-wrap gap-2">
-            <BulkConfigurationMenu disabled={open || bulkKind !== null} onSelect={setBulkKind} />
+            <BulkConfigurationMenu
+              disabled={open || bulkKind !== null}
+              onSelect={setBulkKind}
+            />
             <CreationButton
               active={open}
               disabled={bulkKind !== null}
@@ -114,14 +120,18 @@ export default function ProjectSecretsPage() {
           </div>
         }
       />
-      {bulkKind && <BulkSecretEditor
-        key={bulkKind}
-        kind={bulkKind}
-        open
-        onOpenChange={(next) => { if (!next) setBulkKind(null); }}
-        projectId={projectId}
-        secrets={scoped}
-      />}
+      {bulkKind && (
+        <BulkSecretEditor
+          key={bulkKind}
+          kind={bulkKind}
+          open
+          onOpenChange={(next) => {
+            if (!next) setBulkKind(null);
+          }}
+          projectId={projectId}
+          secrets={scoped}
+        />
+      )}
       <ResourceForm
         open={open}
         onOpenChange={(next) => {
@@ -157,14 +167,7 @@ export default function ProjectSecretsPage() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <ResourcePanel
-        title="Configuration values"
-        actions={
-          <HelpHint>
-            Project values take precedence over matching Platform keys.
-          </HelpHint>
-        }
-      >
+      <ResourcePanel title="Configuration values">
         <p className="text-sm text-muted-foreground">
           Owned by {project.name}. A matching Project key takes precedence over
           the Platform fallback.
@@ -184,12 +187,7 @@ export default function ProjectSecretsPage() {
         />
       </ResourcePanel>
 
-      <ResourcePanel
-        title="Platform fallback configuration"
-        actions={
-          <HelpHint>used only when this project has no matching key</HelpHint>
-        }
-      >
+      <ResourcePanel title="Platform fallback configuration">
         <p className="text-sm text-muted-foreground">
           Owned by the Platform and used only when this Project has no matching
           key. Manage these shared resources in Platform Configuration.

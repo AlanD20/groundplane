@@ -36,6 +36,7 @@ export function TaskJournalItem({
   const [open, setOpen] = useState(false);
   const view = taskPresentation(entry, store);
   const destination = view.destination;
+  const inspectLabel = `Inspect ${view.title}, ${entry.status}, Task ${entry.id}`;
 
   const body = (
     <>
@@ -65,14 +66,7 @@ export function TaskJournalItem({
       {tableRow ? (
         <ResourceRow onOpen={() => setOpen(true)}>
           <TableCell>
-            <Button
-              variant="ghost"
-              size="content"
-              className="justify-start gap-2 p-0 text-left"
-              onClick={() => setOpen(true)}
-              aria-label={`Inspect ${entry.title}, ${entry.status}, Task ${entry.id}`}
-              aria-haspopup="dialog"
-            >
+            <div className="flex items-center gap-2">
               <ActivityIcon type={entry.type} status={entry.status} />
               <span className="min-w-0">
                 <strong className="block text-xs font-medium">
@@ -84,7 +78,7 @@ export function TaskJournalItem({
                   </span>
                 )}
               </span>
-            </Button>
+            </div>
           </TableCell>
           <TableCell>
             <StatusBadge status={entry.status} />
@@ -106,7 +100,13 @@ export function TaskJournalItem({
             {formatTimestamp(entry.createdAt ?? entry.ts, "Time unavailable")}
           </TableCell>
           <TableCell>
-            <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={inspectLabel}
+              aria-haspopup="dialog"
+              onClick={() => setOpen(true)}
+            >
               Inspect
             </Button>
           </TableCell>
@@ -119,7 +119,7 @@ export function TaskJournalItem({
             type="button"
             onClick={() => setOpen(true)}
             className="min-w-0 flex-1 items-start justify-start gap-3 rounded-l-lg rounded-r-none p-3.5 text-left hover:bg-surface/40"
-            aria-label={`Inspect ${entry.title}, ${entry.status}, Task ${entry.id}`}
+            aria-label={inspectLabel}
             aria-haspopup="dialog"
           >
             {body}

@@ -45,7 +45,6 @@ export function ServiceTab({
   const authenticationDetails = valkeyAuthenticationDetails(svc.authentication);
   return (
     <>
-      {" "}
       <div className="grid items-start gap-5 xl:grid-cols-2">
         <ResourcePanel
           title="Image & runtime"
@@ -131,10 +130,7 @@ export function ServiceTab({
             mono
           />
         </ResourcePanel>
-        <ResourcePanel
-          title="Healthcheck"
-          actions={destination("service", "Go to Runtime & image")}
-        >
+        <ResourcePanel title="Healthcheck">
           {svc.healthcheck ? (
             <>
               <Row

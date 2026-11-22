@@ -114,17 +114,23 @@ export default function BackingServiceDetailPage() {
               Edit name
             </Button>
             <Button
-              variant="outline"
+              variant={svc.runtimeIntent === "running" ? "outline" : "default"}
               disabled={pendingAction !== null}
-              onClick={() => setPendingAction("stop")}
+              onClick={() =>
+                setPendingAction(
+                  svc.runtimeIntent === "running" ? "stop" : "start",
+                )
+              }
             >
-              <PowerOff className="size-4" /> Stop
-            </Button>
-            <Button
-              disabled={pendingAction !== null}
-              onClick={() => setPendingAction("start")}
-            >
-              <Power className="size-4" /> Start
+              {svc.runtimeIntent === "running" ? (
+                <>
+                  <PowerOff className="size-4" /> Stop
+                </>
+              ) : (
+                <>
+                  <Power className="size-4" /> Start
+                </>
+              )}
             </Button>
           </>
         }
@@ -293,6 +299,24 @@ export default function BackingServiceDetailPage() {
                 ) : undefined
               }
             />
+            <ResourcePanel title="Scheduled runtime actions">
+              <p className="text-sm text-muted-foreground">
+                Queue a runtime action after another Task completes.
+              </p>
+              <Button
+                variant="outline"
+                disabled={pendingAction !== null}
+                onClick={() =>
+                  setPendingAction(
+                    svc.runtimeIntent === "running" ? "start" : "stop",
+                  )
+                }
+              >
+                {svc.runtimeIntent === "running"
+                  ? "Start after a Task"
+                  : "Stop after a Task"}
+              </Button>
+            </ResourcePanel>
             <ResourcePanel title="Remove containers">
               <p className="text-sm text-muted-foreground">
                 Keep this Backing Service, its configuration, connections and
