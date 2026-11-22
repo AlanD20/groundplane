@@ -48,11 +48,12 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
+	forward := workdispatch.NewForwardGate()
 	owners, err := platform.newWorkOwners(queue, dependencies)
 	if err != nil {
 		return nil, err
 	}
-	dispatchers, err := owners.newDispatchers(platform, dependencies, queue, softwareWork)
+	dispatchers, err := owners.newDispatchers(platform, dependencies, queue, forward, softwareWork)
 	if err != nil {
 		return nil, err
 	}
@@ -422,6 +423,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	}
 	runtime, err := workdispatch.NewRuntime(
 		queue,
+		platform.dependencies.Store,
+		forward,
 		scheduler,
 		controller,
 		completions,
@@ -436,6 +439,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	}
 	starts, err := workdispatch.NewAgentStarts(
 		queue,
+		forward,
 		append(append(owners.provisioning.starts, owners.resolver.starts...), []workdispatch.AgentStartRegistration{
 			{Operation: workexecution.ReleaseRestoration, Owner: owners.directReleases.restoration},
 			{Operation: workexecution.Backup, Owner: owners.backupReports},

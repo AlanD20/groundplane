@@ -224,7 +224,7 @@ func newNativeHierarchyEtcdRuntime(
 	if err != nil {
 		t.Fatal(err)
 	}
-	scheduler, err := workdispatch.NewScheduler(queue, []workdispatch.Registration{
+	scheduler, err := workdispatch.NewScheduler(queue, workdispatch.NewForwardGate(), []workdispatch.Registration{
 		{Operation: workexecution.Hierarchy, Executor: workexecution.Controller, Owner: controller, DecisionOnly: true},
 	})
 	if err != nil {

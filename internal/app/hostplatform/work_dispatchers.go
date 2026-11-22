@@ -18,10 +18,12 @@ func (owners *workOwners) newDispatchers(
 	platform *Platform,
 	dependencies ExecutionDependencies,
 	queue *workqueue.Repository,
+	forward *workdispatch.ForwardGate,
 	softwareWork softwareWorkRegistrations,
 ) (executionDispatchers, error) {
 	scheduler, err := workdispatch.NewScheduler(
 		queue,
+		forward,
 		append(
 			append(
 				append(
@@ -190,6 +192,7 @@ func (owners *workOwners) newDispatchers(
 	}
 	controller, err := workdispatch.NewControllerExecutor(
 		queue,
+		forward,
 		append(softwareWork.controller, []workdispatch.ControllerRegistration{
 			{Operation: workexecution.AgentLifecycle, Owner: owners.agentWork},
 			{Operation: workexecution.AgentSoftware, Owner: owners.agentWork},

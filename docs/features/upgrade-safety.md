@@ -5,6 +5,20 @@ The Console can briefly disconnect while the Controller restarts, but it must
 recover the result of the same update operation. A successful software update is
 not an application redeployment.
 
+## Transient execution-storage outages
+
+When execution storage temporarily becomes unavailable, the Controller pauses
+new scheduling and Start grants, drains its execution loops, and retains its
+process ownership and executor identity. After storage responds, it rechecks
+that identity and reconciles already-started operations before admitting new
+work. It does not repeat an accepted operation's Execute call to recover a lost
+storage response. Reports and reconciliation remain available during the pause.
+
+This keeps a transient execution-storage failure from automatically shutting
+down the Controller and local Agent. Corrupt state, changed ownership, a failed
+drain or another permanent loop failure still stops recovery. This behavior is
+not an offline restore or a bypass for unresolved ownership.
+
 ## Choosing what to update
 
 Agent, Controller and Console have independent releases. Fresh tagged installation uses

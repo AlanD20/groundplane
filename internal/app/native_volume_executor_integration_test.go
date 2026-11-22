@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -49,7 +50,8 @@ func TestNativeVolumeExecutorCreateRemoveSettlesExactResource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	starts, err := workdispatch.NewAgentStarts(f.queue, []workdispatch.AgentStartRegistration{
+	forward := workdispatch.NewForwardGate()
+	starts, err := workdispatch.NewAgentStarts(f.queue, forward, []workdispatch.AgentStartRegistration{
 		{Operation: workexecution.Volume, Owner: owner},
 	})
 	if err != nil {
@@ -111,8 +113,35 @@ func TestNativeVolumeExecutorCreateRemoveSettlesExactResource(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	created := f.assign(t, f.created.TaskID)
+	pause, err := forward.Pause()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pause.Wait(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := exchange.StartAttempt(t.Context(), created.Attempt.Attempt); !errors.Is(
+		err,
+		errs.New(errs.KindStorageUnavailable, ""),
+	) {
+		t.Fatalf("paused forward admission granted Agent work: %v", err)
+	}
+	fresh, err := f.queue.ReadResume(
+		t.Context(),
+		created.Attempt.Attempt.TaskID,
+		created.Attempt.Attempt.WorkItemID,
+		created.Attempt.Attempt.ID,
+		created.Attempt.Attempt.Executor,
+	)
+	if err != nil || fresh.Attempt.Attempt.StartedAt != nil {
+		t.Fatalf("paused Agent Start wrote a grant: %v", err)
+	}
+	if err := pause.Resume(); err != nil {
+		t.Fatal(err)
+	}
 	run(
-		f.assign(t, f.created.TaskID),
+		created,
 		[]volumeexecution.Stage{volumeexecution.PrepareDirectory, volumeexecution.PrepareVolume},
 	)
 	if applied, err := f.inputs.ReadApplied(t.Context(), f.created.Volume.ID, 0); err != nil || applied == nil {
@@ -194,6 +223,42 @@ func TestNativeVolumeExecutorCreateRemoveSettlesExactResource(t *testing.T) {
 	projection, found, err := f.blueprint.GetEnvironmentComposeProjection(t.Context(), f.environmentID)
 	if err != nil || !found || len(projection.Record.Volumes) != 0 {
 		t.Fatalf("successful Agent removal retained desired declaration: %v", err)
+	}
+}
+
+func TestPausedForwardAdmissionReturnsExistingAgentStart(t *testing.T) {
+	f := newNativeVolumeFixture(t)
+	owner, err := volume.NewAgentWork(f.inputs, f.queue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forward := workdispatch.NewForwardGate()
+	starts, err := workdispatch.NewAgentStarts(f.queue, forward, []workdispatch.AgentStartRegistration{
+		{Operation: workexecution.Volume, Owner: owner},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := f.assign(t, f.created.TaskID)
+	exchange := &nativeVolumeExecutorExchange{fixture: f, starts: starts}
+	first, err := exchange.StartAttempt(t.Context(), view.Attempt.Attempt)
+	if err != nil || first == nil || first.StartedAt == nil || first.Reconcile {
+		t.Fatalf("initial Agent Start was not granted: ack=%+v err=%v", first, err)
+	}
+	pause, err := forward.Pause()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pause.Wait(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := exchange.StartAttempt(t.Context(), view.Attempt.Attempt)
+	if err != nil || replayed == nil || replayed.StartedAt == nil || !replayed.Reconcile ||
+		!replayed.StartedAt.AsTime().Equal(first.StartedAt.AsTime()) {
+		t.Fatalf("paused admission blocked existing Start reconciliation: ack=%+v err=%v", replayed, err)
+	}
+	if err := pause.Resume(); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -26,15 +26,17 @@ type ControllerRegistration struct {
 }
 
 type ControllerExecutor struct {
-	queue  *workqueue.Repository
-	owners map[workexecution.Operation]ControllerOperation
+	queue   *workqueue.Repository
+	forward *ForwardGate
+	owners  map[workexecution.Operation]ControllerOperation
 }
 
 func NewControllerExecutor(
 	queue *workqueue.Repository,
+	forward *ForwardGate,
 	registrations []ControllerRegistration,
 ) (*ControllerExecutor, error) {
-	if queue == nil || len(registrations) == 0 {
+	if queue == nil || forward == nil || len(registrations) == 0 {
 		return nil, errs.New(errs.KindInternal, "controller execution requires storage and operation owners")
 	}
 	owners := make(map[workexecution.Operation]ControllerOperation, len(registrations))
@@ -45,7 +47,7 @@ func NewControllerExecutor(
 		}
 		owners[registration.Operation] = registration.Owner
 	}
-	return &ControllerExecutor{queue: queue, owners: owners}, nil
+	return &ControllerExecutor{queue: queue, forward: forward, owners: owners}, nil
 }
 
 // execute is called by the single local delivery loop, serially per attempt.
@@ -80,6 +82,11 @@ func (executor *ControllerExecutor) execute(ctx context.Context, delivery workqu
 		return owner.Settle(ctx, executor.queue, delivery, time.Now().UTC())
 	}
 	if fresh {
+		release, allowed := executor.forward.Begin(ctx)
+		if !allowed {
+			return errs.New(errs.KindStorageUnavailable, "storage recovery pauses new Controller work")
+		}
+		defer release()
 		operation, err := owner.AuthorizeStart(ctx, delivery)
 		if err != nil {
 			return err

@@ -18,6 +18,10 @@ func taskStoreStatus(err error) error {
 	if status.Code(err) != codes.Unknown {
 		return err
 	}
+	if errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) {
+		slog.Error("controller: Agent task storage is unavailable", slog.Any("error", err))
+		return status.Error(codes.Unavailable, "agent task storage is unavailable")
+	}
 	kind, ok := errs.KindOf(err)
 	if !ok {
 		slog.Error("controller: Agent task operation failed", slog.Any("error", err))
@@ -39,8 +43,6 @@ func taskStoreStatus(err error) error {
 		return status.Error(codes.NotFound, "agent task was not found")
 	case errs.KindStateConflict:
 		return status.Error(codes.FailedPrecondition, detail)
-	case errs.KindStorageUnavailable:
-		return status.Error(codes.Unavailable, "agent task storage is unavailable")
 	default:
 		return status.Error(codes.Internal, "agent task operation failed")
 	}

@@ -324,9 +324,13 @@ func (f *nativeVolumeFixture) start(t *testing.T, taskID string) workqueue.Resum
 	if err != nil {
 		t.Fatal(err)
 	}
-	starts, err := workdispatch.NewAgentStarts(f.queue, []workdispatch.AgentStartRegistration{
-		{Operation: workexecution.Volume, Owner: owner},
-	})
+	starts, err := workdispatch.NewAgentStarts(
+		f.queue,
+		workdispatch.NewForwardGate(),
+		[]workdispatch.AgentStartRegistration{
+			{Operation: workexecution.Volume, Owner: owner},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

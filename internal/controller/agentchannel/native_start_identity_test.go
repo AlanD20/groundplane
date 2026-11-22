@@ -33,9 +33,13 @@ func TestNativeStartRefusesMissingAndForeignAttemptIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	owner := &nativeStartIdentityOwner{}
-	starts, err := workdispatch.NewAgentStarts(queue, []workdispatch.AgentStartRegistration{{
-		Operation: workexecution.Script, Owner: owner,
-	}})
+	starts, err := workdispatch.NewAgentStarts(
+		queue,
+		workdispatch.NewForwardGate(),
+		[]workdispatch.AgentStartRegistration{{
+			Operation: workexecution.Script, Owner: owner,
+		}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -26,8 +26,9 @@ type AgentStartRegistration struct {
 }
 
 type AgentStarts struct {
-	queue  *workqueue.Repository
-	owners map[workexecution.Operation]AgentStartOwner
+	queue   *workqueue.Repository
+	forward *ForwardGate
+	owners  map[workexecution.Operation]AgentStartOwner
 }
 
 // Operations is the closed catalog admitted by the composed start owners.
@@ -40,8 +41,12 @@ func (starts *AgentStarts) Operations() []workexecution.Operation {
 	return operations
 }
 
-func NewAgentStarts(queue *workqueue.Repository, registrations []AgentStartRegistration) (*AgentStarts, error) {
-	if queue == nil || len(registrations) == 0 {
+func NewAgentStarts(
+	queue *workqueue.Repository,
+	forward *ForwardGate,
+	registrations []AgentStartRegistration,
+) (*AgentStarts, error) {
+	if queue == nil || forward == nil || len(registrations) == 0 {
 		return nil, errs.New(errs.KindInternal, "Agent start requires storage and operation owners")
 	}
 	owners := make(map[workexecution.Operation]AgentStartOwner, len(registrations))
@@ -52,7 +57,7 @@ func NewAgentStarts(queue *workqueue.Repository, registrations []AgentStartRegis
 		}
 		owners[registration.Operation] = registration.Owner
 	}
-	return &AgentStarts{queue: queue, owners: owners}, nil
+	return &AgentStarts{queue: queue, forward: forward, owners: owners}, nil
 }
 
 func (starts *AgentStarts) Start(ctx context.Context, authorization agentregistration.WorkAuthorization,
@@ -101,6 +106,11 @@ func (starts *AgentStarts) Start(ctx context.Context, authorization agentregistr
 			CheckpointSequence: sequence,
 		}, nil
 	}
+	release, allowed := starts.forward.Begin(ctx)
+	if !allowed {
+		return nil, errs.New(errs.KindStorageUnavailable, "storage recovery pauses new Agent work")
+	}
+	defer release()
 	authority, err := owner.AuthorizeAgentStart(ctx, view)
 	if err != nil {
 		return nil, err

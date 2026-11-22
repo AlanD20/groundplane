@@ -23,33 +23,22 @@ func (scheduler *Scheduler) RunPlacement(ctx context.Context, identity workexecu
 	defer ticker.Stop()
 	bursts := 0
 	for {
-		registration, err := scheduler.queue.ReadExecutor(ctx, target)
-		if err != nil {
-			return err
+		release, allowed := scheduler.forward.Begin(ctx)
+		if !allowed {
+			bursts = 0
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-ticker.C:
+				continue
+			}
 		}
-		if registration.Revision == 0 || registration.Record.Identity != identity {
-			return errs.New(errs.KindStateConflict, "scheduler executor registration changed")
-		}
-		cursor, err := scheduler.queue.ReadSchedulerCursor(ctx, target)
-		if err != nil {
-			return err
-		}
-		result, err := scheduler.Schedule(ctx, identity, cursor.Record.After, time.Now().UTC())
+		result, err := scheduler.runPlacementSweep(ctx, identity, target)
+		release()
 		if err != nil {
 			return err
 		}
 		report(result)
-		// Saving the cursor after the sweep may replay a page after a crash, but
-		// cannot skip unexamined work. Duplicate assignment is prevented by CAS.
-		if result.Next != cursor.Record.After {
-			change, err := workqueue.PrepareSchedulerCursor(cursor, registration, result.Next)
-			if err != nil {
-				return err
-			}
-			if _, err := scheduler.queue.Commit(ctx, change); err != nil {
-				return err
-			}
-		}
 		// A later page or newly settled prerequisite can expose independent
 		// ready work immediately. Re-run admission from fresh durable state;
 		// assignments still acquire the same slots and claims atomically.
@@ -65,6 +54,40 @@ func (scheduler *Scheduler) RunPlacement(ctx context.Context, identity workexecu
 		case <-ticker.C:
 		}
 	}
+}
+
+func (scheduler *Scheduler) runPlacementSweep(
+	ctx context.Context,
+	identity workexecution.Identity,
+	target workexecution.Placement,
+) (Sweep, error) {
+	registration, err := scheduler.queue.ReadExecutor(ctx, target)
+	if err != nil {
+		return Sweep{}, err
+	}
+	if registration.Revision == 0 || registration.Record.Identity != identity {
+		return Sweep{}, errs.New(errs.KindStateConflict, "scheduler executor registration changed")
+	}
+	cursor, err := scheduler.queue.ReadSchedulerCursor(ctx, target)
+	if err != nil {
+		return Sweep{}, err
+	}
+	result, err := scheduler.Schedule(ctx, identity, cursor.Record.After, time.Now().UTC())
+	if err != nil {
+		return Sweep{}, err
+	}
+	// Saving the cursor after the sweep may replay a page after a crash, but
+	// cannot skip unexamined work. Duplicate assignment is prevented by CAS.
+	if result.Next != cursor.Record.After {
+		change, err := workqueue.PrepareSchedulerCursor(cursor, registration, result.Next)
+		if err != nil {
+			return Sweep{}, err
+		}
+		if _, err := scheduler.queue.Commit(ctx, change); err != nil {
+			return Sweep{}, err
+		}
+	}
+	return result, nil
 }
 
 // RunStops advances bounded cancellation pages independently of worker slots.

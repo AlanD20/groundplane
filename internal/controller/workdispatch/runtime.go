@@ -2,13 +2,12 @@ package workdispatch
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
-	"github.com/AlanD20/groundplane/internal/controller/operationretention"
-	"github.com/AlanD20/groundplane/internal/infra/controllerownership"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -19,14 +18,28 @@ import (
 // an executor: startup reconciliation must establish readiness before Run.
 type Runtime struct {
 	queue        *workqueue.Repository
+	health       storageHealth
+	forward      *ForwardGate
 	scheduler    *Scheduler
 	controller   *ControllerExecutor
 	completions  *Completions
 	publications *Publications
 	inputs       *Inputs
-	retention    *operationretention.Collector
+	retention    retentionLoop
 	diagnostics  *executiondiagnostics.Repository
 	logger       *slog.Logger
+}
+
+type storageHealth interface {
+	Health(context.Context) error
+}
+
+type retentionLoop interface {
+	Run(context.Context, time.Duration, func(string, error)) error
+}
+
+type executionOwnership interface {
+	Check() error
 }
 
 // Coordination is latency-sensitive queue processing, separate from the
@@ -45,20 +58,25 @@ type RuntimeConfig struct {
 
 func NewRuntime(
 	queue *workqueue.Repository,
+	health storageHealth,
+	forward *ForwardGate,
 	scheduler *Scheduler,
 	controller *ControllerExecutor,
 	completions *Completions,
 	publications *Publications,
 	inputs *Inputs,
-	retention *operationretention.Collector,
+	retention retentionLoop,
 	diagnostics *executiondiagnostics.Repository,
 	logger *slog.Logger,
 ) (*Runtime, error) {
-	if queue == nil || scheduler == nil || controller == nil || completions == nil || publications == nil ||
+	if queue == nil || health == nil || forward == nil || scheduler == nil || controller == nil || completions == nil ||
+		publications == nil ||
 		inputs == nil ||
 		retention == nil ||
 		diagnostics == nil ||
 		logger == nil ||
+		scheduler.forward != forward ||
+		controller.forward != forward ||
 		scheduler.queue != queue ||
 		controller.queue != queue ||
 		completions.queue != queue ||
@@ -68,6 +86,8 @@ func NewRuntime(
 	}
 	return &Runtime{
 		queue:        queue,
+		health:       health,
+		forward:      forward,
 		scheduler:    scheduler,
 		controller:   controller,
 		completions:  completions,
@@ -79,12 +99,13 @@ func NewRuntime(
 	}, nil
 }
 
-// Run refuses a stale or unreconciled identity. Any loop failure stops and joins
-// the process's loops; it cannot silently leave assignment running without an
-// executor or settlement. Durable claims and checkpoints survive shutdown.
+// Run refuses a stale or unreconciled identity. A typed storage outage pauses
+// forward work and reconciles under this process's retained lease and identity;
+// permanent failures stop and join every loop. Durable claims and checkpoints
+// survive either path.
 func (runtime *Runtime) Run(
 	ctx context.Context,
-	ownership *controllerownership.Lease,
+	ownership executionOwnership,
 	identity workexecution.Identity,
 	config RuntimeConfig,
 ) error {
@@ -96,21 +117,75 @@ func (runtime *Runtime) Run(
 		config.DiagnosticRetention < time.Hour || config.DiagnosticRetention > config.HistoryRetention || config.CollectionBudget <= 0 {
 		return errs.New(errs.KindInternal, "execution runtime identity or intervals are invalid")
 	}
+	for {
+		failure, pause, recoverable, cycleErr := runtime.runCycle(ctx, identity, config)
+		if cycleErr != nil {
+			failure = errs.WrapJoined(errs.KindInternal, failure, cycleErr)
+		}
+		if cycleErr == nil && ctx.Err() == nil && recoverable && pause != nil {
+			runtime.logger.ErrorContext(
+				ctx,
+				"execution storage is unavailable; forward work is paused",
+				"error",
+				failure,
+			)
+			issues, recoveryErr := runtime.waitForStorageRecovery(ctx, ownership, identity)
+			for _, issue := range issues {
+				runtime.logger.ErrorContext(
+					ctx,
+					"storage recovery retained unresolved execution",
+					"task_id",
+					issue.TaskID,
+					"work_id",
+					issue.WorkID,
+					"error",
+					issue.Err,
+				)
+			}
+			if recoveryErr == nil {
+				if err := pause.Resume(); err == nil {
+					continue
+				} else {
+					failure = errs.WrapJoined(errs.KindInternal, failure, err)
+				}
+			} else {
+				failure = errs.WrapJoined(errs.KindStateConflict, failure, recoveryErr)
+			}
+		}
+		shutdown, finish := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		disableErr := runtime.disable(shutdown, identity)
+		finish()
+		if disableErr != nil {
+			return errs.WrapJoined(errs.KindInternal, failure, disableErr)
+		}
+		if failure != nil {
+			return failure
+		}
+		return errs.New(errs.KindInternal, "execution loop stopped without cancellation or an error")
+	}
+}
+
+func (runtime *Runtime) runCycle(
+	ctx context.Context,
+	identity workexecution.Identity,
+	config RuntimeConfig,
+) (error, *ForwardPause, bool, error) {
 	registration, err := runtime.queue.ReadExecutor(
 		ctx,
 		workexecution.Placement{Executor: identity.Executor, HostID: identity.HostID},
 	)
 	if err != nil {
-		return err
+		pause, pauseErr := runtime.pauseForward(ctx)
+		return err, pause, storageUnavailable(err), pauseErr
 	}
 	if registration.Revision == 0 || registration.Record.Identity != identity || !registration.Record.Ready {
+		pause, pauseErr := runtime.pauseForward(ctx)
 		return errs.New(
 			errs.KindStateConflict,
 			"controller execution must finish startup reconciliation before dispatch",
-		)
+		), pause, false, pauseErr
 	}
 	running, cancel := context.WithCancel(ctx)
-	defer cancel()
 	report := func(issue Issue) {
 		runtime.logger.ErrorContext(
 			running,
@@ -159,20 +234,94 @@ func (runtime *Runtime) Run(
 		}(loop)
 	}
 	first := <-results
+	pause, pauseErr := runtime.forward.Pause()
 	cancel()
-	// Disable only this generation. Cancellation is not evidence that an external
-	// effect stopped, so neither slots nor resource claims are released here.
-	shutdown, finish := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	disableErr := runtime.disable(shutdown, identity)
-	finish()
 	workers.Wait()
-	if disableErr != nil {
-		return errs.WrapJoined(errs.KindInternal, first, disableErr)
+	close(results)
+	failure := first
+	recoverable := recoverableStorageFailure(first)
+	for loopErr := range results {
+		if loopErr == nil || cancellationOnly(loopErr) {
+			continue
+		}
+		failure = errs.WrapJoined(errs.KindInternal, failure, loopErr)
+		if !recoverableStorageFailure(loopErr) {
+			recoverable = false
+		}
 	}
-	if first != nil {
-		return first
+	if pauseErr != nil {
+		return failure, nil, false, pauseErr
 	}
-	return errs.New(errs.KindInternal, "execution loop stopped without cancellation or an error")
+	drain, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	drainErr := pause.Wait(drain)
+	finish()
+	if drainErr != nil {
+		return failure, pause, false, drainErr
+	}
+	return failure, pause, recoverable, nil
+}
+
+func (runtime *Runtime) pauseForward(ctx context.Context) (*ForwardPause, error) {
+	pause, err := runtime.forward.Pause()
+	if err != nil {
+		return nil, err
+	}
+	drain, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	err = pause.Wait(drain)
+	finish()
+	return pause, err
+}
+
+func storageUnavailable(err error) bool {
+	return errors.Is(err, errs.New(errs.KindStorageUnavailable, ""))
+}
+
+// recoverableStorageFailure accepts nested Internal wrappers because storage
+// adapters may add private context, but rejects an error graph that also
+// carries a permanent Groundplane failure. Cancellation from sibling loops is
+// ignored separately; it cannot turn a permanent failure into an outage.
+func recoverableStorageFailure(err error) bool {
+	allowed, storage := storageRecoveryCauses(err)
+	return allowed && storage
+}
+
+func cancellationOnly(err error) bool {
+	allowed, storage := storageRecoveryCauses(err)
+	return allowed && !storage
+}
+
+func storageRecoveryCauses(err error) (bool, bool) {
+	if err == nil || err == context.Canceled {
+		return true, false
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		allowed := true
+		var storage bool
+		for _, cause := range joined.Unwrap() {
+			causeAllowed, causeStorage := storageRecoveryCauses(cause)
+			allowed = allowed && causeAllowed
+			storage = storage || causeStorage
+		}
+		return allowed, storage
+	}
+	if typed, ok := err.(*errs.Error); ok {
+		switch typed.Kind() {
+		case errs.KindStorageUnavailable:
+			return true, true
+		case errs.KindInternal:
+			cause := errors.Unwrap(typed)
+			if cause == nil {
+				return false, false
+			}
+			return storageRecoveryCauses(cause)
+		default:
+			return false, false
+		}
+	}
+	if cause := errors.Unwrap(err); cause != nil {
+		return storageRecoveryCauses(cause)
+	}
+	return false, false
 }
 
 func (runtime *Runtime) disable(ctx context.Context, identity workexecution.Identity) error {

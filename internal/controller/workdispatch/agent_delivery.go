@@ -85,7 +85,8 @@ func NewAgentDeliveries(
 		detaches == nil ||
 		components == nil ||
 		entries == nil ||
-		attaches == nil {
+		attaches == nil ||
+		scheduler.forward == nil {
 		return nil, errs.New(errs.KindInternal, "Agent delivery requires one queue, scheduler and Release owner")
 	}
 	return &AgentDeliveries{
@@ -138,6 +139,14 @@ func (delivery *AgentDeliveries) Dispatch(
 	}
 	if registration.Revision == 0 || registration.Record.Identity != identity || !registration.Record.Ready {
 		return nil, errs.New(errs.KindStateConflict, "Agent must finish startup reconciliation before dispatch")
+	}
+	if capacity > 0 {
+		release, allowed := delivery.scheduler.forward.Begin(ctx)
+		if !allowed {
+			capacity = 0
+		} else {
+			defer release()
+		}
 	}
 	var issues []Issue
 	if capacity > 0 {

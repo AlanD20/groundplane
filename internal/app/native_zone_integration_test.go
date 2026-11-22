@@ -117,9 +117,13 @@ func verifyNetworkDiagnosticReplay(t *testing.T, f *nativeVolumeFixture, taskID 
 	if err != nil {
 		t.Fatal(err)
 	}
-	starts, err := workdispatch.NewAgentStarts(f.queue, []workdispatch.AgentStartRegistration{
-		{Operation: workexecution.Network, Owner: owner},
-	})
+	starts, err := workdispatch.NewAgentStarts(
+		f.queue,
+		workdispatch.NewForwardGate(),
+		[]workdispatch.AgentStartRegistration{
+			{Operation: workexecution.Network, Owner: owner},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

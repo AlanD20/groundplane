@@ -54,12 +54,13 @@ type admissionKey struct {
 
 type Scheduler struct {
 	queue     *workqueue.Repository
+	forward   *ForwardGate
 	owners    map[admissionKey]Admission
 	decisions []workexecution.Operation
 }
 
-func NewScheduler(queue *workqueue.Repository, registrations []Registration) (*Scheduler, error) {
-	if queue == nil || len(registrations) == 0 {
+func NewScheduler(queue *workqueue.Repository, forward *ForwardGate, registrations []Registration) (*Scheduler, error) {
+	if queue == nil || forward == nil || len(registrations) == 0 {
 		return nil, errs.New(errs.KindInternal, "work scheduler requires storage and operation owners")
 	}
 	owners := make(map[admissionKey]Admission, len(registrations))
@@ -79,7 +80,7 @@ func NewScheduler(queue *workqueue.Repository, registrations []Registration) (*S
 			decisions = append(decisions, registration.Operation)
 		}
 	}
-	return &Scheduler{queue: queue, owners: owners, decisions: decisions}, nil
+	return &Scheduler{queue: queue, forward: forward, owners: owners, decisions: decisions}, nil
 }
 
 type Deferred struct {
