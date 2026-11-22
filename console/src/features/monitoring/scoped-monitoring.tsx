@@ -4,6 +4,7 @@ import {
   SummaryItem,
   SummaryStrip,
 } from "@/components/common/resource-panel";
+import { useWorkspaceFullscreen } from "@/components/common/use-workspace-fullscreen";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -16,8 +17,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatTimestamp } from "@/lib/format-timestamp";
-import { Activity, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  Activity,
+  ChevronLeft,
+  ChevronRight,
+  Maximize,
+  Minimize,
+  Pause,
+  Play,
+} from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { MonitoringRange, MonitoringScopeKind } from "./api";
 import {
@@ -49,6 +58,10 @@ export function ScopedMonitoring({
 }) {
   const [range, setRange] = useState<MonitoringRange>("1h");
   const [metric, setMetric] = useState("cpu");
+  const fullscreenButton = useRef<HTMLButtonElement>(null);
+  const [fullscreen, setFullscreen] = useWorkspaceFullscreen(undefined, () =>
+    fullscreenButton.current?.focus({ preventScroll: true }),
+  );
   const pageKey = `${scope}/${id}/${range}`;
   const page = useMonitoringCursor(pageKey);
   const consumerPage = useMonitoringCursor(pageKey);
@@ -115,6 +128,30 @@ export function ScopedMonitoring({
   const series = metricSeries(subject.history ?? [], selected);
   const live = subject.live;
   const historyUnavailable = response.history_status !== "available";
+  const rangeControls = (
+    <>
+      <Select
+        aria-label="Monitoring history range"
+        className="w-28"
+        value={range}
+        onValueChange={(value) => setRange(value as MonitoringRange)}
+        options={[
+          { value: "1h", label: "1 hour" },
+          { value: "6h", label: "6 hours" },
+          { value: "24h", label: "24 hours" },
+          { value: "7d", label: "7 days" },
+        ]}
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => query.setPaused(!query.paused)}
+      >
+        {query.paused ? <Play /> : <Pause />}
+        {query.paused ? "Resume live" : "Pause live"}
+      </Button>
+    </>
+  );
 
   return (
     <div className="space-y-5">
@@ -142,26 +179,7 @@ export function ScopedMonitoring({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Select
-              aria-label="Monitoring history range"
-              className="w-28"
-              value={range}
-              onValueChange={(value) => setRange(value as MonitoringRange)}
-              options={[
-                { value: "1h", label: "1 hour" },
-                { value: "6h", label: "6 hours" },
-                { value: "24h", label: "24 hours" },
-                { value: "7d", label: "7 days" },
-              ]}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => query.setPaused(!query.paused)}
-            >
-              {query.paused ? <Play /> : <Pause />}
-              {query.paused ? "Resume live" : "Pause live"}
-            </Button>
+            {!fullscreen && rangeControls}
           </div>
         </div>
         {query.error && (
@@ -173,47 +191,83 @@ export function ScopedMonitoring({
 
       <LiveSummary values={live.values} />
 
-      <ResourcePanel
-        title={`${selected.label} history`}
-        actions={
-          <Select
-            aria-label="Monitoring metric"
-            className="w-44"
-            value={selected.id}
-            onValueChange={setMetric}
-            options={metricGroups.map((group) => ({
-              value: group.id,
-              label: group.label,
-            }))}
-          />
+      <div
+        className={
+          fullscreen
+            ? "workspace-fullscreen overflow-y-auto bg-card [&>[data-slot=card]]:min-h-full [&>[data-slot=card]]:rounded-none"
+            : undefined
         }
       >
-        {historyUnavailable && (
-          <p role="status" className="text-xs text-warning">
-            Historical storage is unavailable. Current evidence continues to
-            refresh independently.
-          </p>
-        )}
-        {series.length ? (
-          <MonitoringChart
-            scopeKey={`${scope}/${id}`}
-            scopedLabel={response.scope.name}
-            rangeLabel={response.window.range}
-            window={{
-              from: Date.parse(response.window.start),
-              to: Date.parse(response.window.end),
-            }}
-            series={series}
-          />
-        ) : (
-          <EmptyState
-            embedded
-            icon={<Activity />}
-            title={`No ${selected.label.toLowerCase()} history`}
-            description="Missing and unsupported readings remain unavailable rather than being drawn as zero."
-          />
-        )}
-      </ResourcePanel>
+        <ResourcePanel
+          title={`${selected.label} history`}
+          actions={
+            <>
+              {fullscreen && rangeControls}
+              <Select
+                aria-label="Monitoring metric"
+                className="w-44"
+                value={selected.id}
+                onValueChange={setMetric}
+                options={metricGroups.map((group) => ({
+                  value: group.id,
+                  label: group.label,
+                }))}
+              />
+              <Button
+                ref={fullscreenButton}
+                variant="outline"
+                size="sm"
+                aria-pressed={fullscreen}
+                onClick={() => setFullscreen(!fullscreen)}
+              >
+                {fullscreen ? <Minimize /> : <Maximize />}
+                {fullscreen ? "Exit fullscreen" : "Fullscreen"}
+              </Button>
+            </>
+          }
+        >
+          {query.loading && response.window.range !== range && (
+            <p role="status" className="text-xs text-muted-foreground">
+              Loading the selected range…
+            </p>
+          )}
+          {fullscreen && query.error && (
+            <p role="alert" className="text-xs text-warning">
+              {query.error}
+            </p>
+          )}
+          {historyUnavailable && (
+            <p role="status" className="text-xs text-warning">
+              Historical storage is unavailable. Current evidence continues to
+              refresh independently.
+            </p>
+          )}
+          {series.length ? (
+            <MonitoringChart
+              scopeKey={`${scope}/${id}`}
+              scopedLabel={response.scope.name}
+              rangeLabel={response.window.range}
+              window={{
+                from: Date.parse(response.window.start),
+                to: Date.parse(response.window.end),
+              }}
+              series={series}
+              height={
+                fullscreen
+                  ? "max(280px, calc(100dvh - 13rem - var(--terminal-dock-height, 0px)))"
+                  : undefined
+              }
+            />
+          ) : (
+            <EmptyState
+              embedded
+              icon={<Activity />}
+              title={`No ${selected.label.toLowerCase()} history`}
+              description="Missing and unsupported readings remain unavailable rather than being drawn as zero."
+            />
+          )}
+        </ResourcePanel>
+      </div>
 
       <ScopeDetails
         response={response}

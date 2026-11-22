@@ -91,15 +91,25 @@ export function useMonitoringQuery(request: MonitoringRequest) {
   const [now, setNow] = useState(() => Date.now());
   const active = useRef<AbortController | undefined>(undefined);
   const previousKey = useRef(key);
+  const previousRequest = useRef(request);
 
   useEffect(() => {
     const entry = cached(key);
     active.current?.abort();
-    setValue(entry?.value);
-    setReadAt(entry?.readAt);
+    const prior = previousRequest.current;
+    previousRequest.current = request;
+    const sameScopeAndPage =
+      prior.scope === request.scope &&
+      prior.id === request.id &&
+      prior.cursor === request.cursor &&
+      prior.consumerCursor === request.consumerCursor;
+    if (entry || !sameScopeAndPage) {
+      setValue(entry?.value);
+      setReadAt(entry?.readAt);
+    }
     setError(undefined);
     setLoading(!entry);
-  }, [key]);
+  }, [key, request]);
 
   const refresh = useCallback(
     async (lifetime: AbortSignal) => {

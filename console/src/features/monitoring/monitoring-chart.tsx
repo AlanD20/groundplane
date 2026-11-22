@@ -41,7 +41,7 @@ export type MonitoringChartProps = {
   readonly window: MonitoringChartWindow;
   readonly scopeKey: string;
   readonly scopedLabel: string;
-  readonly height?: number;
+  readonly height?: CSSProperties["height"];
   readonly className?: string;
 };
 
@@ -392,7 +392,7 @@ export function MonitoringChart({
   const selectedX = selected
     ? chartX(pointCenter(selected), displayedWindow)
     : null;
-  const rootStyle = { height: Math.max(280, height) } satisfies CSSProperties;
+  const rootStyle = { height, minHeight: 280 } satisfies CSSProperties;
 
   return (
     <div

@@ -57,6 +57,9 @@ Deploy Task proves current health.
 
 ## Inspect a chart
 
+Select **Fullscreen** to expand the chart inside the Console tab while keeping
+the time range, metric and live refresh controls available. Press Escape to exit.
+
 Hover a point to inspect its exact UTC interval, units, average, minimum, maximum,
 sample counts and available contributor coverage. The line represents averages;
 the band represents recorded extrema. Missing buckets are gaps rather than zero.

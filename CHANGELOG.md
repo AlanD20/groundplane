@@ -8,6 +8,8 @@ that every deployment or failure scenario has been qualified.
 - Give Host, Tenant and Project their own Monitoring views. Keep chart axes
   visible during bucket inspection and show a single empty state when a range
   contains no samples.
+- Expand monitoring charts within the Console using the same fullscreen
+  behavior as Zones & topology.
 - Keep Service health steady during overlapping observations. Refresh Task
   Inspect from live events while retaining the current view on reconnect, and
   keep existing container logs visible until new output arrives.
