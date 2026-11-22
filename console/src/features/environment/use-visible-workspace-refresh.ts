@@ -110,8 +110,7 @@ export function useVisibleWorkspaceRefresh(options: Options) {
                       } catch (error) {
                         if (signal.aborted) throw error;
                         return {
-                          ...(cached ?? environmentFromMetadata(environment)),
-                          ...environment,
+                          ...environmentFromMetadata(environment),
                           resourceLoadError:
                             error instanceof Error
                               ? error.message
@@ -142,14 +141,21 @@ export function useVisibleWorkspaceRefresh(options: Options) {
           const loaded = projects.map((project) => ({
             ...project,
             environments: project.environments.map((environment) => {
-              if (resourceReads.has(environment.id)) return environment;
+              const readResources = resourceReads.has(environment.id);
+              if (readResources && !environment.resourceLoadError)
+                return environment;
               const latest = draft.tenantProjects
                 .find((value) => value.id === project.id)
                 ?.environments?.find((value) => value.id === environment.id);
+              if (readResources && (!latest || latest.resourceLoadError))
+                return environment;
               return latest
                 ? {
                     ...latest,
                     ...environmentMetadata.get(environment.id),
+                    ...(readResources
+                      ? { resourceRefreshError: environment.resourceLoadError }
+                      : {}),
                     ...(serviceReads.has(environment.id)
                       ? { services: serviceReads.get(environment.id)! }
                       : {}),

@@ -156,6 +156,15 @@ export default function EnvironmentPage() {
       }
     />
   );
+  const refreshNotice = env.resourceRefreshError && (
+    <p
+      role="alert"
+      className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-warning"
+    >
+      Showing the last loaded Environment resources. Refresh failed:{" "}
+      {env.resourceRefreshError}
+    </p>
+  );
   const panels: Record<string, React.ReactNode> = {
     runners: (
       <RunnerManager
@@ -189,6 +198,7 @@ export default function EnvironmentPage() {
     return (
       <div className="flex min-w-0 flex-col gap-5">
         {deletionNotice}
+        {refreshNotice}
         <fieldset
           key={deleting ? "deletion-fenced" : "editable"}
           disabled={deleting}
@@ -287,6 +297,7 @@ export default function EnvironmentPage() {
         }
       />
       {deletionNotice}
+      {refreshNotice}
       {!showingMonitoring && observation.refreshError && (
         <p
           role="alert"

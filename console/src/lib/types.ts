@@ -271,6 +271,7 @@ export type BlueprintApplyAudit = {
 export type Environment = {
   id: string;
   resourceLoadError?: string;
+  resourceRefreshError?: string;
   projectId: string;
   name: string; // staging | production
   networkPool: string;
