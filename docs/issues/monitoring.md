@@ -1,9 +1,12 @@
 # Monitoring design review
 
-Status: the visual direction and scoped navigation have been selected. General
-workload resource collection, historical queries and these monitoring pages are
-not implemented. This review records the intended behavior before that work is
-promoted into the product and feature contracts.
+Status: the visual direction and scoped navigation have been selected. The
+Console's Environment health roster and Service/Backing monitoring destinations
+use existing live runtime observations, including expiry, search and pagination.
+General workload resource collection and historical queries are not implemented;
+resource charts are not populated with demonstration data. This review records
+the remaining intended behavior before that work is promoted into the product
+and feature contracts.
 
 The selected presentation is a health-first overview using the existing Console
 design system. There is one monitoring destination within each resource's own

@@ -28,6 +28,12 @@ export const environmentSections = [
     panels: [{ key: "overview", label: "Services", icon: Layers }],
   },
   {
+    key: "monitoring",
+    label: "Monitoring",
+    icon: Activity,
+    panels: [{ key: "monitoring", label: "Monitoring", icon: Activity }],
+  },
+  {
     key: "network",
     label: "Networking",
     icon: Network,

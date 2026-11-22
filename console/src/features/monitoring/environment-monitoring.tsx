@@ -1,0 +1,237 @@
+import { EmptyState } from "@/components/common/empty-state";
+import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
+import { StatusBadge } from "@/components/common/status-badge";
+import {
+  CollectionToolbar,
+  TablePagination,
+  TableSortHead,
+  useTableView,
+} from "@/components/common/table-controls";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { formatTimestamp } from "@/lib/format-timestamp";
+import type { Environment } from "@/lib/types";
+import { Activity, ArrowUpRight } from "lucide-react";
+import { useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { HealthOverview } from "./health-overview";
+import { monitoringHealth } from "./health-summary";
+
+export function EnvironmentMonitoring({
+  env,
+  now,
+}: {
+  env: Environment;
+  now: number;
+}) {
+  const [search] = useSearchParams();
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const summary = monitoringHealth(env.services, now);
+  const visible = summary.rows.filter(
+    (row) =>
+      row.service.name.toLowerCase().includes(query.trim().toLowerCase()) &&
+      (filter === "all" ||
+        (filter === "attention" ? row.attention : row.state === filter)),
+  );
+  const table = useTableView(
+    visible,
+    {
+      name: (row) => row.service.name,
+      state: (row) => row.state,
+      sampled: (row) => row.sampledAt ?? "",
+    },
+    "name",
+    "asc",
+    `${env.id}/${query}/${filter}`,
+  );
+  const serviceHref = (id: string) => {
+    const next = new URLSearchParams(search);
+    next.set("service", id);
+    next.set("serviceTab", "monitoring");
+    return `?${next}`;
+  };
+  if (summary.total === 0)
+    return (
+      <EmptyState
+        icon={<Activity />}
+        title="No Services to monitor"
+        description="Health appears here when this Environment has Services. Open Services to add a workload."
+      />
+    );
+  return (
+    <div className="space-y-5">
+      <HealthOverview summary={summary} />
+      <section
+        aria-labelledby="monitoring-services-title"
+        className="space-y-4"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h2
+              id="monitoring-services-title"
+              className="text-lg font-semibold"
+            >
+              Service health
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Runtime observations in this Environment. Inspect a Service for
+              its own monitoring and containers.
+            </p>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {summary.total} Services
+          </span>
+        </div>
+        <CollectionToolbar
+          query={query}
+          onQueryChange={setQuery}
+          label="Service health"
+        >
+          <Select
+            aria-label="Filter Service health"
+            className="w-auto min-w-44"
+            value={filter}
+            onValueChange={setFilter}
+            options={[
+              { value: "all", label: "All runtime states" },
+              { value: "attention", label: "Needs attention" },
+              ...[
+                "healthy",
+                "running",
+                "starting",
+                "degraded",
+                "stopped",
+                "failed",
+                "absent",
+                "unavailable",
+              ].map((state) => ({
+                value: state,
+                label:
+                  state === "running"
+                    ? "Running · no healthcheck"
+                    : state.charAt(0).toUpperCase() + state.slice(1),
+              })),
+            ]}
+          />
+        </CollectionToolbar>
+        {table.total === 0 ? (
+          <EmptyState
+            embedded
+            title="No matching Services"
+            description="Change the search or runtime filter to see other Services."
+            action={
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setQuery("");
+                  setFilter("all");
+                }}
+              >
+                Clear filters
+              </Button>
+            }
+          />
+        ) : (
+          <>
+            <ResourceTable>
+              <Table aria-label="Environment Service health">
+                <TableHeader>
+                  <TableRow>
+                    <TableSortHead sort={table} field="name">
+                      Service
+                    </TableSortHead>
+                    <TableSortHead sort={table} field="state">
+                      Runtime
+                    </TableSortHead>
+                    <TableHead>Observed replicas</TableHead>
+                    <TableHead>Desired runtime</TableHead>
+                    <TableSortHead sort={table} field="sampled">
+                      Last observation
+                    </TableSortHead>
+                    <TableHead>
+                      <span className="sr-only">Inspect</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {table.rows.map((row) => (
+                    <ResourceRow
+                      key={row.service.id}
+                      href={serviceHref(row.service.id)}
+                    >
+                      <TableCell>
+                        <Link
+                          to={serviceHref(row.service.id)}
+                          className="font-medium hover:text-primary hover:underline"
+                        >
+                          {row.service.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          status={row.state}
+                          label={
+                            row.state === "running"
+                              ? "Running · no healthcheck"
+                              : undefined
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {row.observation.state === "unavailable" ? (
+                          "Unavailable"
+                        ) : (
+                          <span>
+                            {row.observation.replicas.healthy +
+                              row.observation.replicas.running}
+                            /{row.observation.expectedReplicas} running{" "}
+                            <span className="block text-xs text-muted-foreground">
+                              {row.observation.replicas.healthy} healthy
+                            </span>
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="capitalize text-muted-foreground">
+                        {row.service.runtimeIntent}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatTimestamp(row.sampledAt, "Not observed", {
+                          seconds: true,
+                        })}
+                        {row.state === "unavailable" && row.sampledAt && (
+                          <span className="block text-warning">
+                            Expired observation
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Link
+                          to={serviceHref(row.service.id)}
+                          className="inline-flex items-center gap-1 text-xs text-primary"
+                          aria-label={`Inspect ${row.service.name} monitoring`}
+                        >
+                          Inspect <ArrowUpRight className="size-3.5" />
+                        </Link>
+                      </TableCell>
+                    </ResourceRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ResourceTable>
+            <TablePagination table={table} label="Services" />
+          </>
+        )}
+      </section>
+    </div>
+  );
+}

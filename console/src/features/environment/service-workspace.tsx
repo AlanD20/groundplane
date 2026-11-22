@@ -25,6 +25,7 @@ import {
 import { EnvVarsCard } from "@/features/entry/environment-entries";
 import { ServiceConfiguration } from "@/features/service/service-configuration";
 import { ServiceOverview } from "@/features/service/service-overview";
+import { ServiceMonitoring } from "@/features/monitoring/service-monitoring";
 import {
   ServiceOperationDialog,
   ServiceStateBadges,
@@ -244,6 +245,9 @@ export function ServiceWorkspace({
                 onOpenDeployments={() => selectTab("releases")}
               />
             </div>
+          )}
+          {tab === "monitoring" && (
+            <ServiceMonitoring service={service} now={now} onOpenLogs={() => selectTab("logs")} />
           )}
           {tab === "logs" && (
             <div className="space-y-4 pt-5">

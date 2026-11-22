@@ -9,10 +9,12 @@ import {
   Network,
   FileCode2,
   ArchiveRestore,
+  Activity,
 } from "lucide-react";
 
 export const serviceDestinations = [
   { key: "overview", label: "Overview", icon: Layers },
+  { key: "monitoring", label: "Monitoring", icon: Activity },
   { key: "logs", label: "Logs", icon: Terminal },
   { key: "releases", label: "Deployments", icon: History },
   { key: "entries", label: "Configuration", icon: Braces },
@@ -35,6 +37,7 @@ export function serviceDestination(
 
 export const backingDestinations = [
   { key: "overview", label: "Overview", icon: Layers },
+  { key: "monitoring", label: "Monitoring", icon: Activity },
   { key: "logs", label: "Logs", icon: Terminal },
   { key: "connections", label: "Backing connections", icon: Plug },
   { key: "backups", label: "Backups & restore", icon: ArchiveRestore },

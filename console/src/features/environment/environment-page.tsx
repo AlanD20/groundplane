@@ -1,3 +1,4 @@
+import { EnvironmentMonitoring } from "@/features/monitoring/environment-monitoring";
 import { CreationButton } from "@/components/common/creation-button";
 import RunnerManager from "@/features/runners/runner-manager";
 import { EmptyState } from "@/components/common/empty-state";
@@ -159,6 +160,7 @@ export default function EnvironmentPage() {
       />
     ),
     overview: <EnvironmentOverview env={env} now={observation.now} />,
+    monitoring: <EnvironmentMonitoring env={env} now={observation.now} />,
     logs: <LogStream target={{ kind: "environment", id: env.id }} />,
     zones: <Topology env={env} now={observation.now} />,
     routes: <RoutesCard env={env} />,

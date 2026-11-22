@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { backingDestinations } from "@/features/service/workspace-navigation";
 import { LogStream } from "@/features/logs/log-viewer";
 import { ServiceContainers } from "@/features/service/service-containers";
+import { ServiceMonitoring } from "@/features/monitoring/service-monitoring";
 import { currentServiceObservation } from "@/features/service/service-observation";
 import { ServiceStateBadges } from "@/features/service/service-runtime-actions";
 import { useVisibleServiceObservations } from "@/features/service/use-service-observation-refresh";
@@ -149,6 +150,9 @@ export default function BackingServiceDetailPage() {
           <h2 className="text-lg font-semibold">
             {backingDestinations.find((item) => item.key === tab)?.label}
           </h2>
+        )}
+        {tab === "monitoring" && svc && (
+          <ServiceMonitoring service={svc} now={observationRefresh.now} onOpenLogs={() => setTab("logs")} />
         )}
         {tab === "overview" && (
           <div className="space-y-5 pt-5">
