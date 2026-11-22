@@ -1023,6 +1023,7 @@ message AgentMessage {
     LogReady log_ready = 9;
     WorkloadImageResolutionResult workload_image_resolution_result = 11;
     ServiceObservationResult service_observation_result = 13;
+    MonitoringSamplesResult monitoring_samples_result = 18;
     BackingAccessResult backing_access_result = 15;
     DNSConnectionResult dns_connection_result = 16;
     EdgeConnectionResult edge_connection_result = 17;
@@ -1269,6 +1270,64 @@ message ServiceObservationResult {
   repeated ServiceObservationRow observations = 2;
 }
 
+// Read-only telemetry for exact acknowledged runtime targets. These messages
+// are sent only to a Ready Agent with identical immutable build provenance.
+message CollectMonitoringSamples {
+  string request_id = 1;
+  repeated ServiceObservationTarget targets = 2;
+  bool include_storage = 3;
+  repeated MonitoringVolumeTarget volumes = 4;
+}
+
+message CancelMonitoringSamples { string request_id = 1; }
+
+message MonitoringVolumeTarget {
+  string volume_id = 1;
+  string environment_id = 2;
+  string docker_name = 3;
+  string compose_project = 4;
+  string volume_key = 5;
+}
+
+message MonitoringSamplesResult {
+  string request_id = 1;
+  repeated MonitoringServiceSample services = 2;
+  repeated MonitoringVolumeSample volumes = 3;
+}
+
+message MonitoringServiceSample {
+  string service_id = 1;
+  string release_id = 2;
+  bool unavailable = 3;
+  repeated MonitoringContainerSample containers = 4;
+}
+
+message MonitoringContainerSample {
+  string container_id = 1;
+  uint32 replica = 2;
+  int64 observed_at_unix_nano = 3;
+  uint64 restart_count = 4;
+  optional uint64 cpu_total_nanoseconds = 5;
+  optional uint64 memory_usage_bytes = 6;
+  optional uint64 memory_inactive_file_bytes = 7;
+  optional uint64 memory_limit_bytes = 8;
+  optional double cpu_limit_cores = 9;
+  optional uint64 network_receive_bytes = 10;
+  optional uint64 network_transmit_bytes = 11;
+  optional uint64 block_read_bytes = 12;
+  optional uint64 block_write_bytes = 13;
+  optional uint64 block_read_operations = 14;
+  optional uint64 block_write_operations = 15;
+  optional uint64 writable_layer_bytes = 16;
+  repeated string volume_ids = 17;
+}
+
+message MonitoringVolumeSample {
+  string volume_id = 1;
+  int64 observed_at_unix_nano = 2;
+  optional uint64 used_bytes = 3;
+}
+
 message StepFailure {
   string code = 1; // validated by the shared Task diagnostic catalog
   int32 exit_code = 2; // zero means no nonzero exit was reported
@@ -1447,6 +1506,8 @@ message ControllerMessage {
     CancelDNSConnections cancel_dns_connections = 21;
     CheckEdgeConnections check_edge_connections = 23;
     CancelEdgeConnections cancel_edge_connections = 24;
+    CollectMonitoringSamples collect_monitoring_samples = 25;
+    CancelMonitoringSamples cancel_monitoring_samples = 26;
     BackupConfigTransfer backup_config_transfer = 32;
     BackupConfigCredit backup_config_credit = 33;
     BackupStagingRecoveryPlan backup_staging_recovery_plan = 34;

@@ -18,6 +18,7 @@ only a filter on a global dashboard.
 
 | Workspace | Monitoring contents | Next inspection |
 | --- | --- | --- |
+| Platform / Host | Live host utilization and history for CPU, memory, filesystems, interfaces and block devices, including processes outside GP. | Host resource breakdown. |
 | Tenant | Aggregate owned workload usage, health, missing observations and Projects. | Project monitoring. |
 | Project | Aggregate owned workload usage, health and Environments. | Environment monitoring. |
 | Environment | Health of every Service: observed state, ready replicas, restarts and observation freshness. | That Service's monitoring. |
@@ -33,6 +34,16 @@ of the instance. Shared PostgreSQL, Valkey or ClamAV usage must not be counted
 again in every consuming Environment, Project or Tenant. Per-consumer database
 usage requires independent instrumentation and cannot be inferred from the
 Backing container's totals.
+
+Live utilization and historical inspection share the same resource attribution.
+Visible pages may refresh current readings more frequently than historical
+retention buckets, within bounded collection and query budgets. Show the sample
+time and live/paused state; a refresh control must not imply that an old reading
+was just measured. Platform totals come from host accounting, never a sum of
+containers. Keep physical and virtual network interfaces distinguishable to avoid
+counting the same traffic twice. Disk-device readings and filesystem capacity
+also have different meanings; neither may be silently added across overlapping
+devices or mounts.
 
 ## Metric semantics
 
