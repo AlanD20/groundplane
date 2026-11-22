@@ -135,18 +135,28 @@ export function useMonitoringQuery(request: MonitoringRequest) {
     const changed = previousKey.current !== key;
     previousKey.current = key;
     if (!paused || !changed) return;
-    const controller = new AbortController();
-    let started = false;
+    let pending: AbortController | undefined;
+    let completed = false;
     const read = () => {
-      if (document.hidden || started) return;
-      started = true;
-      void refresh(controller.signal);
+      if (document.hidden) {
+        pending?.abort();
+        pending = undefined;
+        return;
+      }
+      if (pending || completed) return;
+      const controller = new AbortController();
+      pending = controller;
+      void refresh(controller.signal).then(() => {
+        if (controller.signal.aborted) return;
+        pending = undefined;
+        completed = true;
+      });
     };
     document.addEventListener("visibilitychange", read);
     read();
     return () => {
       document.removeEventListener("visibilitychange", read);
-      controller.abort();
+      pending?.abort();
     };
   }, [key, paused, refresh]);
 
