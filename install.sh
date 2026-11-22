@@ -275,7 +275,9 @@ allowed = {"controller", "groundplane", "controller-release.json", "openapi.json
            "groundplane.conf", "controller.yaml.example", "install_bundle.py",
            "install-runtime.sh", "setup-host.sh", "bundle.json", "install_agent.py", "release_selection.py",
            "postgres16-release.json", "postgres16_tools.py"}
+optional = {"openapi.json"}
 if sys.argv[4] == "agent":
+    optional = set()
     allowed = {"install_agent.py", "controller_update.py", "controller_release.py", "bundle.json"}
 with tarfile.open(root / "bundle.tar.gz", "r:gz") as archive:
     members = []
@@ -291,12 +293,12 @@ with tarfile.open(root / "bundle.tar.gz", "r:gz") as archive:
             raise SystemExit("Archive exceeds unpacked limit")
         names.add(item.name)
         members.append(item)
-    if names != allowed:
+    if names - optional != allowed - optional:
         raise SystemExit("Incomplete release archive")
     manifest = json.load(archive.extractfile("bundle.json"))
     if manifest.get("version") != sys.argv[2] or manifest.get("arch") != sys.argv[3] or manifest.get("os") != "linux":
         raise SystemExit("Wrong release version/platform")
-    if set(manifest.get("files", {})) != allowed - {"bundle.json"}:
+    if set(manifest.get("files", {})) != names - {"bundle.json"}:
         raise SystemExit("Incomplete release manifest")
     import hashlib
     for item in members:

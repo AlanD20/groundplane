@@ -77,6 +77,18 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(manifest["postgres_image"], "postgres@sha256:" + "b" * 64)
         self.assertEqual((target / "controller").read_bytes(), b"test controller bytes")
 
+    def test_existing_archive_without_console_api_metadata_remains_installable(self):
+        # The public installer can be published before replacement release assets.
+        files = dict(self.files)
+        del files["openapi.json"]
+        manifest = json.loads(files["bundle.json"])
+        del manifest["files"]["openapi.json"]
+        files["bundle.json"] = json.dumps(manifest).encode()
+        target, result = self.extract(files=files)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((target / "controller").read_bytes(), b"test controller bytes")
+        install_bundle.validate(target, "1.2.3", "amd64")
+
     def test_wrong_version_and_architecture_refuse_before_extraction(self):
         for version, arch in (("9.0.0", "amd64"), ("1.2.3", "arm64")):
             with self.subTest(version=version, arch=arch):
