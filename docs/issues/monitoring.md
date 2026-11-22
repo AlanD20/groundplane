@@ -61,6 +61,18 @@ Counter resets and container replacement must start a new series segment rather
 than produce a negative rate or join unrelated container identities. Aggregates
 must indicate coverage when only some descendants have fresh samples.
 
+Chart inspection shows the actual timestamp or bucket interval with its time
+zone, units, aggregation method, valid/expected sample count and contributor
+coverage. Aggregated points retain average, minimum and maximum from underlying
+measurements; the average line and min/max band have distinct labels. Inspection
+must remain stable while live updates arrive, with keyboard navigation and a
+way to pin or dismiss the selected point. Hover does not issue another query.
+
+Extrema of a parent total require aligned total samples. Adding independent
+Service minima or maxima does not establish the minimum or maximum of their
+sum. If retained evidence cannot establish an extremum, show it as unavailable
+rather than label a bound or an average as the actual extreme.
+
 ## Collection and query constraints
 
 Resolve samples through GP's stable resource and container identities. A name or
