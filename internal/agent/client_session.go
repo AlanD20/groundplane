@@ -168,6 +168,8 @@ func (c *Client) runSession(
 	received := make(chan receiveResult, 1)
 	images := newImageSession(streamCtx, c.images)
 	defer images.close()
+	monitoring := newMonitoringSession(c.monitoring)
+	defer monitoring.Close()
 	observations := newObservationSession(c.observer)
 	defer observations.Close()
 	backingAccess := newBackingAccessSession(c.backingAccess)
@@ -188,6 +190,7 @@ func (c *Client) runSession(
 		event := nextSessionEvent(
 			ctx,
 			observations,
+			monitoring,
 			images,
 			backingAccess,
 			dnsChecks,
@@ -218,12 +221,9 @@ func (c *Client) runSession(
 			}
 		case sessionEnded:
 			return false, nil
-		case sessionObservation:
-			if err := observations.Close(); err != nil {
-				return false, err
-			}
-			if err := sendServiceObservation(streamCtx, stream, event.observation); err != nil {
-				return agentChannelTransportResult(ctx, err, "agent: send service observation", false)
+		case sessionMonitoring, sessionObservation:
+			if err := deliverTelemetryEvent(streamCtx, stream, event, observations, monitoring); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: send runtime telemetry", false)
 			}
 		case sessionBackingAccess:
 			if err := backingAccess.Close(); err != nil {
@@ -243,16 +243,8 @@ func (c *Client) runSession(
 				return agentChannelTransportResult(ctx, err, "agent: send Tunnel check result", false)
 			}
 		case sessionImage:
-			output := event.image
-			images.busy = false
-			if output.err != nil {
-				return agentChannelTransportResult(ctx, output.err, "agent: resolve workload images", true)
-			}
-			message := &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_WorkloadImageResolutionResult{
-				WorkloadImageResolutionResult: output.result,
-			}}
-			if err := stream.Send(message); err != nil {
-				return agentChannelTransportResult(ctx, err, "agent: send workload image result", false)
+			if received, err := images.deliver(stream, event.image); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: deliver workload image result", received)
 			}
 		case sessionReadiness:
 			if err := c.sendReady(stream); err != nil {
@@ -274,6 +266,7 @@ func (c *Client) runSession(
 				c.processOwnership,
 				images,
 				observations,
+				monitoring,
 				backingAccess,
 				dnsChecks,
 				edgeChecks,
@@ -493,9 +486,9 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
-			if handled, err := observations.handle(streamCtx, stream, result.message); handled {
+			if handled, err := handleTelemetryRead(streamCtx, stream, result.message, observations, monitoring); handled {
 				if err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: receive service observation", true)
+					return agentChannelTransportResult(ctx, err, "agent: receive runtime telemetry", true)
 				}
 				receiveNext(streamCtx, stream, received)
 				continue

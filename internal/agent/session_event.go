@@ -12,6 +12,7 @@ type sessionEventKind uint8
 const (
 	sessionEnded sessionEventKind = iota
 	sessionObservation
+	sessionMonitoring
 	sessionBackingAccess
 	sessionDNSCheck
 	sessionEdgeCheck
@@ -27,6 +28,7 @@ const (
 type sessionEvent struct {
 	kind          sessionEventKind
 	observation   *agentpb.ServiceObservationResult
+	monitoring    *agentpb.MonitoringSamplesResult
 	backingAccess *agentpb.BackingAccessResult
 	dnsCheck      *agentpb.DNSConnectionResult
 	edgeCheck     *agentpb.EdgeConnectionResult
@@ -44,6 +46,7 @@ type sessionEvent struct {
 func nextSessionEvent(
 	ctx context.Context,
 	observations *observationSession,
+	monitoring *monitoringSession,
 	images *imageSession,
 	backingAccess *backingAccessSession,
 	dnsChecks *dnsCheckSession,
@@ -60,6 +63,8 @@ func nextSessionEvent(
 		return sessionEvent{kind: sessionEnded}
 	case result := <-observations.outputs:
 		return sessionEvent{kind: sessionObservation, observation: result}
+	case result := <-monitoring.outputs:
+		return sessionEvent{kind: sessionMonitoring, monitoring: result}
 	case result := <-backingAccess.outputs:
 		return sessionEvent{kind: sessionBackingAccess, backingAccess: result}
 	case result := <-dnsChecks.outputs:

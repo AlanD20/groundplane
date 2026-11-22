@@ -23,6 +23,7 @@ type Snapshot struct {
 
 // Registry owns the single active session for each Agent.
 type Registry struct {
+	source           buildversion.BuildProvenance
 	mu               sync.Mutex
 	nextFence        uint64
 	nextSubscription uint64
@@ -68,6 +69,7 @@ type Session struct {
 // NewRegistry returns an empty Agent session registry.
 func NewRegistry() *Registry {
 	return &Registry{
+		source:    buildversion.Provenance(),
 		agents:    make(map[string]*sessionState),
 		lifecycle: make(map[string]*lifecycleFence),
 		ready:     make(map[readyKey]map[uint64]*readySubscription),

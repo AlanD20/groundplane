@@ -42,6 +42,7 @@ func localExecutionQuiescent(
 	ownership executionOwnershipQuiescence,
 	images *imageSession,
 	observations *observationSession,
+	monitoring *monitoringSession,
 	backingAccess *backingAccessSession,
 	dnsChecks *dnsCheckSession,
 	edgeChecks *edgeCheckSession,
@@ -49,7 +50,7 @@ func localExecutionQuiescent(
 	physical ExecutionQuiescenceChecker,
 ) bool {
 	if ctx == nil || ctx.Err() != nil || !workers.quiescent() || ownership == nil || !ownership.Quiescent() ||
-		images == nil || images.busy || observations == nil || observations.requestID != "" ||
+		monitoring == nil || monitoring.requestID != "" || images == nil || images.busy || observations == nil || observations.requestID != "" ||
 		backingAccess == nil || backingAccess.requestID != "" || dnsChecks == nil || dnsChecks.requestID != "" ||
 		edgeChecks == nil || edgeChecks.requestID != "" || terminals == nil || !terminals.Quiescent() ||
 		physical == nil {
@@ -69,6 +70,7 @@ func (client *Client) handleExecutionQuiescence(
 	ownership executionOwnershipQuiescence,
 	images *imageSession,
 	observations *observationSession,
+	monitoring *monitoringSession,
 	backingAccess *backingAccessSession,
 	dnsChecks *dnsCheckSession,
 	edgeChecks *edgeCheckSession,
@@ -88,6 +90,7 @@ func (client *Client) handleExecutionQuiescence(
 		ownership,
 		images,
 		observations,
+		monitoring,
 		backingAccess,
 		dnsChecks,
 		edgeChecks,

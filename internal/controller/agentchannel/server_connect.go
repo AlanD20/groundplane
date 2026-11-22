@@ -86,6 +86,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	received := make(chan agentReceiveResult, 1)
 	go receiveAgentMessages(stream, session, received)
 	observations := &observationExchange{}
+	monitoring := &monitoringExchange{}
 	backingAccess := &backingAccessExchange{}
 	dnsChecks := &dnsCheckExchange{}
 	edgeChecks := &edgeCheckExchange{}
@@ -98,6 +99,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		event := nextConnectEvent(
 			session,
 			observations,
+			monitoring,
 			backingAccess,
 			dnsChecks,
 			edgeChecks,
@@ -115,6 +117,14 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			controlBurst = 0
 			if err := payloads.deliver(stream, event.frame); err != nil {
 				return taskStoreStatus(err)
+			}
+		case connectMonitoringExpired:
+			if err := monitoring.cancel(session.ctx, stream); err != nil {
+				return err
+			}
+		case connectMonitoringCommand:
+			if err := monitoring.send(session.ctx, stream, session, event.monitoring); err != nil {
+				return err
 			}
 		case connectObservationExpired:
 			if err := observations.cancel(session.ctx, stream); err != nil {
@@ -302,6 +312,14 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if backingAccess.active != nil &&
 					result.message.GetBackingAccessResult().RequestId == backingAccess.active.request.RequestId {
 					backingAccess.active = nil
+				}
+				continue
+			}
+			if result.message.GetMonitoringSamplesResult() != nil {
+				session.acceptMonitoringResult(session.ctx, result.message)
+				if monitoring.active != nil &&
+					result.message.GetMonitoringSamplesResult().RequestId == monitoring.active.request.RequestId {
+					monitoring.active = nil
 				}
 				continue
 			}

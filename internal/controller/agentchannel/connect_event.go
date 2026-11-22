@@ -13,6 +13,8 @@ const (
 	connectEnded connectEventKind = iota
 	connectObservationExpired
 	connectObservationCommand
+	connectMonitoringExpired
+	connectMonitoringCommand
 	connectBackingAccessExpired
 	connectBackingAccessCommand
 	connectDNSCheckExpired
@@ -32,6 +34,7 @@ const (
 type connectEvent struct {
 	kind          connectEventKind
 	observation   *observationCommand
+	monitoring    *monitoringCommand
 	backingAccess *backingAccessCommand
 	dnsCheck      *dnsCheckCommand
 	edgeCheck     *edgeCheckCommand
@@ -52,6 +55,7 @@ const maximumControlBurst = 4
 func nextConnectEvent(
 	session *Session,
 	observations *observationExchange,
+	monitoring *monitoringExchange,
 	backingAccess *backingAccessExchange,
 	dnsChecks *dnsCheckExchange,
 	edgeChecks *edgeCheckExchange,
@@ -76,6 +80,10 @@ func nextConnectEvent(
 		return connectEvent{kind: connectEnded}
 	case err := <-payloads.failures:
 		return connectEvent{kind: connectPayloadFailed, err: err}
+	case <-monitoring.done():
+		return connectEvent{kind: connectMonitoringExpired}
+	case command := <-session.state.monitoringCommands:
+		return connectEvent{kind: connectMonitoringCommand, monitoring: command}
 	case <-observations.done():
 		return connectEvent{kind: connectObservationExpired}
 	case command := <-session.state.observationCommands:
@@ -111,6 +119,10 @@ func nextConnectEvent(
 		return connectEvent{kind: connectEnded}
 	case err := <-payloads.failures:
 		return connectEvent{kind: connectPayloadFailed, err: err}
+	case <-monitoring.done():
+		return connectEvent{kind: connectMonitoringExpired}
+	case command := <-session.state.monitoringCommands:
+		return connectEvent{kind: connectMonitoringCommand, monitoring: command}
 	case <-observations.done():
 		return connectEvent{kind: connectObservationExpired}
 	case command := <-session.state.observationCommands:

@@ -36,6 +36,8 @@ type sessionState struct {
 	activeImage           *imageCommand
 	observationCommands   chan *observationCommand
 	activeObservation     *observationCommand
+	monitoringCommands    chan *monitoringCommand
+	activeMonitoring      *monitoringCommand
 	backingAccessCommands chan *backingAccessCommand
 	activeBackingAccess   *backingAccessCommand
 	dnsCheckCommands      chan *dnsCheckCommand
@@ -62,6 +64,7 @@ func newSessionState(
 		terminalCommands: make(chan terminalCommand),
 		imageCounter:     ids.NewImageCorrelationCounter(), offline: make(chan struct{}),
 		observationCommands:   make(chan *observationCommand),
+		monitoringCommands:    make(chan *monitoringCommand),
 		backingAccessCommands: make(chan *backingAccessCommand),
 		dnsCheckCommands:      make(chan *dnsCheckCommand),
 		edgeCheckCommands:     make(chan *edgeCheckCommand),

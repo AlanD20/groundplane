@@ -103,6 +103,7 @@ type Client struct {
 	executionWorkers        *executionWorkers
 	images                  WorkloadImageResolver
 	observer                ServiceObserver
+	monitoring              MonitoringReader
 	backingAccess           BackingAccessChecker
 	dnsChecks               DNSConnectionChecker
 	edgeChecks              EdgeConnectionChecker

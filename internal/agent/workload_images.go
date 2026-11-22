@@ -33,6 +33,20 @@ type imageOutput struct {
 	err    error
 }
 
+func (session *imageSession) deliver(stream agentStream, output imageOutput) (bool, error) {
+	session.busy = false
+	if output.err != nil {
+		return true, output.err
+	}
+	message := &agentpb.AgentMessage{
+		Payload: &agentpb.AgentMessage_WorkloadImageResolutionResult{WorkloadImageResolutionResult: output.result},
+	}
+	if err := stream.Send(message); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
 // Only the stream loop calls start and consumes results. The one worker never
 // writes to the stream; close cancels and joins it before session replacement.
 type imageSession struct {

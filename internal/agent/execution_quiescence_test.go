@@ -30,6 +30,7 @@ func (*quiescenceStream) CloseSend() error                          { return nil
 type quiescenceFixture struct {
 	workers       *executionWorkers
 	images        *imageSession
+	monitoring    *monitoringSession
 	observations  *observationSession
 	backingAccess *backingAccessSession
 	dnsChecks     *dnsCheckSession
@@ -47,6 +48,7 @@ func newQuiescenceFixture(t *testing.T) quiescenceFixture {
 		},
 		images:        newImageSession(t.Context(), nil),
 		observations:  newObservationSession(nil),
+		monitoring:    newMonitoringSession(nil),
 		backingAccess: newBackingAccessSession(nil),
 		dnsChecks:     newDNSCheckSession(nil),
 		edgeChecks:    newEdgeCheckSession(nil),
@@ -65,6 +67,7 @@ func (fixture quiescenceFixture) check(
 		ownership,
 		fixture.images,
 		fixture.observations,
+		fixture.monitoring,
 		fixture.backingAccess,
 		fixture.dnsChecks,
 		fixture.edgeChecks,
@@ -86,6 +89,11 @@ func TestLocalExecutionQuiescenceRequiresEveryIndependentOwner(t *testing.T) {
 		t.Fatal("active auxiliary observation was reported quiescent")
 	}
 	fixture.observations.requestID = ""
+	fixture.monitoring.requestID = "monitoring-read"
+	if fixture.check(t.Context(), quiescenceOwnership(true), quiescenceChecker{}) {
+		t.Fatal("active monitoring was reported quiescent")
+	}
+	fixture.monitoring.requestID = ""
 	if fixture.check(t.Context(), quiescenceOwnership(true), quiescenceChecker{err: errors.New("inspection failed")}) {
 		t.Fatal("physical inspection failure was reported quiescent")
 	}
@@ -116,6 +124,7 @@ func TestExecutionQuiescenceProbeRepliesWithBoundRequestAndFailureClosed(t *test
 				quiescenceOwnership(true),
 				fixture.images,
 				fixture.observations,
+				fixture.monitoring,
 				fixture.backingAccess,
 				fixture.dnsChecks,
 				fixture.edgeChecks,
@@ -145,6 +154,7 @@ func TestExecutionQuiescenceProbeRepliesWithBoundRequestAndFailureClosed(t *test
 			quiescenceOwnership(true),
 			fixture.images,
 			fixture.observations,
+			fixture.monitoring,
 			fixture.backingAccess,
 			fixture.dnsChecks,
 			fixture.edgeChecks,

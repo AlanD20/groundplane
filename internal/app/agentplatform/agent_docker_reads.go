@@ -7,10 +7,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/componentaction"
 	"github.com/AlanD20/groundplane/internal/infra/docker/backingaccesscheck"
 	"github.com/AlanD20/groundplane/internal/infra/docker/executionquiescence"
+	"github.com/AlanD20/groundplane/internal/infra/docker/monitoringreader"
 	"github.com/AlanD20/groundplane/internal/infra/docker/serviceobserver"
 	"github.com/AlanD20/groundplane/internal/infra/docker/workloadimages"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/moby/moby/client"
+	"time"
 )
 
 // ConfigureDockerReads returns the owned Docker connection even when later wiring
@@ -46,6 +48,13 @@ func ConfigureDockerReads(
 		return engine, err
 	}
 	if err := target.SetServiceObserver(observer); err != nil {
+		return engine, err
+	}
+	monitoring, err := monitoringreader.New(engine, time.Now)
+	if err != nil {
+		return engine, err
+	}
+	if err := target.SetMonitoringReader(monitoring); err != nil {
 		return engine, err
 	}
 	checks, err := backingaccesscheck.NewExchange(engine)
