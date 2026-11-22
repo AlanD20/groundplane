@@ -131,6 +131,10 @@ func (reader *Reader) sampleContainer(ctx context.Context, request *agentpb.Coll
 	if err != nil || !matches(before.Container, target, id, replica) {
 		return nil
 	}
+	startedAt, err := time.Parse(time.RFC3339Nano, before.Container.State.StartedAt)
+	if err != nil || startedAt.UnixNano() <= 0 {
+		return nil
+	}
 	stats, err := reader.engine.ContainerStats(ctx, id, client.ContainerStatsOptions{})
 	if err != nil {
 		return nil
@@ -140,7 +144,8 @@ func (reader *Reader) sampleContainer(ctx context.Context, request *agentpb.Coll
 	}
 	row, decodeErr := decodeStatistics(stats.Body, id, reader.now())
 	closeErr := stats.Body.Close()
-	if decodeErr != nil || closeErr != nil || ctx.Err() != nil {
+	if decodeErr != nil || closeErr != nil || ctx.Err() != nil ||
+		time.Unix(0, row.ObservedAtUnixNano).Before(startedAt) {
 		return nil
 	}
 	after, err := reader.engine.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
@@ -150,6 +155,7 @@ func (reader *Reader) sampleContainer(ctx context.Context, request *agentpb.Coll
 		return nil
 	}
 	addContainerDetails(row, before.Container, replica, request.IncludeStorage)
+	row.StartedAtUnixNano = startedAt.UnixNano()
 	if request.IncludeStorage {
 		for _, volume := range request.Volumes {
 			for _, mount := range after.Container.Mounts {

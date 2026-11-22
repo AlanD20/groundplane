@@ -14788,6 +14788,7 @@ type MonitoringContainerSample struct {
 	BlockWriteOperations    *uint64                `protobuf:"varint,15,opt,name=block_write_operations,json=blockWriteOperations,proto3,oneof" json:"block_write_operations,omitempty"`
 	WritableLayerBytes      *uint64                `protobuf:"varint,16,opt,name=writable_layer_bytes,json=writableLayerBytes,proto3,oneof" json:"writable_layer_bytes,omitempty"`
 	VolumeIds               []string               `protobuf:"bytes,17,rep,name=volume_ids,json=volumeIds,proto3" json:"volume_ids,omitempty"`
+	StartedAtUnixNano       int64                  `protobuf:"varint,18,opt,name=started_at_unix_nano,json=startedAtUnixNano,proto3" json:"started_at_unix_nano,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -14939,6 +14940,13 @@ func (x *MonitoringContainerSample) GetVolumeIds() []string {
 		return x.VolumeIds
 	}
 	return nil
+}
+
+func (x *MonitoringContainerSample) GetStartedAtUnixNano() int64 {
+	if x != nil {
+		return x.StartedAtUnixNano
+	}
+	return 0
 }
 
 type MonitoringVolumeSample struct {
@@ -50278,7 +50286,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\vunavailable\x18\x03 \x01(\bR\vunavailable\x12O\n" +
 	"\n" +
 	"containers\x18\x04 \x03(\v2/.groundplane.agent.v1.MonitoringContainerSampleR\n" +
-	"containers\"\x85\t\n" +
+	"containers\"\xb6\t\n" +
 	"\x19MonitoringContainerSample\x12!\n" +
 	"\fcontainer_id\x18\x01 \x01(\tR\vcontainerId\x12\x18\n" +
 	"\areplica\x18\x02 \x01(\rR\areplica\x121\n" +
@@ -50299,7 +50307,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"R\x14blockWriteOperations\x88\x01\x01\x125\n" +
 	"\x14writable_layer_bytes\x18\x10 \x01(\x04H\vR\x12writableLayerBytes\x88\x01\x01\x12\x1d\n" +
 	"\n" +
-	"volume_ids\x18\x11 \x03(\tR\tvolumeIdsB\x18\n" +
+	"volume_ids\x18\x11 \x03(\tR\tvolumeIds\x12/\n" +
+	"\x14started_at_unix_nano\x18\x12 \x01(\x03R\x11startedAtUnixNanoB\x18\n" +
 	"\x16_cpu_total_nanosecondsB\x15\n" +
 	"\x13_memory_usage_bytesB\x1d\n" +
 	"\x1b_memory_inactive_file_bytesB\x15\n" +

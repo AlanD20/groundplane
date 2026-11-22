@@ -1320,6 +1320,7 @@ message MonitoringContainerSample {
   optional uint64 block_write_operations = 15;
   optional uint64 writable_layer_bytes = 16;
   repeated string volume_ids = 17;
+  int64 started_at_unix_nano = 18;
 }
 
 message MonitoringVolumeSample {

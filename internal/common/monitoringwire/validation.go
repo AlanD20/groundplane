@@ -110,6 +110,7 @@ func ValidateResult(request *agentpb.CollectMonitoringSamples, result *agentpb.M
 func containerValid(sample *agentpb.MonitoringContainerSample, storage bool, volumes map[string]bool) bool {
 	if sample == nil || len(sample.ProtoReflect().GetUnknown()) != 0 || len(sample.ContainerId) != 64 ||
 		sample.Replica == 0 || sample.Replica > 4096 || sample.ObservedAtUnixNano <= 0 ||
+		sample.StartedAtUnixNano <= 0 || sample.StartedAtUnixNano > sample.ObservedAtUnixNano ||
 		!storage && (sample.WritableLayerBytes != nil || len(sample.VolumeIds) > 0) {
 		return false
 	}

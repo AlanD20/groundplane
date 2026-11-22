@@ -61,7 +61,7 @@ func TestWorkloadCollectorRejectsChangedAgentAndSourceFences(t *testing.T) {
 	}
 }
 
-func TestWorkloadCollectorStartsNewSegmentOnSameContainerRestart(t *testing.T) {
+func TestWorkloadCollectorStartsNewSegmentOnSameContainerProcessChange(t *testing.T) {
 	clock := &workloadSteppingClock{current: time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)}
 	channel := &workloadTestChannel{}
 	collector := newWorkloadTestCollector(
@@ -89,15 +89,37 @@ func TestWorkloadCollectorStartsNewSegmentOnSameContainerRestart(t *testing.T) {
 		continued.Containers[0].Point.CPUCores == nil {
 		t.Fatalf("continued counter was not derived: %+v", continued.Containers)
 	}
-	channel.restart.Store(1)
+	channel.startedAt.Store(2)
 	clock.Advance(5 * time.Second)
 	if err := collector.Collect(t.Context()); err != nil {
-		t.Fatalf("restart Collect() error = %v", err)
+		t.Fatalf("manual restart Collect() error = %v", err)
 	}
 	restarted, _ := collector.CurrentService("service")
 	if len(restarted.Containers) != 1 || restarted.Containers[0].Segment != metrics.SegmentSourceChange ||
-		restarted.Containers[0].Point.CPUCores != nil {
-		t.Fatalf("restart joined the previous counter segment: %+v", restarted.Containers)
+		restarted.Containers[0].Point.CPUCores != nil ||
+		restarted.Containers[0].Point.NetworkReceiveBytesPerSecond != nil {
+		t.Fatalf("manual restart joined the previous counter segment: %+v", restarted.Containers)
+	}
+	clock.Advance(5 * time.Second)
+	if err := collector.Collect(t.Context()); err != nil {
+		t.Fatalf("post-restart Collect() error = %v", err)
+	}
+	resumed, _ := collector.CurrentService("service")
+	if len(resumed.Containers) != 1 || resumed.Containers[0].Segment != metrics.SegmentContinued ||
+		resumed.Containers[0].Point.CPUCores == nil ||
+		resumed.Containers[0].Point.NetworkReceiveBytesPerSecond == nil {
+		t.Fatalf("new process counter segment did not resume: %+v", resumed.Containers)
+	}
+	channel.restart.Store(1)
+	clock.Advance(5 * time.Second)
+	if err := collector.Collect(t.Context()); err != nil {
+		t.Fatalf("policy restart Collect() error = %v", err)
+	}
+	policyRestarted, _ := collector.CurrentService("service")
+	if len(policyRestarted.Containers) != 1 ||
+		policyRestarted.Containers[0].Segment != metrics.SegmentSourceChange ||
+		policyRestarted.Containers[0].Point.CPUCores != nil {
+		t.Fatalf("restart count change joined the previous counter segment: %+v", policyRestarted.Containers)
 	}
 }
 
@@ -378,6 +400,7 @@ func workloadAgent(revision int64) etcdstore.Versioned[localagentrecord.LocalAge
 type workloadTestChannel struct {
 	calls        atomic.Uint64
 	restart      atomic.Uint64
+	startedAt    atomic.Int64
 	storageCalls atomic.Uint64
 	containers   int
 	observedBase time.Time
@@ -410,11 +433,17 @@ func (channel *workloadTestChannel) CollectMonitoring(
 		row := &agentpb.MonitoringServiceSample{ServiceId: target.ServiceId, ReleaseId: target.ReleaseId}
 		for ordinal := 0; ordinal < count; ordinal++ {
 			cpu, memory, inactive := call*1_000_000_000+uint64(ordinal), uint64(1024), uint64(24)
+			receive, transmit := call*1_000+uint64(ordinal), call*2_000+uint64(ordinal)
+			startedAt := channel.startedAt.Load()
+			if startedAt == 0 {
+				startedAt = 1
+			}
 			container := &agentpb.MonitoringContainerSample{
 				ContainerId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				Replica:     uint32(ordinal + 1), ObservedAtUnixNano: observedAt.UnixNano(),
-				RestartCount: channel.restart.Load(), CpuTotalNanoseconds: &cpu,
+				RestartCount: channel.restart.Load(), StartedAtUnixNano: startedAt, CpuTotalNanoseconds: &cpu,
 				MemoryUsageBytes: &memory, MemoryInactiveFileBytes: &inactive,
+				NetworkReceiveBytes: &receive, NetworkTransmitBytes: &transmit,
 			}
 			if storage {
 				writable := uint64(100 + call)

@@ -344,9 +344,10 @@ func rawContainer(
 	sample *agentpb.MonitoringContainerSample,
 ) metrics.RawContainerSample {
 	digest := sha256.New()
-	_, _ = digest.Write([]byte("groundplane-monitoring-container-source-v1\x00"))
+	_, _ = digest.Write([]byte("groundplane-monitoring-container-source-v2\x00"))
 	_, _ = digest.Write(source[:])
 	_ = binary.Write(digest, binary.BigEndian, sample.RestartCount)
+	_ = binary.Write(digest, binary.BigEndian, sample.StartedAtUnixNano)
 	var salted metrics.SourceFingerprint
 	copy(salted[:], digest.Sum(nil))
 	return metrics.RawContainerSample{

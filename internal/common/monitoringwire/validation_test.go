@@ -21,13 +21,16 @@ func TestMeasurementValidationBindsResultToRequest(t *testing.T) {
 	}}}
 	result := &agentpb.MonitoringSamplesResult{RequestId: id, Services: []*agentpb.MonitoringServiceSample{{
 		ServiceId: "svc_" + id, ReleaseId: "dep_" + id, Containers: []*agentpb.MonitoringContainerSample{{
-			ContainerId: strings.Repeat("a", 64), Replica: 1, ObservedAtUnixNano: 1,
+			ContainerId: strings.Repeat("a", 64), Replica: 1, StartedAtUnixNano: 1, ObservedAtUnixNano: 2,
 		}},
 	}}}
 	if err := ValidateResult(request, result); err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"foreign-service", "duplicate-container", "unknown-volume", "nonfinite-limit", "counter-inconsistency"} {
+	for _, mode := range []string{
+		"foreign-service", "duplicate-container", "unknown-volume", "nonfinite-limit", "counter-inconsistency",
+		"missing-start", "negative-start", "future-start",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			changed := proto.CloneOf(result)
 			row := changed.Services[0]
@@ -43,6 +46,12 @@ func TestMeasurementValidationBindsResultToRequest(t *testing.T) {
 				sample.CpuLimitCores = proto.Float64(math.Inf(1))
 			case "counter-inconsistency":
 				sample.MemoryUsageBytes, sample.MemoryInactiveFileBytes = proto.Uint64(1), proto.Uint64(2)
+			case "missing-start":
+				sample.StartedAtUnixNano = 0
+			case "negative-start":
+				sample.StartedAtUnixNano = -1
+			case "future-start":
+				sample.StartedAtUnixNano = sample.ObservedAtUnixNano + 1
 			}
 			if ValidateResult(request, changed) == nil {
 				t.Fatal("unbound or invalid measurement accepted")

@@ -66,7 +66,8 @@ of etcd. Control-plane metric labels need bounded categories rather than Task or
 request IDs. Per-resource telemetry needs stable resource/container identities,
 with cardinality and retention bounded by the monitored inventory. Shared
 backing usage is observed once at the backing owner; consumer attachments may
-receive an accounting allocation but must not duplicate the underlying usage.
+show connection context, but do not receive an invented allocation of the
+underlying usage.
 
 ## Proposed Recovery Authority seam
 

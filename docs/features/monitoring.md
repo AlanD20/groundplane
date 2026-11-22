@@ -38,6 +38,10 @@ traffic is not host internet egress. Host totals use physical interfaces, while
 the interface breakdown distinguishes virtual interfaces. Block devices and
 partitions are listed separately and are not silently added together.
 
+Container counter continuity includes the actual process start time. A manual
+restart starts a new segment even when Docker retains the same container id and
+restart count.
+
 Persistent-volume usage and writable container layers are distinct. Shared Volumes
 count once in parent totals. Storage timestamps remain visible because storage
 is measured less frequently than CPU, memory and I/O.
