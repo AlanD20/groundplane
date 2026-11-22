@@ -116,6 +116,7 @@ export function useMonitoringQuery(request: MonitoringRequest) {
         remember(key, { value: next, readAt: observed });
         setValue(next);
         setReadAt(observed);
+        setNow(observed);
         setError(undefined);
       } catch (cause) {
         if (!controller.signal.aborted) setError(errorMessage(cause));

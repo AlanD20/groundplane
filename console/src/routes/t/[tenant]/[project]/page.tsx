@@ -21,6 +21,7 @@ import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { Environment } from "@/lib/types";
 import {
+  Activity,
   ArrowLeft,
   Boxes,
   Building2,
@@ -76,6 +77,29 @@ export default function TenantProjectPage() {
     );
 
   const envs = project.environments ?? [];
+  if (search.get("view") === "monitoring")
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Monitoring"
+          eyebrow={`Project · ${project.name}`}
+          icon={<Activity />}
+        />
+        <ScopedMonitoring
+          scope="project"
+          id={project.id}
+          name={project.name}
+          linkFor={(kind, id) => {
+            if (kind !== "environment") return undefined;
+            const child = envs.find((environment) => environment.id === id);
+            return child
+              ? `/t/${tenant.slug}/${project.slug}/${encodeURIComponent(child.name)}?view=monitoring`
+              : undefined;
+          }}
+        />
+      </div>
+    );
+
   const svcCount = envs.reduce((n, e) => n + e.services.length, 0);
   const repoRunner = store.runners.find(
     (r) => r.tenantId === tenant.id && r.projectId === project.id,
@@ -128,18 +152,6 @@ export default function TenantProjectPage() {
             </CreationButton>
           </>
         }
-      />
-      <ScopedMonitoring
-        scope="project"
-        id={project.id}
-        name={project.name}
-        linkFor={(kind, id) => {
-          if (kind !== "environment") return undefined;
-          const child = envs.find((environment) => environment.id === id);
-          return child
-            ? `/t/${tenant.slug}/${project.slug}/${child.name}`
-            : undefined;
-        }}
       />
       <ResourceForm open={open} onOpenChange={setOpen}>
         <DialogHeader>

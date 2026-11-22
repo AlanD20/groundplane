@@ -11,9 +11,10 @@ import (
 )
 
 type observationCommand struct {
-	request *agentpb.ObserveServices
-	ctx     context.Context
-	result  chan observationReply
+	request  *agentpb.ObserveServices
+	ctx      context.Context
+	result   chan observationReply
+	released chan struct{}
 }
 
 type observationReply struct {
@@ -39,20 +40,40 @@ func (r *Registry) ObserveServices(
 	if err := serviceobservation.ValidateRequest(request); err != nil {
 		return nil, err
 	}
-	command := &observationCommand{ctx: ctx, request: proto.CloneOf(request), result: make(chan observationReply, 1)}
 	r.mu.Lock()
 	state := r.agents[agentID]
-	if state == nil || !state.online || state.revoked || closed(state.done) {
+	for {
+		if err := ctx.Err(); err != nil {
+			r.mu.Unlock()
+			return nil, err
+		}
+		if state == nil || r.agents[agentID] != state || !state.online || state.revoked || closed(state.done) {
+			r.mu.Unlock()
+			return nil, observationUnavailable()
+		}
+		if !r.auxiliaryAllowedLocked(agentID, state) {
+			r.mu.Unlock()
+			return nil, auxiliaryPaused()
+		}
+		active := state.activeObservation
+		if active == nil {
+			break
+		}
+		// Other views can observe the same Agent concurrently. Wait inside the
+		// original deadline and keep the original authenticated session fence.
 		r.mu.Unlock()
-		return nil, observationUnavailable()
+		select {
+		case <-active.released:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-state.done:
+			return nil, observationUnavailable()
+		}
+		r.mu.Lock()
 	}
-	if !r.auxiliaryAllowedLocked(agentID, state) {
-		r.mu.Unlock()
-		return nil, auxiliaryPaused()
-	}
-	if state.activeObservation != nil {
-		r.mu.Unlock()
-		return nil, errs.New(errs.KindResourceInUse, "agent service observation is busy")
+	command := &observationCommand{
+		ctx: ctx, request: proto.CloneOf(request),
+		result: make(chan observationReply, 1), released: make(chan struct{}),
 	}
 	state.activeObservation = command
 	r.mu.Unlock()
@@ -62,6 +83,7 @@ func (r *Registry) ObserveServices(
 		if state.activeObservation == command {
 			state.activeObservation = nil
 		}
+		close(command.released)
 		r.mu.Unlock()
 	}()
 	select {

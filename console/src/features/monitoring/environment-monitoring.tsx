@@ -31,13 +31,7 @@ import {
   useMonitoringQuery,
 } from "./use-monitoring-query";
 
-export function EnvironmentMonitoring({
-  env,
-  now,
-}: {
-  env: Environment;
-  now: number;
-}) {
+export function EnvironmentMonitoring({ env }: { env: Environment }) {
   const [search] = useSearchParams();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
@@ -72,7 +66,7 @@ export function EnvironmentMonitoring({
         }
       : service;
   });
-  const summary = monitoringHealth(services, now);
+  const summary = monitoringHealth(services, monitoring.now);
   const visible = summary.rows.filter(
     (row) =>
       (!response || monitored.has(row.service.id)) &&
@@ -127,7 +121,7 @@ export function EnvironmentMonitoring({
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">
-              {summary.total} Services
+              {summary.total} {summary.total === 1 ? "Service" : "Services"}
               {monitoring.paused ? " · live refresh paused" : ""}
             </span>
             <Button

@@ -68,6 +68,7 @@ export function LogStream({ target }: { target: LogTarget }) {
   const abortRef = useRef<AbortController | null>(null);
   const pendingEvents = useRef<TransientLogEvent[]>([]);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const replaceLogSnapshot = useRef(false);
 
   const flushEvents = () => {
     if (flushTimer.current !== null) {
@@ -77,8 +78,12 @@ export function LogStream({ target }: { target: LogTarget }) {
     const batch = pendingEvents.current;
     pendingEvents.current = [];
     if (batch.length > 0) {
-      setEvents((current) => [...current, ...batch].slice(-1000));
-      setReceived((current) => current + batch.length);
+      const replace = replaceLogSnapshot.current;
+      replaceLogSnapshot.current = false;
+      setEvents((current) =>
+        (replace ? batch : [...current, ...batch]).slice(-1000),
+      );
+      setReceived((current) => (replace ? 0 : current) + batch.length);
     }
   };
 
@@ -89,16 +94,19 @@ export function LogStream({ target }: { target: LogTarget }) {
     setStreaming(false);
   };
 
-  const start = () => {
+  const start = (newTarget = false) => {
     stop();
     const controller = new AbortController();
     abortRef.current = controller;
-    setEvents([]);
-    setReceived(0);
+    replaceLogSnapshot.current = true;
     setStarted(true);
-    pinnedToEnd.current = true;
-    setAtEnd(true);
-    setError(null);
+    if (newTarget) {
+      setEvents([]);
+      setReceived(0);
+      pinnedToEnd.current = true;
+      setAtEnd(true);
+      setError(null);
+    }
     setStreaming(true);
     void store
       .watchLogs(
@@ -106,6 +114,7 @@ export function LogStream({ target }: { target: LogTarget }) {
         { tail, follow, signal: controller.signal },
         (event) => {
           if (controller.signal.aborted) return;
+          if (replaceLogSnapshot.current) setError(null);
           pendingEvents.current.push(event);
           if (flushTimer.current === null) {
             flushTimer.current = setTimeout(flushEvents, 50);
@@ -130,7 +139,7 @@ export function LogStream({ target }: { target: LogTarget }) {
 
   useEffect(() => {
     setContainer("all");
-    start();
+    start(true);
     return stop;
     // A new target owns a new stream; filters never restart it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,7 +203,7 @@ export function LogStream({ target }: { target: LogTarget }) {
             !streaming &&
             (!Number.isSafeInteger(tail) || tail < 0 || tail > 1000)
           }
-          onClick={streaming ? stop : start}
+          onClick={streaming ? stop : () => start()}
         >
           {streaming ? "Pause live" : "Resume / reload"}
         </Button>

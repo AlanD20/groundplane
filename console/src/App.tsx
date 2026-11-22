@@ -13,6 +13,9 @@ const BackingService = lazy(
 const PlatformActivity = lazy(() => import("@/routes/platform/activity/page"));
 const PlatformSecrets = lazy(() => import("@/routes/platform/secrets/page"));
 const PlatformHost = lazy(() => import("@/routes/platform/host/page"));
+const PlatformHostMonitoring = lazy(
+  () => import("@/routes/platform/host/monitoring/page"),
+);
 const PlatformImages = lazy(
   () => import("@/features/image-delivery/images-page"),
 );
@@ -87,6 +90,10 @@ export default function App() {
           <Route path="/platform/activity" element={<PlatformActivity />} />
           <Route path="/platform/secrets" element={<PlatformSecrets />} />
           <Route path="/platform/host" element={<PlatformHost />} />
+          <Route
+            path="/platform/host/monitoring"
+            element={<PlatformHostMonitoring />}
+          />
           <Route path="/platform/host/images" element={<PlatformImages />} />
           <Route path="/platform/components" element={<PlatformComponents />} />
           <Route

@@ -193,7 +193,13 @@ export function TaskList({
             aria-label={`Refresh ${title}`}
             disabled={busy}
             onClick={() =>
-              void store.loadTaskJournal(surface, scope).catch(() => undefined)
+              void store
+                .loadTaskJournal(
+                  surface,
+                  scope,
+                  journal.pageCursors[journal.pageIndex],
+                )
+                .catch(() => undefined)
             }
           >
             <RefreshCw className="size-3.5" />

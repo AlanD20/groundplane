@@ -60,16 +60,16 @@ export function useTaskJournal(
       update((draft) => {
         const journal = draft.taskJournals[key] ?? emptyTaskJournal(pageSize);
         if (journal.pageSize !== pageSize) {
+          journal.loaded = false;
           journal.entries = [];
           journal.nextCursor = null;
           journal.pageIndex = 0;
           journal.pageCursors = [undefined];
         }
         journal.pageSize = pageSize;
-        journal.loadError = null;
-        journal.failedCursor = null;
         journal.loading = !journal.loaded && !cursor;
-        journal.loadingMore = !!cursor;
+        journal.loadingMore =
+          !!cursor && cursor !== journal.pageCursors[journal.pageIndex];
         draft.taskJournals[key] = journal;
       });
       try {

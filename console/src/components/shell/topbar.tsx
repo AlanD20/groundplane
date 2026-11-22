@@ -49,6 +49,7 @@ function buildCrumbs(
     if (parts[1] === "host") {
       if (parts[2] === "controller") crumbs.push({ label: "Controller" });
       if (parts[2] === "etcd") crumbs.push({ label: "etcd" });
+      if (parts[2] === "monitoring") crumbs.push({ label: "Monitoring" });
       if (parts[2] === "images") crumbs.push({ label: "Images" });
       if (parts[2] === "agents" && parts[3])
         crumbs.push({ label: `Agent / ${lookups.agentName(parts[3])}` });
@@ -133,6 +134,7 @@ function attachOptions(
             { label: "Controller", href: "/platform/host/controller" },
             { label: "etcd", href: "/platform/host/etcd" },
             { label: "Images", href: "/platform/host/images" },
+            { label: "Monitoring", href: "/platform/host/monitoring" },
             ...store.platform.agents.map((agent) => ({
               label: `Agent / ${agent.host}`,
               href: `/platform/host/agents/${agent.id}`,
@@ -218,6 +220,12 @@ export function Topbar({ pathname }: { pathname: string }) {
     baseCrumbs[baseCrumbs.length - 1].href = pathname;
     baseCrumbs.push({ label: selectedService.name });
   }
+  if (
+    parts[0] === "t" &&
+    parts.length <= 3 &&
+    search.get("view") === "monitoring"
+  )
+    baseCrumbs.push({ label: "Monitoring" });
   const crumbs = attachOptions(pathname, baseCrumbs, store);
 
   return (

@@ -80,6 +80,7 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
+      let complete = false;
       try {
         const current = await requestTask(task!, controller.signal);
         if (controller.signal.aborted) return;
@@ -94,7 +95,7 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
           setResult(response);
         } else setResult(null);
         setError(null);
-        if (!current.task.finished_at) timer = setTimeout(refresh, 2000);
+        complete = !!current.task.finished_at;
       } catch (cause) {
         if (!controller.signal.aborted)
           setError(
@@ -102,6 +103,9 @@ export function RunnerSoftwarePanel({ runner }: { runner: Runner }) {
               ? cause.message
               : "Unable to refresh Runner update",
           );
+      } finally {
+        if (!controller.signal.aborted && !complete)
+          timer = setTimeout(refresh, 2000);
       }
     }
     void refresh();

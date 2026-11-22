@@ -17,13 +17,15 @@ import { Label } from "@/components/ui/label";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import { useLinkedSlug } from "@/lib/use-linked-slug";
-import { Boxes, Cpu, Plus, ShieldCheck } from "lucide-react";
+import { Activity, Boxes, Cpu, Plus, ShieldCheck } from "lucide-react";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ScopedMonitoring } from "@/features/monitoring/scoped-monitoring";
 
 export default function TenantPage() {
   const params = useRequiredParams("tenant");
   const store = useStore();
+  const [search] = useSearchParams();
   const tenant = store.getTenant(params.tenant);
   const projects = store.tenantProjects.filter(
     (p) => p.tenantId === tenant?.id,
@@ -57,6 +59,29 @@ export default function TenantPage() {
     );
   }
 
+  if (search.get("view") === "monitoring")
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Monitoring"
+          eyebrow={`Tenant · ${tenant.name}`}
+          icon={<Activity />}
+        />
+        <ScopedMonitoring
+          scope="tenant"
+          id={tenant.id}
+          name={tenant.name}
+          linkFor={(kind, id) => {
+            if (kind !== "project") return undefined;
+            const child = projects.find((project) => project.id === id);
+            return child
+              ? `/t/${tenant.slug}/${child.slug}?view=monitoring`
+              : undefined;
+          }}
+        />
+      </div>
+    );
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -81,16 +106,6 @@ export default function TenantPage() {
             <Plus className="size-4" /> New project
           </CreationButton>
         }
-      />
-      <ScopedMonitoring
-        scope="tenant"
-        id={tenant.id}
-        name={tenant.name}
-        linkFor={(kind, id) => {
-          if (kind !== "project") return undefined;
-          const child = projects.find((project) => project.id === id);
-          return child ? `/t/${tenant.slug}/${child.slug}` : undefined;
-        }}
       />
       <ResourceForm open={open} onOpenChange={setOpen}>
         <DialogHeader>

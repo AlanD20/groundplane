@@ -272,17 +272,20 @@ function ScopeDetails({
   consumerPage: MonitoringCursor;
 }) {
   const aggregate = response.tenant ?? response.project;
+  const childrenLabel = response.tenant ? "Projects" : "Environments";
   const service = response.service ?? response.backing?.runtime;
   return (
     <>
       {aggregate && (
-        <ResourcePanel title="Child scopes">
-          <Table aria-label={`${response.scope.name} monitoring children`}>
+        <ResourcePanel title={childrenLabel}>
+          <Table aria-label={childrenLabel}>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
+                <TableHead>
+                  {response.tenant ? "Project" : "Environment"}
+                </TableHead>
                 <TableHead>Runtime health</TableHead>
-                <TableHead>Metric evidence</TableHead>
+                {response.tenant && <TableHead>Metrics availability</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -300,15 +303,11 @@ function ScopeDetails({
                     <TableCell>
                       <StatusBadge status={child.runtime_state} />
                     </TableCell>
-                    <TableCell>
-                      {child.scope.kind === "environment" ? (
-                        <span className="text-xs text-muted-foreground">
-                          Health only
-                        </span>
-                      ) : (
+                    {response.tenant && (
+                      <TableCell>
                         <MonitoringStatusBadge live={child.live} now={now} />
-                      )}
-                    </TableCell>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}
@@ -316,11 +315,11 @@ function ScopeDetails({
           </Table>
           {!aggregate.children.items?.length && (
             <p role="status" className="text-sm text-muted-foreground">
-              No child resources are present in this page.
+              No {childrenLabel.toLowerCase()} on this page.
             </p>
           )}
           <MonitoringCursorPagination
-            label="Child scopes"
+            label={childrenLabel}
             page={page}
             nextCursor={aggregate.children.next_cursor}
             loading={loading}

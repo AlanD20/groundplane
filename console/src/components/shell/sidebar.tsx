@@ -146,12 +146,18 @@ export function Sidebar({
           {
             ...item("Environments", projectPath, Layers),
             active:
-              pathname === projectPath && search.get("view") !== "runners",
+              pathname === projectPath &&
+              !["runners", "monitoring"].includes(search.get("view") ?? ""),
           },
           {
             ...item("Runners", `${projectPath}?view=runners`, GitBranch),
             active:
               pathname === projectPath && search.get("view") === "runners",
+          },
+          {
+            ...item("Monitoring", `${projectPath}?view=monitoring`, Activity),
+            active:
+              pathname === projectPath && search.get("view") === "monitoring",
           },
           item("Configuration", `${projectPath}/secrets`, Braces),
           item("Settings", `${projectPath}/settings`, Settings),
@@ -163,7 +169,16 @@ export function Sidebar({
       {
         label: `Tenant · ${tenant?.name ?? workspace.slug}`,
         items: [
-          item("Projects", tenantPath, FolderKanban),
+          {
+            ...item("Projects", tenantPath, FolderKanban),
+            active:
+              pathname === tenantPath && search.get("view") !== "monitoring",
+          },
+          {
+            ...item("Monitoring", `${tenantPath}?view=monitoring`, Activity),
+            active:
+              pathname === tenantPath && search.get("view") === "monitoring",
+          },
           item("Runners", `${tenantPath}/runners`, GitBranch),
           item("Tasks", `${tenantPath}/activity`, Activity),
           item("Settings", `${tenantPath}/settings`, Settings),
@@ -240,6 +255,7 @@ export function Sidebar({
           item("Controller", "/platform/host/controller", Cpu),
           item("etcd", "/platform/host/etcd", Database),
           item("Images", "/platform/host/images", Package),
+          item("Monitoring", "/platform/host/monitoring", Activity),
           item("Components", "/platform/components", Boxes),
         ],
       },

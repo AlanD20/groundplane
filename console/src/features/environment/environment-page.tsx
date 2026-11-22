@@ -71,14 +71,18 @@ export default function EnvironmentPage() {
     });
   }
   const { section, panel } = environmentNavigation(search);
+  const showingMonitoring =
+    panel.key === "monitoring" && !search.has("service");
   const backingEnvironments = store.backingProjects.flatMap(
     (backing) => backing.environments?.slice(0, 1) ?? [],
   );
   const observation = useVisibleServiceObservations({
-    environmentIds: [
-      ...(env && !env.resourceLoadError ? [env.id] : []),
-      ...backingEnvironments.map((environment) => environment.id),
-    ],
+    environmentIds: showingMonitoring
+      ? []
+      : [
+          ...(env && !env.resourceLoadError ? [env.id] : []),
+          ...backingEnvironments.map((environment) => environment.id),
+        ],
     observations: [
       ...(env?.services.map((service) => service.observation) ?? []),
       ...backingEnvironments.flatMap((environment) =>
@@ -160,7 +164,7 @@ export default function EnvironmentPage() {
       />
     ),
     overview: <EnvironmentOverview env={env} now={observation.now} />,
-    monitoring: <EnvironmentMonitoring env={env} now={observation.now} />,
+    monitoring: <EnvironmentMonitoring env={env} />,
     logs: <LogStream target={{ kind: "environment", id: env.id }} />,
     zones: <Topology env={env} now={observation.now} />,
     routes: <RoutesCard env={env} />,
@@ -213,40 +217,50 @@ export default function EnvironmentPage() {
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title={
-          <span className="flex flex-wrap items-center gap-3">
-            {env.name}
-            {env.services.length > 0 && (
-              <StatusBadge
-                status={runtime}
-                label={runtime === "healthy" ? "Operational" : runtime}
-              />
-            )}
-          </span>
+          showingMonitoring ? (
+            "Monitoring"
+          ) : (
+            <span className="flex flex-wrap items-center gap-3">
+              {env.name}
+              {env.services.length > 0 && (
+                <StatusBadge
+                  status={runtime}
+                  label={runtime === "healthy" ? "Operational" : runtime}
+                />
+              )}
+            </span>
+          )
         }
-        eyebrow={`${params.tenant} / ${project.name} / Environment`}
+        eyebrow={
+          showingMonitoring
+            ? `Environment · ${env.name}`
+            : `${params.tenant} / ${project.name} / Environment`
+        }
         actions={
-          <>
-            {panel.key === "overview" && (
-              <CreationButton
-                active={search.get("create") === "service"}
-                variant="outline"
-                disabled={deleting}
-                onClick={() => setAddingService(true)}
-              >
-                <Plus className="size-3.5" /> Add Service
-              </CreationButton>
-            )}
-            <LogViewer
-              target={{ kind: "environment", id: env.id }}
-              label="Logs"
-            />
-            <DeployControls
-              env={env}
-              disabled={deleting || releaseAction !== null}
-              onDeploy={() => setReleaseAction("deploy")}
-              onRollback={() => setReleaseAction("rollback")}
-            />
-          </>
+          showingMonitoring ? undefined : (
+            <>
+              {panel.key === "overview" && (
+                <CreationButton
+                  active={search.get("create") === "service"}
+                  variant="outline"
+                  disabled={deleting}
+                  onClick={() => setAddingService(true)}
+                >
+                  <Plus className="size-3.5" /> Add Service
+                </CreationButton>
+              )}
+              <LogViewer
+                target={{ kind: "environment", id: env.id }}
+                label="Logs"
+              />
+              <DeployControls
+                env={env}
+                disabled={deleting || releaseAction !== null}
+                onDeploy={() => setReleaseAction("deploy")}
+                onRollback={() => setReleaseAction("rollback")}
+              />
+            </>
+          )
         }
         meta={
           <>
@@ -272,7 +286,7 @@ export default function EnvironmentPage() {
         }
       />
       {deletionNotice}
-      {observation.refreshError && (
+      {!showingMonitoring && observation.refreshError && (
         <p
           role="alert"
           className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive"

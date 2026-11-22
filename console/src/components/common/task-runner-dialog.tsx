@@ -128,9 +128,12 @@ export function TaskRunnerDialog({
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let polling = false;
+    let finished = false;
     let stopEvents = () => {};
     const poll = async () => {
-      if (polling || controller.signal.aborted) return;
+      if (finished || polling || controller.signal.aborted) return;
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
       polling = true;
       try {
         const response = await getTask(taskId, controller.signal);
@@ -149,6 +152,7 @@ export function TaskRunnerDialog({
           onCommitRef.current?.();
         }
         if (task.finished_at) {
+          finished = true;
           stopEvents();
           if (settledTaskId.current !== task.id) {
             settledTaskId.current = task.id;
@@ -178,7 +182,8 @@ export function TaskRunnerDialog({
     stopEvents = watchTaskEvents(
       taskId,
       () => void poll(),
-      (message) => setStatusFailure(message),
+      // Brief stream disconnects are covered by the authoritative fallback read.
+      () => {},
     );
     void poll();
     return () => {

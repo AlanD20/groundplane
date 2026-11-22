@@ -7,6 +7,10 @@ they do not substitute demonstration values for unavailable measurements.
 
 ## Choose a scope
 
+Open **Monitoring** in the sidebar of the Host, Tenant, Project or Environment
+workspace. From Environment Monitoring, select **Inspect** on a Service to
+open that Service's charts.
+
 | Workspace | Contents |
 | --- | --- |
 | Host | Whole-host utilization, including non-GP processes; interface and block-device details. |

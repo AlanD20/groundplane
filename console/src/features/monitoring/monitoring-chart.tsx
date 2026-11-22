@@ -143,13 +143,7 @@ function MonitoringTooltip({
     <div
       id={id}
       role="tooltip"
-      className={cn(
-        "absolute left-2 right-2 top-2 z-20 max-h-[min(28rem,calc(100dvh-2rem))] overflow-y-auto",
-        "rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg",
-        "sm:right-auto sm:w-[26rem]",
-      )}
-      onClick={(event) => event.stopPropagation()}
-      onPointerMove={(event) => event.stopPropagation()}
+      className="ml-auto max-h-[min(28rem,calc(100dvh-2rem))] w-full max-w-[26rem] overflow-y-auto rounded-lg border border-border bg-popover p-3 text-popover-foreground"
     >
       <div className="flex items-start justify-between gap-3 border-b border-border pb-2">
         <div className="min-w-0">
@@ -178,20 +172,26 @@ function MonitoringTooltip({
                 />
                 {item.label}
               </div>
-              <dl className="grid grid-cols-3 gap-2 text-xs">
-                {[
-                  ["Average", point?.average ?? null],
-                  ["Minimum", point?.minimum ?? null],
-                  ["Maximum", point?.maximum ?? null],
-                ].map(([label, value]) => (
-                  <div key={String(label)} className="min-w-0">
-                    <dt className="text-muted-foreground">{label}</dt>
-                    <dd className="mt-0.5 truncate font-mono text-xs tabular-nums">
-                      {formatValue(value as number | null, item.unit)}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+              {point?.average === null || !point ? (
+                <p className="text-xs text-muted-foreground">
+                  No samples in this interval.
+                </p>
+              ) : (
+                <dl className="grid grid-cols-3 gap-2 text-xs">
+                  {[
+                    ["Average", point?.average ?? null],
+                    ["Minimum", point?.minimum ?? null],
+                    ["Maximum", point?.maximum ?? null],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="min-w-0">
+                      <dt className="text-muted-foreground">{label}</dt>
+                      <dd className="mt-0.5 truncate font-mono text-xs tabular-nums">
+                        {formatValue(value as number | null, item.unit)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
               <dl className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
                 <div className="flex justify-between gap-3">
                   <dt>Samples</dt>
@@ -374,7 +374,7 @@ export function MonitoringChart({
     });
   };
 
-  if (!reference) {
+  if (!reference || !hasValues) {
     return (
       <div
         role="status"
@@ -384,7 +384,7 @@ export function MonitoringChart({
           className,
         )}
       >
-        No monitoring history is available for this window.
+        No samples were recorded in this window.
       </div>
     );
   }
@@ -396,154 +396,159 @@ export function MonitoringChart({
 
   return (
     <div
-      className={cn(
-        "relative min-w-0 overflow-visible rounded-lg border border-border bg-surface/30",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        className,
-      )}
-      style={rootStyle}
-      role="group"
-      tabIndex={0}
-      aria-label={`${scopedLabel} ${rangeLabel} monitoring chart. Use the arrow keys to inspect buckets, Enter to pin, and Escape to dismiss.`}
-      aria-describedby={selected ? tooltipId : undefined}
-      onKeyDown={handleKeyDown}
-      onPointerMove={handlePointerMove}
+      className="grid min-w-0 gap-2"
       onPointerLeave={() => {
         if (!interaction?.pinned) dismiss();
       }}
-      onClick={handleClick}
-      onBlur={() => {
-        if (!interaction?.pinned) dismiss();
-      }}
     >
-      <div className="absolute left-3 right-3 top-2 z-10 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          {displayedSeries.map((item, index) => (
-            <span key={item.id} className="inline-flex items-center gap-1.5">
-              <svg aria-hidden="true" className="h-2 w-5" viewBox="0 0 20 8">
-                <line
-                  x1="1"
-                  x2="19"
-                  y1="4"
-                  y2="4"
-                  stroke={item.color}
-                  strokeWidth="2"
-                  strokeDasharray={seriesDash(index)}
-                />
-              </svg>
-              {item.label} · {item.unit}
-            </span>
-          ))}
-        </div>
-        <span className="text-muted-foreground">
-          {rangeLabel} · line average · band min–max
-        </span>
-      </div>
-      <svg
-        className="size-full"
-        viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
-        preserveAspectRatio="none"
-        aria-hidden="true"
+      <div
+        className={cn(
+          "relative min-w-0 overflow-visible rounded-lg border border-border bg-surface/30",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          className,
+        )}
+        style={rootStyle}
+        role="group"
+        tabIndex={0}
+        aria-label={`${scopedLabel} ${rangeLabel} monitoring chart. Use the arrow keys to inspect buckets, Enter to pin, and Escape to dismiss.`}
+        aria-describedby={selected ? tooltipId : undefined}
+        onKeyDown={handleKeyDown}
+        onPointerMove={handlePointerMove}
+        onClick={handleClick}
+        onBlur={() => {
+          if (!interaction?.pinned) dismiss();
+        }}
       >
-        {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
-          const y =
-            chartPlot.top + fraction * (chartPlot.bottom - chartPlot.top);
-          const value = maximum * (1 - fraction);
-          return (
-            <g key={fraction}>
-              <line
-                x1={chartPlot.left}
-                x2={chartPlot.right}
-                y1={y}
-                y2={y}
-                stroke="var(--border)"
-                strokeDasharray="3 5"
-                vectorEffect="non-scaling-stroke"
-              />
-              <text
-                x={chartPlot.left - 8}
-                y={y + 4}
-                textAnchor="end"
-                fill="var(--muted-foreground)"
-                fontSize="11"
-              >
-                {valueFormatter.format(value)}
-              </text>
-            </g>
-          );
-        })}
-        {geometry.map(({ item, dash, band, average }) => (
-          <g key={item.id}>
-            {band && <path d={band} fill={item.color} opacity={0.1} />}
-            {average && (
-              <path
-                d={average}
-                fill="none"
-                stroke={item.color}
-                strokeWidth={2}
-                strokeDasharray={dash}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
-          </g>
-        ))}
-        {selectedX !== null && (
-          <g>
-            <line
-              x1={selectedX}
-              x2={selectedX}
-              y1={chartPlot.top}
-              y2={chartPlot.bottom}
-              stroke="var(--foreground)"
-              strokeDasharray="3 4"
-              opacity={0.55}
-              vectorEffect="non-scaling-stroke"
-            />
-            {displayedSeries.map((item) => {
-              const point = selected
-                ? pointForTime(item, pointCenter(selected))
-                : null;
-              if (point?.average === null || point?.average === undefined)
-                return null;
-              return (
-                <circle
-                  key={item.id}
-                  cx={selectedX}
-                  cy={chartY(point.average, maximum)}
-                  r={4}
-                  fill={item.color}
-                  stroke="var(--card)"
-                  strokeWidth={2}
+        <div className="absolute left-3 right-3 top-2 z-10 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {displayedSeries.map((item, index) => (
+              <span key={item.id} className="inline-flex items-center gap-1.5">
+                <svg aria-hidden="true" className="h-2 w-5" viewBox="0 0 20 8">
+                  <line
+                    x1="1"
+                    x2="19"
+                    y1="4"
+                    y2="4"
+                    stroke={item.color}
+                    strokeWidth="2"
+                    strokeDasharray={seriesDash(index)}
+                  />
+                </svg>
+                {item.label} · {item.unit}
+              </span>
+            ))}
+          </div>
+          <span className="text-muted-foreground">
+            {rangeLabel} · line average · band min–max
+          </span>
+        </div>
+        <svg
+          className="size-full"
+          viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
+            const y =
+              chartPlot.top + fraction * (chartPlot.bottom - chartPlot.top);
+            const value = maximum * (1 - fraction);
+            return (
+              <g key={fraction}>
+                <line
+                  x1={chartPlot.left}
+                  x2={chartPlot.right}
+                  y1={y}
+                  y2={y}
+                  stroke="var(--border)"
+                  strokeDasharray="3 5"
                   vectorEffect="non-scaling-stroke"
                 />
-              );
-            })}
-          </g>
-        )}
-        {[
-          displayedWindow.from,
-          (displayedWindow.from + displayedWindow.to) / 2,
-          displayedWindow.to,
-        ].map((time, index) => (
-          <text
-            key={time}
-            x={chartX(time, displayedWindow)}
-            y={viewBoxHeight - 8}
-            textAnchor={index === 0 ? "start" : index === 2 ? "end" : "middle"}
-            fill="var(--muted-foreground)"
-            fontSize="11"
-          >
-            {axisTimestampFormatter.format(time)}
-          </text>
-        ))}
-      </svg>
-      {!hasValues && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-          No samples were recorded in this window.
-        </div>
-      )}
+                <text
+                  x={chartPlot.left - 8}
+                  y={y + 4}
+                  textAnchor="end"
+                  fill="var(--muted-foreground)"
+                  fontSize="11"
+                >
+                  {valueFormatter.format(value)}
+                </text>
+              </g>
+            );
+          })}
+          {geometry.map(({ item, dash, band, average }) => (
+            <g key={item.id}>
+              {band && <path d={band} fill={item.color} opacity={0.1} />}
+              {average && (
+                <path
+                  d={average}
+                  fill="none"
+                  stroke={item.color}
+                  strokeWidth={2}
+                  strokeDasharray={dash}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+            </g>
+          ))}
+          {selectedX !== null && (
+            <g>
+              <line
+                x1={selectedX}
+                x2={selectedX}
+                y1={chartPlot.top}
+                y2={chartPlot.bottom}
+                stroke="var(--foreground)"
+                strokeDasharray="3 4"
+                opacity={0.55}
+                vectorEffect="non-scaling-stroke"
+              />
+              {displayedSeries.map((item) => {
+                const point = selected
+                  ? pointForTime(item, pointCenter(selected))
+                  : null;
+                if (point?.average === null || point?.average === undefined)
+                  return null;
+                return (
+                  <circle
+                    key={item.id}
+                    cx={selectedX}
+                    cy={chartY(point.average, maximum)}
+                    r={4}
+                    fill={item.color}
+                    stroke="var(--card)"
+                    strokeWidth={2}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                );
+              })}
+            </g>
+          )}
+          {[
+            displayedWindow.from,
+            (displayedWindow.from + displayedWindow.to) / 2,
+            displayedWindow.to,
+          ].map((time, index) => (
+            <text
+              key={time}
+              x={chartX(time, displayedWindow)}
+              y={viewBoxHeight - 8}
+              textAnchor={
+                index === 0 ? "start" : index === 2 ? "end" : "middle"
+              }
+              fill="var(--muted-foreground)"
+              fontSize="11"
+            >
+              {axisTimestampFormatter.format(time)}
+            </text>
+          ))}
+        </svg>
+        <p className="sr-only">
+          Lines show bucket averages. Shaded bands show recorded minimum and
+          maximum values. Missing buckets are gaps, not zero values.
+        </p>
+      </div>
       {selected && interaction && (
         <MonitoringTooltip
           id={tooltipId}
@@ -552,10 +557,6 @@ export function MonitoringChart({
           pinned={interaction.pinned}
         />
       )}
-      <p className="sr-only">
-        Lines show bucket averages. Shaded bands show recorded minimum and
-        maximum values. Missing buckets are gaps, not zero values.
-      </p>
     </div>
   );
 }

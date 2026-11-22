@@ -5,14 +5,13 @@ import { ResourcePanel } from "@/components/common/resource-panel";
 import { StatusBadge } from "@/components/common/status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
-import { Boxes, Server } from "lucide-react";
+import { Activity, Boxes, Server } from "lucide-react";
 import { Link } from "react-router-dom";
 import { HostAgentsTable } from "./host-agents-table";
 import {
   SoftwareIdentity,
   ContainerSoftwareIdentity,
 } from "@/features/image-delivery/software-identity";
-import { ScopedMonitoring } from "@/features/monitoring/scoped-monitoring";
 
 export default function PlatformHostPage() {
   const { host, hostLoading, hostError, platform, platformComponentError } =
@@ -29,16 +28,20 @@ export default function PlatformHostPage() {
         }
         icon={<Server />}
         actions={
-          <Link to="/platform/host/images" className={buttonVariants()}>
-            <Boxes aria-hidden />
-            Manage images
-          </Link>
+          <>
+            <Link
+              to="/platform/host/monitoring"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              <Activity aria-hidden />
+              Monitoring
+            </Link>
+            <Link to="/platform/host/images" className={buttonVariants()}>
+              <Boxes aria-hidden />
+              Manage images
+            </Link>
+          </>
         }
-      />
-      <ScopedMonitoring
-        scope="host"
-        id="local"
-        name={host?.hostname ?? "Host"}
       />
       {hostError && (
         <p role="alert" className="text-sm text-warning">

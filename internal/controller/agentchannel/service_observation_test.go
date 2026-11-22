@@ -97,12 +97,12 @@ func TestServiceObservationCorrelationAndIndependence(t *testing.T) {
 		deadline.After(time.Now().Add(5*time.Second)) {
 		t.Fatalf("exchange deadline = %v, want its own five-second bound", deadline)
 	}
-	if _, err := r.ObserveServices(ctx, "agent", servingTargets()); !errors.Is(
-		err,
-		errs.New(errs.KindResourceInUse, ""),
-	) {
-		t.Fatalf("concurrent read=%v", err)
+	waiting, stopWaiting := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer stopWaiting()
+	if _, err := r.ObserveServices(waiting, "agent", servingTargets()); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("waiting read = %v, want deadline exceeded while the slot is occupied", err)
 	}
+	queued := beginServiceRead(ctx, r, "agent")
 	imageDone := make(chan error, 1)
 	go func() { _, err := r.ResolveWorkloadImages(ctx, "agent", imageSelectors()); imageDone <- err }()
 	select {
@@ -129,6 +129,9 @@ func TestServiceObservationCorrelationAndIndependence(t *testing.T) {
 	}
 	s.acceptObservationResult(ctx, servingResult(command.request))
 	assertServingReply(t, awaitServiceRead(t, ctx, done), command.request.RequestId)
+	next := nextServiceCommand(t, ctx, s)
+	s.acceptObservationResult(ctx, servingResult(next.request))
+	assertServingReply(t, awaitServiceRead(t, ctx, queued), next.request.RequestId)
 	if err := s.RecordReady(time.Now(), 0, "1.0.0", buildversion.BuildProvenance{}); err != nil {
 		t.Fatal("observation closed session")
 	}

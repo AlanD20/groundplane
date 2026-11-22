@@ -5,6 +5,13 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Give Host, Tenant and Project their own Monitoring views. Keep chart axes
+  visible during bucket inspection and show a single empty state when a range
+  contains no samples.
+- Keep Service health steady during overlapping observations. Refresh Task
+  Inspect from live events while retaining the current view on reconnect, and
+  keep existing container logs visible until new output arrives.
+
 ## 0.0.1 — 2026-11-17
 
 ### Replacement release corrections

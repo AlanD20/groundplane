@@ -33,6 +33,7 @@ export function TaskDetailDrawer({
 )) {
   const id = taskId ?? entry!.id;
   const store = useStore();
+  const { watchTaskEvents } = store;
   const [detail, setDetail] = useState<TaskResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,14 +41,26 @@ export function TaskDetailDrawer({
   const [reload, setReload] = useState(0);
   const [page, setPage] = useState<{ after?: string; revision?: number }>({});
   useEffect(() => {
-    setPage({});
+    setPage((current) => (current.after || current.revision ? {} : current));
     setDetail(null);
+    setError(null);
   }, [id]);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopEvents = () => {};
+    let polling = false;
+    let finished = false;
+    let eventRefreshScheduled = false;
+    const schedule = (delay: number) => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = setTimeout(() => void poll(), delay);
+    };
     const poll = async () => {
-      let finished = false;
+      timer = undefined;
+      eventRefreshScheduled = false;
+      if (polling || finished || controller.signal.aborted) return;
+      polling = true;
       try {
         const response = await requestTask(id, controller.signal, {
           limit: 25,
@@ -57,24 +70,40 @@ export function TaskDetailDrawer({
         setDetail(response);
         setError(null);
         finished = !!response.task.finished_at;
+        if (finished) stopEvents();
       } catch (cause) {
         if (!controller.signal.aborted)
           setError(
             cause instanceof Error ? cause.message : "Unable to load Task",
           );
       } finally {
+        polling = false;
         if (!controller.signal.aborted) setLoading(false);
       }
       if (!controller.signal.aborted && !finished && !page.revision)
-        timer = setTimeout(() => void poll(), 2000);
+        schedule(2000);
     };
     setLoading(true);
+    if (!page.revision) {
+      stopEvents = watchTaskEvents(
+        id,
+        () => {
+          if (polling || finished || eventRefreshScheduled) return;
+          eventRefreshScheduled = true;
+          schedule(200);
+        },
+        () => {
+          // Keep the current detail visible. The fallback read handles disconnects.
+        },
+      );
+    }
     void poll();
     return () => {
       controller.abort();
+      stopEvents();
       if (timer) clearTimeout(timer);
     };
-  }, [id, page, reload]);
+  }, [id, page, reload, watchTaskEvents]);
   const task = detail?.task.id === id ? detail.task : null;
   const presentation = task ? taskPresentation(taskFromAPI(task), store) : null;
   async function cancel() {
@@ -133,7 +162,7 @@ export function TaskDetailDrawer({
         </>
       }
     >
-      {loading && (
+      {loading && !task && (
         <p role="status" className="text-sm text-muted-foreground">
           Loading Task…
         </p>
