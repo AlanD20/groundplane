@@ -346,5 +346,8 @@ func testMeasurement(
 	if volumeID != "" {
 		measurement.Volumes = []monitoring.VolumeUsage{{VolumeID: volumeID, UsedBytes: used}}
 	}
+	if class == monitoring.OwnerBacking {
+		measurement.Ownership.TenantID = ""
+	}
 	return measurement
 }

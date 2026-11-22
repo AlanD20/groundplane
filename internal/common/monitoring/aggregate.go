@@ -173,8 +173,9 @@ func mergeVolume(current volumeState, exists bool, value *uint64) volumeState {
 }
 
 func validOwnership(owner Ownership) error {
-	if owner.TenantID == "" || owner.ProjectID == "" || owner.EnvironmentID == "" || owner.ServiceID == "" ||
-		(owner.Class != OwnerWorkload && owner.Class != OwnerBacking) {
+	if owner.ProjectID == "" || owner.EnvironmentID == "" || owner.ServiceID == "" ||
+		(owner.Class != OwnerWorkload && owner.Class != OwnerBacking) ||
+		owner.Class == OwnerWorkload && owner.TenantID == "" || owner.Class == OwnerBacking && owner.TenantID != "" {
 		return errs.New(errs.KindValidationFailed, "monitoring ownership is invalid")
 	}
 	return nil

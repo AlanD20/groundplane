@@ -161,6 +161,24 @@ func TestAggregateWorkloadsExcludesBackingAndDeduplicatesVolumes(t *testing.T) {
 	}
 }
 
+// Platform Backing Services have no Tenant owner. Requiring one either drops
+// their measurements or tempts a caller to assign shared usage to a Tenant.
+func TestBackingMeasurementHasNoTenantOwner(t *testing.T) {
+	value := measurement("backing", OwnerBacking, time.Now(), nil, "data", nil)
+	if err := ValidateMeasurement(value); err != nil {
+		t.Fatal(err)
+	}
+	value.Ownership.TenantID = "tenant-a"
+	if ValidateMeasurement(value) == nil {
+		t.Fatal("Backing usage was assigned to a Tenant")
+	}
+	value.Ownership.Class = OwnerWorkload
+	value.Ownership.TenantID = ""
+	if ValidateMeasurement(value) == nil {
+		t.Fatal("workload lost its Tenant owner")
+	}
+}
+
 func measurement(
 	serviceID string,
 	class OwnerClass,
@@ -169,9 +187,13 @@ func measurement(
 	volumeID string,
 	used *uint64,
 ) ServiceMeasurement {
+	tenantID := "tenant-a"
+	if class == OwnerBacking {
+		tenantID = ""
+	}
 	return ServiceMeasurement{
 		Ownership: Ownership{
-			TenantID: "tenant-a", ProjectID: "project-a", EnvironmentID: "environment-a",
+			TenantID: tenantID, ProjectID: "project-a", EnvironmentID: "environment-a",
 			ServiceID: serviceID, Class: class,
 		},
 		Point: MetricPoint{At: at, CPUCores: cpu}, Available: true,
