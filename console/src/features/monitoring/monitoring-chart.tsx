@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { MonitoringBucketDetails } from "./monitoring-bucket-details";
 import {
+  memo,
   useCallback,
   useEffect,
   useId,
@@ -153,7 +154,7 @@ function selectionIdentity(
     .join("\u0001")}`;
 }
 
-export function MonitoringChart({
+export const MonitoringChart = memo(function MonitoringChart({
   series,
   rangeLabel,
   window,
@@ -531,4 +532,4 @@ export function MonitoringChart({
       />
     </div>
   );
-}
+});

@@ -13,7 +13,7 @@ import {
 } from "@/lib/console-preferences";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { Activity, Maximize, Minimize, Pause, Play } from "lucide-react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { MonitoringRange, MonitoringResponse } from "./api";
 import {
   formatMetric,
@@ -53,6 +53,23 @@ export function MonitoringMetrics({
     response.environment ??
     response.service ??
     response.backing?.runtime;
+  const history = subject?.history;
+  const series = useMemo(
+    () => metricSeries(history ?? [], selected),
+    [history, selected],
+  );
+  const { start, end } = response.window;
+  const chartWindow = useMemo(
+    () => ({ from: Date.parse(start), to: Date.parse(end) }),
+    [start, end],
+  );
+  const timeZone = useMemo(
+    () =>
+      chartTimeZone === "local"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : "UTC",
+    [chartTimeZone],
+  );
   if (!subject?.live)
     return (
       <EmptyState
@@ -61,14 +78,9 @@ export function MonitoringMetrics({
       />
     );
 
-  const series = metricSeries(subject.history ?? [], selected);
   const live = subject.live;
   const owners = live.coverage.eligible_resources;
   const reporting = live.coverage.sampled_resources;
-  const timeZone =
-    chartTimeZone === "local"
-      ? Intl.DateTimeFormat().resolvedOptions().timeZone
-      : "UTC";
   const historyUnavailable = response.history_status !== "available";
   const rangeControls = (
     <>
@@ -205,10 +217,7 @@ export function MonitoringMetrics({
               scopeKey={`${response.scope.kind}/${response.scope.id}`}
               scopedLabel={response.scope.name}
               rangeLabel={response.window.range}
-              window={{
-                from: Date.parse(response.window.start),
-                to: Date.parse(response.window.end),
-              }}
+              window={chartWindow}
               series={series}
               timeZone={timeZone}
               height={
