@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -42,14 +43,28 @@ func (reader *Reader) environment(
 	if err != nil {
 		return err
 	}
-	observations := reader.observations.ObserveServices(ctx, services.Items)
+	scope := monitoringstore.AggregateScope{
+		TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID,
+	}
+	// A slow Agent must not consume the history query's deadline.
+	var observations []api.ServiceObservation
+	var reads sync.WaitGroup
+	reads.Go(func() {
+		observations = reader.observations.ObserveServices(ctx, services.Items)
+	})
+	history, historyErr := ReadAggregateHistory(ctx, reader.history, scope, window)
+	reads.Wait()
 	if len(observations) != len(services.Items) {
 		return errs.New(errs.KindInternal, "monitoring health observation count is invalid")
 	}
-	value := api.EnvironmentMonitoring{Live: unavailableLive(), Services: api.Page[api.MonitoringServiceHealth]{
-		Items: make([]api.MonitoringServiceHealth, 0, len(services.Items)), NextCursor: services.NextCursor,
-		Revision: services.Revision,
-	}}
+	value := api.EnvironmentMonitoring{
+		Live:    unavailableLive(),
+		History: history,
+		Services: api.Page[api.MonitoringServiceHealth]{
+			Items: make([]api.MonitoringServiceHealth, 0, len(services.Items)), NextCursor: services.NextCursor,
+			Revision: services.Revision,
+		},
+	}
 	for index, service := range services.Items {
 		row := api.MonitoringServiceHealth{ID: service.Record.Desired.ID, Name: service.Record.Desired.Name,
 			RuntimeIntent: string(service.Record.Runtime.RuntimeIntent), Observation: observations[index]}
@@ -64,14 +79,10 @@ func (reader *Reader) environment(
 		}
 		value.Services.Items = append(value.Services.Items, row)
 	}
-	scope := monitoringstore.AggregateScope{
-		TenantID: project.Record.TenantID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID,
-	}
 	if snapshot, ok := reader.workloads.Snapshot(); ok {
 		value.Live = aggregateLive(snapshot, scope, reader.now())
 	}
-	value.History, err = ReadAggregateHistory(ctx, reader.history, scope, window)
-	if err != nil {
+	if historyErr != nil {
 		response.HistoryStatus = "unavailable"
 	}
 	response.Scope = api.MonitoringScope{Kind: "environment", ID: environment.Record.ID, Name: environment.Record.Name}
