@@ -297,6 +297,11 @@ Preparation publication and its temporary-image cleanup are not host image stagi
 
 ## Independently selected Console assets
 
+Console activation records its observed artifact in an attempt-bound immutable
+receipt, committed atomically with work settlement. Parent completion and history
+read that observation rather than the mutable active Console. A later activation
+cannot change an earlier Task's accepted evidence, including a failed activation.
+
 Console releases are immutable static bundles with a canonical file inventory,
 source commit, release identity and exact OpenAPI hash. Their receipt selects the
 active and predecessor bundle atomically under GP-owned storage. The Controller

@@ -2,13 +2,8 @@ package softwareactivation
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/consolerelease"
@@ -209,10 +204,11 @@ func (owner *ConsoleWork) Settle(
 		return err
 	}
 	current, found := owner.store.Current()
-	completion, err := consoleCompletion(record.Record, view.Attempt.Attempt, current, found)
+	receipt, completion, err := activation.PrepareConsoleReceipt(record, view.Attempt.Attempt, current, found, at)
 	if err != nil {
 		return err
 	}
+	defer keyvalue.ClearMutationValues(receipt.Mutations)
 	var request workqueue.Completion
 	if view.CurrentExecutor {
 		request, err = queue.ReadCompletionAt(ctx, view)
@@ -227,7 +223,10 @@ func (owner *ConsoleWork) Settle(
 	if err != nil {
 		return err
 	}
-	committed, err := queue.Commit(ctx, activationGuard(record), change)
+	proof := activationGuard(record)
+	proof.Conditions = append(proof.Conditions, receipt.Conditions...)
+	proof.Mutations = append(proof.Mutations, receipt.Mutations...)
+	committed, err := queue.Commit(ctx, proof, change)
 	if err != nil {
 		return err
 	}
@@ -235,41 +234,6 @@ func (owner *ConsoleWork) Settle(
 		return errs.New(errs.KindStateConflict, "Console activation changed before settlement")
 	}
 	return nil
-}
-
-func consoleCompletion(
-	record activation.Record,
-	attempt workexecution.Attempt,
-	current consolerelease.Artifact,
-	found bool,
-) (workexecution.Completion, error) {
-	desired := record.Input.Preparation.Progress.Result.Console.Artifact
-	reference, err := record.ConsoleReference()
-	if err != nil || reference != attempt.Input {
-		return workexecution.Completion{}, errs.New(errs.KindStateConflict, "Console completion input is invalid")
-	}
-	evidence := struct {
-		Desired consolerelease.Artifact `json:"desired"`
-		Current consolerelease.Artifact `json:"current"`
-		Found   bool                    `json:"found"`
-	}{Desired: desired, Current: current, Found: found}
-	raw, err := json.Marshal(evidence)
-	if err != nil {
-		return workexecution.Completion{}, errs.Wrap(errs.KindInternal, err)
-	}
-	canonical, err := jcs.Canonicalize(raw)
-	if err != nil {
-		return workexecution.Completion{}, err
-	}
-	digest := sha256.Sum256(canonical)
-	outcome := workexecution.Failed
-	if attempt.StartedAt != nil && found && current == desired {
-		outcome = workexecution.Succeeded
-	}
-	return workexecution.Completion{Outcome: outcome, EffectsSettled: found, Evidence: workexecution.Input{
-		ID:     ids.DeriveAt(ids.KindPlan, record.CreatedAt, attempt.ID, "console-activation-result"),
-		SHA256: hex.EncodeToString(digest[:]),
-	}}, nil
 }
 
 func (owner *ConsoleWork) RetireWork(
@@ -305,5 +269,11 @@ func (owner *ConsoleWork) PrepareAttemptRetirement(
 			"Console activation history differs from captured input",
 		)
 	}
-	return workqueue.PrepareAttemptCollection(view.Task, view.Item, snapshot)
+	prepared, err := workqueue.PrepareAttemptCollection(view.Task, view.Item, snapshot)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	prepared.Mutations = append(prepared.Mutations,
+		keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: activation.ConsoleResultKey(attempt.ID)})
+	return prepared, nil
 }

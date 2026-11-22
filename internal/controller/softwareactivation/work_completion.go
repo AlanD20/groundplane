@@ -239,12 +239,15 @@ func (service *Service) finishedItem(
 		agentApplied = saved.Record.Result.Observed == agentoperations.ReadyDesired
 		failure = saved.Record.Result.Failure
 	case workexecution.ConsoleSoftware:
-		if service.console == nil {
-			err = errs.New(errs.KindStateConflict, "Console activation has no verified bundle store")
-			break
+		saved, found, readErr := service.records.ReadConsoleResult(ctx, attempt.Attempt, view.ReadRevision)
+		if readErr != nil {
+			return proof, false, false, false, nil, readErr
 		}
-		current, found := service.console.Current()
-		result, err = consoleCompletion(record.Record, attempt.Attempt, current, found)
+		if !found {
+			return proof, false, false, false, nil,
+				errs.New(errs.KindStateConflict, "Console activation result is missing")
+		}
+		proof, result, err = activation.PrepareConsoleResult(record, saved, attempt.Attempt)
 		consoleApplied = result.Outcome == workexecution.Succeeded
 	default:
 		err = errs.New(errs.KindStateConflict, "software activation has an unknown work operation")
