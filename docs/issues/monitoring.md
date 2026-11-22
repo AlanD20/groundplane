@@ -3,10 +3,11 @@
 Status: the visual direction and scoped navigation have been selected. The
 Console's Environment health roster and Service/Backing monitoring destinations
 use existing live runtime observations, including expiry, search and pagination.
-General workload resource collection and historical queries are not implemented;
-resource charts are not populated with demonstration data. This review records
-the remaining intended behavior before that work is promoted into the product
-and feature contracts.
+Shared read-only collection, bounded derived history and scoped query foundations
+are implemented. Their production lifecycle, public API/CLI and resource-chart
+integration remain unfinished; resource charts are not populated with
+demonstration data. This review records the remaining intended behavior before
+that work is promoted into the product and feature contracts.
 
 The selected presentation is a health-first overview using the existing Console
 design system. There is one monitoring destination within each resource's own

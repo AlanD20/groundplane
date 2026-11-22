@@ -17,7 +17,7 @@ type HostHistory interface {
 // reading in each closed 15-second bucket. Missed buckets stay absent; Console
 // reads never insert a synthetic sample or refresh the observation timestamp.
 func (sampler *HostSampler) Run(ctx context.Context, history HostHistory, logger *slog.Logger) error {
-	if ctx == nil || sampler == nil || history == nil || logger == nil {
+	if ctx == nil || sampler == nil || logger == nil {
 		return errs.New(errs.KindInternal, "host monitoring loop dependencies are required")
 	}
 	ticker := time.NewTicker(LiveInterval)
@@ -33,9 +33,14 @@ func (sampler *HostSampler) Run(ctx context.Context, history HostHistory, logger
 			}
 			logger.DebugContext(ctx, "host monitoring sample unavailable", slog.Any("error", err))
 		} else if current, found := sampler.Current(); found {
-			if pending != nil && !pending.Observed.At.Truncate(metrics.SampleInterval).Equal(current.Observed.At.Truncate(metrics.SampleInterval)) {
+			if history != nil && pending != nil &&
+				!pending.Observed.At.Truncate(metrics.SampleInterval).
+					Equal(current.Observed.At.Truncate(metrics.SampleInterval)) {
 				write, finish := context.WithTimeout(ctx, 2*time.Second)
-				err := history.AppendHost(write, metrics.HostMeasurement{HostID: sampler.hostID, Point: pending.Point, Available: true})
+				err := history.AppendHost(
+					write,
+					metrics.HostMeasurement{HostID: sampler.hostID, Point: pending.Point, Available: true},
+				)
 				finish()
 				if err != nil {
 					logger.DebugContext(ctx, "host monitoring history unavailable", slog.Any("error", err))

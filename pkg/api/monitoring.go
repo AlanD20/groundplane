@@ -57,14 +57,14 @@ type MonitoringBucket struct {
 }
 
 type MonitoringWindow struct {
-	Range         string    `json:"range" enum:"1h,6h,24h,7d"`
+	Range         string    `json:"range"          enum:"1h,6h,24h,7d"`
 	Start         time.Time `json:"start"`
 	End           time.Time `json:"end"`
 	BucketSeconds uint32    `json:"bucket_seconds"`
 }
 
 type MonitoringLive struct {
-	Status     string             `json:"status" enum:"fresh,stale,unavailable"`
+	Status     string             `json:"status"      enum:"fresh,stale,unavailable"`
 	ObservedAt *time.Time         `json:"observed_at"`
 	Values     MonitoringValues   `json:"values"`
 	Coverage   MonitoringCoverage `json:"coverage"`
@@ -120,16 +120,17 @@ type AggregateMonitoring struct {
 }
 
 type ServiceMonitoring struct {
-	Live       MonitoringLive            `json:"live"`
-	History    []MonitoringBucket        `json:"history"`
-	Containers Page[MonitoringContainer] `json:"containers"`
-	Volumes    []MonitoringVolume        `json:"volumes"`
+	ContainersStatus string                    `json:"containers_status" enum:"available,unavailable"`
+	Live             MonitoringLive            `json:"live"`
+	History          []MonitoringBucket        `json:"history"`
+	Containers       Page[MonitoringContainer] `json:"containers"`
+	Volumes          []MonitoringVolume        `json:"volumes"`
 }
 
 type MonitoringServiceHealth struct {
 	ID                string             `json:"id"`
 	Name              string             `json:"name"`
-	RuntimeIntent     string             `json:"runtime_intent" enum:"running,stopped,absent"`
+	RuntimeIntent     string             `json:"runtime_intent"      enum:"running,stopped,absent"`
 	Observation       ServiceObservation `json:"observation"`
 	RestartCount      *uint64            `json:"restart_count"`
 	RestartObservedAt *time.Time         `json:"restart_observed_at"`
@@ -147,12 +148,13 @@ type BackingMonitoring struct {
 // Exactly the payload named by Scope.Kind is populated. Environment monitoring
 // is health-only; it never substitutes stored telemetry for live observations.
 type MonitoringResponse struct {
-	Scope       MonitoringScope        `json:"scope"`
-	Window      MonitoringWindow       `json:"window"`
-	Host        *HostMonitoring        `json:"host,omitempty"`
-	Tenant      *AggregateMonitoring   `json:"tenant,omitempty"`
-	Project     *AggregateMonitoring   `json:"project,omitempty"`
-	Environment *EnvironmentMonitoring `json:"environment,omitempty"`
-	Service     *ServiceMonitoring     `json:"service,omitempty"`
-	Backing     *BackingMonitoring     `json:"backing,omitempty"`
+	Scope         MonitoringScope        `json:"scope"`
+	Window        MonitoringWindow       `json:"window"`
+	HistoryStatus string                 `json:"history_status"        enum:"available,unavailable"`
+	Host          *HostMonitoring        `json:"host,omitempty"`
+	Tenant        *AggregateMonitoring   `json:"tenant,omitempty"`
+	Project       *AggregateMonitoring   `json:"project,omitempty"`
+	Environment   *EnvironmentMonitoring `json:"environment,omitempty"`
+	Service       *ServiceMonitoring     `json:"service,omitempty"`
+	Backing       *BackingMonitoring     `json:"backing,omitempty"`
 }
