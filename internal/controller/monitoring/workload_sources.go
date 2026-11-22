@@ -92,7 +92,8 @@ func (reader *WorkloadSourceReader) currentServices(
 	seen := make(map[string]bool)
 	for ctx.Err() == nil {
 		page, err := reader.services.ListServices(ctx, environmentID, request)
-		if err != nil || page.Revision < minimumRevision || request.Revision != 0 && page.Revision != request.Revision ||
+		if err != nil || page.Revision < minimumRevision ||
+			request.Revision != 0 && page.Revision != request.Revision ||
 			len(page.Items) > request.Limit {
 			return nil, false
 		}

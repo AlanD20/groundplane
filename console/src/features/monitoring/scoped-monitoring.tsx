@@ -28,6 +28,7 @@ import {
   type MonitoringValues,
 } from "./metric-projection";
 import { MonitoringChart } from "./monitoring-chart";
+import { MonitoringStatusBadge } from "./monitoring-status";
 import {
   useMonitoringCursor,
   useMonitoringQuery,
@@ -228,7 +229,8 @@ export function ScopedMonitoring({
 
 function LiveSummary({ values }: { values: MonitoringValues }) {
   const cpuCores = metricAverage(values, "cpu_cores");
-  const cpu = cpuCores ?? metricAverage(values, "cpu_utilization_ratio");
+  const ratio = metricAverage(values, "cpu_utilization_ratio");
+  const cpu = cpuCores ?? (ratio === null ? null : ratio * 100);
   const cpuUnit = cpuCores !== null ? "cores" : "%";
   const memory =
     metricAverage(values, "memory_working_set_bytes") ??
@@ -299,7 +301,13 @@ function ScopeDetails({
                       <StatusBadge status={child.runtime_state} />
                     </TableCell>
                     <TableCell>
-                      <MonitoringStatusBadge live={child.live} now={now} />
+                      {child.scope.kind === "environment" ? (
+                        <span className="text-xs text-muted-foreground">
+                          Health only
+                        </span>
+                      ) : (
+                        <MonitoringStatusBadge live={child.live} now={now} />
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -509,48 +517,7 @@ function ServiceDetails({
   );
 }
 
-type MonitoringLive = NonNullable<
-  import("./api").MonitoringResponse["host"]
->["live"];
-
 type MonitoringCursor = ReturnType<typeof useMonitoringCursor>;
-
-function monitoringStatus(live: MonitoringLive, now: number) {
-  if (live.status !== "fresh") return live.status;
-  const observedAt = live.observed_at
-    ? Date.parse(live.observed_at)
-    : Number.NaN;
-  if (!Number.isFinite(observedAt) || observedAt > now) return "unavailable";
-  return now - observedAt < 15_000 ? "fresh" : "stale";
-}
-
-function MonitoringStatusBadge({
-  live,
-  now,
-}: {
-  live: MonitoringLive;
-  now: number;
-}) {
-  const status = monitoringStatus(live, now);
-  return (
-    <StatusBadge
-      status={
-        status === "fresh"
-          ? "healthy"
-          : status === "stale"
-            ? "degraded"
-            : "unavailable"
-      }
-      label={
-        status === "fresh"
-          ? "Fresh"
-          : status === "stale"
-            ? "Stale"
-            : "Unavailable"
-      }
-    />
-  );
-}
 
 export function MonitoringCursorPagination({
   label,

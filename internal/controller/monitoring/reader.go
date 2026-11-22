@@ -79,8 +79,10 @@ type Reader struct {
 func NewReader(hierarchy ReadHierarchy, services ReadServices, backing ReadBacking, consumers ReadConsumers,
 	observations HealthReader, health HealthCache, host *HostSampler, workloads WorkloadCache,
 	history HistoryReader, now func() time.Time) (*Reader, error) {
-	if hierarchy == nil || services == nil || backing == nil || consumers == nil || observations == nil || health == nil ||
-		host == nil || workloads == nil ||
+	if hierarchy == nil || services == nil || backing == nil || consumers == nil || observations == nil ||
+		health == nil ||
+		host == nil ||
+		workloads == nil ||
 		now == nil {
 		return nil, errs.New(errs.KindInternal, "monitoring read dependencies are required")
 	}

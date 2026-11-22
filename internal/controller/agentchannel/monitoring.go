@@ -105,7 +105,10 @@ func monitoringUnavailable() error {
 func (s *Session) monitoringCommandCurrent(ctx context.Context, command *monitoringCommand) bool {
 	s.registry.mu.Lock()
 	defer s.registry.mu.Unlock()
-	return s.registry.monitoringCompatibleLocked(s.state) && ctx.Err() == nil && s.registry.agents[s.agentID] == s.state && s.state.online && !s.state.revoked &&
+	return s.registry.monitoringCompatibleLocked(s.state) && ctx.Err() == nil &&
+		s.registry.agents[s.agentID] == s.state &&
+		s.state.online &&
+		!s.state.revoked &&
 		!closed(s.state.done) &&
 		s.state.activeMonitoring == command &&
 		command.ctx.Err() == nil

@@ -166,7 +166,8 @@ func (registry *Registry) auxiliaryAllowedLocked(agentID string, state *sessionS
 
 // The caller holds Registry.mu.
 func (registry *Registry) hasActiveAuxiliaryLocked(state *sessionState) bool {
-	if state.activeImage != nil || state.activeObservation != nil || state.activeMonitoring != nil || state.activeBackingAccess != nil ||
+	if state.activeImage != nil || state.activeObservation != nil || state.activeMonitoring != nil ||
+		state.activeBackingAccess != nil ||
 		state.activeDNSCheck != nil ||
 		state.activeEdgeCheck != nil {
 		return true

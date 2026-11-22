@@ -23,8 +23,10 @@ const (
 )
 
 func ValidateRequest(request *agentpb.CollectMonitoringSamples) error {
-	if request == nil || len(request.ProtoReflect().GetUnknown()) != 0 || ids.Validate(ids.KindOperation, "op_"+request.RequestId) != nil ||
-		len(request.Targets) == 0 || len(request.Targets) > MaximumTargets ||
+	if request == nil || len(request.ProtoReflect().GetUnknown()) != 0 ||
+		ids.Validate(ids.KindOperation, "op_"+request.RequestId) != nil ||
+		len(request.Targets) == 0 ||
+		len(request.Targets) > MaximumTargets ||
 		len(request.Volumes) > MaximumVolumes ||
 		proto.Size(request) > MaximumRequestBytes ||
 		!request.IncludeStorage && len(request.Volumes) != 0 {

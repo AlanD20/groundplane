@@ -37,8 +37,10 @@ func (reader *Reader) sampleVolumes(
 			}
 			found = true
 			labels := volume.Labels
-			if volume.Driver != "local" || labels["com.groundplane.managed"] != "true" || labels["com.groundplane.kind"] != "volume" ||
-				labels["com.groundplane.environment-id"] != target.EnvironmentId || labels["com.docker.compose.project"] != target.ComposeProject ||
+			if volume.Driver != "local" || labels["com.groundplane.managed"] != "true" ||
+				labels["com.groundplane.kind"] != "volume" ||
+				labels["com.groundplane.environment-id"] != target.EnvironmentId ||
+				labels["com.docker.compose.project"] != target.ComposeProject ||
 				labels["com.docker.compose.volume"] != target.VolumeKey ||
 				volume.UsageData == nil ||
 				volume.UsageData.Size < 0 {

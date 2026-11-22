@@ -320,7 +320,9 @@ func (collector *WorkloadCollector) serviceSample(
 		usage.Summary = instantUintSummary(usage.UsedBytes, 1)
 		sample.Volumes = append(sample.Volumes, usage)
 	}
-	sample.Point.PersistentVolumeUsedBytes, sample.Summaries.PersistentVolumeUsedBytes = aggregateVolumes(sample.Volumes)
+	sample.Point.PersistentVolumeUsedBytes, sample.Summaries.PersistentVolumeUsedBytes = aggregateVolumes(
+		sample.Volumes,
+	)
 	for _, container := range containers {
 		if container.Point.WritableLayerBytes != nil && container.ObservedAt.After(sample.StorageObservedAt) {
 			sample.StorageObservedAt = container.ObservedAt
@@ -337,7 +339,10 @@ func (collector *WorkloadCollector) serviceSample(
 	return sample, rawSamples
 }
 
-func rawContainer(source metrics.SourceFingerprint, sample *agentpb.MonitoringContainerSample) metrics.RawContainerSample {
+func rawContainer(
+	source metrics.SourceFingerprint,
+	sample *agentpb.MonitoringContainerSample,
+) metrics.RawContainerSample {
 	digest := sha256.New()
 	_, _ = digest.Write([]byte("groundplane-monitoring-container-source-v1\x00"))
 	_, _ = digest.Write(source[:])

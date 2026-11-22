@@ -39,7 +39,14 @@ func TestWorkloadCollectorRejectsChangedAgentAndSourceFences(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			sources := &workloadTestSources{recheck: test.recheck, expected: 1}
-			collector := newWorkloadTestCollector(t, test.agents, sources, &workloadTestChannel{}, nil, fixedWorkloadClock())
+			collector := newWorkloadTestCollector(
+				t,
+				test.agents,
+				sources,
+				&workloadTestChannel{},
+				nil,
+				fixedWorkloadClock(),
+			)
 			if err := collector.Collect(t.Context()); err != nil {
 				t.Fatalf("Collect() error = %v", err)
 			}

@@ -222,7 +222,13 @@ func cloneMetricSummaries(value metrics.MetricSummaries) metrics.MetricSummaries
 }
 
 func cloneMetricSummary(value metrics.MetricSummary) metrics.MetricSummary {
-	value.Average, value.Minimum, value.Maximum = cloneFloat64(value.Average), cloneFloat64(value.Minimum), cloneFloat64(value.Maximum)
+	value.Average, value.Minimum, value.Maximum = cloneFloat64(
+		value.Average,
+	), cloneFloat64(
+		value.Minimum,
+	), cloneFloat64(
+		value.Maximum,
+	)
 	return value
 }
 
