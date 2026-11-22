@@ -14,6 +14,7 @@ type MaintenanceResult struct {
 	RolledServiceRows int64
 	RolledVolumeRows  int64
 	RolledHostRows    int64
+	RolledScopeRows   int64
 	ExpiredRows       int64
 }
 
@@ -68,6 +69,15 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 		if executeErr != nil {
 			return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, executeErr)
 		}
+		scopeResult, executeErr := tx.ExecContext(
+			ctx,
+			scopeRollupSQL(),
+			int64(tier.target/time.Second), int64(tier.target/time.Second),
+			int64(tier.source/time.Second), cutoff, int64(tier.target/time.Second),
+		)
+		if executeErr != nil {
+			return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, executeErr)
+		}
 		serviceRows, rowsErr := rowsAffected(serviceResult)
 		if rowsErr != nil {
 			return MaintenanceResult{}, rowsErr
@@ -80,9 +90,14 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 		if rowsErr != nil {
 			return MaintenanceResult{}, rowsErr
 		}
+		scopeRows, rowsErr := rowsAffected(scopeResult)
+		if rowsErr != nil {
+			return MaintenanceResult{}, rowsErr
+		}
 		result.RolledServiceRows += serviceRows
 		result.RolledVolumeRows += volumeRows
 		result.RolledHostRows += hostRows
+		result.RolledScopeRows += scopeRows
 	}
 	for _, expiry := range []struct {
 		resolution time.Duration
@@ -97,6 +112,7 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 			"monitoring_volume_samples",
 			"monitoring_service_samples",
 			"monitoring_host_samples",
+			"monitoring_scope_samples",
 		} {
 			expired, executeErr := tx.ExecContext(
 				ctx,
@@ -126,6 +142,25 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 		return MaintenanceResult{}, err
 	}
 	return result, nil
+}
+
+func scopeRollupSQL() string {
+	columns := []string{
+		"sampled_count", "eligible_count", "cpu_limited_count", "memory_limited_count",
+		"volume_sampled_count", "volume_eligible_count",
+	}
+	for _, metric := range scopeMetricColumns {
+		for _, suffix := range []string{"sum", "count", "min", "max", "contributor_valid", "contributor_expected"} {
+			columns = append(columns, metric+"_"+suffix)
+		}
+	}
+	return fmt.Sprintf(`INSERT INTO monitoring_scope_samples (
+		tier_seconds, bucket_unix, tenant_id, project_id, %s
+	) SELECT ?, bucket_unix - (bucket_unix %% ?), tenant_id, project_id, %s
+	FROM monitoring_scope_samples WHERE tier_seconds = ? AND bucket_unix < ?
+	GROUP BY bucket_unix - (bucket_unix %% ?), tenant_id, project_id
+	ON CONFLICT(tier_seconds, bucket_unix, tenant_id, project_id) DO NOTHING`,
+		strings.Join(columns, ", "), strings.Join(rollupExpressions(columns), ", "))
 }
 
 func hostRollupSQL() string {

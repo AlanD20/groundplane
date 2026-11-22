@@ -166,14 +166,13 @@ func TestStoreWorkloadAggregateDeduplicatesVolumeAndExcludesBacking(t *testing.T
 	at := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
 	one, two := 1.0, 2.0
 	shared, backing := uint64(100), uint64(10_000)
-	for _, measurement := range []monitoring.ServiceMeasurement{
+	measurements := []monitoring.ServiceMeasurement{
 		testMeasurement("service-a", monitoring.OwnerWorkload, at, &one, "volume-shared", &shared),
 		testMeasurement("service-b", monitoring.OwnerWorkload, at, &two, "volume-shared", &shared),
 		testMeasurement("backing-a", monitoring.OwnerBacking, at, &two, "volume-backing", &backing),
-	} {
-		if err := store.Append(ctx, measurement); err != nil {
-			t.Fatal(err)
-		}
+	}
+	if err := store.AppendBatch(ctx, measurements); err != nil {
+		t.Fatal(err)
 	}
 	aggregates, err := store.ReadWorkloadAggregate(
 		ctx,
@@ -185,8 +184,101 @@ func TestStoreWorkloadAggregateDeduplicatesVolumeAndExcludesBacking(t *testing.T
 	if err != nil || len(aggregates) != 1 || aggregates[0].Point.CPUCores == nil ||
 		*aggregates[0].Point.CPUCores != 3 || aggregates[0].Point.PersistentVolumeUsedBytes == nil ||
 		*aggregates[0].Point.PersistentVolumeUsedBytes != shared || aggregates[0].Coverage.Eligible != 2 ||
-		aggregates[0].Summaries.CPUCores.Minimum != nil {
+		aggregates[0].Summaries.CPUCores.Minimum == nil || *aggregates[0].Summaries.CPUCores.Minimum != 3 {
 		t.Fatalf("unexpected stored aggregate: values=%+v err=%v", aggregates, err)
+	}
+}
+
+// Rationale: parent extrema must come from synchronized totals. Summing child
+// maxima invents a peak when different Services peak in different samples.
+func TestAppendBatchPersistsSynchronizedParentExtremaAndCoverage(t *testing.T) {
+	ctx := t.Context()
+	store := openTestStore(t, filepath.Join(t.TempDir(), "monitoring.sqlite"), 0)
+	defer store.Close()
+	base := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	shared, backingVolume := uint64(100), uint64(10_000)
+	for index, values := range [][2]float64{{10, 1}, {2, 8}} {
+		at := base.Add(time.Duration(index) * monitoring.SampleInterval)
+		serviceA := testMeasurement("service-a", monitoring.OwnerWorkload, at, &values[0], "shared", &shared)
+		serviceB := testMeasurement("service-b", monitoring.OwnerWorkload, at, &values[1], "shared", &shared)
+		network := float64(50 + index)
+		serviceA.Point.NetworkReceiveBytesPerSecond = &network
+		backingCPU := 100.0
+		backing := testMeasurement("backing-a", monitoring.OwnerBacking, at, &backingCPU, "backing", &backingVolume)
+		if err := store.AppendBatch(ctx, []monitoring.ServiceMeasurement{serviceA, serviceB, backing}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.Maintain(ctx, base.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	parents, err := store.ReadWorkloadAggregate(
+		ctx,
+		AggregateScope{TenantID: "tenant-a"},
+		base,
+		base.Add(time.Minute),
+		monitoring.MediumResolution,
+	)
+	if err != nil || len(parents) != 1 {
+		t.Fatalf("parent history unavailable: values=%+v err=%v", parents, err)
+	}
+	parent := parents[0]
+	if parent.Summaries.CPUCores.Average == nil || *parent.Summaries.CPUCores.Average != 10.5 ||
+		parent.Summaries.CPUCores.Minimum == nil || *parent.Summaries.CPUCores.Minimum != 10 ||
+		parent.Summaries.CPUCores.Maximum == nil || *parent.Summaries.CPUCores.Maximum != 11 ||
+		parent.Summaries.CPUCores.Valid != 2 || parent.Summaries.CPUCores.Expected != 4 ||
+		parent.Summaries.CPUCores.ContributorValid != 4 ||
+		parent.Summaries.CPUCores.ContributorExpected != 4 {
+		t.Fatalf("parent CPU statistics are not synchronized: %+v", parent)
+	}
+	if parent.Summaries.NetworkReceiveBytesPerSecond.ContributorValid != 2 ||
+		parent.Summaries.NetworkReceiveBytesPerSecond.ContributorExpected != 4 ||
+		parent.Point.PersistentVolumeUsedBytes == nil || *parent.Point.PersistentVolumeUsedBytes != shared ||
+		parent.Summaries.PersistentVolumeUsedBytes.Minimum == nil ||
+		*parent.Summaries.PersistentVolumeUsedBytes.Minimum != float64(shared) ||
+		parent.Coverage.Eligible != 4 || parent.Coverage.Sampled != 4 {
+		t.Fatalf("parent partial or Volume coverage is wrong: %+v", parent)
+	}
+	serviceA, err := store.ReadService(ctx, "service-a", base, base.Add(time.Minute), monitoring.MediumResolution)
+	if err != nil || len(serviceA) != 1 || serviceA[0].Summaries.CPUCores.Maximum == nil {
+		t.Fatalf("first child history unavailable: values=%+v err=%v", serviceA, err)
+	}
+	serviceB, err := store.ReadService(ctx, "service-b", base, base.Add(time.Minute), monitoring.MediumResolution)
+	if err != nil || len(serviceB) != 1 || serviceB[0].Summaries.CPUCores.Maximum == nil {
+		t.Fatalf("second child history unavailable: values=%+v err=%v", serviceB, err)
+	}
+	if *parent.Summaries.CPUCores.Maximum ==
+		*serviceA[0].Summaries.CPUCores.Maximum+*serviceB[0].Summaries.CPUCores.Maximum {
+		t.Fatal("parent maximum was manufactured from child maxima")
+	}
+	projects, err := store.ReadWorkloadAggregate(
+		ctx,
+		AggregateScope{TenantID: "tenant-a", ProjectID: "project-a"},
+		base,
+		base.Add(time.Minute),
+		monitoring.MediumResolution,
+	)
+	if err != nil || len(projects) != 1 || projects[0].Summaries.CPUCores.Maximum == nil ||
+		*projects[0].Summaries.CPUCores.Maximum != 11 {
+		t.Fatalf("Project synchronized history is wrong: values=%+v err=%v", projects, err)
+	}
+}
+
+func TestAppendBatchRollsBackEveryRowWhenOneMeasurementIsInvalid(t *testing.T) {
+	ctx := t.Context()
+	store := openTestStore(t, filepath.Join(t.TempDir(), "monitoring.sqlite"), 0)
+	defer store.Close()
+	at := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	cpu := 1.0
+	valid := testMeasurement("service-a", monitoring.OwnerWorkload, at, &cpu, "", nil)
+	tooLarge := ^uint64(0)
+	invalid := testMeasurement("service-b", monitoring.OwnerWorkload, at, &cpu, "volume-too-large", &tooLarge)
+	if err := store.AppendBatch(ctx, []monitoring.ServiceMeasurement{valid, invalid}); err == nil {
+		t.Fatal("batch with an unstoreable metric was accepted")
+	}
+	values, err := store.ReadService(ctx, "service-a", at, at.Add(monitoring.SampleInterval), monitoring.SampleInterval)
+	if err != nil || len(values) != 0 {
+		t.Fatalf("invalid batch persisted a prefix: values=%+v err=%v", values, err)
 	}
 }
 

@@ -9,6 +9,11 @@ import (
 
 func metricSummary(value metricValue, expected uint32) monitoring.MetricSummary {
 	result := monitoring.MetricSummary{Expected: expected}
+	if value.contributorValid >= 0 && value.contributorExpected >= value.contributorValid &&
+		value.contributorExpected <= math.MaxUint32 {
+		result.ContributorValid = uint32(value.contributorValid)
+		result.ContributorExpected = uint32(value.contributorExpected)
+	}
 	if value.count <= 0 || !value.minimum.Valid || !value.maximum.Valid || value.count > math.MaxUint32 {
 		return result
 	}
@@ -16,6 +21,12 @@ func metricSummary(value metricValue, expected uint32) monitoring.MetricSummary 
 	minimum, maximum := value.minimum.Float64, value.maximum.Float64
 	result.Average, result.Minimum, result.Maximum = &average, &minimum, &maximum
 	result.Valid = uint32(value.count)
+	return result
+}
+
+func scopeSummaries(values []metricValue, expected uint32) monitoring.MetricSummaries {
+	result := serviceSummaries(values[:11], expected)
+	result.PersistentVolumeUsedBytes = metricSummary(values[11], expected)
 	return result
 }
 

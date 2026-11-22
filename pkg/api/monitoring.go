@@ -5,11 +5,13 @@ import "time"
 // MonitoringMetric describes observed samples in one exact bucket. Null
 // extrema mean the retained evidence cannot establish them; zero is a value.
 type MonitoringMetric struct {
-	Average         *float64 `json:"average"`
-	Minimum         *float64 `json:"minimum"`
-	Maximum         *float64 `json:"maximum"`
-	ValidSamples    uint32   `json:"valid_samples"`
-	ExpectedSamples uint32   `json:"expected_samples"`
+	Average               *float64 `json:"average"`
+	Minimum               *float64 `json:"minimum"`
+	Maximum               *float64 `json:"maximum"`
+	ValidSamples          uint32   `json:"valid_samples"`
+	ExpectedSamples       uint32   `json:"expected_samples"`
+	ValidContributions    uint32   `json:"valid_contributions"`
+	ExpectedContributions uint32   `json:"expected_contributions"`
 }
 
 // Units are explicit in field names. Host memory usage and container working

@@ -91,11 +91,13 @@ type Bucket struct {
 }
 
 type MetricSummary struct {
-	Average  *float64
-	Minimum  *float64
-	Maximum  *float64
-	Valid    uint32
-	Expected uint32
+	Average             *float64
+	Minimum             *float64
+	Maximum             *float64
+	Valid               uint32
+	Expected            uint32
+	ContributorValid    uint32
+	ContributorExpected uint32
 }
 
 type MetricSummaries struct {

@@ -10,11 +10,13 @@ func publicMetric(value metrics.MetricSummary) *api.MonitoringMetric {
 		return nil
 	}
 	return &api.MonitoringMetric{
-		Average:         value.Average,
-		Minimum:         value.Minimum,
-		Maximum:         value.Maximum,
-		ValidSamples:    value.Valid,
-		ExpectedSamples: value.Expected,
+		Average:               value.Average,
+		Minimum:               value.Minimum,
+		Maximum:               value.Maximum,
+		ValidSamples:          value.Valid,
+		ExpectedSamples:       value.Expected,
+		ValidContributions:    value.ContributorValid,
+		ExpectedContributions: value.ContributorExpected,
 	}
 }
 

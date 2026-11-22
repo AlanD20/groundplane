@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/monitoring"
@@ -25,6 +24,7 @@ const (
 	schemaVersion                     = 1
 	minimumDatabaseBytes        int64 = 64 << 10
 	minimumWALTargetBytes       int64 = 32 << 10
+	MaximumBatchMeasurements          = 512
 )
 
 type Options struct {
@@ -96,16 +96,95 @@ func (store *Store) Append(ctx context.Context, measurement monitoring.ServiceMe
 	if err := monitoring.ValidateMeasurement(measurement); err != nil {
 		return err
 	}
-	bucket := measurement.Point.At.UTC().Truncate(monitoring.SampleInterval).Unix()
-	metricValues, err := storedMetricValues(measurement)
+	tx, err := store.database.BeginTx(ctx, nil)
 	if err != nil {
+		return errs.Wrap(errs.KindStorageUnavailable, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err = store.appendService(ctx, tx, measurement); err != nil {
 		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return errs.Wrap(errs.KindStorageUnavailable, err)
+	}
+	if err = secureFiles(store.path); err != nil {
+		return err
+	}
+	return store.checkpointOversizedWAL(ctx)
+}
+
+// AppendBatch persists one complete collection cycle and its synchronized
+// Tenant and Project workload totals in a single transaction.
+func (store *Store) AppendBatch(ctx context.Context, measurements []monitoring.ServiceMeasurement) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if store == nil || store.database == nil {
+		return errs.New(errs.KindInternal, "monitoring store is not configured")
+	}
+	if len(measurements) == 0 || len(measurements) > MaximumBatchMeasurements {
+		return errs.New(errs.KindValidationFailed, "monitoring collection batch size is invalid")
+	}
+	at := measurements[0].Point.At
+	services := make(map[string]struct{}, len(measurements))
+	groups := make(map[scopeKey][]monitoring.ServiceMeasurement)
+	for _, measurement := range measurements {
+		if err := monitoring.ValidateMeasurement(measurement); err != nil {
+			return err
+		}
+		if !measurement.Point.At.Equal(at) {
+			return errs.New(errs.KindValidationFailed, "monitoring collection batch times differ")
+		}
+		if _, exists := services[measurement.Ownership.ServiceID]; exists {
+			return errs.New(errs.KindValidationFailed, "monitoring collection batch repeats a Service")
+		}
+		services[measurement.Ownership.ServiceID] = struct{}{}
+		if measurement.Ownership.Class != monitoring.OwnerWorkload {
+			continue
+		}
+		tenant := scopeKey{tenantID: measurement.Ownership.TenantID}
+		project := scopeKey{tenantID: measurement.Ownership.TenantID, projectID: measurement.Ownership.ProjectID}
+		groups[tenant] = append(groups[tenant], measurement)
+		groups[project] = append(groups[project], measurement)
 	}
 	tx, err := store.database.BeginTx(ctx, nil)
 	if err != nil {
 		return errs.Wrap(errs.KindStorageUnavailable, err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	for _, measurement := range measurements {
+		if err = store.appendService(ctx, tx, measurement); err != nil {
+			return err
+		}
+	}
+	for scope, members := range groups {
+		aggregate, aggregateErr := monitoring.AggregateWorkloads(members)
+		if aggregateErr != nil {
+			return aggregateErr
+		}
+		if err = store.appendScope(ctx, tx, scope, aggregate, members); err != nil {
+			return err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return errs.Wrap(errs.KindStorageUnavailable, err)
+	}
+	if err = secureFiles(store.path); err != nil {
+		return err
+	}
+	return store.checkpointOversizedWAL(ctx)
+}
+
+func (store *Store) appendService(
+	ctx context.Context,
+	tx *sql.Tx,
+	measurement monitoring.ServiceMeasurement,
+) error {
+	bucket := measurement.Point.At.UTC().Truncate(monitoring.SampleInterval).Unix()
+	metricValues, err := storedMetricValues(measurement)
+	if err != nil {
+		return err
+	}
 	arguments := []any{
 		int64(monitoring.SampleInterval / time.Second), bucket,
 		measurement.Ownership.TenantID, measurement.Ownership.ProjectID,
@@ -138,13 +217,7 @@ func (store *Store) Append(ctx context.Context, measurement monitoring.ServiceMe
 			return errs.Wrap(errs.KindStorageUnavailable, err)
 		}
 	}
-	if err = tx.Commit(); err != nil {
-		return errs.Wrap(errs.KindStorageUnavailable, err)
-	}
-	if err = secureFiles(store.path); err != nil {
-		return err
-	}
-	return store.checkpointOversizedWAL(ctx)
+	return nil
 }
 
 func (store *Store) AppendHost(ctx context.Context, measurement monitoring.HostMeasurement) error {
@@ -286,11 +359,14 @@ func (store *Store) createSchema(ctx context.Context) error {
 		serviceSchema,
 		volumeSchema,
 		hostSchema,
+		scopeSchema(),
 		`CREATE INDEX monitoring_service_scope ON monitoring_service_samples
 			(tier_seconds, tenant_id, project_id, bucket_unix, owner_class)`,
 		`CREATE INDEX monitoring_volume_scope ON monitoring_volume_samples
 			(tier_seconds, tenant_id, project_id, bucket_unix, owner_class, volume_id)`,
 		`CREATE INDEX monitoring_host_time ON monitoring_host_samples (tier_seconds, host_id, bucket_unix)`,
+		`CREATE INDEX monitoring_scope_time ON monitoring_scope_samples
+			(tier_seconds, tenant_id, project_id, bucket_unix)`,
 		fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion),
 	}
 	for _, statement := range statements {
@@ -436,112 +512,4 @@ func boolCount(value bool) int64 {
 		return 1
 	}
 	return 0
-}
-
-const serviceSchema = `CREATE TABLE monitoring_service_samples (
-	tier_seconds INTEGER NOT NULL,
-	bucket_unix INTEGER NOT NULL,
-	tenant_id TEXT NOT NULL,
-	project_id TEXT NOT NULL,
-	environment_id TEXT NOT NULL,
-	service_id TEXT NOT NULL,
-	owner_class TEXT NOT NULL CHECK (owner_class IN ('workload', 'backing')),
-	sampled_count INTEGER NOT NULL,
-	eligible_count INTEGER NOT NULL,
-	cpu_sum REAL NOT NULL, cpu_count INTEGER NOT NULL, cpu_min REAL, cpu_max REAL,
-	cpu_limit_sum REAL NOT NULL, cpu_limit_count INTEGER NOT NULL, cpu_limit_min REAL, cpu_limit_max REAL,
-	memory_sum INTEGER NOT NULL, memory_count INTEGER NOT NULL, memory_min INTEGER, memory_max INTEGER,
-	memory_limit_sum INTEGER NOT NULL, memory_limit_count INTEGER NOT NULL, memory_limit_min INTEGER, memory_limit_max INTEGER,
-	network_receive_sum REAL NOT NULL, network_receive_count INTEGER NOT NULL, network_receive_min REAL, network_receive_max REAL,
-	network_transmit_sum REAL NOT NULL, network_transmit_count INTEGER NOT NULL, network_transmit_min REAL, network_transmit_max REAL,
-	writable_layer_sum INTEGER NOT NULL, writable_layer_count INTEGER NOT NULL, writable_layer_min INTEGER, writable_layer_max INTEGER,
-	block_read_sum REAL NOT NULL, block_read_count INTEGER NOT NULL, block_read_min REAL, block_read_max REAL,
-	block_write_sum REAL NOT NULL, block_write_count INTEGER NOT NULL, block_write_min REAL, block_write_max REAL,
-	block_read_operations_sum REAL NOT NULL, block_read_operations_count INTEGER NOT NULL,
-	block_read_operations_min REAL, block_read_operations_max REAL,
-	block_write_operations_sum REAL NOT NULL, block_write_operations_count INTEGER NOT NULL,
-	block_write_operations_min REAL, block_write_operations_max REAL,
-	PRIMARY KEY (tier_seconds, bucket_unix, service_id)
-) STRICT`
-
-const volumeSchema = `CREATE TABLE monitoring_volume_samples (
-	tier_seconds INTEGER NOT NULL,
-	bucket_unix INTEGER NOT NULL,
-	tenant_id TEXT NOT NULL,
-	project_id TEXT NOT NULL,
-	environment_id TEXT NOT NULL,
-	service_id TEXT NOT NULL,
-	owner_class TEXT NOT NULL CHECK (owner_class IN ('workload', 'backing')),
-	volume_id TEXT NOT NULL,
-	used_sum INTEGER NOT NULL,
-	used_count INTEGER NOT NULL,
-	used_min INTEGER,
-	used_max INTEGER,
-	PRIMARY KEY (tier_seconds, bucket_unix, service_id, volume_id)
-) STRICT`
-
-const hostSchema = `CREATE TABLE monitoring_host_samples (
-	tier_seconds INTEGER NOT NULL,
-	bucket_unix INTEGER NOT NULL,
-	host_id TEXT NOT NULL,
-	sampled_count INTEGER NOT NULL,
-	eligible_count INTEGER NOT NULL,
-	cpu_sum REAL NOT NULL, cpu_count INTEGER NOT NULL, cpu_min REAL, cpu_max REAL,
-	cpu_utilization_sum REAL NOT NULL, cpu_utilization_count INTEGER NOT NULL,
-	cpu_utilization_min REAL, cpu_utilization_max REAL,
-	memory_sum INTEGER NOT NULL, memory_count INTEGER NOT NULL, memory_min INTEGER, memory_max INTEGER,
-	memory_total_sum INTEGER NOT NULL, memory_total_count INTEGER NOT NULL, memory_total_min INTEGER, memory_total_max INTEGER,
-	network_receive_sum REAL NOT NULL, network_receive_count INTEGER NOT NULL, network_receive_min REAL, network_receive_max REAL,
-	network_transmit_sum REAL NOT NULL, network_transmit_count INTEGER NOT NULL, network_transmit_min REAL, network_transmit_max REAL,
-	block_read_sum REAL NOT NULL, block_read_count INTEGER NOT NULL, block_read_min REAL, block_read_max REAL,
-	block_write_sum REAL NOT NULL, block_write_count INTEGER NOT NULL, block_write_min REAL, block_write_max REAL,
-	block_read_operations_sum REAL NOT NULL, block_read_operations_count INTEGER NOT NULL,
-	block_read_operations_min REAL, block_read_operations_max REAL,
-	block_write_operations_sum REAL NOT NULL, block_write_operations_count INTEGER NOT NULL,
-	block_write_operations_min REAL, block_write_operations_max REAL,
-	disk_used_sum INTEGER NOT NULL, disk_used_count INTEGER NOT NULL, disk_used_min INTEGER, disk_used_max INTEGER,
-	disk_total_sum INTEGER NOT NULL, disk_total_count INTEGER NOT NULL, disk_total_min INTEGER, disk_total_max INTEGER,
-	PRIMARY KEY (tier_seconds, bucket_unix, host_id)
-) STRICT`
-
-const insertVolumeSample = `INSERT INTO monitoring_volume_samples VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-var serviceMetricColumns = []string{
-	"cpu", "cpu_limit", "memory", "memory_limit", "network_receive", "network_transmit",
-	"writable_layer", "block_read", "block_write", "block_read_operations", "block_write_operations",
-}
-
-var hostMetricColumns = []string{
-	"cpu", "cpu_utilization", "memory", "memory_total", "network_receive", "network_transmit",
-	"block_read", "block_write", "block_read_operations", "block_write_operations", "disk_used", "disk_total",
-}
-
-func upsertServiceSampleSQL() string {
-	return upsertSampleSQL("monitoring_service_samples", 9+len(serviceMetricColumns)*4, []string{
-		"tenant_id", "project_id", "environment_id", "owner_class", "sampled_count", "eligible_count",
-	}, serviceMetricColumns, "tier_seconds, bucket_unix, service_id")
-}
-
-func upsertHostSampleSQL() string {
-	return upsertSampleSQL(
-		"monitoring_host_samples",
-		5+len(hostMetricColumns)*4,
-		[]string{"sampled_count", "eligible_count"},
-		hostMetricColumns,
-		"tier_seconds, bucket_unix, host_id",
-	)
-}
-
-func upsertSampleSQL(table string, valueCount int, assignments, metrics []string, key string) string {
-	for _, metric := range metrics {
-		for _, suffix := range []string{"sum", "count", "min", "max"} {
-			assignments = append(assignments, metric+"_"+suffix)
-		}
-	}
-	set := make([]string, len(assignments))
-	for index, column := range assignments {
-		set[index] = column + "=excluded." + column
-	}
-	return `INSERT INTO ` + table + ` VALUES (` + strings.TrimSuffix(strings.Repeat("?,", valueCount), ",") +
-		`) ON CONFLICT(` + key + `) DO UPDATE SET ` + strings.Join(set, ",")
 }

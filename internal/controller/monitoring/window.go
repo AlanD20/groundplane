@@ -61,7 +61,10 @@ func CombineMetric(values []metrics.MetricSummary) (metrics.MetricSummary, error
 	var weighted float64
 	missingMin, missingMax := false, false
 	for _, value := range values {
-		if uint64(result.Expected)+uint64(value.Expected) > 1<<32-1 ||
+		if uint64(result.ContributorExpected)+uint64(value.ContributorExpected) > 1<<32-1 ||
+			uint64(result.ContributorValid)+uint64(value.ContributorValid) > 1<<32-1 ||
+			value.ContributorValid > value.ContributorExpected ||
+			uint64(result.Expected)+uint64(value.Expected) > 1<<32-1 ||
 			uint64(result.Valid)+uint64(value.Valid) > 1<<32-1 ||
 			value.Valid > value.Expected {
 			return metrics.MetricSummary{}, errs.New(
@@ -71,6 +74,8 @@ func CombineMetric(values []metrics.MetricSummary) (metrics.MetricSummary, error
 		}
 		result.Expected += value.Expected
 		result.Valid += value.Valid
+		result.ContributorValid += value.ContributorValid
+		result.ContributorExpected += value.ContributorExpected
 		if value.Valid == 0 {
 			continue
 		}

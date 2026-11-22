@@ -123,32 +123,20 @@ func (store *Store) ReadWorkloadAggregate(
 	if scope.TenantID == "" {
 		return nil, errs.New(errs.KindValidationFailed, "monitoring aggregate Tenant identity is required")
 	}
-	where, arguments := `tenant_id = ? AND owner_class = ?`, []any{scope.TenantID, string(monitoring.OwnerWorkload)}
-	if scope.ProjectID != "" {
-		where += ` AND project_id = ?`
-		arguments = append(arguments, scope.ProjectID)
-	}
-	queryArguments := []any{int64(resolution / time.Second)}
-	queryArguments = append(queryArguments, arguments...)
-	queryArguments = append(queryArguments, start.Unix(), end.Unix(), maximumStoredPoints+1)
-	rows, err := store.database.QueryContext(ctx, workloadAggregateSelect+`
-		WHERE tier_seconds = ? AND `+where+` AND bucket_unix >= ? AND bucket_unix < ?
-		GROUP BY bucket_unix ORDER BY bucket_unix LIMIT ?`, queryArguments...)
+	rows, err := store.database.QueryContext(ctx, scopeSelect()+`
+		WHERE tier_seconds = ? AND tenant_id = ? AND project_id = ?
+		AND bucket_unix >= ? AND bucket_unix < ? ORDER BY bucket_unix LIMIT ?`,
+		int64(resolution/time.Second), scope.TenantID, scope.ProjectID,
+		start.Unix(), end.Unix(), maximumStoredPoints+1)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindStorageUnavailable, err)
 	}
-	result, err := scanWorkloadAggregates(rows, maximumStoredPoints, resolution)
-	if err != nil {
-		return nil, err
-	}
-	if err := store.attachAggregateVolumes(ctx, result, where, arguments, start, end, resolution); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return scanScopeAggregates(rows, scope, maximumStoredPoints, resolution)
 }
 
-func scanWorkloadAggregates(
+func scanScopeAggregates(
 	rows *sql.Rows,
+	scope AggregateScope,
 	maximum int,
 	resolution time.Duration,
 ) ([]monitoring.AggregatePoint, error) {
@@ -158,21 +146,35 @@ func scanWorkloadAggregates(
 		if len(result) >= maximum {
 			return nil, errs.New(errs.KindResourceInUse, "monitoring aggregate query point limit exceeded")
 		}
-		var bucket, eligible, sampled, cpuLimited, memoryLimited int64
-		values := make([]metricValue, 11)
-		destinations := []any{&bucket, &eligible, &sampled, &cpuLimited, &memoryLimited}
+		var bucket, eligible, sampled, cpuLimited, memoryLimited, volumeSampled, volumeEligible int64
+		var tenantID, projectID string
+		values := make([]metricValue, 12)
+		destinations := []any{
+			&bucket, &tenantID, &projectID, &sampled, &eligible, &cpuLimited, &memoryLimited,
+			&volumeSampled, &volumeEligible,
+		}
 		for index := range values {
-			destinations = append(destinations, &values[index].sum, &values[index].count)
+			destinations = append(destinations,
+				&values[index].sum, &values[index].count, &values[index].minimum, &values[index].maximum,
+				&values[index].contributorValid, &values[index].contributorExpected,
+			)
 		}
 		if err := rows.Scan(destinations...); err != nil {
 			return nil, errs.Wrap(errs.KindStorageUnavailable, err)
 		}
-		point, err := pointFromAggregateTotals(time.Unix(bucket, 0).UTC(), values)
+		for _, value := range values {
+			if value.contributorValid < 0 || value.contributorExpected < value.contributorValid ||
+				value.contributorExpected > math.MaxUint32 {
+				return nil, errs.New(errs.KindStorageUnavailable, "monitoring scope metric coverage is invalid")
+			}
+		}
+		point, err := pointFromScopeValues(time.Unix(bucket, 0).UTC(), values)
 		if err != nil || eligible <= 0 || eligible > math.MaxUint32 || sampled < 0 || sampled > eligible ||
 			cpuLimited < 0 ||
 			cpuLimited > eligible ||
 			memoryLimited < 0 ||
-			memoryLimited > eligible {
+			memoryLimited > eligible || volumeEligible < 0 || volumeSampled < 0 ||
+			volumeSampled > volumeEligible || tenantID != scope.TenantID || projectID != scope.ProjectID {
 			if err != nil {
 				return nil, err
 			}
@@ -180,9 +182,11 @@ func scanWorkloadAggregates(
 		}
 		result = append(result, monitoring.AggregatePoint{
 			Point: point, Bucket: monitoring.Bucket{Start: point.At, End: point.At.Add(resolution)},
+			Summaries: scopeSummaries(values, expectedSamples(resolution)),
 			Coverage: monitoring.Coverage{
 				Eligible: uint32(eligible), Sampled: uint32(sampled),
 				CPULimited: uint32(cpuLimited), MemoryLimited: uint32(memoryLimited),
+				VolumeEligible: uint32(volumeEligible), VolumeSampled: uint32(volumeSampled),
 			},
 		})
 	}
@@ -190,64 +194,6 @@ func scanWorkloadAggregates(
 		return nil, errs.Wrap(errs.KindStorageUnavailable, err)
 	}
 	return result, nil
-}
-
-func (store *Store) attachAggregateVolumes(
-	ctx context.Context,
-	result []monitoring.AggregatePoint,
-	where string,
-	whereArguments []any,
-	start time.Time,
-	end time.Time,
-	resolution time.Duration,
-) error {
-	byBucket := make(map[int64]int, len(result))
-	for index := range result {
-		byBucket[result[index].Point.At.Unix()] = index
-	}
-	arguments := []any{int64(resolution / time.Second)}
-	arguments = append(arguments, whereArguments...)
-	arguments = append(arguments, start.Unix(), end.Unix(), maximumStoredPoints+1)
-	rows, err := store.database.QueryContext(ctx, `SELECT bucket_unix, COUNT(*),
-		SUM(CASE WHEN minimum_used IS NOT NULL AND minimum_used = maximum_used THEN 1 ELSE 0 END),
-		COALESCE(SUM(CASE WHEN minimum_used IS NOT NULL AND minimum_used = maximum_used THEN minimum_used ELSE 0 END), 0)
-		FROM (SELECT bucket_unix, volume_id,
-			MIN(CASE WHEN used_count > 0 THEN CAST(used_sum AS REAL) / used_count END) AS minimum_used,
-			MAX(CASE WHEN used_count > 0 THEN CAST(used_sum AS REAL) / used_count END) AS maximum_used
-			FROM monitoring_volume_samples WHERE tier_seconds = ? AND `+where+`
-			AND bucket_unix >= ? AND bucket_unix < ? GROUP BY bucket_unix, volume_id)
-		GROUP BY bucket_unix ORDER BY bucket_unix LIMIT ?`, arguments...)
-	if err != nil {
-		return errs.Wrap(errs.KindStorageUnavailable, err)
-	}
-	defer rows.Close()
-	volumeBuckets := 0
-	for rows.Next() {
-		volumeBuckets++
-		if volumeBuckets > maximumStoredPoints {
-			return errs.New(errs.KindResourceInUse, "monitoring volume aggregate query point limit exceeded")
-		}
-		var bucket, eligible, sampled int64
-		var used float64
-		if err := rows.Scan(&bucket, &eligible, &sampled, &used); err != nil {
-			return errs.Wrap(errs.KindStorageUnavailable, err)
-		}
-		index, exists := byBucket[bucket]
-		if !exists || eligible < 0 || sampled < 0 || sampled > eligible {
-			return errs.New(errs.KindStorageUnavailable, "monitoring volume aggregate row is invalid")
-		}
-		stored, err := totalUint(used, sampled)
-		if err != nil {
-			return err
-		}
-		result[index].Point.PersistentVolumeUsedBytes = stored
-		result[index].Coverage.VolumeEligible = uint32(eligible)
-		result[index].Coverage.VolumeSampled = uint32(sampled)
-	}
-	if err := rows.Err(); err != nil {
-		return errs.Wrap(errs.KindStorageUnavailable, err)
-	}
-	return nil
 }
 
 func (store *Store) Usage(ctx context.Context) (Usage, error) {
@@ -418,10 +364,12 @@ type measurementKey struct {
 }
 
 type metricValue struct {
-	sum     float64
-	count   int64
-	minimum sql.NullFloat64
-	maximum sql.NullFloat64
+	sum                 float64
+	count               int64
+	minimum             sql.NullFloat64
+	maximum             sql.NullFloat64
+	contributorValid    int64
+	contributorExpected int64
 }
 
 func pointFromValues(at time.Time, values []metricValue) (monitoring.MetricPoint, error) {
@@ -461,55 +409,19 @@ func pointFromValues(at time.Time, values []metricValue) (monitoring.MetricPoint
 	}, nil
 }
 
-func pointFromAggregateTotals(at time.Time, values []metricValue) (monitoring.MetricPoint, error) {
-	if len(values) != 11 {
-		return monitoring.MetricPoint{}, errs.New(
-			errs.KindInternal,
-			"monitoring aggregate metric column count is invalid",
-		)
+func pointFromScopeValues(at time.Time, values []metricValue) (monitoring.MetricPoint, error) {
+	if len(values) != 12 {
+		return monitoring.MetricPoint{}, errs.New(errs.KindInternal, "monitoring scope column count is invalid")
 	}
-	memory, err := totalUint(values[2].sum, values[2].count)
+	point, err := pointFromValues(at, values[:11])
 	if err != nil {
 		return monitoring.MetricPoint{}, err
 	}
-	memoryLimit, err := totalUint(values[3].sum, values[3].count)
+	point.PersistentVolumeUsedBytes, err = averageUint(int64(values[11].sum), values[11].count)
 	if err != nil {
 		return monitoring.MetricPoint{}, err
 	}
-	writable, err := totalUint(values[6].sum, values[6].count)
-	if err != nil {
-		return monitoring.MetricPoint{}, err
-	}
-	return monitoring.MetricPoint{
-		At: at, CPUCores: totalFloat(values[0]), CPULimitCores: totalFloat(values[1]),
-		MemoryWorkingSetBytes: memory, MemoryLimitBytes: memoryLimit,
-		NetworkReceiveBytesPerSecond:  totalFloat(values[4]),
-		NetworkTransmitBytesPerSecond: totalFloat(values[5]),
-		WritableLayerBytes:            writable,
-		BlockReadBytesPerSecond:       totalFloat(values[7]),
-		BlockWriteBytesPerSecond:      totalFloat(values[8]),
-		BlockReadOperationsPerSecond:  totalFloat(values[9]),
-		BlockWriteOperationsPerSecond: totalFloat(values[10]),
-	}, nil
-}
-
-func totalFloat(value metricValue) *float64 {
-	if value.count <= 0 {
-		return nil
-	}
-	result := value.sum
-	return &result
-}
-
-func totalUint(sum float64, count int64) (*uint64, error) {
-	if count <= 0 {
-		return nil, nil
-	}
-	if math.IsNaN(sum) || math.IsInf(sum, 0) || sum < 0 || sum > float64(^uint64(0)) {
-		return nil, errs.New(errs.KindStorageUnavailable, "monitoring integer aggregate is invalid")
-	}
-	value := uint64(sum)
-	return &value, nil
+	return point, nil
 }
 
 func pointFromHostValues(at time.Time, values []metricValue) (monitoring.MetricPoint, error) {
