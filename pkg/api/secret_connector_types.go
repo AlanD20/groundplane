@@ -33,8 +33,9 @@ type SecretCreateRequest struct {
 }
 
 type SecretEditRequest struct {
-	Revision int64  `json:"revision"`
-	Value    string `json:"value"`
+	Revision   int64  `json:"revision"`
+	Value      string `json:"value"`
+	Encryption string `json:"encryption,omitempty" enum:"age,none"`
 }
 
 type SecretValue struct {

@@ -76,6 +76,17 @@ func (record Record) Graph() (workexecution.Task, []workexecution.Item, error) {
 		item.Dependencies = []string{stage.ID}
 		items = append(items, item)
 	}
+	if record.ConsoleWorkItemID != "" {
+		item := stage
+		item.ID, item.Operation, item.TargetID = record.ConsoleWorkItemID, workexecution.ConsoleSoftware, TargetID()
+		item.Claims, item.Input, item.Phase, item.Wait = []workexecution.Claim{{ScopeID: TargetID()}}, nil,
+			workexecution.Waiting, &workexecution.Wait{Reason: workexecution.WaitInput}
+		item.Dependencies = []string{stage.ID}
+		if record.ControllerWorkItemID != "" {
+			item.Dependencies = append(item.Dependencies, record.ControllerWorkItemID)
+		}
+		items = append(items, item)
+	}
 	task.ExpectedItems = uint32(len(items))
 	return task, items, workexecution.ValidateGraph(task, items)
 }

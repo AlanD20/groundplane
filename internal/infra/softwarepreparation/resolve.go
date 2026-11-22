@@ -51,6 +51,12 @@ func (preparer *Preparer) Resolve(ctx context.Context, input ResolveInput) (Reso
 			"published release tag is outside its component namespace",
 		)
 	}
+	if input.SourceKind == SourceRef && input.Selection.includesConsole() {
+		return ResolvedSource{}, errs.New(
+			errs.KindStrategyNotImplemented,
+			"Console and All preparation require a published release",
+		)
+	}
 
 	resolved := ResolvedSource{
 		Selection: input.Selection, SourceKind: input.SourceKind, OriginalRef: input.OriginalRef,
@@ -80,6 +86,15 @@ func (preparer *Preparer) Resolve(ctx context.Context, input ResolveInput) (Reso
 				return ResolvedSource{}, err
 			}
 			resolved.AgentRelease = &agent
+		}
+		if input.Selection.includesConsole() {
+			consoleRelease, err := preparer.resolveComponentRelease(
+				ctx, SelectionConsole, componentReleaseTag(SelectionConsole, input.OriginalRef), input.Platform,
+			)
+			if err != nil {
+				return ResolvedSource{}, err
+			}
+			resolved.ConsoleRelease = &consoleRelease
 		}
 	}
 	return resolved, resolved.validate()
@@ -177,6 +192,11 @@ func requiredReleaseAssets(selection Selection, tag string, platform Platform) m
 	if selection.includesController() {
 		name := fmt.Sprintf("groundplane-%s-linux-%s.tar.gz", version, platform.Architecture)
 		required[name] = maximumBundleBytes
+		required[name+".sha256"] = 1024
+	}
+	if selection.includesConsole() {
+		name := fmt.Sprintf("groundplane-console-%s.tar.gz", version)
+		required[name] = 64 << 20
 		required[name+".sha256"] = 1024
 	}
 	return required

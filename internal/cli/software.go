@@ -45,7 +45,7 @@ func newSoftwareCmd() *cobra.Command {
 			return renderDispatchedTask(cmd, accepted)
 		},
 	}
-	prepare.Flags().StringVar(&selection, "component", "", "controller, agent or both")
+	prepare.Flags().StringVar(&selection, "component", "", "controller, agent, console, both or all")
 	prepare.Flags().StringVar(&source, "source", "", "source_ref or release")
 	prepare.Flags().StringVar(&ref, "ref", "", "branch/tag/commit, or component release tag")
 	prepare.Flags().
@@ -195,14 +195,14 @@ func newSoftwareCmd() *cobra.Command {
 			}
 			return app.Out.Render([]string{"REF", "COMPONENT", "NAME", "PUBLISHED"}, rows, catalog)
 		}}
-	releases.Flags().StringVar(&releaseSelection, "component", "both", "controller, agent or both")
+	releases.Flags().StringVar(&releaseSelection, "component", "both", "controller, agent, console, both or all")
 	command.AddCommand(prepare, apply, list, show, activation, releases)
 	return withExecutionClass(command, executionAPI)
 }
 
 func softwareSelection(value string) error {
-	if value != "controller" && value != "agent" && value != "both" {
-		return errs.New(errs.KindValidationFailed, "component must be controller, agent or both")
+	if value != "controller" && value != "agent" && value != "console" && value != "both" && value != "all" {
+		return errs.New(errs.KindValidationFailed, "component must be controller, agent, console, both or all")
 	}
 	return nil
 }

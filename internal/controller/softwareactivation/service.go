@@ -14,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
+	"github.com/AlanD20/groundplane/internal/infra/consolerelease"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
@@ -72,6 +73,7 @@ type ServiceDependencies struct {
 	Diagnostics       *executiondiagnostics.Repository
 	ControllerRecords *controllersoftware.Repository
 	AgentRecords      *agentoperations.Repository
+	Console           *consolerelease.Store
 	Evidence          requestidempotency.EvidenceRepository
 	Intents           *requestidempotency.Coordinator
 }
@@ -88,6 +90,7 @@ type Service struct {
 	diagnostics       *executiondiagnostics.Repository
 	controllerRecords *controllersoftware.Repository
 	agentRecords      *agentoperations.Repository
+	console           *consolerelease.Store
 	evidence          requestidempotency.EvidenceRepository
 	intents           *requestidempotency.Coordinator
 	now               func() time.Time
@@ -114,6 +117,7 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 		health: dependencies.Health, stager: dependencies.Stager,
 		controllerSource: dependencies.ControllerSource, queue: dependencies.Queue, diagnostics: dependencies.Diagnostics,
 		controllerRecords: dependencies.ControllerRecords, agentRecords: dependencies.AgentRecords,
+		console:  dependencies.Console,
 		evidence: dependencies.Evidence, intents: dependencies.Intents, now: time.Now,
 	}, nil
 }

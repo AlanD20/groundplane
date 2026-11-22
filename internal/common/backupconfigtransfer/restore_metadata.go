@@ -24,7 +24,7 @@ func EncodeRestoreMetadata(ctx context.Context, direction backupconfig.TransferD
 	}
 	secret := entry.Secret
 	value := &agentpb.BackupConfigRestoreEntry{
-		EntryId: entry.ID, Secret: &secret,
+		EntryId: entry.ID, Secret: &secret, Encryption: entry.Encryption,
 		Metadata: &agentpb.BackupConfigEntryMetadata{},
 		Exposure: &agentpb.BackupConfigEntryExposure{},
 		Source:   &agentpb.BackupConfigArtifactDesiredSource{},

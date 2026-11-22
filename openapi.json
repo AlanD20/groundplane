@@ -3667,6 +3667,13 @@
           "empty_secret_value": {
             "type": "boolean"
           },
+          "encryption": {
+            "enum": [
+              "age",
+              "none"
+            ],
+            "type": "string"
+          },
           "exposure": {
             "items": {
               "type": "string"
@@ -3711,7 +3718,8 @@
           "type",
           "source",
           "exposure",
-          "secret"
+          "secret",
+          "encryption"
         ],
         "type": "object"
       },
@@ -3753,6 +3761,13 @@
               "null"
             ],
             "uniqueItems": true
+          },
+          "encryption": {
+            "enum": [
+              "age",
+              "none"
+            ],
+            "type": "string"
           },
           "entries": {
             "items": {
@@ -3809,6 +3824,13 @@
               "null"
             ],
             "uniqueItems": true
+          },
+          "encryption": {
+            "enum": [
+              "age",
+              "none"
+            ],
+            "type": "string"
           },
           "environment_id": {
             "type": "string"
@@ -3877,6 +3899,13 @@
               "null"
             ],
             "uniqueItems": true
+          },
+          "encryption": {
+            "enum": [
+              "age",
+              "none"
+            ],
+            "type": "string"
           },
           "exposure": {
             "items": {
@@ -5802,7 +5831,8 @@
           "component": {
             "enum": [
               "controller",
-              "agent"
+              "agent",
+              "console"
             ],
             "type": "string"
           },
@@ -7956,6 +7986,13 @@
             "readOnly": true,
             "type": "string"
           },
+          "encryption": {
+            "enum": [
+              "age",
+              "none"
+            ],
+            "type": "string"
+          },
           "revision": {
             "format": "int64",
             "type": "integer"
@@ -8837,6 +8874,12 @@
           "agent_work_item_id": {
             "type": "string"
           },
+          "console_applied": {
+            "type": "boolean"
+          },
+          "console_work_item_id": {
+            "type": "string"
+          },
           "controller_applied": {
             "type": "boolean"
           },
@@ -8859,7 +8902,9 @@
             "enum": [
               "controller",
               "agent",
-              "both"
+              "console",
+              "both",
+              "all"
             ],
             "type": "string"
           },
@@ -8874,7 +8919,8 @@
           "selection",
           "phase",
           "controller_applied",
-          "agent_applied"
+          "agent_applied",
+          "console_applied"
         ],
         "type": "object"
       },
@@ -8930,7 +8976,9 @@
             "enum": [
               "controller",
               "agent",
-              "both"
+              "console",
+              "both",
+              "all"
             ],
             "type": "string"
           },
@@ -9017,7 +9065,9 @@
             "enum": [
               "controller",
               "agent",
-              "both"
+              "console",
+              "both",
+              "all"
             ],
             "type": "string"
           },
@@ -9045,7 +9095,8 @@
           "component": {
             "enum": [
               "controller",
-              "agent"
+              "agent",
+              "console"
             ],
             "type": "string"
           },
@@ -9101,7 +9152,9 @@
             "enum": [
               "controller",
               "agent",
-              "both"
+              "console",
+              "both",
+              "all"
             ],
             "type": "string"
           }
@@ -14157,7 +14210,7 @@
             "description": "Error"
           }
         },
-        "summary": "Reveal an encrypted Entry value",
+        "summary": "Read a resolved Entry value",
         "tags": [
           "Entry"
         ]
@@ -19966,7 +20019,9 @@
               "enum": [
                 "controller",
                 "agent",
-                "both"
+                "console",
+                "both",
+                "all"
               ],
               "type": "string"
             }

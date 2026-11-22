@@ -81,7 +81,9 @@ function readPending(): Pending | null {
       "ref" in request &&
       typeof request.ref === "string" &&
       "selection" in request &&
-      ["controller", "agent", "both"].includes(String(request.selection)) &&
+      ["controller", "agent", "console", "both", "all"].includes(
+        String(request.selection),
+      ) &&
       "source_kind" in request &&
       ["release", "source_ref"].includes(String(request.source_kind)) &&
       "after" in request

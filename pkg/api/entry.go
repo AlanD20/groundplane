@@ -21,6 +21,7 @@ type Entry struct {
 	Source            EntrySource `json:"source"`
 	Exposure          []string    `json:"exposure"` // Service names, ["all"], or the closed ["component:edge-tunnel"] grant.
 	Secret            bool        `json:"secret"`
+	Encryption        string      `json:"encryption" enum:"age,none"`
 	EmptySecretValue  bool        `json:"empty_secret_value,omitempty"` // True only for an empty selected secret generation.
 	ReconciliationKey string      `json:"reconciliation_key,omitempty"` // Immutable Blueprint key on metadata reads.
 }
@@ -37,6 +38,7 @@ type EntryCreateRequest struct {
 	Source        EntrySource `json:"source"`
 	Exposure      []string    `json:"exposure"`
 	Secret        bool        `json:"secret"`
+	Encryption    string      `json:"encryption,omitempty" enum:"age,none"`
 	After         []string    `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
 }
 

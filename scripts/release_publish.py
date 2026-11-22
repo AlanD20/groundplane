@@ -16,22 +16,26 @@ def run(*args):
 
 
 def publish(tag, root, *, check=False):
-    match = re.fullmatch(r"(?:(agent|controller)/)?v(" + SEMVER + r")", tag)
+    match = re.fullmatch(r"(?:(agent|controller|console)/)?v(" + SEMVER + r")", tag)
     if not match:
-        raise ValueError("release tag must be vX.Y.Z, agent/vX.Y.Z or controller/vX.Y.Z")
+        raise ValueError("release tag must be vX.Y.Z or an agent/, controller/, or console/ component tag")
     scope, version = match[1], match[2]
     commit = run("git", "rev-parse", "HEAD")
-    roles = [scope] if scope else ["agent", "controller", "both"]
+    roles = [scope] if scope else ["agent", "controller", "console", "both"]
     plans = []
     for role in roles:
         selected = f"{role}/v{version}" if role != "both" else f"v{version}"
         agent = sorted(root.glob(f"groundplane-agent-{version}-linux-*.tar.gz*"))
         controller_root = root / "controller" if role == "controller" and scope is None else root
         controller = sorted(controller_root.glob(f"groundplane-{version}-linux-*.tar.gz*"))
-        files = (agent + [root / "agent.json"] if role == "agent" else list(controller))
+        console = sorted(root.glob(f"groundplane-console-{version}.tar.gz*"))
+        files = (agent + [root / "agent.json"] if role == "agent" else
+                 console if role == "console" else list(controller))
         if role == "both":
-            files += agent + [root / "agent.json"]
-        if not check and (len(agent) != 4 and role != "controller" or len(controller) != 4 and role != "agent"):
+            files += agent + [root / "agent.json"] + console
+        if not check and (len(agent) != 4 and role not in ("controller", "console")
+                          or len(controller) != 4 and role not in ("agent", "console")
+                          or len(console) != 2 and role not in ("agent", "controller")):
             raise ValueError(f"incomplete {role} release artifacts")
         if not check and any(not file.is_file() for file in files):
             raise ValueError("release artifact is absent")
@@ -48,8 +52,8 @@ def publish(tag, root, *, check=False):
             raise ValueError(f"release {selected} already exists; never overwrite assets")
         plans.append((selected, role, files, bool(refs)))
     for selected, role, files, exists in ([] if check else plans):
-        notes = (f"Independent Agent release {version}. See CHANGELOG.md for features and limits."
-                 if role == "agent" else release_notes(Path(__file__).resolve().parents[1], version))
+        notes = (f"Independent {role.title()} release {version}. See CHANGELOG.md for features and limits."
+                 if role in ("agent", "console") else release_notes(Path(__file__).resolve().parents[1], version))
         notes = notes.replace(f"/blob/v{version}/", f"/blob/{urllib.parse.quote(selected, safe='')}/")
         if not exists:
             # GITHUB_TOKEN-created refs do not recursively trigger push workflows.

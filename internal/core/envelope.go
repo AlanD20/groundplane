@@ -149,13 +149,14 @@ type AttachmentCredentialSpec struct {
 // EnvEntry (model.go) in authored form — kind/source/exposure/secret.
 // See blueprint.md, "x-gp-entry".
 type EntrySpec struct {
-	Kind     EntryKind       `yaml:"kind"`
-	Path     string          `yaml:"path,omitempty"` // Kind=file only
-	UID      *uint32         `yaml:"uid,omitempty"`  // Kind=file only; explicit, never inferred
-	GID      *uint32         `yaml:"gid,omitempty"`  // Kind=file only; explicit, never inferred
-	Source   EntrySourceSpec `yaml:"source"`
-	Exposure []string        `yaml:"exposure"`
-	Secret   bool            `yaml:"secret,omitempty"`
+	Kind       EntryKind       `yaml:"kind"`
+	Path       string          `yaml:"path,omitempty"` // Kind=file only
+	UID        *uint32         `yaml:"uid,omitempty"`  // Kind=file only; explicit, never inferred
+	GID        *uint32         `yaml:"gid,omitempty"`  // Kind=file only; explicit, never inferred
+	Source     EntrySourceSpec `yaml:"source"`
+	Exposure   []string        `yaml:"exposure"`
+	Secret     bool            `yaml:"secret,omitempty"`
+	Encryption string          `yaml:"encryption,omitempty"`
 }
 
 // EntrySourceSpec is the authored YAML shape of a fact/secret_ref/

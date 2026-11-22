@@ -7,7 +7,13 @@ import (
 )
 
 func appendManifestEntry(destination []byte, entry Entry) []byte {
-	destination = append(destination, `{"exposure":`...)
+	destination = append(destination, '{')
+	if entry.Encryption != "" {
+		destination = append(destination, `"encryption":`...)
+		destination = appendJSONString(destination, entry.Encryption)
+		destination = append(destination, ',')
+	}
+	destination = append(destination, `"exposure":`...)
 	destination = appendExposure(destination, entry.Exposure)
 	destination = append(destination, `,"id":`...)
 	destination = appendJSONString(destination, entry.ID)

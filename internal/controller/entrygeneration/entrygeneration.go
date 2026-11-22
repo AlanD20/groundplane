@@ -108,7 +108,7 @@ func (service *EntryGenerationService) Generate(
 		}
 	}
 	validationEntry := entry
-	if validationEntry.Secret && validationEntry.Source.Kind == core.SourceLiteral {
+	if validationEntry.ValueMetadataProtected() && validationEntry.Source.Kind == core.SourceLiteral {
 		validationEntry.Source.Literal = ""
 	}
 	if err := validationEntry.Validate(); err != nil {
@@ -126,7 +126,7 @@ func (service *EntryGenerationService) Generate(
 		if len(value) > recordcodec.MaximumValueBytes {
 			return errs.New(errs.KindValidationFailed, "Resolved Entry value exceeds the maximum size")
 		}
-		if !entry.Secret {
+		if !entry.Encrypted() {
 			digest := sha256.Sum256(value)
 			generation.Plain = &entryvalues.PlainGeneration{
 				EnvironmentID:   environmentID,

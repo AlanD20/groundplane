@@ -202,11 +202,7 @@ func (reader *CaptureSourceReader) readEntry(
 		if err != nil {
 			return CaptureSourceEntry{}, err
 		}
-		kind := core.SecretKindEnvVar
-		if record.Entry.Kind == core.EntryKindFile {
-			kind = core.SecretKindFile
-		}
-		if !record.Entry.Secret || selected.Record.Secret.Kind != kind {
+		if !captureSourceSecretMatchesEntry(record.Entry, selected.Record.Secret) {
 			return CaptureSourceEntry{}, captureSourceCorrupt()
 		}
 		raw, err := reader.Get(ctx, secrets.RecordKey(selected.Record.Secret.ID))
@@ -250,6 +246,19 @@ func (reader *CaptureSourceReader) readEntry(
 	return entry, nil
 }
 
+func captureSourceSecretMatchesEntry(entry core.EnvEntry, secret core.Secret) bool {
+	var kind core.SecretKind
+	switch entry.Kind {
+	case core.EntryKindEnv:
+		kind = core.SecretKindEnvVar
+	case core.EntryKindFile:
+		kind = core.SecretKindFile
+	default:
+		return false
+	}
+	return secret.Kind == kind && (!secret.Sensitive || entry.Secret)
+}
+
 func (reader *CaptureSourceReader) attachDigest(ctx context.Context, id string, revision int64) ([32]byte, error) {
 	raw, err := reader.Get(ctx, attachments.AttachKey(id))
 	if err != nil {
@@ -267,7 +276,7 @@ func (reader *CaptureSourceReader) ReadGeneration(
 	entry CaptureSourceEntry,
 ) (*etcdstore.KeyValue, error) {
 	key := entryvalues.PlainKey(entry.Record.Entry.ID, entry.Record.CurrentValueGenerationID)
-	if entry.Record.Entry.Secret {
+	if entry.Record.Entry.Encrypted() {
 		key = entryvalues.SecretKey(entry.Record.Entry.ID, entry.Record.CurrentValueGenerationID)
 	}
 	read, err := reader.Get(ctx, key)

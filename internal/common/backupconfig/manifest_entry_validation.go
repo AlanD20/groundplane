@@ -40,6 +40,9 @@ func ValidateEntry(entry Entry) error {
 	if entry.Value.SizeBytes > MaxSelectedValueBytes {
 		return archiveError("Config Entry selected value exceeds its byte limit")
 	}
+	if entry.Encryption != "" && entry.Encryption != "age" && entry.Encryption != "none" {
+		return archiveError("Config Entry encryption is invalid")
+	}
 
 	switch entry.Metadata.Kind {
 	case MetadataEnvironment:

@@ -18,7 +18,7 @@ func PrepareEntryGeneration(
 		)
 	}
 	if generation.Plain != nil {
-		if record.Entry.Secret || generation.Plain.EnvironmentID != record.EnvironmentID ||
+		if record.Entry.Encrypted() || generation.Plain.EnvironmentID != record.EnvironmentID ||
 			generation.Plain.EntryID != record.Entry.ID ||
 			generation.Plain.GenerationID != record.CurrentValueGenerationID {
 			return "", nil, errs.New(errs.KindValidationFailed, "Entry plain value generation does not match metadata")
@@ -30,7 +30,7 @@ func PrepareEntryGeneration(
 		value, err := entryvalues.EncodePlain(*generation.Plain)
 		return entryvalues.PlainKey(record.Entry.ID, record.CurrentValueGenerationID), value, err
 	}
-	if !record.Entry.Secret || generation.Secret.EnvironmentID != record.EnvironmentID ||
+	if !record.Entry.Encrypted() || generation.Secret.EnvironmentID != record.EnvironmentID ||
 		generation.Secret.EntryID != record.Entry.ID ||
 		generation.Secret.GenerationID != record.CurrentValueGenerationID {
 		return "", nil, errs.New(errs.KindValidationFailed, "Entry secret value generation does not match metadata")

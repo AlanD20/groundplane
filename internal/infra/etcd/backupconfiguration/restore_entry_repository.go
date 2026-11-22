@@ -47,7 +47,8 @@ func (repository *ConfigTransferRepository) StageConfigRestoreEntry(ctx context.
 	defer clear(encoded)
 	storedDigest := sha256.Sum256(encoded)
 	receipt := ConfigRestoreEntryReceipt{Owner: owner, Ordinal: ordinal, EntryID: record.Entry.ID,
-		Secret: record.Entry.Secret, MetadataSHA256: hex.EncodeToString(metadataDigest[:]),
+		Secret: record.Entry.Secret, ValueStorage: configRestoreValueStorage(record.Entry.Encryption),
+		MetadataSHA256: hex.EncodeToString(metadataDigest[:]),
 		ValueSizeBytes: selectedSize, ValueSHA256: selectedSHA256, StoredSHA256: hex.EncodeToString(storedDigest[:])}
 	if receipt.Secret {
 		// Secret plaintext evidence stays in the protected transfer, not this index.
@@ -84,7 +85,7 @@ func (repository *ConfigTransferRepository) StageConfigRestoreEntry(ctx context.
 	if existing := read.Values[1]; existing != nil {
 		stored, err := decodeConfigRestoreEntryReceipt(existing.Value)
 		if err != nil || existing.Key != receiptKey || existing.Version != 1 || stored.Owner != owner ||
-			stored.Ordinal != ordinal || stored.EntryID != receipt.EntryID || stored.Secret != receipt.Secret ||
+			stored.Ordinal != ordinal || stored.EntryID != receipt.EntryID || stored.Secret != receipt.Secret || stored.ValueStorage != receipt.ValueStorage ||
 			stored.MetadataSHA256 != receipt.MetadataSHA256 || stored.ValueSizeBytes != receipt.ValueSizeBytes || stored.ValueSHA256 != receipt.ValueSHA256 ||
 			read.Values[2] == nil || read.Values[3] == nil {
 			return zero, captureSnapshotConflict()
@@ -159,7 +160,7 @@ func decodeConfigRestoreStoredValue(
 	if hex.EncodeToString(digest[:]) != receipt.StoredSHA256 {
 		return result, captureSnapshotConflict()
 	}
-	if receipt.Secret {
+	if receipt.valueEncrypted() {
 		stored, err := entryvalues.DecodeSecret(value.Value)
 		if err != nil || stored.EnvironmentID != receipt.Owner.EnvironmentID || stored.EntryID != receipt.EntryID ||
 			stored.GenerationID != receipt.Owner.GenerationID {
@@ -170,11 +171,22 @@ func decodeConfigRestoreStoredValue(
 	} else {
 		stored, err := entryvalues.DecodePlain(value.Value)
 		if err != nil || stored.EnvironmentID != receipt.Owner.EnvironmentID || stored.EntryID != receipt.EntryID || stored.GenerationID != receipt.Owner.GenerationID ||
-			uint64(len(stored.Content)) != receipt.ValueSizeBytes || stored.PlaintextSHA256 != receipt.ValueSHA256 {
+			!receipt.Secret && (uint64(len(stored.Content)) != receipt.ValueSizeBytes || stored.PlaintextSHA256 != receipt.ValueSHA256) {
 			clear(stored.Content)
 			return result, captureSnapshotConflict()
 		}
 		result.Plain = &stored
 	}
 	return result, nil
+}
+
+func configRestoreValueStorage(encryption string) string {
+	switch encryption {
+	case "age":
+		return "secret"
+	case "none":
+		return "plain"
+	default:
+		return ""
+	}
 }

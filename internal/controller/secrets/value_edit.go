@@ -45,10 +45,10 @@ func (service *ValueEditor) EditSecret(
 	key string,
 ) (idempotency.IdempotencyResponse, error) {
 	if ctx == nil || ids.Validate(ids.KindSecret, id) != nil || input.Revision <= 0 || !utf8.ValidString(input.Value) ||
-		len(input.Value) > apiTypes.MaximumSecretValueBytes {
+		len(input.Value) > apiTypes.MaximumSecretValueBytes || !validConfigurationEncryption(input.Encryption) {
 		return idempotency.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
-			"Secret edit requires its current revision and a UTF-8 value of at most 255 KiB",
+			"Secret edit requires its current revision, a UTF-8 value of at most 255 KiB, and encryption age or none when supplied",
 		)
 	}
 	target := idempotency.IdempotencyReplayTarget{Kind: idempotency.IdempotencyReplayTargetSecret, ID: id}
@@ -80,6 +80,14 @@ func (service *ValueEditor) EditSecret(
 	if locator.ScopeKind == idempotency.IdempotencyScopeProject {
 		scope = requestidempotency.Scope{Kind: requestidempotency.ScopeProject, ID: locator.ScopeID}
 	}
+	intentFields := []requestidempotency.Field{
+		{Name: "revision", Value: requestidempotency.Integer(input.Revision)},
+		{Name: "value_sha256", Value: requestidempotency.String(hex.EncodeToString(hash[:]))},
+	}
+	if input.Encryption != "" {
+		intentFields = append(intentFields,
+			requestidempotency.Field{Name: "encryption", Value: requestidempotency.String(input.Encryption)})
+	}
 	version, digest, err := requestidempotency.Canonicalize(
 		ctx,
 		requestidempotency.CanonicalIntentV1{
@@ -88,15 +96,7 @@ func (service *ValueEditor) EditSecret(
 			Scope:  scope,
 			Path:   []requestidempotency.PathBinding{{Name: "id", Value: id}},
 			Query:  requestidempotency.Object(),
-			Body: requestidempotency.JSONBody(
-				requestidempotency.Object(
-					requestidempotency.Field{Name: "revision", Value: requestidempotency.Integer(input.Revision)},
-					requestidempotency.Field{
-						Name:  "value_sha256",
-						Value: requestidempotency.String(hex.EncodeToString(hash[:])),
-					},
-				),
-			),
+			Body:   requestidempotency.JSONBody(requestidempotency.Object(intentFields...)),
 		},
 	)
 	if err != nil {
@@ -130,12 +130,15 @@ func (service *ValueEditor) EditSecret(
 		}
 		owner = secretrecord.ProjectOwner(project)
 	}
-	value, err := storeConfigurationValue(ctx, service.protector, id, current.Record.Secret.Encryption, valueBytes)
+	replacement := current.Record
+	if input.Encryption != "" {
+		replacement.Secret.Encryption = input.Encryption
+	}
+	value, err := storeConfigurationValue(ctx, service.protector, id, replacement.Secret.Encryption, valueBytes)
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
 	defer clear(value.Ciphertext)
-	replacement := current.Record
 	replacement.Secret.UpdatedAt = time.Now().UTC()
 	body, err := json.Marshal(secretCreationResponse(replacement))
 	if err != nil {

@@ -13,6 +13,42 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// ConsoleAssets exposes only a verified active release. Production supplies the
+// fixed Console release store; a plain host directory is deliberately not an
+// accepted handler dependency.
+type ConsoleAssets interface {
+	Assets() (fs.FS, error)
+	BindAPIDocument([]byte) error
+}
+
+type fixedConsoleAssets struct{ assets fs.FS }
+
+// FixedConsoleAssets supports release smoke tests over already embedded bytes.
+// Runtime composition uses the mutable verified release store instead.
+func FixedConsoleAssets(assets fs.FS) ConsoleAssets {
+	if assets == nil {
+		return nil
+	}
+	return fixedConsoleAssets{assets: assets}
+}
+
+func (assets fixedConsoleAssets) Assets() (fs.FS, error) { return assets.assets, nil }
+func (fixedConsoleAssets) BindAPIDocument([]byte) error  { return nil }
+
+// BindConsole supplies the completed code-first API contract before the
+// listener starts. Corrupt installed authority fails startup; a valid release
+// for another API leaves Controller recovery routes online and static gated.
+func (s *Server) BindConsole() error {
+	if s.console == nil {
+		return nil
+	}
+	document, err := s.OpenAPIDocument()
+	if err != nil {
+		return err
+	}
+	return s.console.BindAPIDocument(document)
+}
+
 var consoleContentTypes = map[string]string{
 	".avif":  "image/avif",
 	".css":   "text/css; charset=utf-8",
@@ -148,7 +184,12 @@ func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, assetPath 
 		return
 	}
 	if s.console == nil {
-		s.writeStaticProblem(w, errs.KindRequestUnavailable, "development binary has no embedded Console build")
+		s.writeStaticProblem(w, errs.KindRequestUnavailable, "development binary has no installed Console release")
+		return
+	}
+	assets, err := s.console.Assets()
+	if err != nil {
+		s.writeStaticProblem(w, errs.KindRequestUnavailable, "verified Console release is unavailable")
 		return
 	}
 
@@ -156,7 +197,7 @@ func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, assetPath 
 	if exactPath == "" {
 		exactPath = "index.html"
 	}
-	served, missing, err := s.serveConsoleFile(w, r, exactPath)
+	served, missing, err := s.serveConsoleFile(assets, w, r, exactPath)
 	if err != nil {
 		s.writeStaticProblem(w, errs.KindInternal, "embedded Console asset is unavailable")
 		return
@@ -177,7 +218,7 @@ func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, assetPath 
 		s.writeStaticProblem(w, errs.KindRequestNotFound, "Console asset was not found")
 		return
 	}
-	served, _, err = s.serveConsoleFile(w, r, "index.html")
+	served, _, err = s.serveConsoleFile(assets, w, r, "index.html")
 	if err != nil {
 		s.writeStaticProblem(w, errs.KindInternal, "embedded Console index is unavailable")
 		return
@@ -187,8 +228,13 @@ func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, assetPath 
 	}
 }
 
-func (s *Server) serveConsoleFile(w http.ResponseWriter, r *http.Request, name string) (bool, bool, error) {
-	info, err := fs.Stat(s.console, name)
+func (s *Server) serveConsoleFile(
+	assets fs.FS,
+	w http.ResponseWriter,
+	r *http.Request,
+	name string,
+) (bool, bool, error) {
+	info, err := fs.Stat(assets, name)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, true, nil
 	}
@@ -198,7 +244,7 @@ func (s *Server) serveConsoleFile(w http.ResponseWriter, r *http.Request, name s
 	if !info.Mode().IsRegular() {
 		return false, false, nil
 	}
-	body, err := fs.ReadFile(s.console, name)
+	body, err := fs.ReadFile(assets, name)
 	if err != nil {
 		return false, false, err
 	}

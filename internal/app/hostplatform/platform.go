@@ -30,6 +30,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/agentimagemetadata"
+	"github.com/AlanD20/groundplane/internal/infra/consolerelease"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
@@ -60,6 +61,7 @@ type Dependencies struct {
 	StorageMaintenance *etcd.StorageMaintenance
 	Tick               time.Duration
 	Logger             *slog.Logger
+	Console            *consolerelease.Store
 }
 
 // Platform owns native release handles and the Agent container

@@ -12,6 +12,10 @@ export function entryFromAPI(entry: EntryResponse): EnvironmentEntry {
   if (!entry.exposure || entry.exposure.length === 0) {
     throw new Error(`Controller returned Entry ${entry.id} without exposure`);
   }
+  const encryption = entry.encryption ?? (entry.secret ? "age" : "none");
+  if (encryption !== "age" && encryption !== "none") {
+    throw new Error("Controller returned invalid Configuration encryption metadata");
+  }
   let source: EnvironmentEntry["source"];
   switch (entry.source.kind) {
     case "literal":
@@ -51,6 +55,7 @@ export function entryFromAPI(entry: EntryResponse): EnvironmentEntry {
     source,
     exposure: [...entry.exposure],
     secret: entry.secret,
+    encryption,
     emptySecretValue: entry.empty_secret_value,
   };
 }

@@ -30,6 +30,7 @@ const (
 	Runner              Operation = "runner"
 	ControllerSoftware  Operation = "controller_software"
 	AgentSoftware       Operation = "agent_software"
+	ConsoleSoftware     Operation = "console_software"
 	SoftwarePreparation Operation = "software_preparation"
 	SoftwareStaging     Operation = "software_staging"
 	ConnectorCheck      Operation = "connector_check"

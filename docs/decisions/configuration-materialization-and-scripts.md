@@ -26,6 +26,14 @@ mount transitions. Creation proves exact root-owned directory metadata.
 Deletion is coordinated by the aggregate deletion engine and removes the
 Environment leaf only after contained workload and data cleanup.
 
+## Confidentiality and storage are separate
+
+Entry confidentiality controls redaction, reveal and protected materialization.
+Storage encryption is an independent authored choice. Omitted modes retain the
+legacy default, so existing captured plans and generation fingerprints remain
+valid. New explicit choices travel with captured Script and Backup inputs; readers
+do not infer storage from confidentiality.
+
 ## Generated files use pinned sources and a narrow writer
 
 Entry create, edit and bulk-upsert publish desired definitions and value

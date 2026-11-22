@@ -22,7 +22,7 @@ func (platform *Platform) softwareWork() softwareWorkRegistrations {
 	if owner == nil {
 		return softwareWorkRegistrations{}
 	}
-	return softwareWorkRegistrations{
+	registrations := softwareWorkRegistrations{
 		admission: []workdispatch.Registration{
 			{Operation: workexecution.SoftwareStaging, Executor: workexecution.Controller, Owner: owner},
 		},
@@ -35,4 +35,19 @@ func (platform *Platform) softwareWork() softwareWorkRegistrations {
 			{Action: workexecution.ActionActivate, Operation: workexecution.AgentSoftware, Owner: owner},
 		},
 	}
+	if console := owner.ConsoleWork(); console != nil {
+		registrations.admission = append(registrations.admission, workdispatch.Registration{
+			Operation: workexecution.ConsoleSoftware, Executor: workexecution.Controller, Owner: console,
+		})
+		registrations.controller = append(registrations.controller, workdispatch.ControllerRegistration{
+			Operation: workexecution.ConsoleSoftware, Owner: console,
+		})
+		registrations.retention = append(registrations.retention, operationretention.WorkRegistration{
+			Operation: workexecution.ConsoleSoftware, Owner: console,
+		})
+		registrations.input = append(registrations.input, workdispatch.InputRegistration{
+			Action: workexecution.ActionActivate, Operation: workexecution.ConsoleSoftware, Owner: owner,
+		})
+	}
+	return registrations
 }

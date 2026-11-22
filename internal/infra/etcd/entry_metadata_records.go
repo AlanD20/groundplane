@@ -41,6 +41,7 @@ func (repository *EnvironmentBlueprintRepository) validateEntryMetadataRecords(
 		if exists {
 			comparable := prior
 			comparable.Entry.Source, comparable.Entry.Exposure = record.Entry.Source, record.Entry.Exposure
+			comparable.Entry.Encryption = record.Entry.Encryption
 			comparable.CurrentValueGenerationID = record.CurrentValueGenerationID
 			if !entries.EqualRecord(comparable, record) {
 				return errs.New(errs.KindValidationFailed, "Entry mutation changed an immutable identity")
@@ -66,7 +67,7 @@ func (repository *EnvironmentBlueprintRepository) entryMetadataGenerationExists(
 	ctx context.Context, record entries.Record,
 ) (bool, error) {
 	key := entryvalues.PlainKey(record.Entry.ID, record.CurrentValueGenerationID)
-	if record.Entry.Secret {
+	if record.Entry.Encrypted() {
 		key = entryvalues.SecretKey(record.Entry.ID, record.CurrentValueGenerationID)
 	}
 	read, err := repository.store.Get(ctx, key)
@@ -80,7 +81,7 @@ func (repository *EnvironmentBlueprintRepository) entryMetadataGenerationExists(
 		return false, nil
 	}
 	defer clear(read.Entry.Value)
-	if record.Entry.Secret {
+	if record.Entry.Encrypted() {
 		value, err := entryvalues.DecodeSecret(read.Entry.Value)
 		defer clear(value.Ciphertext)
 		return err == nil && value.EnvironmentID == record.EnvironmentID && value.EntryID == record.Entry.ID &&

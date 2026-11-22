@@ -94,7 +94,7 @@ func ProjectEnvironmentEntries(
 		}
 		entry := record.Entry
 		storage := materializationrecord.EntryValueStoragePlain
-		if entry.Secret {
+		if entry.Encrypted() {
 			storage = materializationrecord.EntryValueStorageSecret
 		}
 		value := materializationrecord.EntryValueReference{

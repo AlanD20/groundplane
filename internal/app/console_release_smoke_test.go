@@ -34,7 +34,7 @@ func TestProductionConsoleReleaseSmoke(t *testing.T) {
 	server := testhandlers.New(
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		testhandlers.Options{Console: assets},
+		testhandlers.Options{Console: testhandlers.FixedConsoleAssets(assets)},
 	)
 	handler := server.HTTPHandler()
 

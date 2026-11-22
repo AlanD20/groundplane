@@ -27,7 +27,9 @@ func PrepareConfigRestoreEntryPublication(ctx context.Context, store interface {
 	digest := sha256.Sum256(metadata)
 	clear(metadata)
 	receiptKey := ConfigRestoreEntryReceiptKey(owner, ordinal)
-	valueKey := (ConfigRestoreEntryReceipt{Owner: owner, EntryID: record.Entry.ID, Secret: record.Entry.Secret}).ValueKey()
+	receiptIdentity := ConfigRestoreEntryReceipt{Owner: owner, EntryID: record.Entry.ID, Secret: record.Entry.Secret,
+		ValueStorage: configRestoreValueStorage(record.Entry.Encryption)}
+	valueKey := receiptIdentity.ValueKey()
 	keys := []string{receiptKey, valueKey}
 	read, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -44,7 +46,8 @@ func PrepareConfigRestoreEntryPublication(ctx context.Context, store interface {
 	}
 	receipt, err := decodeConfigRestoreEntryReceipt(read.Values[0].Value)
 	if err != nil || receipt.Owner != owner || receipt.Ordinal != ordinal || receipt.EntryID != record.Entry.ID ||
-		receipt.Secret != record.Entry.Secret || receipt.MetadataSHA256 != hex.EncodeToString(digest[:]) ||
+		receipt.Secret != record.Entry.Secret || receipt.ValueStorage != receiptIdentity.ValueStorage ||
+		receipt.MetadataSHA256 != hex.EncodeToString(digest[:]) ||
 		read.Values[0].ModRevision != read.Values[1].ModRevision {
 		return nil, captureSnapshotConflict()
 	}

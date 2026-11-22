@@ -5,7 +5,9 @@ type SoftwareSelection string
 const (
 	SoftwareController SoftwareSelection = "controller"
 	SoftwareAgent      SoftwareSelection = "agent"
+	SoftwareConsole    SoftwareSelection = "console"
 	SoftwareBoth       SoftwareSelection = "both"
+	SoftwareAll        SoftwareSelection = "all"
 )
 
 type SoftwareSourceKind string
@@ -20,14 +22,14 @@ const (
 // controller/vX.Y.Z and agent/vX.Y.Z releases from the requested vX.Y.Z label.
 type SoftwarePreparationRequest struct {
 	After      []string           `json:"after,omitempty" maxItems:"16" uniqueItems:"true"`
-	Selection  SoftwareSelection  `json:"selection" enum:"controller,agent,both"`
+	Selection  SoftwareSelection  `json:"selection" enum:"controller,agent,console,both,all"`
 	SourceKind SoftwareSourceKind `json:"source_kind" enum:"source_ref,release"`
 	Ref        string             `json:"ref" minLength:"1" maxLength:"256"`
 }
 
 type SoftwareReleaseChoice struct {
 	Ref         string            `json:"ref"`
-	Selection   SoftwareSelection `json:"selection" enum:"controller,agent,both"`
+	Selection   SoftwareSelection `json:"selection" enum:"controller,agent,console,both,all"`
 	Name        string            `json:"name"`
 	PublishedAt string            `json:"published_at" format:"date-time"`
 }
@@ -37,13 +39,13 @@ type SoftwareReleaseCatalog struct {
 }
 
 type SoftwareProvenance struct {
-	Component string `json:"component" enum:"controller,agent"`
+	Component string `json:"component" enum:"controller,agent,console"`
 	Ref       string `json:"ref"`
 	Commit    string `json:"commit"`
 }
 
 type PreparedSoftwareArtifact struct {
-	Component      string `json:"component" enum:"controller,agent"`
+	Component      string `json:"component" enum:"controller,agent,console"`
 	Reference      string `json:"reference"`
 	ManifestDigest string `json:"manifest_digest"`
 	OS             string `json:"os"`
@@ -52,7 +54,7 @@ type PreparedSoftwareArtifact struct {
 
 type SoftwarePreparation struct {
 	TaskID      string                     `json:"task_id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Selection   SoftwareSelection          `json:"selection" enum:"controller,agent,both"`
+	Selection   SoftwareSelection          `json:"selection" enum:"controller,agent,console,both,all"`
 	SourceKind  SoftwareSourceKind         `json:"source_kind" enum:"source_ref,release"`
 	Ref         string                     `json:"ref"`
 	Phase       string                     `json:"phase" enum:"accepted,preparing,agent_published,controller_published,verified,failed"`
@@ -73,12 +75,14 @@ type SoftwarePreparationPage struct {
 type SoftwareActivation struct {
 	TaskID               string            `json:"task_id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
 	PreparationTaskID    string            `json:"preparation_task_id"`
-	Selection            SoftwareSelection `json:"selection" enum:"controller,agent,both"`
+	Selection            SoftwareSelection `json:"selection" enum:"controller,agent,console,both,all"`
 	Phase                string            `json:"phase"`
 	ControllerWorkItemID string            `json:"controller_work_item_id,omitempty"`
 	AgentWorkItemID      string            `json:"agent_work_item_id,omitempty"`
+	ConsoleWorkItemID    string            `json:"console_work_item_id,omitempty"`
 	ControllerApplied    bool              `json:"controller_applied"`
 	AgentApplied         bool              `json:"agent_applied"`
+	ConsoleApplied       bool              `json:"console_applied"`
 	ErrorCode            string            `json:"error_code,omitempty"`
 	ErrorDetail          string            `json:"error_detail,omitempty"`
 }

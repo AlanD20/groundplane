@@ -53,12 +53,13 @@ func prepareEntryCreation(input apiTypes.EntryCreateRequest) (core.EnvEntry, err
 	entry := core.EnvEntry{
 		ID: ids.New(ids.KindEnvEntry), Kind: core.EntryKind(input.Type), Key: input.Key, Path: input.Path,
 		UID: uid, GID: gid, Source: source, Exposure: exposure, Secret: input.Secret,
+		Encryption: input.Encryption,
 	}
 	if len(entry.Source.Literal) > apiTypes.MaximumEntryValueBytes {
 		return core.EnvEntry{}, errs.New(errs.KindValidationFailed, "Entry literal exceeds the 256 KiB limit")
 	}
 	validationEntry := entry
-	if validationEntry.Secret && validationEntry.Source.Kind == core.SourceLiteral {
+	if validationEntry.ValueMetadataProtected() && validationEntry.Source.Kind == core.SourceLiteral {
 		validationEntry.Source.Literal = ""
 	}
 	if err := validationEntry.Validate(); err != nil {
@@ -70,6 +71,13 @@ func prepareEntryCreation(input apiTypes.EntryCreateRequest) (core.EnvEntry, err
 		}
 	}
 	return entry, nil
+}
+
+func validateEntryEncryption(value string) error {
+	if value != "" && value != "age" && value != "none" {
+		return errs.New(errs.KindValidationFailed, "Entry encryption must be age or none")
+	}
+	return nil
 }
 
 func entryCreationSource(input apiTypes.EntrySource) (core.EntrySource, error) {

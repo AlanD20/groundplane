@@ -41,6 +41,10 @@ func (c *Client) CreateEntry(
 		value := *input.GID
 		body.Gid = &value
 	}
+	if input.Encryption != "" {
+		value := generated.EntryCreateRequestEncryption(input.Encryption)
+		body.Encryption = &value
+	}
 	response, err := client.EntryCreateWithResponse(
 		ctx,
 		&generated.EntryCreateParams{IdempotencyKey: ids.NewULID()},
@@ -81,6 +85,10 @@ func (c *Client) BulkUpsertEntries(
 		Exposure:      &exposure,
 		Secret:        input.Secret,
 	}
+	if input.Encryption != "" {
+		value := generated.EntryBulkUpsertRequestEncryption(input.Encryption)
+		body.Encryption = &value
+	}
 	response, err := client.EntryBulkUpsertWithResponse(
 		ctx,
 		&generated.EntryBulkUpsertParams{IdempotencyKey: ids.NewULID()},
@@ -116,6 +124,10 @@ func (c *Client) EditEntry(
 	body := generated.EntryEditRequest{
 		After: optionalServiceStrings(input.After), Source: entrySourceToGenerated(input.Source),
 		Exposure: &exposure,
+	}
+	if input.Encryption != "" {
+		value := generated.EntryEditRequestEncryption(input.Encryption)
+		body.Encryption = &value
 	}
 	path := "/api/v1/entries/" + id
 	response, err := client.EntryEditWithResponse(
@@ -244,6 +256,7 @@ func (c *Client) ShowEntry(ctx context.Context, id string) (apiTypes.Entry, erro
 func entryFromGenerated(entry generated.Entry) (apiTypes.Entry, error) {
 	result := apiTypes.Entry{
 		ID: entry.Id, Type: entry.Type, Source: entrySourceFromGenerated(entry.Source), Secret: entry.Secret,
+		Encryption: string(entry.Encryption),
 	}
 	if entry.EmptySecretValue != nil {
 		result.EmptySecretValue = *entry.EmptySecretValue

@@ -199,7 +199,7 @@ func (s *Server) registerEntries() {
 	}, s.showEntry)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "entry.reveal", Method: http.MethodGet, Path: "/entries/{id}/value",
-		Summary: "Reveal an encrypted Entry value", Tags: []string{"Entry"},
+		Summary: "Read a resolved Entry value", Tags: []string{"Entry"},
 	}, s.revealEntry)
 	s.setRoutePolicy("POST /api/v1/entries", routePolicy{body: jsonBody})
 	s.setRoutePolicy("POST /api/v1/entries/bulk", routePolicy{body: jsonBody})

@@ -105,11 +105,12 @@ func newEntryCmd() *cobra.Command {
 func newEntryBulkEditCmd() *cobra.Command {
 	var runAfter []string
 	var (
-		path     string
-		services []string
-		all      bool
-		plain    bool
-		secret   bool
+		path       string
+		services   []string
+		all        bool
+		plain      bool
+		secret     bool
+		encryption string
 	)
 	cmd := &cobra.Command{
 		Use:   "bulk-edit",
@@ -139,9 +140,10 @@ func newEntryBulkEditCmd() *cobra.Command {
 			}
 			response, err := fromContext(cmd).Client.BulkUpsertEntries(cmd.Context(), apiTypes.EntryBulkUpsertRequest{
 				After: after, EnvironmentID: environmentID,
-				Entries:  entries,
-				Exposure: entryExposure(services, all),
-				Secret:   secret,
+				Entries:    entries,
+				Exposure:   entryExposure(services, all),
+				Secret:     secret,
+				Encryption: encryption,
 			})
 			if err != nil {
 				return err
@@ -152,8 +154,10 @@ func newEntryBulkEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&path, "file", "-", "read KEY=value lines from PATH, or - for stdin")
 	cmd.Flags().StringSliceVar(&services, "service", nil, "expose every supplied Entry to specific service(s)")
 	cmd.Flags().BoolVar(&all, "all", true, "expose every supplied Entry to all services")
-	cmd.Flags().BoolVar(&plain, "plain", false, "store every supplied value in desired state")
-	cmd.Flags().BoolVar(&secret, "secret", false, "store every supplied value encrypted")
+	cmd.Flags().BoolVar(&plain, "plain", false, "classify every supplied value as an ordinary variable")
+	cmd.Flags().BoolVar(&secret, "secret", false, "classify every supplied value as confidential")
+	cmd.Flags().
+		StringVar(&encryption, "encryption", "", "at-rest encryption: age or none; omitted preserves existing values and defaults by classification")
 	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
@@ -203,6 +207,7 @@ func newEntryAddCmd() *cobra.Command {
 		services            []string
 		all                 bool
 		secret              bool
+		encryption          string
 		uid, gid            uint32
 	)
 
@@ -221,8 +226,8 @@ func newEntryAddCmd() *cobra.Command {
 			if literalSet && valueFileSet {
 				return fmt.Errorf("--literal and --value-file are mutually exclusive")
 			}
-			if secret && literalSet {
-				return fmt.Errorf("a secret literal must use --value-file so plaintext is not placed in argv")
+			if (secret || encryption == "age") && literalSet {
+				return fmt.Errorf("a protected literal must use --value-file so plaintext is not placed in argv")
 			}
 			if valueFileSet {
 				var err error
@@ -264,6 +269,7 @@ func newEntryAddCmd() *cobra.Command {
 			entry, err := app.Client.CreateEntry(cmd.Context(), apiTypes.EntryCreateRequest{
 				After: after, EnvironmentID: environmentID, Type: entryType, Key: key, Path: path,
 				UID: uidValue, GID: gidValue, Source: source, Exposure: exposure, Secret: secret,
+				Encryption: encryption,
 			})
 			if err != nil {
 				return err
@@ -275,7 +281,7 @@ func newEntryAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&entryType, "type", "env", "env | file")
 	cmd.Flags().StringVar(&key, "key", "", "env var name (--type env)")
 	cmd.Flags().StringVar(&path, "path", "", "path relative to the environment's volume folder (--type file)")
-	cmd.Flags().StringVar(&literal, "literal", "", "a non-secret literal stored in desired state")
+	cmd.Flags().StringVar(&literal, "literal", "", "an unprotected literal stored in desired state")
 	cmd.Flags().
 		StringVar(&valueFile, "value-file", "", "read a literal from PATH, or - for stdin; required for secrets")
 	cmd.Flags().
@@ -293,7 +299,9 @@ func newEntryAddCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&services, "service", nil, "expose to specific service(s) (repeatable); omit for --all")
 	cmd.Flags().
 		BoolVar(&all, "all", true, "expose to all services in the environment (default; overridden by --service)")
-	cmd.Flags().BoolVar(&secret, "secret", false, "store in the encrypted secret store instead of desired state")
+	cmd.Flags().BoolVar(&secret, "secret", false, "classify the Entry value as confidential")
+	cmd.Flags().
+		StringVar(&encryption, "encryption", "", "at-rest encryption: age or none; defaults to age for secrets and none otherwise")
 	cmd.Flags().Uint32Var(&uid, "uid", 0, "numeric owner for a file Entry (required with --type file)")
 	cmd.Flags().Uint32Var(&gid, "gid", 0, "numeric group for a file Entry (required with --type file)")
 	addTaskAfterFlag(cmd, &runAfter)
@@ -309,6 +317,7 @@ func newEntryEditCmd() *cobra.Command {
 		factGrantAttach     string
 		services            []string
 		all                 bool
+		encryption          string
 	)
 
 	cmd := &cobra.Command{
@@ -330,8 +339,12 @@ func newEntryEditCmd() *cobra.Command {
 			if literalSet && valueFileSet {
 				return fmt.Errorf("--literal and --value-file are mutually exclusive")
 			}
-			if entry.Secret && literalSet {
-				return fmt.Errorf("a secret literal must use --value-file so plaintext is not placed in argv")
+			protected := entry.Secret || entry.Encryption == "age"
+			if encryption != "" {
+				protected = entry.Secret || encryption == "age"
+			}
+			if protected && literalSet {
+				return fmt.Errorf("a protected literal must use --value-file so plaintext is not placed in argv")
 			}
 			if valueFileSet {
 				literal, err = readEntryValue(valueFile, cmd.InOrStdin())
@@ -358,7 +371,7 @@ func newEntryEditCmd() *cobra.Command {
 				return errs.New(errs.KindValidationFailed, "exactly one of --all or --service is required")
 			}
 			updated, err := app.Client.EditEntry(cmd.Context(), entry.ID, apiTypes.EntryEditRequest{
-				After: after, Source: source, Exposure: exposure,
+				After: after, Source: source, Exposure: exposure, Encryption: encryption,
 			})
 			if err != nil {
 				return err
@@ -383,6 +396,8 @@ func newEntryEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&factKey, "fact-key", "", "replace the source with a live fact reference: fact key")
 	cmd.Flags().StringSliceVar(&services, "service", nil, "new exposure: specific service(s)")
 	cmd.Flags().BoolVar(&all, "all", false, "new exposure: all services")
+	cmd.Flags().
+		StringVar(&encryption, "encryption", "", "replace at-rest encryption with age or none; omitted preserves it")
 	addTaskAfterFlag(cmd, &runAfter)
 	return cmd
 }
@@ -487,6 +502,6 @@ func entryFields(entry apiTypes.Entry) map[string]any {
 	return map[string]any{
 		"id": entry.ID, "type": entry.Type, "key": entry.Key, "path": entry.Path,
 		"uid": entry.UID, "gid": entry.GID, "source": entry.Source.Kind,
-		"exposure": strings.Join(entry.Exposure, ","), "secret": entry.Secret,
+		"exposure": strings.Join(entry.Exposure, ","), "secret": entry.Secret, "encryption": entry.Encryption,
 	}
 }

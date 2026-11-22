@@ -132,7 +132,7 @@ identity where a field says so, while slugs are renamable labels. In particular:
   destructive replacement.
 
 For Entries, source and exposure may change without changing identity. Kind,
-destination, file ownership, and secret-storage class are not in-place identity
+destination, file ownership, and confidentiality are not in-place identity
 edits. A direct env Entry initially uses its destination key for Blueprint
 identity; a direct file Entry uses `file:` followed by its relative path.
 Generated Component configuration is not an operator-authored Entry.
@@ -538,6 +538,13 @@ x-gp-entry:
   metadata during preparation; or
 - `source.fact` with `attach`, optional `grant`, and fact `key`.
 
+`encryption` optionally selects `age` or `none`, independently of `secret`.
+When omitted, secrets default to `age` and ordinary Entries to `none`. Storage
+mode can change through the Entry edit action without changing identity;
+confidentiality remains fixed. For an existing protected literal, change its
+encryption through Entry edit before exporting/reapplying the Blueprint. A blank
+protected declaration cannot itself rotate stored bytes to another storage mode.
+
 `secret` defaults to false. A confidential fact must have a secret destination;
 the fact key is the exact adapter-published name, including its prefix. Optional
 `grant` selects another Attach that this credential owner is granted access to.
@@ -570,9 +577,9 @@ x-gp-entry:
     secret: true
 ```
 
-A secret literal in a Blueprint has an empty `source.literal`; nonempty secret
-plaintext is rejected. A new key-only secret Entry creates an empty protected
-value generation. Canonical export shows its key and source kind, never the
+A secret or encrypted literal in a Blueprint has an empty `source.literal`;
+nonempty protected plaintext is rejected. A new key-only protected Entry creates
+an empty value generation. Canonical export shows its key and source kind, never the
 selected value. A key-only declaration preserves an existing generation when
 adopting a direct Entry, changing exposure, or reapplying, including a value later
 set through the Entry action. Prefer

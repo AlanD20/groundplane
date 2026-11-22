@@ -155,12 +155,12 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 		}
 		record, found := selected[binding.EntryId]
 		if !found || record.CurrentValueGenerationID != binding.ValueGenerationId ||
-			record.Entry.Secret != binding.Secret {
+			record.Entry.Secret != binding.Secret || binding.ValueStorage != manualScriptEntryValueStorage(record.Entry) {
 			return nil, errs.New(errs.KindValidationFailed, "manual Script Entry binding does not match its source")
 		}
 		delete(selected, binding.EntryId)
 		key := entryvalues.PlainKey(binding.EntryId, binding.ValueGenerationId)
-		if binding.Secret {
+		if record.Entry.Encrypted() {
 			key = entryvalues.SecretKey(binding.EntryId, binding.ValueGenerationId)
 		}
 		value, err := scriptexecutions.ScriptExecutionValueAt(ctx, repository.store, key, sources.Revision)
@@ -172,7 +172,7 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 			Kind: sourceref.SourceEntryValue, EntryID: binding.EntryId, ValueGenerationID: binding.ValueGenerationId,
 		}
 		reference.SourceModRevision = value.ModRevision
-		if binding.Secret {
+		if record.Entry.Encrypted() {
 			generation, decodeErr := entryvalues.DecodeSecret(value.Value)
 			if decodeErr != nil {
 				return nil, decodeErr
@@ -203,6 +203,17 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 		secrets[secretID] = struct{}{}
 	}
 	return members, nil
+}
+
+func manualScriptEntryValueStorage(entry core.EnvEntry) agentpb.ScriptEntryValueStorage {
+	switch entry.Encryption {
+	case "age":
+		return agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_SECRET
+	case "none":
+		return agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_PLAIN
+	default:
+		return agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_UNSPECIFIED
+	}
 }
 
 func (repository *ScriptRepository) manualScriptSecretSourceMember(

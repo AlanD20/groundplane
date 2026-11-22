@@ -61,23 +61,29 @@ func (service *durableEntryCreationIdempotency) Prepare(
 	entry core.EnvEntry,
 	after []string,
 ) (entryCreationEvidence, error) {
+	fields := []requestidempotency.Field{
+		{Name: "after", Value: acceptedaction.AfterValue(after)},
+		{Name: "environment_id", Value: requestidempotency.String(environmentID)},
+		{Name: "exposure", Value: canonicalEntryExposure(entry.Exposure)},
+		{Name: "gid", Value: canonicalEntryNumericID(entry.GID)},
+		{Name: "key", Value: requestidempotency.String(entry.Key)},
+		{Name: "path", Value: requestidempotency.String(entry.Path)},
+		{Name: "secret", Value: requestidempotency.Bool(entry.Secret)},
+		{Name: "source", Value: canonicalEntrySource(entry)},
+		{Name: "type", Value: requestidempotency.String(string(entry.Kind))},
+		{Name: "uid", Value: canonicalEntryNumericID(entry.UID)},
+	}
+	if entry.Encryption != "" {
+		fields = append(fields, requestidempotency.Field{
+			Name: "encryption", Value: requestidempotency.String(entry.Encryption),
+		})
+	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost,
 		Route:  entryCreationRoute,
 		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
 		Query:  requestidempotency.Object(),
-		Body: requestidempotency.JSONBody(requestidempotency.Object(
-			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(after)},
-			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(environmentID)},
-			requestidempotency.Field{Name: "exposure", Value: canonicalEntryExposure(entry.Exposure)},
-			requestidempotency.Field{Name: "gid", Value: canonicalEntryNumericID(entry.GID)},
-			requestidempotency.Field{Name: "key", Value: requestidempotency.String(entry.Key)},
-			requestidempotency.Field{Name: "path", Value: requestidempotency.String(entry.Path)},
-			requestidempotency.Field{Name: "secret", Value: requestidempotency.Bool(entry.Secret)},
-			requestidempotency.Field{Name: "source", Value: canonicalEntrySource(entry)},
-			requestidempotency.Field{Name: "type", Value: requestidempotency.String(string(entry.Kind))},
-			requestidempotency.Field{Name: "uid", Value: canonicalEntryNumericID(entry.UID)},
-		)),
+		Body:   requestidempotency.JSONBody(requestidempotency.Object(fields...)),
 	})
 	if err != nil {
 		return entryCreationEvidence{}, err
@@ -146,7 +152,7 @@ func canonicalEntrySource(entry core.EnvEntry) requestidempotency.Value {
 	source := entry.Source
 	switch source.Kind {
 	case core.SourceLiteral:
-		if entry.Secret {
+		if entry.ValueMetadataProtected() {
 			digest := sha256.Sum256([]byte(source.Literal))
 			return requestidempotency.Object(
 				requestidempotency.Field{Name: "kind", Value: requestidempotency.String(string(source.Kind))},

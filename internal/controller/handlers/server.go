@@ -5,7 +5,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"io/fs"
 	"log/slog"
 	"net/http"
 
@@ -112,7 +111,7 @@ type Server struct {
 	taskInspection          *taskinspection.Service
 	controllerTaskWake      func()
 	agentTaskWake           func()
-	console                 fs.FS
+	console                 ConsoleAssets
 	logs                    *servicelogs.Service
 	serviceTerminals        *serviceterminal.Service
 	routePolicies           map[string]routePolicy
@@ -201,7 +200,7 @@ type Options struct {
 	TaskInspection          *taskinspection.Service
 	ControllerTaskWake      func()
 	AgentTaskWake           func()
-	Console                 fs.FS
+	Console                 ConsoleAssets
 	Logs                    *servicelogs.Service
 }
 

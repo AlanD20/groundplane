@@ -78,6 +78,9 @@ func (service *entryDesiredMutationService) prepareAcceptedEntry(ctx context.Con
 				return taskdependencies.Prepared{}, err
 			}
 			request.desired.Source, request.desired.Exposure = edited.Source, edited.Exposure
+			if edited.Encryption != "" {
+				request.desired.Encryption = edited.Encryption
+			}
 		}
 	default:
 		return taskdependencies.Prepared{}, errs.New(errs.KindInternal, "Accepted Entry action is unsupported")

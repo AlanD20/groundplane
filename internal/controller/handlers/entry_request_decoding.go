@@ -13,7 +13,7 @@ func decodeEntryEdit(body []byte) (apiTypes.EntryEditRequest, error) {
 	}
 	defer clearEntryJSONMembers(members)
 	for name := range members {
-		if name != "source" && name != "exposure" && name != "after" {
+		if name != "source" && name != "exposure" && name != "encryption" && name != "after" {
 			return apiTypes.EntryEditRequest{}, errs.New(
 				errs.KindMalformedRequest, "entry edit body contains an unknown member",
 			)
@@ -29,6 +29,11 @@ func decodeEntryEdit(body []byte) (apiTypes.EntryEditRequest, error) {
 	input := apiTypes.EntryEditRequest{}
 	if value, ok := members["after"]; ok {
 		if err := decodeEntryJSONMember(value, &input.After); err != nil {
+			return apiTypes.EntryEditRequest{}, err
+		}
+	}
+	if value, ok := members["encryption"]; ok {
+		if err := decodeEntryJSONMember(value, &input.Encryption); err != nil {
 			return apiTypes.EntryEditRequest{}, err
 		}
 	}
@@ -50,7 +55,7 @@ func decodeEntryCreate(body []byte) (apiTypes.EntryCreateRequest, error) {
 	defer clearEntryJSONMembers(members)
 	allowed := map[string]struct{}{
 		"environment_id": {}, "type": {}, "key": {}, "path": {}, "uid": {}, "gid": {},
-		"source": {}, "exposure": {}, "secret": {}, "after": {},
+		"source": {}, "exposure": {}, "secret": {}, "encryption": {}, "after": {},
 	}
 	for name := range members {
 		if _, ok := allowed[name]; !ok {
@@ -77,6 +82,7 @@ func decodeEntryCreate(body []byte) (apiTypes.EntryCreateRequest, error) {
 	}
 	for name, target := range map[string]*string{
 		"environment_id": &input.EnvironmentID, "type": &input.Type, "key": &input.Key, "path": &input.Path,
+		"encryption": &input.Encryption,
 	} {
 		if value, present := members[name]; present {
 			if err := decodeEntryJSONMember(value, target); err != nil {
@@ -114,7 +120,7 @@ func decodeEntryBulkUpsert(body []byte) (apiTypes.EntryBulkUpsertRequest, error)
 	}
 	defer clearEntryJSONMembers(members)
 	allowed := map[string]struct{}{
-		"environment_id": {}, "entries": {}, "exposure": {}, "secret": {}, "after": {},
+		"environment_id": {}, "entries": {}, "exposure": {}, "secret": {}, "encryption": {}, "after": {},
 	}
 	for name := range members {
 		if _, ok := allowed[name]; !ok {
@@ -144,6 +150,11 @@ func decodeEntryBulkUpsert(body []byte) (apiTypes.EntryBulkUpsertRequest, error)
 	}
 	if err := decodeEntryJSONMember(members["secret"], &input.Secret); err != nil {
 		return apiTypes.EntryBulkUpsertRequest{}, err
+	}
+	if value, ok := members["encryption"]; ok {
+		if err := decodeEntryJSONMember(value, &input.Encryption); err != nil {
+			return apiTypes.EntryBulkUpsertRequest{}, err
+		}
 	}
 	var rawEntries []json.RawMessage
 	if err := decodeEntryJSONMember(members["entries"], &rawEntries); err != nil {

@@ -27,6 +27,7 @@ type controllerDigests struct {
 	binary   string
 	metadata string
 	cli      string
+	api      string
 }
 
 func (preparer *Preparer) downloadSource(ctx context.Context, source ResolvedSource, destination string) error {
@@ -233,9 +234,10 @@ func extractControllerBundle(
 		hasher := sha256.New()
 		var writer io.Writer = hasher
 		var output *os.File
-		if header.Name == "controller" || header.Name == "controller-release.json" || header.Name == "groundplane" {
+		if header.Name == "controller" || header.Name == "controller-release.json" || header.Name == "groundplane" ||
+			header.Name == "openapi.json" {
 			mode := os.FileMode(0o600)
-			if header.Name != "controller-release.json" {
+			if header.Name == "controller" || header.Name == "groundplane" {
 				mode = 0o700
 			}
 			output, err = os.OpenFile(filepath.Join(destination, header.Name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
@@ -269,7 +271,7 @@ func extractControllerBundle(
 		seen[header.Name] = hex.EncodeToString(hasher.Sum(nil))
 	}
 	if manifestBytes == nil || seen["controller"] == "" || seen["controller-release.json"] == "" ||
-		seen["groundplane"] == "" {
+		seen["groundplane"] == "" || seen["openapi.json"] == "" {
 		return controllerDigests{}, errs.New(errs.KindStateConflict, "controller release bundle is incomplete")
 	}
 	var manifest struct {
@@ -321,6 +323,10 @@ func validateControllerPayload(
 	if err != nil {
 		return controllerDigests{}, err
 	}
+	api, err := boundedFile(filepath.Join(directory, "openapi.json"), 16<<20)
+	if err != nil {
+		return controllerDigests{}, err
+	}
 	var release controllerupgrade.BuildMetadata
 	if err := decodeJSON(metadata, &release); err != nil || release.Schema != controllerupgrade.ManifestSchema ||
 		release.StorageEpoch < 1 ||
@@ -334,6 +340,7 @@ func validateControllerPayload(
 	}
 	return controllerDigests{
 		binary: string(release.ControllerSHA256), metadata: sha256Value(metadata), cli: sha256Value(cli),
+		api: sha256Value(api),
 	}, nil
 }
 

@@ -20,17 +20,23 @@ func bulkCanonicalIntent(input entryBulkUpsertInput) requestidempotency.Canonica
 			},
 		)
 	}
+	fields := []requestidempotency.Field{
+		{Name: "environment_id", Value: requestidempotency.String(input.environmentID)},
+		{Name: "entries", Value: requestidempotency.List(items...)},
+		{Name: "exposure", Value: canonicalEntryExposure(input.exposure)},
+		{Name: "secret", Value: requestidempotency.Bool(input.secret)},
+		{Name: "after", Value: acceptedaction.AfterValue(input.after)},
+	}
+	if input.encryption != "" {
+		fields = append(fields, requestidempotency.Field{
+			Name: "encryption", Value: requestidempotency.String(input.encryption),
+		})
+	}
 	return requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost,
 		Route:  entryBulkUpsertRoute,
 		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: input.environmentID},
 		Query:  requestidempotency.Object(),
-		Body: requestidempotency.JSONBody(requestidempotency.Object(
-			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(input.environmentID)},
-			requestidempotency.Field{Name: "entries", Value: requestidempotency.List(items...)},
-			requestidempotency.Field{Name: "exposure", Value: canonicalEntryExposure(input.exposure)},
-			requestidempotency.Field{Name: "secret", Value: requestidempotency.Bool(input.secret)},
-			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.after)},
-		)),
+		Body:   requestidempotency.JSONBody(requestidempotency.Object(fields...)),
 	}
 }

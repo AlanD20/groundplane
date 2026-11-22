@@ -26,7 +26,7 @@ export function EntryProtection({
         {editing
           ? "File classification is fixed when created."
           : secret
-            ? "Values are encrypted at rest and hidden until explicitly revealed."
+            ? "Values are hidden until explicitly revealed. Encryption is a separate choice below."
             : "Values remain visible in configuration."}
       </p>
     </fieldset>

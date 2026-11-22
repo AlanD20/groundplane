@@ -24,13 +24,15 @@ func TestPrepareEntryCreationAcceptsTransientSecretLiteral(t *testing.T) {
 		Source:        apiTypes.EntrySource{Kind: "literal", Literal: "private"},
 		Exposure:      []string{"worker", "api"},
 		Secret:        true,
+		Encryption:    "none",
 	}
 	entry, err := prepareEntryCreation(input)
 	if err != nil {
 		t.Fatalf("prepareEntryCreation() error = %v", err)
 	}
-	if entry.Source.Literal != "private" || len(entry.Exposure) != 2 ||
-		entry.Exposure[0] != "api" || entry.Exposure[1] != "worker" {
+	if entry.Source.Literal != "private" || entry.Encrypted() || !entry.ValueMetadataProtected() || len(entry.Exposure) != 2 ||
+		entry.Exposure[0] != "api" ||
+		entry.Exposure[1] != "worker" {
 		t.Fatalf("prepareEntryCreation() = %#v", entry)
 	}
 	persisted := entry

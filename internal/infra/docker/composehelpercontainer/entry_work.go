@@ -52,7 +52,13 @@ func (executor *Executor) ExecuteEntryConfigurationWork(
 		return nil, err
 	}
 	defer clear(framed)
-	options := createOptions(executor.image, "entry-work-helper", nil)
+	artifact := input.Procedure.Candidate
+	if input.Recovery != nil {
+		artifact = input.Procedure.Baseline
+	}
+	// Compose resolves env_file/config paths even during a read-only hash check.
+	// Expose only this captured Environment root, read-only, as in release work.
+	options := createOptions(executor.image, "entry-work-helper", artifact)
 	options.Name, options.Config.Labels = name, labels
 	raw, err := executor.executeFrame(bounded, options, framed)
 	if err != nil {

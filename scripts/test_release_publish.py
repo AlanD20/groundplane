@@ -17,6 +17,8 @@ class ReleasePublicationTests(unittest.TestCase):
                     for suffix in ("tar.gz", "tar.gz.sha256"):
                         (root / f"{component}-1.2.3-linux-{arch}.{suffix}").write_bytes(b"qualified artifact")
             (root / "agent.json").write_text("{}")
+            for suffix in ("tar.gz", "tar.gz.sha256"):
+                (root / f"groundplane-console-1.2.3.{suffix}").write_bytes(b"qualified Console artifact")
             (root / "controller").mkdir()
             for archive in root.glob("groundplane-1.2.3-*"):
                 (root / "controller" / archive.name).write_bytes(b"qualified Controller-only artifact")
@@ -46,16 +48,21 @@ class ReleasePublicationTests(unittest.TestCase):
     def test_combined_release_creates_scoped_tags_at_same_commit_and_separates_assets(self):
         calls = self.exercise()
         tags = [call for call in calls if call[:2] == ("gh", "api")]
-        self.assertEqual(len(tags), 3)
+        self.assertEqual(len(tags), 4)
         self.assertTrue(all("sha=" + "a" * 40 in call for call in tags))
         releases = {call[3]: call for call in calls if call[:3] == ("gh", "release", "create")}
-        self.assertEqual(set(releases), {"v1.2.3", "agent/v1.2.3", "controller/v1.2.3"})
+        self.assertEqual(set(releases), {
+            "v1.2.3", "agent/v1.2.3", "controller/v1.2.3", "console/v1.2.3",
+        })
         agent_files = [Path(arg).name for arg in releases["agent/v1.2.3"] if ".tar.gz" in arg]
         controller_files = [Path(arg).name for arg in releases["controller/v1.2.3"] if ".tar.gz" in arg]
+        console_files = [Path(arg).name for arg in releases["console/v1.2.3"] if ".tar.gz" in arg]
         self.assertEqual(len(agent_files), 4)
         self.assertEqual(len(controller_files), 4)
+        self.assertEqual(len(console_files), 2)
         self.assertTrue(all(name.startswith("groundplane-agent-") for name in agent_files))
         self.assertTrue(all(name.startswith("groundplane-1.2.3-") for name in controller_files))
+        self.assertTrue(all(name.startswith("groundplane-console-") for name in console_files))
         self.assertTrue(all(Path(arg).parent.name == "controller"
                             for arg in releases["controller/v1.2.3"] if ".tar.gz" in arg))
         self.assertTrue(all(Path(arg).parent.name != "controller"

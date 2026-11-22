@@ -3027,6 +3027,12 @@ enum ScriptEntryBindingKind {
   SCRIPT_ENTRY_BINDING_KIND_FILE = 2;
 }
 
+enum ScriptEntryValueStorage {
+  SCRIPT_ENTRY_VALUE_STORAGE_UNSPECIFIED = 0;
+  SCRIPT_ENTRY_VALUE_STORAGE_PLAIN = 1;
+  SCRIPT_ENTRY_VALUE_STORAGE_SECRET = 2;
+}
+
 message ScriptRunnerEntryBinding {
   string entry_id = 1;
   string value_generation_id = 2;
@@ -3038,6 +3044,7 @@ message ScriptRunnerEntryBinding {
   uint32 uid = 8;
   uint32 gid = 9;
   uint32 mode = 10;
+  ScriptEntryValueStorage value_storage = 11;
 }
 
 message ScriptRunnerSecretValue {
@@ -4132,6 +4139,7 @@ message BackupConfigEntry {
   }
   uint64 selected_value_size_bytes = 40;
   bytes selected_value_sha256 = 41;
+  string encryption = 42; // age or none; empty preserves legacy secret-derived storage
 }
 
 message BackupConfigEnvironment {
@@ -4176,6 +4184,7 @@ message BackupConfigRestoreEntry {
   BackupConfigArtifactDesiredSource source = 4;
   optional bool secret = 5; // presence mandatory, including false
   BackupConfigSelectedValue selected_value = 6;
+  string encryption = 7; // age or none; empty preserves legacy secret-derived storage
 }
 
 message BackupConfigEntryMetadata {

@@ -33,6 +33,9 @@ func (values *explicitScriptEntryValues) ResolveTaskMaterializationSource(
 func TestExplicitScriptEntriesResolveOnlyExactGrants(t *testing.T) {
 	for _, grant := range []bool{false, true} {
 		sources := explicitScriptEntrySources()
+		sources.DesiredProjection.Record.Entries[0].Entry.Encryption = "none"
+		sources.DesiredProjection.Record.Entries[1].Entry.Encryption = "age"
+		sources.DesiredProjection.Record.Entries[1].Entry.Source.Literal = ""
 		if !grant {
 			sources.Script.Record.Desired.Execution.EntryIDs = nil
 		}
@@ -59,7 +62,9 @@ func TestExplicitScriptEntriesResolveOnlyExactGrants(t *testing.T) {
 			}
 		}
 		if grant && (bindings[0].Kind != agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV ||
-			!bindings[0].Secret || bindings[1].FileTarget != "/etc/tls/setup.conf" || bindings[1].Uid != 1001 ||
+			!bindings[0].Secret || bindings[0].ValueStorage != agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_PLAIN ||
+			bindings[1].ValueStorage != agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_SECRET ||
+			bindings[1].FileTarget != "/etc/tls/setup.conf" || bindings[1].Uid != 1001 ||
 			bindings[1].Gid != 1002 || bindings[1].Mode != 0o444) {
 			t.Fatal("selected Entry metadata lost its exact destination or ownership")
 		}

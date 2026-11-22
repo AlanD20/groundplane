@@ -7,7 +7,7 @@ func (platform *Platform) NewSoftware() (*softwareplatform.Composition, error) {
 		Submitter: platform.dependencies.Accepted, Store: platform.dependencies.Store, Tasks: platform.dependencies.Tasks, Evidence: platform.dependencies.Idempotency, Intents: platform.dependencies.Intents,
 		Agents: platform.agents, ControllerUpdates: platform.Upgrades,
 		Releases: platform.releases, WorkspaceRoot: platform.dependencies.Config.Storage.VolumeRoot,
-		Logger: platform.dependencies.Logger,
+		Logger: platform.dependencies.Logger, Console: platform.dependencies.Console,
 	})
 	if err != nil {
 		return nil, err

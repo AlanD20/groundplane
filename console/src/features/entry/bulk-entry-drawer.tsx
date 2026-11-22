@@ -1,4 +1,6 @@
-import { ConfigurationTypeOptions } from "@/components/common/configuration-type-options";
+import type { BulkConfigurationKind } from "@/components/common/bulk-configuration-menu";
+import { BulkRevealConfirmation } from "@/components/common/bulk-reveal-confirmation";
+import { Checkbox } from "@/components/ui/checkbox";
 ("use client");
 
 import { useEffect, useRef, useState } from "react";
@@ -26,7 +28,7 @@ import {
 import {
   loadBulkEntryValues,
   planBulkEntryChanges,
-  type BulkEntryValue,
+  type BulkEntryBaseline,
 } from "./bulk-entry-draft";
 import { listAllEntries } from "./api";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
@@ -36,11 +38,13 @@ export function BulkEntryDrawer({
   setBulkOpen,
   inline = false,
   serviceName,
+  kind,
 }: {
   env: Environment;
   bulkOpen: boolean;
   inline?: boolean;
   serviceName?: string;
+  kind: BulkConfigurationKind;
   setBulkOpen: (open: boolean) => void;
 }) {
   const store = useStore();
@@ -49,13 +53,15 @@ export function BulkEntryDrawer({
   const acceptedBatches = useRef(new Set<string>());
   const [bulkText, setBulkText] = useState("");
   const [bulkExposure, setBulkExposure] = useState<string[]>(["all"]);
-  const [bulkStorage, setBulkStorage] = useState<"plain" | "secret">("plain");
+  const secretMode = kind === "secrets";
+  const [encryption, setEncryption] = useState<"age" | "none">("age");
+  const [confirmReveal, setConfirmReveal] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [baseline, setBaseline] = useState<BulkEntryValue[]>([]);
+  const [baseline, setBaseline] = useState<BulkEntryBaseline[]>([]);
   const [outsideKeys, setOutsideKeys] = useState<string[]>([]);
   const reveal = useRef(store.revealEntry);
   reveal.current = store.revealEntry;
@@ -67,7 +73,8 @@ export function BulkEntryDrawer({
     setBaseline([]);
     setLoaded(false);
     setBulkError(null);
-    setBulkStorage("plain");
+    setEncryption("age");
+    setConfirmReveal(false);
     setBulkExposure([serviceName ?? "all"]);
     if (!bulkOpen) return;
     setLoading(true);
@@ -76,12 +83,12 @@ export function BulkEntryDrawer({
         if (cancelled) return;
         const visible = entries.filter(
           (entry) =>
-            !serviceName ||
-            (entry.exposure.length === 1 && entry.exposure[0] === serviceName),
+            entry.type === "env" && entry.secret === secretMode &&
+            (!serviceName ||
+            (entry.exposure.length === 1 && entry.exposure[0] === serviceName)),
         );
-        const values = await loadBulkEntryValues(visible, (id) =>
-          reveal.current(id),
-        );
+        const values = secretMode ? visible.map((entry) => ({ entry, key: entry.key! }))
+          : await loadBulkEntryValues(visible, (id) => reveal.current(id));
         if (cancelled) return;
         setOutsideKeys(
           entries
@@ -89,13 +96,14 @@ export function BulkEntryDrawer({
             .map((entry) => entry.key!),
         );
         setBaseline(values);
-        setBulkText(formatBulkEnvironmentEntries(values));
+        if (!secretMode) setBulkText(formatBulkEnvironmentEntries(
+          values.filter((item): item is BulkEntryBaseline & { value: string } => "value" in item && typeof item.value === "string")));
         setLoaded(true);
       })
       .catch(() => {
         if (!cancelled)
           setBulkError(
-            "Could not load all variable values. Retry to edit safely.",
+            "Could not load configuration. Retry to edit safely.",
           );
       })
       .finally(() => {
@@ -104,7 +112,21 @@ export function BulkEntryDrawer({
     return () => {
       cancelled = true;
     };
-  }, [bulkOpen, env.id, serviceName, loadAttempt]);
+  }, [bulkOpen, env.id, serviceName, loadAttempt, secretMode]);
+
+  async function loadExistingSecrets() {
+    setLoading(true);
+    setBulkError(null);
+    try {
+      const values = await loadBulkEntryValues(baseline.map((item) => item.entry), (id) => reveal.current(id));
+      setBaseline(values);
+      setBulkText(formatBulkEnvironmentEntries(values));
+    } catch (error) {
+      setBulkError(error instanceof Error ? error.message : "Could not reveal secrets.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   let plan: ReturnType<typeof planBulkEntryChanges> | undefined;
   let inputError: string | undefined;
@@ -114,7 +136,8 @@ export function BulkEntryDrawer({
         parseBulkEnvironmentEntries(bulkText),
         baseline,
         {
-          secret: bulkStorage === "secret",
+          secret: secretMode,
+          ...(secretMode ? { encryption } : {}),
           exposure: serviceName ? [serviceName] : bulkExposure,
         },
         outsideKeys,
@@ -152,7 +175,7 @@ export function BulkEntryDrawer({
       setBulkOpen(false);
       setBulkText("");
       setBulkExposure(["all"]);
-      setBulkStorage("plain");
+      setEncryption("age");
     } catch (error) {
       setBulkError(
         error instanceof Error ? error.message : "Unable to bulk edit Entries",
@@ -174,15 +197,44 @@ export function BulkEntryDrawer({
     >
       <DialogHeader>
         <DialogTitle>
-          Bulk edit variables · {serviceName ?? env.name}
+          Bulk edit {kind} · {serviceName ?? env.name}
         </DialogTitle>
       </DialogHeader>
       <div className="flex flex-col gap-4">
+        {secretMode && (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Paste secrets to add or replace. Existing secret values stay hidden
+              until you load them. Files and ordinary variables are excluded.
+            </p>
+            <Button variant="outline" disabled={loading || !loaded || bulkSaving || baseline.length === 0}
+              onClick={() => {
+                if (store.requireRevealConfirm) setConfirmReveal(true);
+                else void loadExistingSecrets();
+              }}>
+              Load existing secrets
+            </Button>
+            <BulkRevealConfirmation open={confirmReveal} onOpenChange={setConfirmReveal}
+              subject={`${serviceName ?? env.name} secrets`} onConfirm={() => void loadExistingSecrets()} />
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox checked={encryption === "age"} disabled={loading || bulkSaving}
+                onChange={(event) => setEncryption(event.target.checked ? "age" : "none")} />
+              Encrypt every secret in this batch
+            </label>
+            {encryption === "none" && <p className="text-sm text-muted-foreground">
+              Values stay hidden in the Console but will be stored unencrypted.
+            </p>}
+          </>
+        )}
+        {!secretMode && <p className="text-sm text-muted-foreground">
+          New variables are unencrypted. Existing encryption settings are preserved;
+          change them individually when needed. Secrets and files are excluded.
+        </p>}
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="entry-bulk-values">Variables</Label>
+          <Label htmlFor="entry-bulk-values">{secretMode ? "Secrets" : "Variables"}</Label>
           <CodeEditor
             id="entry-bulk-values"
-            label="Environment variables"
+            label={`Environment ${kind}`}
             language="text"
             value={bulkText}
             disabled={loading || !loaded || bulkSaving}
@@ -194,14 +246,14 @@ export function BulkEntryDrawer({
           </p>
           {serviceName && (
             <p className="text-xs text-muted-foreground">
-              Only variables exposed exclusively to {serviceName} are editable
-              here. Shared variables stay unchanged. New variables are exposed
+              Only {kind} exposed exclusively to {serviceName} are editable
+              here. Shared entries stay unchanged. New keys are exposed
               only to this Service.
             </p>
           )}
           {loading && (
             <p role="status" className="text-sm text-muted-foreground">
-              Loading variables…
+              Loading {kind}…
             </p>
           )}
           {!loading && !loaded && (
@@ -218,13 +270,6 @@ export function BulkEntryDrawer({
           className="space-y-4 rounded-lg border border-border p-4"
         >
           <legend className="px-1 text-sm font-medium">New keys</legend>
-          <ConfigurationTypeOptions
-            files={false}
-            value={bulkStorage === "secret" ? "secret" : "variable"}
-            onChange={(type) =>
-              setBulkStorage(type === "secret" ? "secret" : "plain")
-            }
-          />
           {!serviceName && (
             <div className="flex flex-col gap-1.5">
               <Label>Exposure</Label>
@@ -257,7 +302,7 @@ export function BulkEntryDrawer({
         {!!plan?.replacedReferences.length && (
           <p role="status" className="break-words text-sm text-warning">
             Saving replaces linked values with literals:{" "}
-            {plan.replacedReferences.join(", ")}. Encryption is preserved.
+            {plan.replacedReferences.join(", ")}.
           </p>
         )}
         {(bulkError || inputError) && (

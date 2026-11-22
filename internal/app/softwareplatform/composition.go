@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/softwareactivation"
 	"github.com/AlanD20/groundplane/internal/controller/softwarepreparation"
 	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
+	"github.com/AlanD20/groundplane/internal/infra/consolerelease"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentoperations"
@@ -38,6 +39,7 @@ type Dependencies struct {
 	Releases          *controllerrelease.Store
 	WorkspaceRoot     string
 	Logger            *slog.Logger
+	Console           *consolerelease.Store
 }
 
 type Composition struct {
@@ -50,7 +52,7 @@ func New(deps Dependencies) (*Composition, error) {
 	if deps.Logger == nil || deps.Submitter == nil {
 		return nil, errs.New(errs.KindInternal, "software runtime logging and accepted action submission are required")
 	}
-	preparer, err := preparation.NewPreparer(runner.New(deps.Logger), deps.WorkspaceRoot)
+	preparer, err := preparation.NewPreparerWithConsole(runner.New(deps.Logger), deps.WorkspaceRoot, deps.Console)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +100,7 @@ func New(deps Dependencies) (*Composition, error) {
 	result.Activations, err = softwareactivation.NewService(softwareactivation.ServiceDependencies{
 		Submitter: deps.Submitter, Preparations: records, Records: activations, Tasks: deps.Tasks, Health: deps.Agents, Stager: stager,
 		ControllerSource: deps.ControllerUpdates, Queue: queue, Diagnostics: diagnostics, ControllerRecords: controllerRecords, AgentRecords: agentRecords,
-		Evidence: deps.Evidence, Intents: deps.Intents,
+		Evidence: deps.Evidence, Intents: deps.Intents, Console: deps.Console,
 	})
 	return result, err
 }

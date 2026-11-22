@@ -90,16 +90,26 @@ func ReconcileBlueprintEntries(
 			desired.ID = allocate(ids.KindEnvEntry, "entry-replacement/"+key)
 			found = false
 		}
+		if found && existing.Entry.ValueMetadataProtected() && existing.Entry.Source.Kind == core.SourceLiteral &&
+			desired.Source.Kind == core.SourceLiteral && desired.Source.Literal == "" &&
+			existing.Entry.Encrypted() != desired.Encrypted() {
+			return BlueprintEntryReconciliation{}, errs.Newf(
+				errs.KindValidationFailed,
+				"Blueprint Entry %q cannot change encryption for a key-only protected literal; edit the Entry encryption first, then export and reapply the Blueprint",
+				key,
+			)
+		}
 		persisted := desired
-		if persisted.Secret && persisted.Source.Kind == core.SourceLiteral {
+		if persisted.ValueMetadataProtected() && persisted.Source.Kind == core.SourceLiteral {
 			persisted.Source.Literal = ""
 		}
 		valueChanged := !found || !sameBlueprintEntryDesired(existing.Entry, persisted) ||
-			desired.Secret && desired.Source.Kind == core.SourceLiteral && desired.Source.Literal != ""
+			desired.ValueMetadataProtected() && desired.Source.Kind == core.SourceLiteral &&
+				desired.Source.Literal != ""
 		// Key-only secret declarations select the existing protected value.
 		// Exposure changes and direct-Entry adoption change metadata, not bytes.
-		if found && existing.Entry.Secret && existing.Entry.Source.Kind == core.SourceLiteral &&
-			desired.Secret && desired.Source.Kind == core.SourceLiteral && desired.Source.Literal == "" {
+		if found && existing.Entry.ValueMetadataProtected() && existing.Entry.Source.Kind == core.SourceLiteral &&
+			desired.ValueMetadataProtected() && desired.Source.Kind == core.SourceLiteral && desired.Source.Literal == "" {
 			valueChanged = false
 		}
 		generationID := existing.CurrentValueGenerationID
@@ -136,7 +146,8 @@ func blueprintEntryIdentityChanged(current core.EnvEntry, desired core.EnvEntry)
 }
 
 func sameBlueprintEntryDesired(current core.EnvEntry, desired core.EnvEntry) bool {
-	if blueprintEntryIdentityChanged(current, desired) || current.Source.Kind != desired.Source.Kind ||
+	if blueprintEntryIdentityChanged(current, desired) || current.Encryption != desired.Encryption ||
+		current.Source.Kind != desired.Source.Kind ||
 		current.Source.Literal != desired.Source.Literal || current.Source.SecretRef != desired.Source.SecretRef ||
 		len(current.Exposure) != len(desired.Exposure) {
 		return false

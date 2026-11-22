@@ -23,11 +23,16 @@ func (client *Client) EditSecret(
 		return apiTypes.Secret{}, err
 	}
 	path := "/api/v1/secrets/" + id
+	body := generated.SecretEditJSONRequestBody{Revision: input.Revision, Value: input.Value}
+	if input.Encryption != "" {
+		value := generated.SecretEditRequestEncryption(input.Encryption)
+		body.Encryption = &value
+	}
 	response, err := transport.SecretEditWithResponse(
 		ctx,
 		id,
 		&generated.SecretEditParams{IdempotencyKey: key},
-		generated.SecretEditJSONRequestBody{Revision: input.Revision, Value: input.Value},
+		body,
 	)
 	if err != nil {
 		return apiTypes.Secret{}, generatedCallError(ctx, http.MethodPatch, path, err)

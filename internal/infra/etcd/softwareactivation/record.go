@@ -57,7 +57,8 @@ func (input Input) Validate() error {
 	selection := input.Preparation.Source.Selection
 	if !result.Source.Equal(input.Preparation.Source) ||
 		selection.IncludesController() != (result.Controller != nil) ||
-		selection.IncludesAgent() != (result.Agent != nil) {
+		selection.IncludesAgent() != (result.Agent != nil) ||
+		selection.IncludesConsole() != (result.Console != nil) {
 		return errs.New(errs.KindValidationFailed, "software activation outputs do not match their selection")
 	}
 	if input.Agent != nil {
@@ -91,8 +92,10 @@ type Progress struct {
 	Phase             Phase            `json:"phase"`
 	StagedController  *upgrade.Release `json:"staged_controller,omitempty"`
 	AgentStaged       bool             `json:"agent_staged"`
+	ConsoleStaged     bool             `json:"console_staged"`
 	ControllerApplied bool             `json:"controller_applied"`
 	AgentApplied      bool             `json:"agent_applied"`
+	ConsoleApplied    bool             `json:"console_applied"`
 	ErrorCode         string           `json:"error_code,omitempty"`
 	ErrorDetail       string           `json:"error_detail,omitempty"`
 }
@@ -102,6 +105,7 @@ type Record struct {
 	WorkItemID           string    `json:"work_item_id"`
 	ControllerWorkItemID string    `json:"controller_work_item_id,omitempty"`
 	AgentWorkItemID      string    `json:"agent_work_item_id,omitempty"`
+	ConsoleWorkItemID    string    `json:"console_work_item_id,omitempty"`
 	OperationID          string    `json:"operation_id"`
 	InputSHA256          string    `json:"input_sha256"`
 	Input                Input     `json:"input"`
@@ -118,6 +122,9 @@ func NewRecord(taskID, inputSHA256 string, input Input, at time.Time) (Record, e
 	}
 	if input.Preparation.Source.Selection == preparation.SelectionAgent {
 		record.AgentWorkItemID = ids.New(ids.KindWorkItem)
+	}
+	if input.Preparation.Source.Selection.IncludesConsole() {
+		record.ConsoleWorkItemID = ids.New(ids.KindWorkItem)
 	}
 	return record, ValidateRecord(record)
 }
@@ -158,6 +165,23 @@ func (record Record) Reference() (workexecution.Input, error) {
 	}, nil
 }
 
+func (record Record) ConsoleReference() (workexecution.Input, error) {
+	if record.ConsoleWorkItemID == "" || record.Input.Preparation.Progress.Result.Console == nil {
+		return workexecution.Input{}, errs.New(errs.KindStateConflict, "software activation has no Console artifact")
+	}
+	raw, err := json.Marshal(record.Input.Preparation.Progress.Result.Console.Artifact)
+	if err != nil {
+		return workexecution.Input{}, errs.Wrap(errs.KindInternal, err)
+	}
+	canonical, err := jcs.Canonicalize(raw)
+	if err != nil {
+		return workexecution.Input{}, err
+	}
+	digest := sha256.Sum256(canonical)
+	return workexecution.Input{ID: ids.DeriveAt(ids.KindPlan, record.CreatedAt, record.ConsoleWorkItemID,
+		"console-activation"), SHA256: fmt.Sprintf("%x", digest)}, nil
+}
+
 func ValidateRecord(record Record) error {
 	if ids.Validate(ids.KindTask, record.TaskID) != nil || ids.Validate(ids.KindWorkItem, record.WorkItemID) != nil ||
 		ids.Validate(ids.KindOperation, record.OperationID) != nil || record.OperationID != record.Input.OperationID ||
@@ -169,11 +193,16 @@ func ValidateRecord(record Record) error {
 	selection := record.Input.Preparation.Source.Selection
 	if selection.IncludesController() != (record.ControllerWorkItemID != "") ||
 		(selection == preparation.SelectionAgent) != (record.AgentWorkItemID != "") ||
+		selection.IncludesConsole() != (record.ConsoleWorkItemID != "") ||
 		record.ControllerWorkItemID != "" && ids.Validate(ids.KindWorkItem, record.ControllerWorkItemID) != nil ||
 		record.AgentWorkItemID != "" && ids.Validate(ids.KindWorkItem, record.AgentWorkItemID) != nil ||
+		record.ConsoleWorkItemID != "" && ids.Validate(ids.KindWorkItem, record.ConsoleWorkItemID) != nil ||
 		record.WorkItemID == record.ControllerWorkItemID ||
 		record.WorkItemID == record.AgentWorkItemID ||
-		record.ControllerWorkItemID != "" && record.ControllerWorkItemID == record.AgentWorkItemID {
+		record.WorkItemID == record.ConsoleWorkItemID ||
+		record.ControllerWorkItemID != "" && record.ControllerWorkItemID == record.AgentWorkItemID ||
+		record.ControllerWorkItemID != "" && record.ControllerWorkItemID == record.ConsoleWorkItemID ||
+		record.AgentWorkItemID != "" && record.AgentWorkItemID == record.ConsoleWorkItemID {
 		return errs.New(errs.KindValidationFailed, "software activation work membership is invalid")
 	}
 	if _, err := record.Reference(); err != nil {
@@ -187,7 +216,9 @@ func ValidateProgress(progress Progress, input Input) error {
 	if len(progress.ErrorCode) > 128 || len(progress.ErrorDetail) > 2048 ||
 		progress.ControllerApplied &&
 			!selection.IncludesController() || progress.AgentApplied && !selection.IncludesAgent() ||
+		progress.ConsoleApplied && !selection.IncludesConsole() ||
 		progress.AgentStaged && !selection.IncludesAgent() ||
+		progress.ConsoleStaged && !selection.IncludesConsole() ||
 		progress.StagedController != nil &&
 			(!selection.IncludesController() || progress.StagedController.ValidateRecord() != nil ||
 				string(progress.StagedController.Manifest.ControllerSHA256) != input.Preparation.Progress.Result.Controller.BinarySHA256 ||
@@ -196,8 +227,9 @@ func ValidateProgress(progress Progress, input Input) error {
 	}
 	switch progress.Phase {
 	case PhaseAccepted:
-		if progress.StagedController != nil || progress.AgentStaged || progress.ControllerApplied ||
+		if progress.StagedController != nil || progress.AgentStaged || progress.ConsoleStaged || progress.ControllerApplied ||
 			progress.AgentApplied ||
+			progress.ConsoleApplied ||
 			progress.ErrorCode != "" ||
 			progress.ErrorDetail != "" {
 			return invalidProgress()
@@ -205,8 +237,9 @@ func ValidateProgress(progress Progress, input Input) error {
 	case PhaseStaged:
 		if selection.IncludesController() != (progress.StagedController != nil) ||
 			selection.IncludesAgent() != progress.AgentStaged ||
+			selection.IncludesConsole() != progress.ConsoleStaged ||
 			progress.ControllerApplied ||
-			progress.AgentApplied ||
+			progress.AgentApplied || progress.ConsoleApplied ||
 			progress.ErrorCode != "" ||
 			progress.ErrorDetail != "" {
 			return invalidProgress()
@@ -214,6 +247,7 @@ func ValidateProgress(progress Progress, input Input) error {
 	case PhaseCompleted:
 		if selection.IncludesController() != progress.ControllerApplied ||
 			selection.IncludesAgent() != progress.AgentApplied ||
+			selection.IncludesConsole() != progress.ConsoleApplied ||
 			progress.ErrorCode != "" ||
 			progress.ErrorDetail != "" {
 			return invalidProgress()

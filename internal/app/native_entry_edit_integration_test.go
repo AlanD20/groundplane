@@ -270,14 +270,18 @@ func acknowledgeEntryEditConfiguration(t *testing.T, f *nativeVolumeFixture, rec
 	content := []byte("original-private-value")
 	digest := sha256.Sum256(content)
 	uid, gid := *record.Entry.UID, *record.Entry.GID
-	snapshot := runtimeconfiguration.Snapshot{ID: ids.New(ids.KindConfig), EnvironmentID: f.environmentID, Generation: 1,
+	snapshot := runtimeconfiguration.Snapshot{
+		ID:            ids.New(ids.KindConfig),
+		EnvironmentID: f.environmentID,
+		Generation:    1,
 		Files: []taskmaterialization.Record{{EnvironmentID: f.environmentID,
 			StepID: ids.New(ids.KindStep), MaterializationID: ids.New(ids.KindConfig),
 			Destination: record.Entry.Path, OutputKind: taskmaterialization.OutputSecretFile,
 			Mode: 0o600, UID: uid, GID: gid, Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]),
 			Source: taskmaterialization.Source{Kind: taskmaterialization.SourceEntryValue,
 				EntryValue: &taskmaterialization.EntryValueReference{EntryID: record.Entry.ID,
-					ValueGenerationID: record.CurrentValueGenerationID, Storage: taskmaterialization.EntryValueStorageSecret}}}}}
+					ValueGenerationID: record.CurrentValueGenerationID, Storage: taskmaterialization.EntryValueStorageSecret}}}},
+	}
 	repository, err := runtimeconfiguration.New(f.store)
 	if err != nil {
 		t.Fatal(err)

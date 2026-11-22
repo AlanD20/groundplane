@@ -46,13 +46,13 @@ func ProjectEntrySpec(logicalKey string, spec EntrySpec, entryID string) (EnvEnt
 	}
 	entry := EnvEntry{
 		ID: entryID, Kind: spec.Kind, Path: spec.Path, UID: spec.UID, GID: spec.GID,
-		Source: source, Exposure: exposure, Secret: spec.Secret,
+		Source: source, Exposure: exposure, Secret: spec.Secret, Encryption: spec.Encryption,
 	}
 	if entry.Kind == EntryKindEnv {
 		entry.Key = logicalKey
 	}
 	validation := entry
-	if validation.Secret && validation.Source.Kind == SourceLiteral {
+	if validation.ValueMetadataProtected() && validation.Source.Kind == SourceLiteral {
 		validation.Source.Literal = ""
 	}
 	if err := validation.Validate(); err != nil {

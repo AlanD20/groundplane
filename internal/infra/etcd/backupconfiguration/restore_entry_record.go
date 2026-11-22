@@ -17,6 +17,7 @@ type ConfigRestoreEntryReceipt struct {
 	Ordinal        uint32                     `json:"ordinal"`
 	EntryID        string                     `json:"entry_id"`
 	Secret         bool                       `json:"secret"`
+	ValueStorage   string                     `json:"value_storage,omitempty"`
 	MetadataSHA256 string                     `json:"metadata_sha256"`
 	ValueSizeBytes uint64                     `json:"value_size_bytes"`
 	ValueSHA256    string                     `json:"value_sha256"`
@@ -38,10 +39,21 @@ func ConfigRestoreEntryCursorKey(owner ConfigRestoreTransferOwner) string {
 }
 
 func (receipt ConfigRestoreEntryReceipt) ValueKey() string {
-	if receipt.Secret {
+	if receipt.valueEncrypted() {
 		return entryvalues.SecretKey(receipt.EntryID, receipt.Owner.GenerationID)
 	}
 	return entryvalues.PlainKey(receipt.EntryID, receipt.Owner.GenerationID)
+}
+
+func (receipt ConfigRestoreEntryReceipt) valueEncrypted() bool {
+	switch receipt.ValueStorage {
+	case "secret":
+		return true
+	case "plain":
+		return false
+	default:
+		return receipt.Secret
+	}
 }
 
 func encodeConfigRestoreEntryReceipt(receipt ConfigRestoreEntryReceipt) ([]byte, error) {
@@ -51,6 +63,9 @@ func encodeConfigRestoreEntryReceipt(receipt ConfigRestoreEntryReceipt) ([]byte,
 		receipt.ValueSizeBytes > backupconfig.MaxSelectedValueBytes ||
 		!recordcodec.ValidSHA256(receipt.MetadataSHA256) ||
 		!recordcodec.ValidSHA256(receipt.StoredSHA256) {
+		return nil, captureSnapshotConflict()
+	}
+	if receipt.ValueStorage != "" && receipt.ValueStorage != "plain" && receipt.ValueStorage != "secret" {
 		return nil, captureSnapshotConflict()
 	}
 	if receipt.Secret && (receipt.ValueSizeBytes != 0 || receipt.ValueSHA256 != "") ||

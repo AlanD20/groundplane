@@ -37,6 +37,7 @@ func (preparer *Preparer) ListReleases(ctx context.Context, selection Selection)
 	choices := make([]ReleaseChoice, 0, len(releases))
 	controllers := make(map[string]ReleaseChoice)
 	agents := make(map[string]ReleaseChoice)
+	consoles := make(map[string]ReleaseChoice)
 	for _, release := range releases {
 		if release.Draft || release.Prerelease {
 			continue
@@ -48,6 +49,8 @@ func (preparer *Preparer) ListReleases(ctx context.Context, selection Selection)
 		component := SelectionController
 		if strings.HasPrefix(release.TagName, "agent/") {
 			component = SelectionAgent
+		} else if strings.HasPrefix(release.TagName, "console/") {
+			component = SelectionConsole
 		}
 		if !validReleaseTag(component, release.TagName) {
 			continue
@@ -60,22 +63,28 @@ func (preparer *Preparer) ListReleases(ctx context.Context, selection Selection)
 		version := strings.TrimPrefix(release.TagName, string(component)+"/")
 		if component == SelectionController {
 			controllers[version] = choice
-		} else {
+		} else if component == SelectionAgent {
 			agents[version] = choice
+		} else {
+			consoles[version] = choice
 		}
 		if selection == component {
 			choices = append(choices, choice)
 		}
 	}
-	if selection == SelectionBoth {
+	if selection == SelectionBoth || selection == SelectionAll {
 		for version, controller := range controllers {
 			agent, found := agents[version]
-			if !found {
+			console, hasConsole := consoles[version]
+			if !found || selection == SelectionAll && !hasConsole {
 				continue
 			}
 			published := controller.PublishedAt
 			if agent.PublishedAt.After(published) {
 				published = agent.PublishedAt
+			}
+			if selection == SelectionAll && console.PublishedAt.After(published) {
+				published = console.PublishedAt
 			}
 			choices = append(choices, ReleaseChoice{Ref: version, Selection: selection,
 				Name: version, PublishedAt: published})

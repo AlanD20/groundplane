@@ -19,12 +19,14 @@ func TestComponentEntryCaptureScopeAndGeneration(t *testing.T) {
 			Key: "CLOUDFLARE_TUNNEL_TOKEN", Secret: true,
 			Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{core.EntryExposureEdgeTunnel}},
 	}
-	for _, name := range []string{"valid", "empty", "other-environment", "workloads", "plain", "missing"} {
+	for _, name := range []string{"valid", "valid-unencrypted", "empty", "other-environment", "workloads", "plain", "missing"} {
 		t.Run(name, func(t *testing.T) {
 			candidate := entry
 			resolver := &environmentBlueprintMaterializationResolverFake{content: []byte("private-token")}
 			service := &Service{materials: resolver}
 			switch name {
+			case "valid-unencrypted":
+				candidate.Entry.Encryption = "none"
 			case "empty":
 				resolver.content = []byte(" \n")
 			case "other-environment":
@@ -42,7 +44,7 @@ func TestComponentEntryCaptureScopeAndGeneration(t *testing.T) {
 				entry.Entry.ID,
 				[]entries.Record{candidate},
 			)
-			if name != "valid" {
+			if name != "valid" && name != "valid-unencrypted" {
 				if err == nil {
 					t.Fatal("unsafe token capture accepted")
 				}
@@ -58,6 +60,9 @@ func TestComponentEntryCaptureScopeAndGeneration(t *testing.T) {
 				EntryID:           entry.Entry.ID,
 				ValueGenerationID: entry.CurrentValueGenerationID,
 				Storage:           taskmaterialization.EntryValueStorageSecret,
+			}
+			if name == "valid-unencrypted" {
+				want.Storage = taskmaterialization.EntryValueStoragePlain
 			}
 			if result != want || resolver.source.EntryValue == nil || *resolver.source.EntryValue != want {
 				t.Fatal("token capture did not pin the selected encrypted generation")

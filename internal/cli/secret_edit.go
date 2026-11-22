@@ -6,7 +6,7 @@ import (
 )
 
 func newSecretEditCmd(platform *bool) *cobra.Command {
-	var file, key string
+	var file, key, encryption string
 	var revision int64
 	cmd := &cobra.Command{
 		Use:   "edit <key>",
@@ -33,7 +33,7 @@ func newSecretEditCmd(platform *bool) *cobra.Command {
 			secret, err := app.Client.EditSecret(
 				cmd.Context(),
 				id,
-				apiTypes.SecretEditRequest{Revision: selected, Value: value},
+				apiTypes.SecretEditRequest{Revision: selected, Value: value, Encryption: encryption},
 				key,
 			)
 			value = ""
@@ -46,6 +46,8 @@ func newSecretEditCmd(platform *bool) *cobra.Command {
 	cmd.Flags().StringVar(&file, "value-file", "", "read replacement value from PATH or - for stdin")
 	_ = cmd.MarkFlagRequired("value-file")
 	cmd.Flags().Int64Var(&revision, "revision", 0, "exact metadata revision; defaults to a fresh Secret read")
+	cmd.Flags().
+		StringVar(&encryption, "encryption", "", "replace at-rest encryption with age or none; omitted preserves it")
 	cmd.Flags().
 		StringVar(&key, "idempotency-key", "", "reuse with the same revision and value to resolve uncertain acceptance")
 	return cmd

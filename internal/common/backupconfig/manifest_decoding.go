@@ -14,12 +14,13 @@ type manifestDocument struct {
 }
 
 type manifestEntry struct {
-	Exposure json.RawMessage `json:"exposure"`
-	ID       string          `json:"id"`
-	Metadata json.RawMessage `json:"metadata"`
-	Secret   bool            `json:"secret"`
-	Source   json.RawMessage `json:"source"`
-	Value    manifestValue   `json:"value"`
+	Encryption string          `json:"encryption,omitempty"`
+	Exposure   json.RawMessage `json:"exposure"`
+	ID         string          `json:"id"`
+	Metadata   json.RawMessage `json:"metadata"`
+	Secret     bool            `json:"secret"`
+	Source     json.RawMessage `json:"source"`
+	Value      manifestValue   `json:"value"`
 }
 
 type manifestValue struct {
@@ -72,8 +73,9 @@ func parseManifestEntry(encoded manifestEntry) (Entry, error) {
 		)
 	}
 	entry := Entry{
-		ID:     encoded.ID,
-		Secret: encoded.Secret,
+		ID:         encoded.ID,
+		Secret:     encoded.Secret,
+		Encryption: encoded.Encryption,
 		Value: ValueEvidence{
 			Path:      encoded.Value.Path,
 			SizeBytes: encoded.Value.SizeBytes,

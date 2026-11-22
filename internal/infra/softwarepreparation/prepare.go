@@ -109,6 +109,29 @@ func (preparer *Preparer) Prepare(
 	if err != nil {
 		return result, err
 	}
+	if input.Source.Selection.includesConsole() {
+		if err := observation.Run(ctx, "software_console_publish", func(ctx context.Context) error {
+			if preparer.console == nil {
+				return errs.New(errs.KindStrategyNotImplemented, "Console release preparation is unavailable on this host")
+			}
+			if input.Source.SourceKind != Release {
+				return errs.New(errs.KindStrategyNotImplemented, "Console source-ref preparation is not implemented")
+			}
+			artifact, err := preparer.prepareConsoleRelease(ctx, input.Source.ConsoleRelease, workspace)
+			if err != nil {
+				return err
+			}
+			result.Console = &ConsoleResult{Artifact: artifact}
+			if input.Source.Selection == SelectionConsole {
+				if err := preparer.console.Compatible(artifact); err != nil {
+					return err
+				}
+			}
+			return reporter(ctx, Progress{Phase: PhaseConsolePublished, Result: result})
+		}); err != nil {
+			return result, err
+		}
+	}
 
 	if input.Source.Selection.includesAgent() {
 		if err := observation.Run(ctx, "software_agent_publish", func(ctx context.Context) error {
@@ -133,6 +156,7 @@ func (preparer *Preparer) Prepare(
 			result.Controller = &ControllerResult{
 				Artifact: artifact, BinarySHA256: controllerIdentity.binary,
 				MetadataSHA256: controllerIdentity.metadata, CLISHA256: controllerIdentity.cli,
+				APISHA256: controllerIdentity.api,
 			}
 			return reporter(ctx, Progress{Phase: PhaseControllerPublished, Result: result})
 		}); err != nil {
@@ -181,6 +205,7 @@ func ValidateInput(input Input) error {
 		for component, release := range map[Selection]*ResolvedRelease{
 			SelectionController: input.Source.ControllerRelease,
 			SelectionAgent:      input.Source.AgentRelease,
+			SelectionConsole:    input.Source.ConsoleRelease,
 		} {
 			if release == nil {
 				continue
@@ -207,7 +232,7 @@ func ValidateInput(input Input) error {
 
 func ValidateResult(result Result, source ResolvedSource, partial bool) error {
 	if result.Source.Selection == "" {
-		if result.Controller != nil || result.Agent != nil || !partial {
+		if result.Controller != nil || result.Agent != nil || result.Console != nil || !partial {
 			return errs.New(errs.KindValidationFailed, "software preparation result source is missing")
 		}
 		return nil
@@ -216,7 +241,8 @@ func ValidateResult(result Result, source ResolvedSource, partial bool) error {
 		return errs.New(errs.KindValidationFailed, "software preparation result source changed")
 	}
 	if !source.Selection.includesController() && result.Controller != nil ||
-		!source.Selection.includesAgent() && result.Agent != nil {
+		!source.Selection.includesAgent() && result.Agent != nil ||
+		!source.Selection.includesConsole() && result.Console != nil {
 		return errs.New(errs.KindValidationFailed, "software preparation result contains another component")
 	}
 	if result.Controller != nil {
@@ -225,7 +251,8 @@ func ValidateResult(result Result, source ResolvedSource, partial bool) error {
 		}
 		if !digestPattern.MatchString(result.Controller.BinarySHA256) ||
 			!digestPattern.MatchString(result.Controller.MetadataSHA256) ||
-			!digestPattern.MatchString(result.Controller.CLISHA256) {
+			!digestPattern.MatchString(result.Controller.CLISHA256) ||
+			result.Controller.APISHA256 != "" && !digestPattern.MatchString(result.Controller.APISHA256) {
 			return errs.New(errs.KindValidationFailed, "prepared Controller bundle identities are invalid")
 		}
 	}
@@ -242,8 +269,14 @@ func ValidateResult(result Result, source ResolvedSource, partial bool) error {
 			return errs.New(errs.KindValidationFailed, "published Agent result identity is invalid")
 		}
 	}
+	if result.Console != nil {
+		if preparerConsoleArtifactInvalid(result.Console.Artifact) {
+			return errs.New(errs.KindValidationFailed, "prepared Console bundle identity is invalid")
+		}
+	}
 	if !partial && (source.Selection.includesController() != (result.Controller != nil) ||
-		source.Selection.includesAgent() != (result.Agent != nil)) {
+		source.Selection.includesAgent() != (result.Agent != nil) ||
+		source.Selection.includesConsole() != (result.Console != nil)) {
 		return errs.New(errs.KindStateConflict, "software preparation result is incomplete")
 	}
 	return nil
@@ -263,7 +296,7 @@ func ValidateProgress(progress Progress, source ResolvedSource) error {
 	}
 	switch progress.Phase {
 	case PhaseAccepted:
-		if progress.Result.Agent != nil || progress.Result.Controller != nil {
+		if progress.Result.Agent != nil || progress.Result.Controller != nil || progress.Result.Console != nil {
 			return errs.New(errs.KindValidationFailed, "initial software preparation progress has outputs")
 		}
 	case PhasePreparing:
@@ -273,8 +306,13 @@ func ValidateProgress(progress Progress, source ResolvedSource) error {
 		}
 	case PhaseControllerPublished:
 		if progress.Result.Controller == nil ||
-			(source.Selection == SelectionBoth && progress.Result.Agent == nil) {
+			(source.Selection.IncludesAgent() && progress.Result.Agent == nil) ||
+			(source.Selection.IncludesConsole() && progress.Result.Console == nil) {
 			return errs.New(errs.KindValidationFailed, "controller publication checkpoint is invalid")
+		}
+	case PhaseConsolePublished:
+		if progress.Result.Console == nil {
+			return errs.New(errs.KindValidationFailed, "Console publication checkpoint is invalid")
 		}
 	case PhaseVerified:
 	case PhaseFailed:
@@ -301,6 +339,19 @@ func (preparer *Preparer) verifyArtifacts(ctx context.Context, result Result, ow
 	}
 	if result.Controller != nil {
 		artifacts = append(artifacts, result.Controller.Artifact)
+	}
+	if result.Console != nil {
+		if preparer.console == nil {
+			return errs.New(errs.KindStrategyNotImplemented, "Console release verification is unavailable on this host")
+		}
+		if err := preparer.console.Verify(result.Console.Artifact); err != nil {
+			return err
+		}
+		if result.Source.Selection == SelectionConsole {
+			if err := preparer.console.Compatible(result.Console.Artifact); err != nil {
+				return err
+			}
+		}
 	}
 	for _, artifact := range artifacts {
 		if artifact.Reference == "" {

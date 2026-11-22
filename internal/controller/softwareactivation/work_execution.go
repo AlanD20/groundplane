@@ -115,6 +115,19 @@ func (service *Service) Execute(ctx context.Context, delivery workqueue.Delivery
 		}
 		result.Agent = true
 	}
+	if selection.IncludesConsole() {
+		if service.console == nil || record.Record.Input.Preparation.Progress.Result.Console == nil {
+			return service.failStaging(ctx, delivery, record,
+				errs.New(errs.KindStrategyNotImplemented, "Console activation is unavailable on this host"))
+		}
+		if err := service.observe(ctx, delivery, "software_console_stage", "Verify inactive Console bundle",
+			"Recheck the exact immutable Console bundle without changing active assets", func(context.Context) error {
+				return service.console.Verify(record.Record.Input.Preparation.Progress.Result.Console.Artifact)
+			}); err != nil {
+			return service.failStaging(ctx, delivery, record, err)
+		}
+		result.Console = true
+	}
 	result.Settled = true
 	saving, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()

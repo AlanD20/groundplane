@@ -7,8 +7,8 @@ Backup artifacts go, how the SDK addresses that endpoint, and how its access
 and secret keys are obtained.
 
 Reusable Secrets are distinct from secret Environment Entries and from Attach
-facts. An Environment secret literal is subordinate encrypted Entry data. An
-Attach fact is subordinate encrypted credential-owner data. Neither becomes a
+facts. An Environment secret literal is subordinate Entry data with independently
+selected storage. An Attach fact is subordinate encrypted credential-owner data. Neither becomes a
 reusable Secret resource merely because its value is confidential.
 
 This document owns the feature behavior. Exact REST and CLI shapes remain in
@@ -66,8 +66,9 @@ that revision without the value. A Script source or recoverable execution pin
 blocks replacement of bytes it still needs; edits do not retain a hidden old
 plaintext/ciphertext copy. Previously materialized running processes change only
 through their normal configuration/deployment actions.
-Sensitivity and encryption are fixed when created and preserved on value edits.
-Create a replacement value to choose different settings.
+Sensitivity is fixed when created. Encryption can change on a guarded value edit
+without replacing resource identity; an omitted encryption option preserves it.
+Execution pins and concurrent-edit protection still apply.
 
 Variables, Secrets and files have an **Edit** action on their owning Project or Platform page.
 The editor loads the current value explicitly, supports search and full-screen
@@ -75,15 +76,18 @@ editing, and saves with the loaded metadata revision. Close or Cancel discards
 the draft. A concurrent edit must be reloaded; an uncertain save can retry the
 same submission. Reveal confirmation applies when enabled in Preferences.
 
-Platform and Project Secret pages provide **Bulk edit** for pasted dotenv text
+Platform and Project Configuration pages provide **Bulk edit → Variables** and
+**Bulk edit → Secrets** for pasted dotenv text
 or a local file. The editor uses the existing bulk Entry grammar: `KEY=value`,
 blank/comment lines, first-`=` splitting and JSON-quoted strings for escaped or
 multiline values. It does not expand shell variables or execute the file. Only
 submitted env-var keys are created/replaced; omitted keys and file Secrets remain
 unchanged. Loading existing values is an explicit reveal action and excludes
 Platform fallback values from a Project editing buffer.
-The batch chooses sensitivity and encryption for new keys; existing keys retain
-their own settings, and uncertain retries retain the exact original choices.
+Each editor excludes files and the other classification. New variables are
+unencrypted; existing variable encryption is preserved. Secrets default to
+encryption, with a bulk opt-out applying to every submitted key. Uncertain
+retries retain the exact original choices.
 
 A UI batch is at most 256 keys / 1 MiB and orchestrates normal create/edit API
 requests; it is not one atomic storage transaction. Successfully saved keys remain

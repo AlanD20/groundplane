@@ -123,6 +123,7 @@ func (service *ScriptArtifactService) buildScriptEntryBindings(
 func scriptEntryBindingMetadata(record entryrecord.Record) (*agentpb.ScriptRunnerEntryBinding, error) {
 	binding := &agentpb.ScriptRunnerEntryBinding{
 		EntryId: record.Entry.ID, ValueGenerationId: record.CurrentValueGenerationID, Secret: record.Entry.Secret,
+		ValueStorage: scriptEntryValueStorage(record.Entry),
 	}
 	switch record.Entry.Kind {
 	case core.EntryKindEnv:
@@ -216,8 +217,16 @@ func (service *ScriptArtifactService) resolveCapturedScriptValues(
 			EntryID: binding.EntryId, ValueGenerationID: binding.ValueGenerationId,
 			Storage: materializationrecord.EntryValueStoragePlain,
 		}
-		if binding.Secret {
+		switch binding.ValueStorage {
+		case agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_SECRET:
 			reference.Storage = materializationrecord.EntryValueStorageSecret
+		case agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_PLAIN:
+		case agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_UNSPECIFIED:
+			if binding.Secret {
+				reference.Storage = materializationrecord.EntryValueStorageSecret
+			}
+		default:
+			return fail(errs.New(errs.KindInternal, "Script captured Entry storage is invalid"))
 		}
 		value, err := service.values.ResolveTaskMaterializationSource(ctx, captured.Snapshot.EnvironmentId,
 			materializationrecord.Source{Kind: materializationrecord.SourceEntryValue, EntryValue: &reference})
@@ -352,7 +361,7 @@ func (service *ScriptArtifactService) resolveScriptEntryValue(
 	record entryrecord.Record,
 ) ([]byte, error) {
 	storage := materializationrecord.EntryValueStoragePlain
-	if record.Entry.Secret {
+	if record.Entry.Encrypted() {
 		storage = materializationrecord.EntryValueStorageSecret
 	}
 	reference := materializationrecord.EntryValueReference{
@@ -361,6 +370,17 @@ func (service *ScriptArtifactService) resolveScriptEntryValue(
 	return service.values.ResolveTaskMaterializationSource(ctx, environmentID, materializationrecord.Source{
 		Kind: materializationrecord.SourceEntryValue, EntryValue: &reference,
 	})
+}
+
+func scriptEntryValueStorage(entry core.EnvEntry) agentpb.ScriptEntryValueStorage {
+	switch entry.Encryption {
+	case "age":
+		return agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_SECRET
+	case "none":
+		return agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_PLAIN
+	default:
+		return agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_UNSPECIFIED
+	}
 }
 
 func scriptEntryExposesService(entry core.EnvEntry, serviceName string) bool {

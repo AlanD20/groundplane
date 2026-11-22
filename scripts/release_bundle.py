@@ -29,6 +29,7 @@ def payload(version: str, agent: str | None, runner: str, arch: str, postgres_ca
     sources = [deploy.CONTROLLER, deploy.CONTROLLER_METADATA, deploy.CLI,
                deploy.RELEASE_STAGER, deploy.BOOTSTRAP_HELPER, deploy.UPDATE_CLIENT,
                deploy.CONTROLLER_UNIT, deploy.TMPFILES, deploy.CONFIG_EXAMPLE,
+               ROOT / "openapi.json",
                ROOT / "scripts" / "install_bundle.py", ROOT / "scripts" / "install_agent.py",
                ROOT / "scripts" / "postgres16_tools.py",
                ROOT / "scripts" / "release_selection.py"]

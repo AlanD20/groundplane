@@ -54,7 +54,8 @@ func (repository *EnvironmentBlueprintRepository) PrepareEntryDefinitionWork(
 	if err != nil {
 		return EntryWorkCapture{}, err
 	}
-	if task.Action == workexecution.ActionRemove && authority.Runtime != nil || authority.Desired.Revision != source.Desired.Revision ||
+	if task.Action == workexecution.ActionRemove && authority.Runtime != nil ||
+		authority.Desired.Revision != source.Desired.Revision ||
 		authority.Desired.Record.RevisionID != source.Desired.Record.RevisionID {
 		return EntryWorkCapture{}, errs.New(errs.KindStateConflict, "Entry metadata source changed")
 	}

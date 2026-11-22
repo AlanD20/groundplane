@@ -77,7 +77,7 @@ func PrepareEntryDefinitions(ctx context.Context, store Store, environmentID str
 			}
 		}
 		authored[key] = core.EntrySpec{Kind: value.Kind, Path: value.Path, UID: value.UID, GID: value.GID,
-			Secret: value.Secret, Exposure: append([]string(nil), value.Exposure...),
+			Secret: value.Secret, Encryption: value.Encryption, Exposure: append([]string(nil), value.Exposure...),
 			Source: core.EntrySourceSpec{
 				Literal:   value.Source.Literal,
 				SecretRef: value.Source.SecretRef,

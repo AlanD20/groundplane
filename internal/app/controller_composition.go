@@ -488,7 +488,7 @@ func NewController(ctx context.Context, configPath string) (_ *Controller, resul
 		EtcdLifecycle:      bootstrap.etcdLifecycle,
 		StorageMaintenance: bootstrap.storageMaintenance,
 		Protector:          authority.intentProtector,
-		Accepted:           authority.acceptedActions,
+		Accepted:           authority.acceptedActions, Console: bootstrap.console.Store,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize platform runtime: %w", err)

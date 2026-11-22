@@ -48,7 +48,7 @@ func (publication *ConfigRestorePublication) StageValues(ctx context.Context,
 		}
 		record := publication.Projection.Entries[ordinal-1]
 		if record.Entry.ID != archived.ID || record.CurrentValueGenerationID != generation.owner.GenerationID ||
-			record.Entry.Secret != archived.Secret {
+			record.Entry.Secret != archived.Secret || record.Entry.Encryption != archived.Encryption {
 			return configSnapshotGuardConflict()
 		}
 		prepared, err := sealRestoredEntryValue(ctx, protector, record, value, createdAt)
@@ -69,7 +69,7 @@ func (publication *ConfigRestorePublication) StageValues(ctx context.Context,
 func sealRestoredEntryValue(ctx context.Context, protector *secretvalue.Protector,
 	record entries.Record, value []byte, createdAt time.Time,
 ) (entries.EntryValueGeneration, error) {
-	if !record.Entry.Secret {
+	if !record.Entry.Encrypted() {
 		digest := sha256.Sum256(value)
 		return entries.EntryValueGeneration{Plain: &entryvalues.PlainGeneration{EnvironmentID: record.EnvironmentID,
 			EntryID: record.Entry.ID, GenerationID: record.CurrentValueGenerationID, Content: append([]byte(nil), value...),

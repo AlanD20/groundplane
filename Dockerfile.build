@@ -23,3 +23,4 @@ FROM scratch
 COPY --from=build /src/bin/controller /controller
 COPY --from=build /src/bin/controller-release.json /controller-release.json
 COPY --from=build /src/bin/groundplane /groundplane
+COPY --from=build /src/openapi.json /openapi.json

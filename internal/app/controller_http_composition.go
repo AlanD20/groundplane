@@ -331,9 +331,13 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		AgentTaskWake:         dependencies.agentRuntime.Registry.WakeTaskDispatch,
 		TenantMutations:       dependencies.hierarchy.tenantMutations,
 		TenantChanges:         dependencies.hierarchy.tenantChanges,
-		Console:               dependencies.bootstrap.consoleAssets,
+		Console:               dependencies.bootstrap.console.Assets,
 		Logs:                  serviceReads.logs,
 	})
+	if err := server.BindConsole(); err != nil {
+		_, _ = hostTerminals.Close(), dependencies.platform.Close()
+		return nil, fmt.Errorf("controller: bind verified Console release: %w", err)
+	}
 	maintenanceScheduler := scheduler.New(
 		dependencies.bootstrap.logger, dependencies.platform.Upgrades, dependencies.bootstrap.tick,
 		dependencies.authority.tasks, dependencies.authority.idempotency.Retention,

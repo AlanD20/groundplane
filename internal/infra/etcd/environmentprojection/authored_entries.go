@@ -31,7 +31,7 @@ func AuthoredEntryRecords(
 		if err != nil {
 			return nil, errs.Wrap(errs.KindInternal, err)
 		}
-		if entry.Secret && entry.Source.Kind == core.SourceLiteral {
+		if entry.ValueMetadataProtected() && entry.Source.Kind == core.SourceLiteral {
 			entry.Source.Literal = ""
 		}
 		record, err := entryrecord.NewBlueprintRecord(

@@ -19,6 +19,7 @@ type entryBulkUpsertInput struct {
 	entries       []entryBulkPair
 	exposure      []string
 	secret        bool
+	encryption    string
 	after         []string
 }
 
@@ -35,6 +36,9 @@ func prepareEntryBulkUpsert(request apiTypes.EntryBulkUpsertRequest) (entryBulkU
 			"Entry bulk upsert requires 1 through %d entries",
 			apiTypes.MaximumBulkEntryCount,
 		)
+	}
+	if err := validateEntryEncryption(request.Encryption); err != nil {
+		return entryBulkUpsertInput{}, err
 	}
 	exposure, err := normalizeEntryExposure(request.Exposure)
 	if err != nil {
@@ -66,8 +70,9 @@ func prepareEntryBulkUpsert(request apiTypes.EntryBulkUpsertRequest) (entryBulkU
 			ID: ids.New(ids.KindEnvEntry), Kind: core.EntryKindEnv, Key: item.Key,
 			Source:   core.EntrySource{Kind: core.SourceLiteral, Literal: item.Value},
 			Exposure: append([]string(nil), exposure...), Secret: request.Secret,
+			Encryption: request.Encryption,
 		}
-		if validation.Secret {
+		if validation.ValueMetadataProtected() {
 			validation.Source.Literal = ""
 		}
 		if err := validation.Validate(); err != nil {
@@ -81,6 +86,7 @@ func prepareEntryBulkUpsert(request apiTypes.EntryBulkUpsertRequest) (entryBulkU
 		entries:       entries,
 		exposure:      exposure,
 		secret:        request.Secret,
+		encryption:    request.Encryption,
 		after:         append([]string(nil), request.After...),
 	}, nil
 }

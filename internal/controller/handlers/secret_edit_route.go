@@ -42,7 +42,7 @@ func decodeSecretEdit(value []byte) (apiTypes.SecretEditRequest, error) {
 	invalid := func() (apiTypes.SecretEditRequest, error) {
 		return apiTypes.SecretEditRequest{}, errs.New(
 			errs.KindMalformedRequest,
-			"Secret edit must contain exactly revision and value with valid types",
+			"Secret edit must contain revision, value, and optional encryption with valid types",
 		)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
@@ -62,13 +62,17 @@ func decodeSecretEdit(value []byte) (apiTypes.SecretEditRequest, error) {
 		}
 		seen[key] = true
 		switch key {
-		case "value":
+		case "value", "encryption":
 			token, err := decoder.Token()
 			text, ok := token.(string)
 			if err != nil || !ok {
 				return invalid()
 			}
-			input.Value = text
+			if key == "value" {
+				input.Value = text
+			} else {
+				input.Encryption = text
+			}
 		case "revision":
 			if decoder.Decode(&input.Revision) != nil {
 				return invalid()

@@ -18,4 +18,5 @@ type EntryBulkUpsertRequest struct {
 	Entries       []EntryBulkItem `json:"entries"`
 	Exposure      []string        `json:"exposure"`
 	Secret        bool            `json:"secret"`
+	Encryption    string          `json:"encryption,omitempty" enum:"age,none"`
 }

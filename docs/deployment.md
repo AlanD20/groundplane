@@ -203,7 +203,8 @@ rejects both `--stage-only` and `--config`, including with `--ref`.
 | Release | Intended use |
 | --- | --- |
 | `vX.Y.Z` | Combined fresh installation; publication also creates matching component releases. |
-| `controller/vX.Y.Z` | Controller/Console/CLI bundle and Runner dependency; no Agent build. |
+| `controller/vX.Y.Z` | Native Controller/CLI bundle with bootstrap Console assets and Runner dependency; no Agent build. |
+| `console/vX.Y.Z` | Platform-neutral verified Console assets for independent UI updates. |
 | `agent/vX.Y.Z` | Agent image, metadata and small installer archives. |
 
 Updates select only the component namespaces, never plain `v` releases. The
@@ -216,7 +217,7 @@ preparation reader against the selected version, architecture and source commit.
 
 With no version specified, each selected component resolves its own latest stable version.
 Pass numeric `--version X.Y.Z`, without a `v` or component prefix. On a combined
-update this pins both component releases to that version; use a component scope
+update this pins the selected component releases to that version; use a component scope
 when their desired versions differ.
 Runtime images use immutable digests. OCI repositories use `vX.Y.Z` image tags
 because `/` is not valid in an image tag; embedded component versions retain their

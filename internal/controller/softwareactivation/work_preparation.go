@@ -181,6 +181,16 @@ func (service *Service) Prepare(ctx context.Context, taskID, workID string) erro
 			)
 		}
 		prepared, err = service.records.PrepareAgentInput(view, record, capture, dependencies)
+	case workexecution.ConsoleSoftware:
+		if service.console == nil || record.Record.Input.Preparation.Progress.Result.Console == nil {
+			return errs.New(errs.KindStateConflict, "Console activation has no verified bundle store")
+		}
+		desired := record.Record.Input.Preparation.Progress.Result.Console.Artifact
+		if current, found := service.console.Current(); found && current == desired {
+			return service.rejectUnit(ctx, view, record, stageProof,
+				"The Console already serves the selected prepared bundle. Prepare a different Console release.")
+		}
+		prepared, err = service.records.PrepareConsoleInput(view, record, dependencies)
 	default:
 		return errs.New(errs.KindStateConflict, "software activation item has no input owner")
 	}

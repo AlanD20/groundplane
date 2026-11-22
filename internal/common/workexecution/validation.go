@@ -38,6 +38,7 @@ func ValidOperation(operation Operation) bool {
 		Runner,
 		ControllerSoftware,
 		AgentSoftware,
+		ConsoleSoftware,
 		SoftwarePreparation,
 		SoftwareStaging,
 		ConnectorCheck,

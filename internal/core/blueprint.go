@@ -265,6 +265,9 @@ func (e EnvEntry) Validate() error {
 	if e.ID == "" {
 		return fmt.Errorf("entry: id is required")
 	}
+	if e.Encryption != "" && e.Encryption != "age" && e.Encryption != "none" {
+		return fmt.Errorf("entry %s: encryption must be %q or %q", e.ID, "age", "none")
+	}
 	switch e.Kind {
 	case EntryKindEnv:
 		if e.Key == "" {
@@ -332,8 +335,8 @@ func (e EnvEntry) Validate() error {
 			)
 		}
 	}
-	if e.Secret && e.Source.Kind == SourceLiteral && e.Source.Literal != "" {
-		return fmt.Errorf("entry %s: secret entries must not carry a plaintext literal value", e.ID)
+	if e.ValueMetadataProtected() && e.Source.Kind == SourceLiteral && e.Source.Literal != "" {
+		return fmt.Errorf("entry %s: protected entries must not carry a plaintext literal value", e.ID)
 	}
 	return nil
 }

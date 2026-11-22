@@ -9,6 +9,17 @@ that every deployment or failure scenario has been qualified.
 
 ### Replacement release corrections
 
+- Mount the captured Environment root read-only in Entry execution helpers so
+  Compose can inspect generated configuration during retained-operation recovery.
+
+- Prepare and activate independently published Console assets through Software
+  updates, with exact API compatibility checks and no Controller/Agent restart
+  for Console-only changes. All selects a matching Controller, Agent and Console.
+
+- Separate bulk Variables and Secrets across Configuration scopes, exclude files,
+  and allow storage encryption to change independently from confidentiality.
+  Preserve existing values and execution pins when changing storage.
+
 - Save Environment Entry values and exposure without rewriting mounted files or
   reconciling containers. Explicit Deploy or Blueprint Apply activates saved
   configuration through the selected Service release strategy.

@@ -1,3 +1,4 @@
+import { BulkConfigurationMenu, type BulkConfigurationKind } from "@/components/common/bulk-configuration-menu";
 import {
   ConfigurationFields,
   newConfigurationDraft,
@@ -22,7 +23,7 @@ import { useState } from "react";
 export default function PlatformSecretsPage() {
   const store = useStore();
   const [open, setOpen] = useState(false);
-  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkKind, setBulkKind] = useState<BulkConfigurationKind | null>(null);
   const [draft, setDraft] = useState(newConfigurationDraft);
   const { kind, key, value, path, sensitive, encryption } = draft;
   const [creating, setCreating] = useState(false);
@@ -69,16 +70,10 @@ export default function PlatformSecretsPage() {
         icon={<KeyRound />}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={open}
-              onClick={() => setBulkOpen(true)}
-            >
-              Bulk edit
-            </Button>
+            <BulkConfigurationMenu disabled={open || bulkKind !== null} onSelect={setBulkKind} />
             <CreationButton
               active={open}
-              disabled={bulkOpen}
+              disabled={bulkKind !== null}
               onClick={() => setOpen(true)}
             >
               <Plus className="size-4" /> Add configuration
@@ -86,13 +81,15 @@ export default function PlatformSecretsPage() {
           </div>
         }
       />
-      <BulkSecretEditor
-        open={bulkOpen}
-        onOpenChange={setBulkOpen}
+      {bulkKind && <BulkSecretEditor
+        key={bulkKind}
+        kind={bulkKind}
+        open
+        onOpenChange={(next) => { if (!next) setBulkKind(null); }}
         secrets={store.reusableSecrets.filter(
           (secret) => secret.scope === "platform",
         )}
-      />
+      />}
       <ResourceForm
         open={open}
         onOpenChange={(next) => {

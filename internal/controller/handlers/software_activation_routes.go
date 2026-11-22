@@ -61,7 +61,9 @@ func (s *Server) showSoftwareActivation(
 		TaskID: record.TaskID, PreparationTaskID: record.Input.Preparation.TaskID,
 		Selection: apiTypes.SoftwareSelection(record.Input.Preparation.Source.Selection), Phase: string(progress.Phase),
 		ControllerWorkItemID: record.ControllerWorkItemID, AgentWorkItemID: record.AgentWorkItemID,
+		ConsoleWorkItemID: record.ConsoleWorkItemID,
 		ControllerApplied: progress.ControllerApplied, AgentApplied: progress.AgentApplied,
-		ErrorCode: progress.ErrorCode, ErrorDetail: progress.ErrorDetail,
+		ConsoleApplied: progress.ConsoleApplied,
+		ErrorCode:      progress.ErrorCode, ErrorDetail: progress.ErrorDetail,
 	}}, nil
 }

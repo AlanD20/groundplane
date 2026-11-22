@@ -102,13 +102,22 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                 value={selection}
                 disabled={busy}
                 options={[
+                  {
+                    value: "all",
+                    label: "Controller, Agent, and Console",
+                  },
                   { value: "both", label: "Controller and Agent" },
                   { value: "controller", label: "Controller only" },
                   { value: "agent", label: "Agent only" },
+                  { value: "console", label: "Console only" },
                 ]}
                 onValueChange={(value) => {
-                  setSelection(value as SoftwareRequest["selection"]);
-                  if (source === "release") setRef("");
+                  const next = value as SoftwareRequest["selection"];
+                  setSelection(next);
+                  if (next === "console" || next === "all") {
+                    setSource("release");
+                    setRef("");
+                  } else if (source === "release") setRef("");
                 }}
               />
             </div>
@@ -118,10 +127,17 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                 id="software-source"
                 value={source}
                 disabled={busy}
-                options={[
-                  { value: "source_ref", label: "Build branch, tag or commit" },
-                  { value: "release", label: "Published release" },
-                ]}
+                options={
+                  selection === "console" || selection === "all"
+                    ? [{ value: "release", label: "Published release" }]
+                    : [
+                        {
+                          value: "source_ref",
+                          label: "Build branch, tag or commit",
+                        },
+                        { value: "release", label: "Published release" },
+                      ]
+                }
                 onValueChange={(value) => {
                   setSource(value as SoftwareRequest["source_kind"]);
                   setRef(value === "source_ref" ? "main" : "");
@@ -158,6 +174,13 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
               )}
             </div>
           </div>
+          {(selection === "console" || selection === "all") && (
+            <p className="text-xs text-muted-foreground">
+              Console updates use verified published component releases. All
+              requires Controller, Agent, and Console artifacts from the same
+              source commit and exact API.
+            </p>
+          )}
           {releaseError && (
             <p role="alert" className="text-sm text-destructive">
               {releaseError}
@@ -258,6 +281,11 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                 Agent {work.activation.agent_applied ? "applied" : "update"}
               </TaskLink>
             )}
+            {work.activation.console_work_item_id && (
+              <TaskLink taskId={work.activation.task_id}>
+                Console {work.activation.console_applied ? "applied" : "update"}
+              </TaskLink>
+            )}
           </div>
           {work.activation.error_detail && (
             <p role="alert" className="mt-3 text-sm text-destructive">
@@ -272,7 +300,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
           if (!open) setReview(null);
         }}
         title="Apply prepared software"
-        description="The Console may briefly disconnect during activation."
+        description="Controller updates may briefly disconnect the Console. A Console-only update switches verified assets without restarting the Controller or Agent."
         type="update"
         target={review ?? ""}
         workspace="Platform"
@@ -386,11 +414,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {item.selection === "both"
-                          ? "Controller + Agent"
-                          : item.selection}
-                      </TableCell>
+                      <TableCell>{selectionLabel(item.selection)}</TableCell>
                       <TableCell>
                         {formatTimestamp(item.created_at, "Not recorded", {
                           seconds: true,
@@ -447,8 +471,14 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
   );
 }
 
-function preparedComponents(selection: "controller" | "agent" | "both") {
-  return selection === "both"
-    ? (["controller", "agent"] as const)
-    : ([selection] as const);
+function preparedComponents(selection: SoftwareRequest["selection"]) {
+  if (selection === "both") return ["controller", "agent"] as const;
+  if (selection === "all") return ["controller", "agent", "console"] as const;
+  return [selection] as const;
+}
+
+function selectionLabel(selection: SoftwareRequest["selection"]) {
+  if (selection === "both") return "Controller + Agent";
+  if (selection === "all") return "Controller + Agent + Console";
+  return `${selection[0].toUpperCase()}${selection.slice(1)} only`;
 }

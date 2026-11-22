@@ -68,8 +68,12 @@ func (ledger *ReleaseLedger) BlueprintProxyHookSourceMembers(ctx context.Context
 		members = append(members, existingProxyHookSource(body, scriptrecord.ScriptSetBodyGenerationKey(
 			parent.Scope.EnvironmentID, parent.ID, body.Source.ScriptID, body.Source.BodyGeneration)))
 		for _, binding := range snapshot.GetEntryBindings() {
+			encrypted, err := scriptBindingValueEncrypted(binding)
+			if err != nil {
+				return nil, err
+			}
 			key := entryvalues.PlainKey(binding.GetEntryId(), binding.GetValueGenerationId())
-			if binding.GetSecret() {
+			if encrypted {
 				key = entryvalues.SecretKey(binding.GetEntryId(), binding.GetValueGenerationId())
 			}
 			value, err := scriptexecutions.ScriptExecutionValueAt(
@@ -85,7 +89,7 @@ func (ledger *ReleaseLedger) BlueprintProxyHookSourceMembers(ctx context.Context
 			entry.Source = sourceref.SourceIdentity{Kind: sourceref.SourceEntryValue,
 				EntryID: binding.GetEntryId(), ValueGenerationID: binding.GetValueGenerationId()}
 			entry.SourceModRevision = value.ModRevision
-			if binding.GetSecret() {
+			if encrypted {
 				generation, err := entryvalues.DecodeSecret(value.Value)
 				clear(value.Value)
 				if err != nil {

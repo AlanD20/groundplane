@@ -573,7 +573,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Reveal an encrypted Entry value */
+        /** Read a resolved Entry value */
         get: operations["entry.reveal"];
         put?: never;
         post?: never;
@@ -3038,6 +3038,8 @@ export interface components {
              */
             readonly $schema?: string;
             empty_secret_value?: boolean;
+            /** @enum {string} */
+            encryption: "age" | "none";
             exposure: string[] | null;
             /** Format: int64 */
             gid?: number;
@@ -3063,6 +3065,8 @@ export interface components {
              */
             readonly $schema?: string;
             after?: string[] | null;
+            /** @enum {string} */
+            encryption?: "age" | "none";
             entries: components["schemas"]["EntryBulkItem"][] | null;
             environment_id: string;
             exposure: string[] | null;
@@ -3076,6 +3080,8 @@ export interface components {
              */
             readonly $schema?: string;
             after?: string[] | null;
+            /** @enum {string} */
+            encryption?: "age" | "none";
             environment_id: string;
             exposure: string[] | null;
             /** Format: int64 */
@@ -3096,6 +3102,8 @@ export interface components {
              */
             readonly $schema?: string;
             after?: string[] | null;
+            /** @enum {string} */
+            encryption?: "age" | "none";
             exposure: string[] | null;
             source: components["schemas"]["EntrySource"];
         };
@@ -3705,7 +3713,7 @@ export interface components {
         PreparedSoftwareArtifact: {
             architecture: string;
             /** @enum {string} */
-            component: "controller" | "agent";
+            component: "controller" | "agent" | "console";
             manifest_digest: string;
             os: string;
             reference: string;
@@ -4373,6 +4381,8 @@ export interface components {
              * @example /api/v1/SecretEditRequest.json
              */
             readonly $schema?: string;
+            /** @enum {string} */
+            encryption?: "age" | "none";
             /** Format: int64 */
             revision: number;
             value: string;
@@ -4645,6 +4655,8 @@ export interface components {
             readonly $schema?: string;
             agent_applied: boolean;
             agent_work_item_id?: string;
+            console_applied: boolean;
+            console_work_item_id?: string;
             controller_applied: boolean;
             controller_work_item_id?: string;
             error_code?: string;
@@ -4652,7 +4664,7 @@ export interface components {
             phase: string;
             preparation_task_id: string;
             /** @enum {string} */
-            selection: "controller" | "agent" | "both";
+            selection: "controller" | "agent" | "console" | "both" | "all";
             task_id: string;
         };
         SoftwarePreparation: {
@@ -4672,7 +4684,7 @@ export interface components {
             provenance: components["schemas"]["SoftwareProvenance"][];
             ref: string;
             /** @enum {string} */
-            selection: "controller" | "agent" | "both";
+            selection: "controller" | "agent" | "console" | "both" | "all";
             /** @enum {string} */
             source_kind: "source_ref" | "release";
             task_id: string;
@@ -4697,14 +4709,14 @@ export interface components {
             after?: string[] | null;
             ref: string;
             /** @enum {string} */
-            selection: "controller" | "agent" | "both";
+            selection: "controller" | "agent" | "console" | "both" | "all";
             /** @enum {string} */
             source_kind: "source_ref" | "release";
         };
         SoftwareProvenance: {
             commit: string;
             /** @enum {string} */
-            component: "controller" | "agent";
+            component: "controller" | "agent" | "console";
             ref: string;
         };
         SoftwareReleaseCatalog: {
@@ -4722,7 +4734,7 @@ export interface components {
             published_at: string;
             ref: string;
             /** @enum {string} */
-            selection: "controller" | "agent" | "both";
+            selection: "controller" | "agent" | "console" | "both" | "all";
         };
         Stage: {
             expected: string;
@@ -10549,7 +10561,7 @@ export interface operations {
     "software.releases": {
         parameters: {
             query: {
-                selection: "controller" | "agent" | "both";
+                selection: "controller" | "agent" | "console" | "both" | "all";
             };
             header?: never;
             path?: never;

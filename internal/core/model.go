@@ -256,9 +256,30 @@ type EnvEntry struct {
 	// (blueprint.md: "exposure: [all] means the entry is written to the
 	// canonical secrets/.env.<environment-id> file"). Multiple explicit
 	// service names create per-service generated files.
-	Exposure []string `yaml:"exposure" json:"exposure"`
-	Secret   bool     `yaml:"secret"   json:"secret"` // true -> Source must not be SourceLiteral with a plaintext value visible in desired state
+	Exposure   []string `yaml:"exposure"           json:"exposure"`
+	Secret     bool     `yaml:"secret"             json:"secret"` // confidentiality classification; independent of storage encryption
+	Encryption string   `yaml:"encryption,omitempty" json:"encryption,omitempty"`
 }
+
+// EffectiveEncryption preserves the storage choice of records written before
+// Entry encryption was explicit: confidential Entries used age, while ordinary
+// Entries used the plain generation repository.
+func (e EnvEntry) EffectiveEncryption() string {
+	if e.Encryption != "" {
+		return e.Encryption
+	}
+	if e.Secret {
+		return "age"
+	}
+	return "none"
+}
+
+func (e EnvEntry) Encrypted() bool { return e.EffectiveEncryption() == "age" }
+
+// ValueMetadataProtected reports whether literal bytes must stay out of
+// desired metadata. Confidential values remain protected even when the
+// operator explicitly selects unencrypted generation storage.
+func (e EnvEntry) ValueMetadataProtected() bool { return e.Secret || e.Encrypted() }
 
 // ExposesAll reports whether this entry's Exposure is the "all services"
 // sentinel, per blueprint.md's `exposure: [all]` convention.

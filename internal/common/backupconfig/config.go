@@ -107,12 +107,13 @@ type ValueEvidence struct {
 }
 
 type Entry struct {
-	ID       string
-	Metadata Metadata
-	Exposure Exposure
-	Source   Source
-	Secret   bool
-	Value    ValueEvidence
+	ID         string
+	Metadata   Metadata
+	Exposure   Exposure
+	Source     Source
+	Secret     bool
+	Encryption string
+	Value      ValueEvidence
 }
 
 // Layout contains exact member offsets. ValueHeaderOffsets and

@@ -54,3 +54,31 @@ test('failed reveals do not produce a partially populated draft; large edits res
   const plan = planBulkEntryChanges(values, [], { secret: false, exposure: ['all'] })
   assert.deepEqual(plan.batches.map((batch) => batch.entries.length), [200, 1])
 })
+
+// Encryption-only edits must produce writes without changing confidentiality,
+// exposure, or silently flattening an untouched linked value.
+test('secret batch encryption applies to unchanged values and preserves unrelated settings', async () => {
+  const draft = await loadBulkEntryValues([
+    variable('TOKEN', { secret: true, encryption: 'age', exposure: ['worker'] }),
+  ], async () => 'original')
+  assert.deepEqual(planBulkEntryChanges([{ key: 'TOKEN', value: 'original' }], draft,
+    { secret: true, exposure: ['all'], encryption: 'none' }), {
+    batches: [{ entries: [{ key: 'TOKEN', value: 'original' }], secret: true,
+      encryption: 'none', exposure: ['worker'] }], replacedReferences: [],
+  })
+  assert.deepEqual(planBulkEntryChanges([{ key: 'TOKEN', value: 'original' }], draft,
+    { secret: true, exposure: ['all'], encryption: 'age' }), { batches: [], replacedReferences: [] })
+})
+
+test('encrypted ordinary variables load their stored value; unopened secrets can be explicitly cleared', async () => {
+  const calls = []
+  const draft = await loadBulkEntryValues([
+    variable('ENCRYPTED', { encryption: 'age', source: { kind: 'literal' } }),
+  ], async (id) => { calls.push(id); return 'opened' })
+  assert.deepEqual(calls, ['entry_ENCRYPTED'])
+  assert.equal(draft[0].value, 'opened')
+  const unopened = [{ entry: variable('TOKEN', { secret: true }), key: 'TOKEN' }]
+  assert.deepEqual(planBulkEntryChanges([{ key: 'TOKEN', value: '' }], unopened,
+    { secret: true, encryption: 'age', exposure: ['all'] }).batches[0].entries,
+    [{ key: 'TOKEN', value: '' }])
+})

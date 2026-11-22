@@ -68,7 +68,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 	}
 	defer clear(entryValue)
 	generationKey := entryvalues.PlainKey(record.Entry.ID, record.CurrentValueGenerationID)
-	if record.Entry.Secret {
+	if record.Entry.Encrypted() {
 		generationKey = entryvalues.SecretKey(record.Entry.ID, record.CurrentValueGenerationID)
 	}
 
@@ -127,7 +127,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 		if err != nil {
 			return workqueue.Change{}, errs.Wrap(errs.KindInternal, err)
 		}
-		if projected.Secret && projected.Source.Kind == core.SourceLiteral {
+		if projected.ValueMetadataProtected() && projected.Source.Kind == core.SourceLiteral {
 			projected.Source.Literal = ""
 		}
 		expected, err := entries.NewBlueprintRecord(
@@ -161,6 +161,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 		identity := adopted
 		identity.CurrentValueGenerationID = record.CurrentValueGenerationID
 		identity.Entry.Source, identity.Entry.Exposure = record.Entry.Source, record.Entry.Exposure
+		identity.Entry.Encryption = record.Entry.Encryption
 		if !entries.EqualRecord(identity, record) {
 			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry immutable identity changed")
 		}
@@ -170,12 +171,19 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 				"Blueprint Entry selected value generation disappeared",
 			)
 		}
-		if current.Entry.Secret && current.Entry.Source.Kind == core.SourceLiteral &&
-			record.Entry.Secret && record.Entry.Source.Kind == core.SourceLiteral {
-			// A key-only declaration may narrow or expand exposure without
-			// replacing the selected protected bytes. All other metadata and
-			// the generation remain compared below and in the transaction.
+		if current.Entry.ValueMetadataProtected() && current.Entry.Source.Kind == core.SourceLiteral &&
+			record.Entry.ValueMetadataProtected() && record.Entry.Source.Kind == core.SourceLiteral {
+			if current.Entry.Encrypted() != record.Entry.Encrypted() {
+				return workqueue.Change{}, errs.New(
+					errs.KindStateConflict,
+					"Blueprint Entry reused generation changed encryption storage",
+				)
+			}
+			// A key-only declaration may narrow or expand exposure and may make
+			// an equivalent legacy storage default explicit without replacing the
+			// selected protected bytes. All other metadata remains compared below.
 			adopted.Entry.Exposure = record.Entry.Exposure
+			adopted.Entry.Encryption = record.Entry.Encryption
 		}
 		if current.CurrentValueGenerationID == record.CurrentValueGenerationID &&
 			!entries.EqualRecord(adopted, record) {
@@ -212,7 +220,7 @@ func (repository *EnvironmentBlueprintRepository) PrepareBlueprintEntrySettlemen
 		if read.Values[7] == nil || string(read.Values[7].Value) != record.EnvironmentID {
 			return workqueue.Change{}, errs.New(errs.KindStateConflict, "Blueprint Entry selected generation has no authored binding")
 		}
-		if record.Entry.Secret {
+		if record.Entry.Encrypted() {
 			generation, err := entryvalues.DecodeSecret(read.Values[6].Value)
 			if err != nil || generation.EnvironmentID != record.EnvironmentID ||
 				generation.EntryID != record.Entry.ID || generation.GenerationID != record.CurrentValueGenerationID {

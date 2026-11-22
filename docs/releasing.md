@@ -31,10 +31,13 @@ exception is not permission to carry it into a new version.
 commit belongs to `main`:
 
 - `vX.Y.Z` builds the combined fresh-install release and creates
-  `controller/vX.Y.Z` and `agent/vX.Y.Z` at the same commit, reusing its artifacts.
+  `controller/vX.Y.Z`, `agent/vX.Y.Z` and `console/vX.Y.Z` at the same commit,
+  reusing its artifacts.
 - `controller/vX.Y.Z` builds the Controller bundle and Runner dependency without
   building an Agent image.
 - `agent/vX.Y.Z` builds only Agent artifacts and may use an independent version.
+- `console/vX.Y.Z` builds a platform-neutral static Console bundle without Agent
+  or Runner images.
 
 Generated component tags do not trigger duplicate builds. Existing tags and
 published assets are not overwritten. A failed workflow can leave image children
@@ -49,7 +52,7 @@ Artifact checksums and runtime image digests are still required.
 
 Publication builds native amd64/arm64 images and reads back their multi-platform
 indexes. Native archives contain Controller with embedded Console, CLI,
-compatibility metadata and installation/update helpers. Images are registry
+compatibility metadata, the exact API document and installation/update helpers. Images are registry
 dependencies, not embedded archive layers. Each archive gets a SHA256 file.
 
 Releases and the `groundplane-agent`/`groundplane-runner` GHCR packages are intended
@@ -93,6 +96,11 @@ Archives and checksums go under `.tmp/releases/`. Existing outputs are not
 overwritten. Stable archive headers do not prove bit-identical independent compiler
 runs. The [packaging decisions](decisions/release-packaging.md) explain integrity
 and compatibility boundaries.
+
+An independent Console bundle is built with `make console-release-bundle`. Its
+manifest binds every asset, the source commit, release identity and API document
+hash. Combined publication includes that bundle; standalone Console publication
+uses the same bundle and checksum without native archives.
 
 ## Installation website
 

@@ -1,4 +1,4 @@
-# Controller and Agent updates
+# Software updates
 
 GP updates must preserve application containers, data, routing and durable Tasks.
 The Console can briefly disconnect while the Controller restarts, but it must
@@ -7,8 +7,9 @@ not an application redeployment.
 
 ## Choosing what to update
 
-Agent and Controller have independent releases. Fresh tagged installation uses
-`vX.Y.Z`; subsequent updates use `controller/vX.Y.Z` and `agent/vX.Y.Z`.
+Agent, Controller and Console have independent releases. Fresh tagged installation uses
+`vX.Y.Z`; subsequent updates use `controller/vX.Y.Z`, `agent/vX.Y.Z` and
+`console/vX.Y.Z`.
 Agent-only updates do not replace the Controller. Controller-only updates preserve
 the enrolled Agent and requires a compatible channel format. Updating Both
 qualifies the prepared Controller and Agent together. A failed pair qualification
@@ -20,7 +21,7 @@ the same idempotency key is a conflict.
 
 ## Prepare software, then Apply
 
-Software preparation supports Controller-only, Agent-only and Both, each from
+Controller and Agent preparation supports Controller-only, Agent-only and Both, each from
 a published release or an explicit branch, tag or commit. Source builds run in
 Docker on the GP host for its architecture; host Go/Node toolchains are not
 required. Both resolves one source commit, or the matching component release
@@ -42,7 +43,7 @@ Agent-only updates must match the running Controller's channel format. Select
 Both when the channel format changes. Persistent-format changes still require
 a separate supported cutover; selecting Both does not bypass storage checks.
 
-Use `groundplane software prepare --component controller|agent|both
+Use `groundplane software prepare --component controller|agent|both|console|all
 --source source_ref|release --ref REF`, follow its Task, then
 `groundplane software apply PREPARATION_TASK`. Preparation and activation have
 independent Task ids. Preserve the exact key and inputs when resolving an
@@ -50,6 +51,27 @@ uncertain request. [H97](../acceptance.md#source-software-preparation-and-activa
 records bounded source-build interruption and normal activation evidence.
 Published release inputs retain their separate qualification requirements.
 See [host-built development versions](../decisions/release-packaging.md#host-built-development-versions).
+
+## Independent Console updates
+
+Select **Console only** to prepare and Apply a published `console/vX.Y.Z` release.
+The Controller serves the verified static bundle on its existing listener; no
+separate daemon or Node runtime is installed. Console-only activation does not
+restart Controller or Agent or redeploy applications. Reload to use the new UI.
+
+**Both** still means Controller and Agent. **All** includes Console as well.
+Console bundles record the exact API document hash. Incompatible Console
+activation is rejected. Controller-only or Both updates must preserve compatibility
+with the installed Console; choose All for a matching API/UI change. All stages
+matching artifacts before Controller replacement and activates the matching Console
+after the new API is available. If Console compatibility fails at boot, the API
+remains available for recovery while UI requests fail closed.
+
+A first upgrade from an embedded-only installation initializes the verified Console
+store from its trusted embedded assets. Later updates use its durable selection;
+there is no arbitrary asset-directory override. Previously loaded fingerprinted
+assets are retained for a bounded period so open tabs can load their old chunks.
+Console source-ref preparation is unavailable; use a published Console release.
 
 ## Admission and activation
 

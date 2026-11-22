@@ -32,11 +32,10 @@ func (repository *SecretRepository) ReplaceSecretValueIdempotent(
 		replacement.Secret.Kind != current.Record.Secret.Kind ||
 		replacement.Secret.Ref != current.Record.Secret.Ref ||
 		replacement.Secret.Sensitive != current.Record.Secret.Sensitive ||
-		replacement.Secret.Encryption != current.Record.Secret.Encryption ||
 		current.Revision <= 0 {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
-			"Secret value edit cannot change its identity, owner, key or kind",
+			"Secret value edit cannot change its identity, owner, key, kind or confidentiality",
 		)
 	}
 	if marker.Kind != idempotency.IdempotencyMarkerDirect || marker.State != idempotency.IdempotencyMarkerCompleted ||

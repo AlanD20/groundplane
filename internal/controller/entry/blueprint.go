@@ -59,6 +59,7 @@ func BlueprintAuthoring(
 		result[key] = core.EntrySpec{
 			Kind: entry.Kind, Path: entry.Path, UID: entry.UID, GID: entry.GID,
 			Source: source, Exposure: append([]string(nil), entry.Exposure...), Secret: entry.Secret,
+			Encryption: entry.Encryption,
 		}
 	}
 	return result, nil

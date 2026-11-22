@@ -21,6 +21,8 @@ type fakeEntryReadRepository struct {
 	entry           testkeyvalue.Versioned[testentries.Record]
 	secretValue     testentryvalues.SecretGeneration
 	secretMissing   bool
+	plainValue      testentryvalues.PlainGeneration
+	plainMissing    bool
 	page            testkeyvalue.Page[testentries.Record]
 	wantPage        testkeyvalue.PageRequest
 	environmentRead bool
@@ -135,6 +137,17 @@ func (fake *fakeEntryReadRepository) GetSecretEntryValue(
 	return fake.secretValue, !fake.secretMissing, nil
 }
 
+func (fake *fakeEntryReadRepository) GetPlainEntryValue(
+	_ context.Context,
+	entryID string,
+	generationID string,
+) (testentryvalues.PlainGeneration, bool, error) {
+	if entryID != fake.entry.Record.Entry.ID || generationID != fake.entry.Record.CurrentValueGenerationID {
+		return testentryvalues.PlainGeneration{}, false, errs.New(errs.KindInternal, "Entry generation changed")
+	}
+	return fake.plainValue, !fake.plainMissing, nil
+}
+
 // A declared secret may await settlement: do not hide its metadata, mark it
 // empty, or reveal an invented value while its exact generation is unavailable.
 func TestEntryPendingSecretHasNoEmptyBadgeAndCannotBeRevealed(t *testing.T) {
@@ -194,9 +207,9 @@ func TestEntryListVerifiesEnvironmentAndPreservesPagination(t *testing.T) {
 	}
 }
 
-// Rationale: reveal is the sole Entry plaintext response boundary, so it must open the exact selected
-// encrypted generation, verify its ownership tuple, and clear repository ciphertext on return.
-func TestEntryRevealDecryptsSelectedGenerationAndClearsCiphertext(t *testing.T) {
+// Rationale: reveal is the sole Entry plaintext response boundary, including for file editors, so it
+// must open the exact selected encrypted generation, verify its ownership tuple, and clear ciphertext.
+func TestEntryRevealDecryptsSelectedFileGenerationAndClearsCiphertext(t *testing.T) {
 	t.Parallel()
 	protector := secretReadTestProtector(t)
 	environmentID := ids.NewAt(ids.KindEnvironment, secretReadTestTime(), 22)
@@ -211,7 +224,7 @@ func TestEntryRevealDecryptsSelectedGenerationAndClearsCiphertext(t *testing.T) 
 		entry: testkeyvalue.Versioned[testentries.Record]{Record: testentries.Record{
 			EnvironmentID: environmentID,
 			Entry: core.EnvEntry{
-				ID: entryID, Kind: core.EntryKindEnv, Key: "PASSWORD",
+				ID: entryID, Kind: core.EntryKindFile, Path: "secrets/password.txt",
 				Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"all"}, Secret: true,
 			},
 			CurrentValueGenerationID: generationID,
@@ -277,20 +290,28 @@ func TestEntryEmptySecretStatusUsesSelectedGeneration(t *testing.T) {
 	}
 }
 
-// Rationale: the value endpoint is a secret-only exception; allowing it for plain Entries would
-// create a second read representation and blur the accepted desired-state storage boundary.
-func TestEntryRevealRejectsPlainEntry(t *testing.T) {
+// Rationale: reference-backed variables have no literal metadata representation, so the owning
+// value endpoint must return the exact selected plain generation as well as protected values.
+func TestEntryReadReturnsResolvedPlainVariableValue(t *testing.T) {
 	t.Parallel()
 	entryID := ids.NewAt(ids.KindEnvEntry, secretReadTestTime(), 25)
+	generationID := ids.NewAt(ids.KindConfig, secretReadTestTime(), 26)
+	environmentID := ids.NewAt(ids.KindEnvironment, secretReadTestTime(), 27)
 	repository := &fakeEntryReadRepository{entry: testkeyvalue.Versioned[testentries.Record]{Record: testentries.Record{
-		Entry: core.EnvEntry{ID: entryID},
-	}}}
+		EnvironmentID: environmentID, CurrentValueGenerationID: generationID,
+		Entry: core.EnvEntry{ID: entryID, Kind: core.EntryKindEnv, Key: "DATABASE_URL",
+			Source: core.EntrySource{Kind: core.SourceFact}, Exposure: []string{"all"}},
+	}}, plainValue: testentryvalues.PlainGeneration{EnvironmentID: environmentID, EntryID: entryID,
+		GenerationID: generationID, Content: []byte("postgres://resolved")}}
 	service, err := NewReadService(repository, secretReadTestProtector(t))
 	if err != nil {
 		t.Fatalf("NewReadService() error = %v", err)
 	}
-	if value, revealErr := service.RevealEntry(context.Background(), entryID); value != "" ||
-		!errors.Is(revealErr, errs.New(errs.KindValidationFailed, "")) {
-		t.Fatalf("RevealEntry() = %q, %v, want validation failure", value, revealErr)
+	if value, revealErr := service.RevealEntry(context.Background(), entryID); value != "postgres://resolved" ||
+		revealErr != nil {
+		t.Fatalf("RevealEntry() = %q, %v", value, revealErr)
+	}
+	if !allBytesZero(repository.plainValue.Content) {
+		t.Fatal("RevealEntry() retained repository plaintext")
 	}
 }

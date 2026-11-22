@@ -5,9 +5,11 @@ export type BulkEntryValue = {
   key: string;
   value: string;
 };
+export type BulkEntryBaseline = Omit<BulkEntryValue, "value"> & { value?: string };
 export type BulkEntryBatch = {
   entries: { key: string; value: string }[];
   secret: boolean;
+  encryption?: "age" | "none";
   exposure: string[];
 };
 
@@ -24,7 +26,7 @@ export async function loadBulkEntryValues(
           entry,
           key: entry.key!,
           value:
-            entry.source.kind === "literal" && !entry.secret
+            entry.source.kind === "literal" && !entry.secret && entry.encryption !== "age"
               ? (entry.source.literal ?? "")
               : await reveal(entry.id),
         })),
@@ -37,8 +39,8 @@ export async function loadBulkEntryValues(
 // Existing keys retain their own protection and exposure. Only additions use defaults.
 export function planBulkEntryChanges(
   values: { key: string; value: string }[],
-  baseline: BulkEntryValue[],
-  defaults: { secret: boolean; exposure: string[] },
+  baseline: BulkEntryBaseline[],
+  defaults: { secret: boolean; exposure: string[]; encryption?: "age" | "none" },
   outsideKeys: string[] = [],
 ) {
   const existing = new Map(baseline.map((item) => [item.key, item]));
@@ -46,10 +48,12 @@ export function planBulkEntryChanges(
   const replacedReferences: string[] = [];
   for (const value of values) {
     const prior = existing.get(value.key);
-    if (prior?.value === value.value) continue;
+    const encryptionChanged = prior && defaults.encryption !== undefined &&
+      defaults.encryption !== (prior.entry.encryption ?? (prior.entry.secret ? "age" : "none"));
+    if (prior?.value === value.value && !encryptionChanged) continue;
     if (!prior && outsideKeys.includes(value.key)) {
       throw new Error(
-        `${value.key} belongs to another Service. Edit it from the Environment.`,
+        `${value.key} belongs to another Service or configuration type. Open its matching bulk editor.`,
       );
     }
     if (prior && prior.entry.source.kind !== "literal")
@@ -60,11 +64,13 @@ export function planBulkEntryChanges(
     let batch = batches.find(
       (item) =>
         item.secret === secret &&
+        item.encryption === defaults.encryption &&
         JSON.stringify([...item.exposure].sort()) === group &&
         item.entries.length < 200,
     );
     if (!batch) {
-      batch = { entries: [], secret, exposure: [...exposure] };
+      batch = { entries: [], secret, exposure: [...exposure],
+        ...(defaults.encryption === undefined ? {} : { encryption: defaults.encryption }) };
       batches.push(batch);
     }
     batch.entries.push(value);

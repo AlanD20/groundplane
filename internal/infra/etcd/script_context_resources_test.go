@@ -52,6 +52,9 @@ func TestScriptContextSourcesRejectResourceSubstitutions(t *testing.T) {
 			p.EntryBindings[0].Secret = true
 			p.EntryBindings[0].Mode = 0o600
 		}},
+		{"another Entry value storage", func(_ *testscriptsourcequeries.ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
+			p.EntryBindings[0].ValueStorage = agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_SECRET
+		}},
 		{"another Entry kind", func(_ *testscriptsourcequeries.ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
 			p.EntryBindings[0].Kind = agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV
 			p.EntryBindings[0].FileTarget = ""

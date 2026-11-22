@@ -30,7 +30,10 @@ func (service *Service) componentEntryReference(
 		reference := materializationrecord.EntryValueReference{
 			EntryID:           entryID,
 			ValueGenerationID: record.CurrentValueGenerationID,
-			Storage:           materializationrecord.EntryValueStorageSecret,
+			Storage:           materializationrecord.EntryValueStoragePlain,
+		}
+		if record.Entry.Encrypted() {
+			reference.Storage = materializationrecord.EntryValueStorageSecret
 		}
 		value, err := service.materials.ResolveTaskMaterializationSource(
 			ctx,

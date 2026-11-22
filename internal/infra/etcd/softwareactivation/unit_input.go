@@ -163,3 +163,29 @@ func (repository *Repository) PrepareAgentInput(
 	defer clear(raw)
 	return unitInputChange(view, record, reference, agentoperations.InputKey(capture.WorkItemID), raw, dependencies)
 }
+
+func (repository *Repository) PrepareConsoleInput(
+	view workqueue.View,
+	record keyvalue.Versioned[Record],
+	dependencies []workqueue.ItemSnapshot,
+) (workqueue.Change, error) {
+	if record.Record.ConsoleWorkItemID != view.Item.Item.ID || !record.Record.Progress.ConsoleStaged {
+		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Console unit input differs from captured staging")
+	}
+	reference, err := record.Record.ConsoleReference()
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	guards, err := workqueue.DependencyConditions(view.Item.Item, dependencies)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	change, err := workqueue.PrepareInput(view.Task, view.Item, reference, time.Now().UTC())
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	change.Conditions = append(change.Conditions, guards...)
+	change.Conditions = append(change.Conditions,
+		keyvalue.Condition{Key: Key(record.Record.TaskID), ModRevision: record.Revision})
+	return change, nil
+}

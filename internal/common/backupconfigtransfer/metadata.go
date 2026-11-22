@@ -20,7 +20,7 @@ func CaptureEntry(value *agentpb.BackupConfigEntry) (backupconfig.Entry, error) 
 		len(value.SelectedValueSha256) != sha256.Size || proto.Size(value) > backupconfig.MaxCanonicalEntryBytes {
 		return backupconfig.Entry{}, invalid("capture Config Entry metadata is invalid")
 	}
-	entry := backupconfig.Entry{ID: value.EntryId, Secret: value.GetSecret()}
+	entry := backupconfig.Entry{ID: value.EntryId, Secret: value.GetSecret(), Encryption: value.Encryption}
 	entry.Value.Path = "values/" + value.EntryId
 	entry.Value.SizeBytes = value.SelectedValueSizeBytes
 	copy(entry.Value.SHA256[:], value.SelectedValueSha256)
@@ -48,7 +48,7 @@ func RestoreEntry(value *agentpb.BackupConfigRestoreEntry) (backupconfig.Entry, 
 		len(value.SelectedValue.Sha256) != sha256.Size || proto.Size(value) > backupconfig.MaxCanonicalEntryBytes {
 		return backupconfig.Entry{}, invalid("restore Config Entry metadata is invalid")
 	}
-	entry := backupconfig.Entry{ID: value.EntryId, Secret: value.GetSecret()}
+	entry := backupconfig.Entry{ID: value.EntryId, Secret: value.GetSecret(), Encryption: value.Encryption}
 	entry.Value.Path = "values/" + value.EntryId
 	entry.Value.SizeBytes = value.SelectedValue.SizeBytes
 	copy(entry.Value.SHA256[:], value.SelectedValue.Sha256)

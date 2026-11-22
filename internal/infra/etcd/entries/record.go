@@ -81,7 +81,7 @@ func ReplaceDesired(
 		!equalOptionalUint32(current.Entry.GID, desired.GID) {
 		return Record{}, errs.New(
 			errs.KindValidationFailed,
-			"Entry edit changed immutable identity, destination, ownership, or storage class",
+			"Entry edit changed immutable identity, destination, ownership, or confidentiality class",
 		)
 	}
 	replacement, err := NewRecord(current.EnvironmentID, desired, valueGenerationID)
@@ -120,9 +120,9 @@ func ValidateRecord(record Record) error {
 	if err := record.Entry.Validate(); err != nil {
 		return errs.New(errs.KindValidationFailed, err.Error())
 	}
-	if record.Entry.Secret && record.Entry.Source.Kind == core.SourceLiteral &&
+	if record.Entry.ValueMetadataProtected() && record.Entry.Source.Kind == core.SourceLiteral &&
 		record.Entry.Source.Literal != "" {
-		return errs.New(errs.KindValidationFailed, "Entry secret literal leaked into durable metadata")
+		return errs.New(errs.KindValidationFailed, "Entry protected literal leaked into durable metadata")
 	}
 	return nil
 }
@@ -138,7 +138,8 @@ func equalEnvEntry(left core.EnvEntry, right core.EnvEntry) bool {
 	return left.ID == right.ID && left.Kind == right.Kind && left.Key == right.Key &&
 		left.Path == right.Path && equalOptionalUint32(left.UID, right.UID) &&
 		equalOptionalUint32(left.GID, right.GID) && equalEntrySource(left.Source, right.Source) &&
-		slices.Equal(left.Exposure, right.Exposure) && left.Secret == right.Secret
+		slices.Equal(left.Exposure, right.Exposure) && left.Secret == right.Secret &&
+		left.Encryption == right.Encryption
 }
 
 func equalEntrySource(left core.EntrySource, right core.EntrySource) bool {

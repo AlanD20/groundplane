@@ -48,19 +48,23 @@ func buildEntryBulkCandidate(
 			Kind: core.EntryKindEnv, Key: item.key,
 			Source:   core.EntrySource{Kind: core.SourceLiteral, Literal: item.value},
 			Exposure: append([]string(nil), input.exposure...), Secret: input.secret,
+			Encryption: input.encryption,
 		}
 		var prior *entryrecord.Record
 		if existing, found := byKey[item.key]; found {
 			if existing.Entry.Secret != input.secret {
 				return entryBulkCandidate{}, errs.Newf(
-					errs.KindValidationFailed, "Entry %q already uses the %s storage class", item.key,
-					entryStorageClass(existing.Entry.Secret),
+					errs.KindValidationFailed, "Entry %q already uses the %s confidentiality class", item.key,
+					entryConfidentialityClass(existing.Entry.Secret),
 				)
 			}
 			value := existing
 			prior = &value
 			previous = append(previous, value)
 			desired.ID = existing.Entry.ID
+			if desired.Encryption == "" {
+				desired.Encryption = existing.Entry.Encryption
+			}
 			replaced[existing.Entry.ID] = struct{}{}
 		} else {
 			entryID, err := deriveEntryBulkID(ids.KindEnvEntry, revisionID, "entry/"+item.key)
@@ -74,7 +78,7 @@ func buildEntryBulkCandidate(
 			return entryBulkCandidate{}, err
 		}
 		persisted := desired
-		if persisted.Secret {
+		if persisted.ValueMetadataProtected() {
 			persisted.Source.Literal = ""
 		}
 		record, err := entryrecord.NewRecord(environmentID, persisted, generationID)
@@ -110,7 +114,7 @@ func deriveEntryBulkID(kind ids.Kind, revisionID string, purpose string) (string
 	return ids.DeriveAt(kind, createdAt, revisionID, "entry-bulk/"+purpose), nil
 }
 
-func entryStorageClass(secret bool) string {
+func entryConfidentialityClass(secret bool) string {
 	if secret {
 		return "secret"
 	}

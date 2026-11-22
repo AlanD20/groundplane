@@ -3,13 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/app/adaptercompiler"
 	"github.com/AlanD20/groundplane/internal/app/componentregistration"
+	"github.com/AlanD20/groundplane/internal/app/consoleplatform"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/logging"
@@ -20,7 +20,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/internal/infra/hostbootstrap"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type controllerBootstrapComposition struct {
@@ -28,7 +27,7 @@ type controllerBootstrapComposition struct {
 	controllerConfig   *controllerconfigstore.Store
 	tick               time.Duration
 	logger             *slog.Logger
-	consoleAssets      fs.FS
+	console            consoleplatform.Runtime
 	etcdLifecycle      *etcdcontainer.Manager
 	etcdEndpoints      []string
 	store              controllerStore
@@ -106,12 +105,9 @@ func newControllerBootstrapComposition(
 	if err != nil {
 		return controllerBootstrapComposition{}, err
 	}
-	consoleAssets, err := controllerConsoleAssets()
+	consoleRuntime, err := consoleplatform.Load(controllerConsoleAssets)
 	if err != nil {
-		return controllerBootstrapComposition{}, errs.Wrap(
-			errs.KindInternal,
-			fmt.Errorf("controller: load embedded Console: %w", err),
-		)
+		return controllerBootstrapComposition{}, err
 	}
 	etcdLifecycle, err := etcdcontainer.New(ctx)
 	if err != nil {
@@ -144,7 +140,7 @@ func newControllerBootstrapComposition(
 		controllerConfig:   controllerConfig,
 		tick:               tick,
 		logger:             logger,
-		consoleAssets:      consoleAssets,
+		console:            consoleRuntime,
 		etcdLifecycle:      etcdLifecycle,
 		etcdEndpoints:      etcdEndpoints,
 		store:              store,

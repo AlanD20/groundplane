@@ -26,6 +26,7 @@ export function EntryRow({
   exposure,
   file,
   secret,
+  encryption,
   emptySecretValue,
   loadValue,
   copyValue,
@@ -41,6 +42,7 @@ export function EntryRow({
   exposure: string[];
   file?: boolean;
   secret?: boolean;
+  encryption?: "age" | "none";
   emptySecretValue?: boolean;
   loadValue?: () => Promise<string>;
   copyValue?: string;
@@ -101,8 +103,8 @@ export function EntryRow({
               className="shrink-0"
             />
             {editing && <Badge variant="warning">Editing</Badge>}
-            <Badge variant="outline">{file ? "File" : "Variable"}</Badge>
-            {secret && <Badge variant="muted">Protected</Badge>}
+            <Badge variant="outline">{file ? (secret ? "Secret file" : "File") : (secret ? "Secret" : "Variable")}</Badge>
+            <Badge variant="outline">{(encryption ?? (secret ? "age" : "none")) === "age" ? "Encrypted" : "Unencrypted"}</Badge>
             {secret && <EmptySecretValueBadge empty={emptySecretValue} />}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -147,15 +149,15 @@ export function EntryRow({
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuItem variant="destructive" onClick={onRemove}>
-                  <Trash2 /> Remove {file ? "file" : "variable"}
+                  <Trash2 /> Remove {file ? "file" : secret ? "secret" : "variable"}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
         </div>
       </div>
-      {secret && loadValue ? (
-        <RevealValue loadValue={loadValue} label={label} file={file} />
+      {loadValue ? (
+        <RevealValue loadValue={loadValue} label={label} file={file} sensitive={secret} />
       ) : file ? (
         <Disclosure
           className="min-w-0 rounded-lg border border-border"

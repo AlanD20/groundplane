@@ -217,7 +217,7 @@ func backingEnvironmentMaterialization(
 	for index, entry := range entries {
 		desired[index] = entry.Entry
 		storage := materializationrecord.EntryValueStoragePlain
-		if entry.Entry.Secret {
+		if entry.Entry.Encrypted() {
 			storage = materializationrecord.EntryValueStorageSecret
 		}
 		references[index] = materializationrecord.GeneratedEnvironmentEntryReference{

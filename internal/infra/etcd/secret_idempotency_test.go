@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"testing"
 	"time"
@@ -71,6 +73,78 @@ func TestSecretIdempotentCreateCommitsValueAndReplays(t *testing.T) {
 	defer clear(existing.Response.Body)
 	if err != nil || conflict != nil || outcome != IdempotencyKnownExisting || existing.Locator != marker.Locator {
 		t.Fatalf("CreateSecretIdempotent(replay) outcome/conflict/error = %v/%v/%v", outcome, conflict, err)
+	}
+}
+
+// Rationale: changing at-rest encryption is one CAS value replacement under
+// the same Secret identity; exact retries replay and fixed-revision readers
+// retain the prior metadata/value pair.
+func TestSecretIdempotentEditRotatesEncryptionAndPreservesPriorRevision(t *testing.T) {
+	t.Parallel()
+	store, project := testSecretRepositoryProject(t)
+	repository, err := newSecretRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 22, 12, 30, 0, 0, time.UTC)
+	secretID := ids.NewAt(ids.KindSecret, now, 60)
+	record, err := testsecrets.NewProjectRecord(secretID, project.Record.ID, "API_TOKEN",
+		core.SecretKindEnvVar, "", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := repository.CreateSecret(t.Context(), testsecrets.ProjectOwner(project), record,
+		testSecretEncryptedValue(secretID, "old-ciphertext"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement := current.Record
+	replacement.Secret.Encryption = "none"
+	replacement.Secret.UpdatedAt = now.Add(time.Minute)
+	plaintext := []byte("rotated-value")
+	digest := sha256.Sum256(plaintext)
+	value := testsecrets.StoredValue{SecretID: secretID, EnvelopeVersion: 1, Cipher: "none",
+		DigestAlgorithm: "sha256", CiphertextSHA256: hex.EncodeToString(digest[:]), Ciphertext: plaintext}
+	marker := testDirectMarker()
+	marker.Locator = testidempotency.IdempotencyLocator{ScopeKind: testidempotency.IdempotencyScopeProject,
+		ScopeID: project.Record.ID, Method: http.MethodPatch, Route: "/secrets/{id}", Key: "secret-edit-key-0001"}
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetSecret, ID: secretID,
+	}
+	result, err := repository.ReplaceSecretValueIdempotent(t.Context(), testsecrets.ProjectOwner(project),
+		current, replacement, value, marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, _, conflict, err := result.Classify()
+	if err != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+		t.Fatalf("edit outcome/conflict/error = %v/%v/%v", outcome, conflict, err)
+	}
+	updated, err := repository.GetSecret(t.Context(), secretID)
+	if err != nil || updated.Record.Secret.Encryption != "none" ||
+		updated.Record.Secret.ID != current.Record.Secret.ID {
+		t.Fatalf("updated Secret = %#v, %v", updated, err)
+	}
+	updatedValue, err := repository.GetSecretValue(t.Context(), updated)
+	if err != nil || updatedValue.Cipher != "none" || string(updatedValue.Ciphertext) != "rotated-value" {
+		t.Fatalf("updated value = %#v, %v", updatedValue, err)
+	}
+	clear(updatedValue.Ciphertext)
+	priorValue, err := repository.GetSecretValue(t.Context(), current)
+	if err != nil || priorValue.Cipher != "age-x25519" || string(priorValue.Ciphertext) != "old-ciphertext" {
+		t.Fatalf("prior fixed-revision value = %#v, %v", priorValue, err)
+	}
+	clear(priorValue.Ciphertext)
+	replay, err := repository.ReplaceSecretValueIdempotent(t.Context(), testsecrets.ProjectOwner(project),
+		current, replacement, value, marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, existing, conflict, err := replay.Classify()
+	defer clear(existing.Intent.Ciphertext)
+	defer clear(existing.Response.Body)
+	if err != nil || conflict != nil || outcome != IdempotencyKnownExisting {
+		t.Fatalf("replay outcome/conflict/error = %v/%v/%v", outcome, conflict, err)
 	}
 }
 

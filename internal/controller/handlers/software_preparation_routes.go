@@ -43,7 +43,7 @@ type softwareListOutput struct {
 	Body apiTypes.SoftwarePreparationPage
 }
 type softwareReleaseInput struct {
-	Selection string `query:"selection" required:"true" enum:"controller,agent,both"`
+	Selection string `query:"selection" required:"true" enum:"controller,agent,console,both,all"`
 }
 type softwareReleaseOutput struct {
 	Body apiTypes.SoftwareReleaseCatalog
@@ -162,20 +162,26 @@ func softwarePreparationResponse(record preparationrecord.Record) apiTypes.Softw
 		ErrorDetail: record.Progress.ErrorDetail,
 	}
 	if source.SourceKind == preparation.SourceRef {
-		response.Provenance = append(
-			response.Provenance,
-			apiTypes.SoftwareProvenance{Component: "controller", Ref: source.OriginalRef, Commit: source.ResolvedSHA},
-		)
-		if !source.Selection.IncludesController() {
-			response.Provenance[0].Component = "agent"
-		} else if source.Selection.IncludesAgent() {
-			response.Provenance = append(response.Provenance, apiTypes.SoftwareProvenance{Component: "agent", Ref: source.OriginalRef, Commit: source.ResolvedSHA})
+		for _, component := range []struct {
+			name     string
+			selected bool
+		}{{"controller", source.Selection.IncludesController()}, {"agent", source.Selection.IncludesAgent()}, {"console", source.Selection.IncludesConsole()}} {
+			if component.selected {
+				response.Provenance = append(
+					response.Provenance,
+					apiTypes.SoftwareProvenance{
+						Component: component.name,
+						Ref:       source.OriginalRef,
+						Commit:    source.ResolvedSHA,
+					},
+				)
+			}
 		}
 	} else {
 		for _, item := range []struct {
 			component string
 			release   *preparation.ResolvedRelease
-		}{{"controller", source.ControllerRelease}, {"agent", source.AgentRelease}} {
+		}{{"controller", source.ControllerRelease}, {"agent", source.AgentRelease}, {"console", source.ConsoleRelease}} {
 			if item.release != nil {
 				response.Provenance = append(response.Provenance, apiTypes.SoftwareProvenance{Component: item.component, Ref: item.release.OriginalRef, Commit: item.release.ResolvedSHA})
 			}
@@ -193,6 +199,12 @@ func softwarePreparationResponse(record preparationrecord.Record) apiTypes.Softw
 					OS: output.artifact.Platform.OS, Architecture: output.artifact.Platform.Architecture},
 			)
 		}
+	}
+	if result.Console != nil {
+		artifact := result.Console.Artifact
+		response.Artifacts = append(response.Artifacts, apiTypes.PreparedSoftwareArtifact{
+			Component: "console", Reference: artifact.Release, ManifestDigest: artifact.BundleSHA256,
+		})
 	}
 	return response
 }

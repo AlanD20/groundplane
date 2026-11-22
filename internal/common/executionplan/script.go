@@ -385,7 +385,7 @@ func validateScriptEntryBindings(values []*agentpb.ScriptRunnerEntryBinding) err
 	for _, value := range values {
 		if value == nil || validateID(ids.KindEnvEntry, value.EntryId) != nil ||
 			validateID(ids.KindConfig, value.ValueGenerationId) != nil || len(value.Sha256) != sha256.Size ||
-			value.EntryId <= previous {
+			value.EntryId <= previous || !validScriptEntryStorage(value.ValueStorage) {
 			return errs.New(errs.KindValidationFailed, "Script runner Entry binding is invalid or unsorted")
 		}
 		switch value.Kind {
@@ -418,6 +418,17 @@ func validateScriptEntryBindings(values []*agentpb.ScriptRunnerEntryBinding) err
 		previous = value.EntryId
 	}
 	return nil
+}
+
+func validScriptEntryStorage(value agentpb.ScriptEntryValueStorage) bool {
+	switch value {
+	case agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_UNSPECIFIED,
+		agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_PLAIN,
+		agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_SECRET:
+		return true
+	default:
+		return false
+	}
 }
 
 func equalScriptEntryBindings(left, right []*agentpb.ScriptRunnerEntryBinding) bool {

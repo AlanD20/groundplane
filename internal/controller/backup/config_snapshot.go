@@ -203,7 +203,7 @@ func (producer *ConfigSnapshotProducer) prepareConfigSnapshot(
 
 func configSnapshotEntry(source backupconfiguration.CaptureSourceEntry) (backupconfig.Entry, error) {
 	desired := source.Record.Entry
-	entry := backupconfig.Entry{ID: desired.ID, Secret: desired.Secret}
+	entry := backupconfig.Entry{ID: desired.ID, Secret: desired.Secret, Encryption: desired.Encryption}
 	if desired.Kind == core.EntryKindEnv {
 		entry.Metadata = backupconfig.Metadata{
 			Kind:        backupconfig.MetadataEnvironment,
@@ -259,12 +259,18 @@ func configSnapshotMetadata(
 	entry backupconfig.Entry,
 ) *agentpb.BackupConfigEntry {
 	secret := entry.Secret
-	metadata := &agentpb.BackupConfigEntry{Ordinal: ordinal, EntryId: entry.ID, Secret: &secret,
+	metadata := &agentpb.BackupConfigEntry{
+		Ordinal:    ordinal,
+		EntryId:    entry.ID,
+		Secret:     &secret,
+		Encryption: entry.Encryption,
 		Entry: configSnapshotRevision(
 			source.EntryRevision,
 			source.EntrySHA256,
-		), SelectedValueSizeBytes: entry.Value.SizeBytes,
-		SelectedValueSha256: append([]byte(nil), entry.Value.SHA256[:]...)}
+		),
+		SelectedValueSizeBytes: entry.Value.SizeBytes,
+		SelectedValueSha256:    append([]byte(nil), entry.Value.SHA256[:]...),
+	}
 	if entry.Metadata.Kind == backupconfig.MetadataEnvironment {
 		metadata.Metadata = &agentpb.BackupConfigEntry_Environment{
 			Environment: &agentpb.BackupConfigEnvironment{Name: entry.Metadata.Environment.Key},
@@ -324,7 +330,7 @@ func (producer *ConfigSnapshotProducer) withConfigSnapshotValue(
 		return err
 	}
 	defer clear(raw.Value)
-	if !source.Record.Entry.Secret {
+	if !source.Record.Entry.Encrypted() {
 		value, err := entryvalues.DecodePlain(raw.Value)
 		defer clear(value.Content)
 		if err != nil || value.EnvironmentID != source.Record.EnvironmentID ||

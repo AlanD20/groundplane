@@ -166,7 +166,7 @@ func restoreConfigEntryRecord(environmentID, generationID string, archived backu
 	if backupconfig.ValidateEntry(archived) != nil {
 		return entries.Record{}, configSnapshotInvalid()
 	}
-	desired := core.EnvEntry{ID: archived.ID, Secret: archived.Secret}
+	desired := core.EnvEntry{ID: archived.ID, Secret: archived.Secret, Encryption: archived.Encryption}
 	if archived.Metadata.Kind == backupconfig.MetadataEnvironment {
 		desired.Kind, desired.Key = core.EntryKindEnv, archived.Metadata.Environment.Key
 	} else {
@@ -191,7 +191,7 @@ func restoreConfigEntryRecord(environmentID, generationID string, archived backu
 	switch archived.Source.Kind {
 	case backupconfig.SourceLiteral:
 		desired.Source.Kind = core.SourceLiteral
-		if !archived.Secret {
+		if !desired.ValueMetadataProtected() {
 			if !utf8.Valid(value) {
 				return entries.Record{}, configSnapshotInvalid()
 			}

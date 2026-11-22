@@ -45,7 +45,7 @@ func (producer *ConfigRestoreProducer) ProveCandidateFiles(
 			return backupconfig.Entry{}, nil, err
 		}
 		key := entryvalues.PlainKey(record.Entry.ID, owner.GenerationID)
-		if record.Entry.Secret {
+		if record.Entry.Encrypted() {
 			key = entryvalues.SecretKey(record.Entry.ID, owner.GenerationID)
 		}
 		values, err := producer.sources.GetMany(
@@ -61,7 +61,7 @@ func (producer *ConfigRestoreProducer) ProveCandidateFiles(
 		}
 		defer etcdstore.ClearValues(values.Values)
 		var generation entries.EntryValueGeneration
-		if record.Entry.Secret {
+		if record.Entry.Encrypted() {
 			decoded, err := entryvalues.DecodeSecret(values.Values[0].Value)
 			if err != nil {
 				return backupconfig.Entry{}, nil, err

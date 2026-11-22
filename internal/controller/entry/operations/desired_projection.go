@@ -64,7 +64,7 @@ func entryDesiredCandidateRecord(
 		desired.ID = previous.Entry.ID
 	}
 	persisted := desired
-	if persisted.Secret && persisted.Source.Kind == core.SourceLiteral {
+	if persisted.ValueMetadataProtected() && persisted.Source.Kind == core.SourceLiteral {
 		persisted.Source.Literal = ""
 	}
 	record, err := entryrecord.NewRecord(

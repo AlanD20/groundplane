@@ -71,6 +71,48 @@ func TestEntryGenerationServiceGeneratesSecretLiteral(t *testing.T) {
 	}
 }
 
+// Rationale: confidentiality controls redaction and runtime handling while the
+// explicit encryption choice alone selects the immutable value repository.
+func TestEntryGenerationStorageIsIndependentOfConfidentiality(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	service := newEntryGenerationTestService(t, nil, &entryGenerationTestFactResolver{})
+	tests := []struct {
+		name       string
+		secret     bool
+		encryption string
+		wantSecret bool
+	}{
+		{name: "unencrypted secret", secret: true, encryption: "none"},
+		{name: "encrypted variable", encryption: "age", wantSecret: true},
+	}
+	for index, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			entry := testEnvEntry(now, int64(20+index))
+			entry.Secret, entry.Encryption = test.secret, test.encryption
+			entry.Source = core.EntrySource{Kind: core.SourceLiteral, Literal: "independent-value"}
+			generation, err := service.Generate(t.Context(), ids.NewAt(ids.KindProject, now, 30),
+				ids.NewAt(ids.KindEnvironment, now, 31), entry,
+				ids.NewAt(ids.KindConfig, now, int64(32+index)), now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ClearEntryValueGeneration(&generation)
+			if test.wantSecret {
+				if generation.Secret == nil || generation.Plain != nil ||
+					openEntryGenerationTestValue(t, service.protector, *generation.Secret) != "independent-value" {
+					t.Fatalf("Generate() = %#v", generation)
+				}
+				return
+			}
+			if generation.Plain == nil || generation.Secret != nil ||
+				string(generation.Plain.Content) != "independent-value" {
+				t.Fatalf("Generate() = %#v", generation)
+			}
+		})
+	}
+}
+
 // Rationale: a project-first reusable Secret must be opened only in memory and resealed into an Entry-owned generation.
 func TestEntryGenerationServiceGeneratesReusableSecret(t *testing.T) {
 	t.Parallel()

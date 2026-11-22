@@ -69,16 +69,19 @@ the owning Environment, its Service exposure and value source. A Service-only
 Entry is still Environment-owned; Project and Platform Secret references do not
 change that ownership or create a second definition in the Service.
 
-Entry type, destination, secret storage class and file ownership cannot change
+Entry type, destination, confidentiality and file ownership cannot change
 through edit. Source and exposure can change. File Entries require numeric `uid`
 and `gid`, including explicit zero; environment-variable Entries have neither.
 Generated environment files and secret files use mode `0600`; plain file Entries
 use read-only mode `0444`.
 See the [Blueprint reference](../blueprint.md) for exact input fields.
 
-A plain literal remains visible. Secret literals are encrypted; ordinary reads
-do not reveal plaintext. Desired references can resolve to newer values for a
-new operation, but an accepted Task pins exact value generations for its own
+Confidentiality and storage are independent. Ordinary literals remain visible
+unless encrypted. Secret values stay hidden until explicitly revealed, including
+when encryption is disabled. `encryption: age | none` selects storage; omitted
+settings default to `age` for secrets and `none` for ordinary values. Encryption
+can change through edit without changing Entry identity. Desired references can
+resolve to newer values for a new operation, but an accepted Task pins exact value generations for its own
 execution and Retry. A later edit must not change an in-flight operation.
 The Entries list marks a secret Entry whose selected value is empty; it does
 not reveal the value or infer emptiness from the redacted source field.
@@ -86,16 +89,19 @@ Entry definitions remain readable while a Blueprint Apply is pending, failed or
 aborted. A value that has not been materialized is unavailable, not empty: no
 empty-value badge is shown, and Reveal directs you to the Apply or creation Task.
 
-Console Bulk edit loads existing variable values, including secrets, and excludes
-files. From a Service, it loads only variables exposed to that Service. Existing
-keys retain their encryption and exposure; the form's defaults apply to new keys.
-Only changed values are submitted, and omitted keys are kept. Unchanged Secret
-and Attach references remain linked; editing their resolved value replaces the
+Console **Bulk edit → Variables** and **Bulk edit → Secrets** use separate
+buffers and exclude files and the other classification. From a Service, only
+Entries exposed exclusively to that Service can be edited. Secrets load only
+after an explicit reveal action. New ordinary variables are unencrypted; existing
+variable encryption is preserved. The Secrets editor defaults to encryption and
+can turn it off for every submitted key. Existing exposure is preserved. Only
+changed values or storage settings are submitted, and omitted keys are kept.
+Unchanged Secret and Attach references remain linked; editing their resolved value replaces the
 Entry source with a literal, with a warning before saving. Multiline values use
 JSON-quoted strings such as `MESSAGE="first\nsecond"`.
 
 Canonical Environment Blueprint export includes every operator-managed Entry,
-including Entries created through Console, CLI or API actions. Secret literal
+including Entries created through Console, CLI or API actions. Secret and encrypted literal
 values are always blank in that document. An unchanged key-only declaration
 retains its selected value; a new one starts empty. Set or rotate secret values
 through the Entry action, not Blueprint YAML. A reusable Project or Platform

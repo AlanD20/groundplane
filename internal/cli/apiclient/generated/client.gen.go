@@ -823,6 +823,78 @@ func (e EdgeCheckResultPhase) Valid() bool {
 	}
 }
 
+// Defines values for EntryEncryption.
+const (
+	EntryEncryptionAge  EntryEncryption = "age"
+	EntryEncryptionNone EntryEncryption = "none"
+)
+
+// Valid indicates whether the value is a known member of the EntryEncryption enum.
+func (e EntryEncryption) Valid() bool {
+	switch e {
+	case EntryEncryptionAge:
+		return true
+	case EntryEncryptionNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EntryBulkUpsertRequestEncryption.
+const (
+	EntryBulkUpsertRequestEncryptionAge  EntryBulkUpsertRequestEncryption = "age"
+	EntryBulkUpsertRequestEncryptionNone EntryBulkUpsertRequestEncryption = "none"
+)
+
+// Valid indicates whether the value is a known member of the EntryBulkUpsertRequestEncryption enum.
+func (e EntryBulkUpsertRequestEncryption) Valid() bool {
+	switch e {
+	case EntryBulkUpsertRequestEncryptionAge:
+		return true
+	case EntryBulkUpsertRequestEncryptionNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EntryCreateRequestEncryption.
+const (
+	EntryCreateRequestEncryptionAge  EntryCreateRequestEncryption = "age"
+	EntryCreateRequestEncryptionNone EntryCreateRequestEncryption = "none"
+)
+
+// Valid indicates whether the value is a known member of the EntryCreateRequestEncryption enum.
+func (e EntryCreateRequestEncryption) Valid() bool {
+	switch e {
+	case EntryCreateRequestEncryptionAge:
+		return true
+	case EntryCreateRequestEncryptionNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EntryEditRequestEncryption.
+const (
+	EntryEditRequestEncryptionAge  EntryEditRequestEncryption = "age"
+	EntryEditRequestEncryptionNone EntryEditRequestEncryption = "none"
+)
+
+// Valid indicates whether the value is a known member of the EntryEditRequestEncryption enum.
+func (e EntryEditRequestEncryption) Valid() bool {
+	switch e {
+	case EntryEditRequestEncryptionAge:
+		return true
+	case EntryEditRequestEncryptionNone:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EnvironmentBlueprintChangeAction.
 const (
 	Create EnvironmentBlueprintChangeAction = "create"
@@ -1033,6 +1105,7 @@ func (e LogEventStream) Valid() bool {
 // Defines values for PreparedSoftwareArtifactComponent.
 const (
 	PreparedSoftwareArtifactComponentAgent      PreparedSoftwareArtifactComponent = "agent"
+	PreparedSoftwareArtifactComponentConsole    PreparedSoftwareArtifactComponent = "console"
 	PreparedSoftwareArtifactComponentController PreparedSoftwareArtifactComponent = "controller"
 )
 
@@ -1040,6 +1113,8 @@ const (
 func (e PreparedSoftwareArtifactComponent) Valid() bool {
 	switch e {
 	case PreparedSoftwareArtifactComponentAgent:
+		return true
+	case PreparedSoftwareArtifactComponentConsole:
 		return true
 	case PreparedSoftwareArtifactComponentController:
 		return true
@@ -1468,6 +1543,24 @@ func (e SecretCreateRequestEncryption) Valid() bool {
 	}
 }
 
+// Defines values for SecretEditRequestEncryption.
+const (
+	SecretEditRequestEncryptionAge  SecretEditRequestEncryption = "age"
+	SecretEditRequestEncryptionNone SecretEditRequestEncryption = "none"
+)
+
+// Valid indicates whether the value is a known member of the SecretEditRequestEncryption enum.
+func (e SecretEditRequestEncryption) Valid() bool {
+	switch e {
+	case SecretEditRequestEncryptionAge:
+		return true
+	case SecretEditRequestEncryptionNone:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ServiceContainerObservationHealth.
 const (
 	ServiceContainerObservationHealthHealthy   ServiceContainerObservationHealth = "healthy"
@@ -1609,7 +1702,9 @@ func (e ServiceObservationState) Valid() bool {
 // Defines values for SoftwareActivationSelection.
 const (
 	SoftwareActivationSelectionAgent      SoftwareActivationSelection = "agent"
+	SoftwareActivationSelectionAll        SoftwareActivationSelection = "all"
 	SoftwareActivationSelectionBoth       SoftwareActivationSelection = "both"
+	SoftwareActivationSelectionConsole    SoftwareActivationSelection = "console"
 	SoftwareActivationSelectionController SoftwareActivationSelection = "controller"
 )
 
@@ -1618,7 +1713,11 @@ func (e SoftwareActivationSelection) Valid() bool {
 	switch e {
 	case SoftwareActivationSelectionAgent:
 		return true
+	case SoftwareActivationSelectionAll:
+		return true
 	case SoftwareActivationSelectionBoth:
+		return true
+	case SoftwareActivationSelectionConsole:
 		return true
 	case SoftwareActivationSelectionController:
 		return true
@@ -1660,7 +1759,9 @@ func (e SoftwarePreparationPhase) Valid() bool {
 // Defines values for SoftwarePreparationSelection.
 const (
 	SoftwarePreparationSelectionAgent      SoftwarePreparationSelection = "agent"
+	SoftwarePreparationSelectionAll        SoftwarePreparationSelection = "all"
 	SoftwarePreparationSelectionBoth       SoftwarePreparationSelection = "both"
+	SoftwarePreparationSelectionConsole    SoftwarePreparationSelection = "console"
 	SoftwarePreparationSelectionController SoftwarePreparationSelection = "controller"
 )
 
@@ -1669,7 +1770,11 @@ func (e SoftwarePreparationSelection) Valid() bool {
 	switch e {
 	case SoftwarePreparationSelectionAgent:
 		return true
+	case SoftwarePreparationSelectionAll:
+		return true
 	case SoftwarePreparationSelectionBoth:
+		return true
+	case SoftwarePreparationSelectionConsole:
 		return true
 	case SoftwarePreparationSelectionController:
 		return true
@@ -1699,7 +1804,9 @@ func (e SoftwarePreparationSourceKind) Valid() bool {
 // Defines values for SoftwarePreparationRequestSelection.
 const (
 	SoftwarePreparationRequestSelectionAgent      SoftwarePreparationRequestSelection = "agent"
+	SoftwarePreparationRequestSelectionAll        SoftwarePreparationRequestSelection = "all"
 	SoftwarePreparationRequestSelectionBoth       SoftwarePreparationRequestSelection = "both"
+	SoftwarePreparationRequestSelectionConsole    SoftwarePreparationRequestSelection = "console"
 	SoftwarePreparationRequestSelectionController SoftwarePreparationRequestSelection = "controller"
 )
 
@@ -1708,7 +1815,11 @@ func (e SoftwarePreparationRequestSelection) Valid() bool {
 	switch e {
 	case SoftwarePreparationRequestSelectionAgent:
 		return true
+	case SoftwarePreparationRequestSelectionAll:
+		return true
 	case SoftwarePreparationRequestSelectionBoth:
+		return true
+	case SoftwarePreparationRequestSelectionConsole:
 		return true
 	case SoftwarePreparationRequestSelectionController:
 		return true
@@ -1738,6 +1849,7 @@ func (e SoftwarePreparationRequestSourceKind) Valid() bool {
 // Defines values for SoftwareProvenanceComponent.
 const (
 	SoftwareProvenanceComponentAgent      SoftwareProvenanceComponent = "agent"
+	SoftwareProvenanceComponentConsole    SoftwareProvenanceComponent = "console"
 	SoftwareProvenanceComponentController SoftwareProvenanceComponent = "controller"
 )
 
@@ -1745,6 +1857,8 @@ const (
 func (e SoftwareProvenanceComponent) Valid() bool {
 	switch e {
 	case SoftwareProvenanceComponentAgent:
+		return true
+	case SoftwareProvenanceComponentConsole:
 		return true
 	case SoftwareProvenanceComponentController:
 		return true
@@ -1756,7 +1870,9 @@ func (e SoftwareProvenanceComponent) Valid() bool {
 // Defines values for SoftwareReleaseChoiceSelection.
 const (
 	SoftwareReleaseChoiceSelectionAgent      SoftwareReleaseChoiceSelection = "agent"
+	SoftwareReleaseChoiceSelectionAll        SoftwareReleaseChoiceSelection = "all"
 	SoftwareReleaseChoiceSelectionBoth       SoftwareReleaseChoiceSelection = "both"
+	SoftwareReleaseChoiceSelectionConsole    SoftwareReleaseChoiceSelection = "console"
 	SoftwareReleaseChoiceSelectionController SoftwareReleaseChoiceSelection = "controller"
 )
 
@@ -1765,7 +1881,11 @@ func (e SoftwareReleaseChoiceSelection) Valid() bool {
 	switch e {
 	case SoftwareReleaseChoiceSelectionAgent:
 		return true
+	case SoftwareReleaseChoiceSelectionAll:
+		return true
 	case SoftwareReleaseChoiceSelectionBoth:
+		return true
+	case SoftwareReleaseChoiceSelectionConsole:
 		return true
 	case SoftwareReleaseChoiceSelectionController:
 		return true
@@ -2056,7 +2176,9 @@ func (e ZoneRemovalImpactMode) Valid() bool {
 // Defines values for SoftwareReleasesParamsSelection.
 const (
 	SoftwareReleasesParamsSelectionAgent      SoftwareReleasesParamsSelection = "agent"
+	SoftwareReleasesParamsSelectionAll        SoftwareReleasesParamsSelection = "all"
 	SoftwareReleasesParamsSelectionBoth       SoftwareReleasesParamsSelection = "both"
+	SoftwareReleasesParamsSelectionConsole    SoftwareReleasesParamsSelection = "console"
 	SoftwareReleasesParamsSelectionController SoftwareReleasesParamsSelection = "controller"
 )
 
@@ -2065,7 +2187,11 @@ func (e SoftwareReleasesParamsSelection) Valid() bool {
 	switch e {
 	case SoftwareReleasesParamsSelectionAgent:
 		return true
+	case SoftwareReleasesParamsSelectionAll:
+		return true
 	case SoftwareReleasesParamsSelectionBoth:
+		return true
+	case SoftwareReleasesParamsSelectionConsole:
 		return true
 	case SoftwareReleasesParamsSelectionController:
 		return true
@@ -3286,19 +3412,23 @@ type Entry struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Entry.json
-	Schema            *string     `json:"$schema,omitempty"`
-	EmptySecretValue  *bool       `json:"empty_secret_value,omitempty"`
-	Exposure          *[]string   `json:"exposure"`
-	Gid               *int64      `json:"gid,omitempty"`
-	Id                string      `json:"id"`
-	Key               *string     `json:"key,omitempty"`
-	Path              *string     `json:"path,omitempty"`
-	ReconciliationKey *string     `json:"reconciliation_key,omitempty"`
-	Secret            bool        `json:"secret"`
-	Source            EntrySource `json:"source"`
-	Type              string      `json:"type"`
-	Uid               *int64      `json:"uid,omitempty"`
+	Schema            *string         `json:"$schema,omitempty"`
+	EmptySecretValue  *bool           `json:"empty_secret_value,omitempty"`
+	Encryption        EntryEncryption `json:"encryption"`
+	Exposure          *[]string       `json:"exposure"`
+	Gid               *int64          `json:"gid,omitempty"`
+	Id                string          `json:"id"`
+	Key               *string         `json:"key,omitempty"`
+	Path              *string         `json:"path,omitempty"`
+	ReconciliationKey *string         `json:"reconciliation_key,omitempty"`
+	Secret            bool            `json:"secret"`
+	Source            EntrySource     `json:"source"`
+	Type              string          `json:"type"`
+	Uid               *int64          `json:"uid,omitempty"`
 }
+
+// EntryEncryption defines model for Entry.Encryption.
+type EntryEncryption string
 
 // EntryBulkItem defines model for EntryBulkItem.
 type EntryBulkItem struct {
@@ -3311,42 +3441,54 @@ type EntryBulkUpsertRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/EntryBulkUpsertRequest.json
-	Schema        *string          `json:"$schema,omitempty"`
-	After         *[]string        `json:"after,omitempty"`
-	Entries       *[]EntryBulkItem `json:"entries"`
-	EnvironmentId string           `json:"environment_id"`
-	Exposure      *[]string        `json:"exposure"`
-	Secret        bool             `json:"secret"`
+	Schema        *string                           `json:"$schema,omitempty"`
+	After         *[]string                         `json:"after,omitempty"`
+	Encryption    *EntryBulkUpsertRequestEncryption `json:"encryption,omitempty"`
+	Entries       *[]EntryBulkItem                  `json:"entries"`
+	EnvironmentId string                            `json:"environment_id"`
+	Exposure      *[]string                         `json:"exposure"`
+	Secret        bool                              `json:"secret"`
 }
+
+// EntryBulkUpsertRequestEncryption defines model for EntryBulkUpsertRequest.Encryption.
+type EntryBulkUpsertRequestEncryption string
 
 // EntryCreateRequest defines model for EntryCreateRequest.
 type EntryCreateRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/EntryCreateRequest.json
-	Schema        *string     `json:"$schema,omitempty"`
-	After         *[]string   `json:"after,omitempty"`
-	EnvironmentId string      `json:"environment_id"`
-	Exposure      *[]string   `json:"exposure"`
-	Gid           *int64      `json:"gid,omitempty"`
-	Key           *string     `json:"key,omitempty"`
-	Path          *string     `json:"path,omitempty"`
-	Secret        bool        `json:"secret"`
-	Source        EntrySource `json:"source"`
-	Type          string      `json:"type"`
-	Uid           *int64      `json:"uid,omitempty"`
+	Schema        *string                       `json:"$schema,omitempty"`
+	After         *[]string                     `json:"after,omitempty"`
+	Encryption    *EntryCreateRequestEncryption `json:"encryption,omitempty"`
+	EnvironmentId string                        `json:"environment_id"`
+	Exposure      *[]string                     `json:"exposure"`
+	Gid           *int64                        `json:"gid,omitempty"`
+	Key           *string                       `json:"key,omitempty"`
+	Path          *string                       `json:"path,omitempty"`
+	Secret        bool                          `json:"secret"`
+	Source        EntrySource                   `json:"source"`
+	Type          string                        `json:"type"`
+	Uid           *int64                        `json:"uid,omitempty"`
 }
+
+// EntryCreateRequestEncryption defines model for EntryCreateRequest.Encryption.
+type EntryCreateRequestEncryption string
 
 // EntryEditRequest defines model for EntryEditRequest.
 type EntryEditRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/EntryEditRequest.json
-	Schema   *string     `json:"$schema,omitempty"`
-	After    *[]string   `json:"after,omitempty"`
-	Exposure *[]string   `json:"exposure"`
-	Source   EntrySource `json:"source"`
+	Schema     *string                     `json:"$schema,omitempty"`
+	After      *[]string                   `json:"after,omitempty"`
+	Encryption *EntryEditRequestEncryption `json:"encryption,omitempty"`
+	Exposure   *[]string                   `json:"exposure"`
+	Source     EntrySource                 `json:"source"`
 }
+
+// EntryEditRequestEncryption defines model for EntryEditRequest.Encryption.
+type EntryEditRequestEncryption string
 
 // EntrySource defines model for EntrySource.
 type EntrySource struct {
@@ -4717,10 +4859,14 @@ type SecretEditRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/SecretEditRequest.json
-	Schema   *string `json:"$schema,omitempty"`
-	Revision int64   `json:"revision"`
-	Value    string  `json:"value"`
+	Schema     *string                      `json:"$schema,omitempty"`
+	Encryption *SecretEditRequestEncryption `json:"encryption,omitempty"`
+	Revision   int64                        `json:"revision"`
+	Value      string                       `json:"value"`
 }
+
+// SecretEditRequestEncryption defines model for SecretEditRequest.Encryption.
+type SecretEditRequestEncryption string
 
 // SecretValue defines model for SecretValue.
 type SecretValue struct {
@@ -4989,6 +5135,8 @@ type SoftwareActivation struct {
 	Schema               *string                     `json:"$schema,omitempty"`
 	AgentApplied         bool                        `json:"agent_applied"`
 	AgentWorkItemId      *string                     `json:"agent_work_item_id,omitempty"`
+	ConsoleApplied       bool                        `json:"console_applied"`
+	ConsoleWorkItemId    *string                     `json:"console_work_item_id,omitempty"`
 	ControllerApplied    bool                        `json:"controller_applied"`
 	ControllerWorkItemId *string                     `json:"controller_work_item_id,omitempty"`
 	ErrorCode            *string                     `json:"error_code,omitempty"`
@@ -8696,7 +8844,7 @@ type ClientInterface interface {
 	// Corresponds with PATCH /entries/{id} (the `EntryEdit` operationId).
 	EntryEdit(ctx context.Context, id string, params *EntryEditParams, body EntryEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// EntryReveal Reveal an encrypted Entry value
+	// EntryReveal Read a resolved Entry value
 	//
 	// Corresponds with GET /entries/{id}/value (the `EntryReveal` operationId).
 	EntryReveal(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -11228,7 +11376,7 @@ func (c *Client) EntryEdit(ctx context.Context, id string, params *EntryEditPara
 	return c.Client.Do(req)
 }
 
-// EntryReveal Reveal an encrypted Entry value
+// EntryReveal Read a resolved Entry value
 //
 // Corresponds with GET /entries/{id}/value (the `EntryReveal` operationId).
 func (c *Client) EntryReveal(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -25316,7 +25464,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /entries/{id} (the `EntryEdit` operationId).
 	EntryEditWithResponse(ctx context.Context, id string, params *EntryEditParams, body EntryEditJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryEditResponse, error)
 
-	// EntryRevealWithResponse Reveal an encrypted Entry value
+	// EntryRevealWithResponse Read a resolved Entry value
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -36777,7 +36925,7 @@ func (c *ClientWithResponses) EntryEditWithResponse(ctx context.Context, id stri
 	return ParseEntryEditResponse(rsp)
 }
 
-// EntryRevealWithResponse Reveal an encrypted Entry value
+// EntryRevealWithResponse Read a resolved Entry value
 //
 // Returns a wrapper object for the known response body format(s).
 //

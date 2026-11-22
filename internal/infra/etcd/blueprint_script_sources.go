@@ -238,12 +238,16 @@ func (ledger *ReleaseLedger) ReleaseHookSourceMembers(
 		}
 
 		for _, binding := range snapshot.EntryBindings {
+			encrypted, storageErr := scriptBindingValueEncrypted(binding)
+			if storageErr != nil {
+				return nil, storageErr
+			}
 			key := entryvalues.PlainKey(
 				binding.EntryId,
 				binding.ValueGenerationId,
 			)
 			sourceDigest := ""
-			if binding.Secret {
+			if encrypted {
 				key = entryvalues.SecretKey(
 					binding.EntryId,
 					binding.ValueGenerationId,
@@ -258,7 +262,7 @@ func (ledger *ReleaseLedger) ReleaseHookSourceMembers(
 			if readErr != nil {
 				return nil, readErr
 			}
-			if binding.Secret {
+			if encrypted {
 				generation, decodeErr := entryvalues.DecodeSecret(value.Value)
 				if decodeErr != nil {
 					return nil, decodeErr
@@ -321,4 +325,20 @@ func (ledger *ReleaseLedger) ReleaseHookSourceMembers(
 		}
 	}
 	return members, nil
+}
+
+func scriptBindingValueEncrypted(binding *agentpb.ScriptRunnerEntryBinding) (bool, error) {
+	if binding == nil {
+		return false, errs.New(errs.KindValidationFailed, "Blueprint Script Entry binding is invalid")
+	}
+	switch binding.ValueStorage {
+	case agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_SECRET:
+		return true, nil
+	case agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_PLAIN:
+		return false, nil
+	case agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_UNSPECIFIED:
+		return binding.Secret, nil
+	default:
+		return false, errs.New(errs.KindValidationFailed, "Blueprint Script Entry storage is invalid")
+	}
 }

@@ -211,11 +211,12 @@ func validateDesiredEntries(values map[string]core.EntrySpec) error {
 		return errs.New(errs.KindValidationFailed, "Environment desired Entries exceed the supported bound")
 	}
 	for key, entry := range values {
-		if entry.Secret && entry.Source.Literal != "" {
-			return errs.New(errs.KindValidationFailed, "Environment desired input contains secret plaintext")
-		}
-		if _, err := core.ProjectEntrySpec(key, entry, "ev_00000000000000000000000000"); err != nil {
+		projected, err := core.ProjectEntrySpec(key, entry, "ev_00000000000000000000000000")
+		if err != nil {
 			return errs.Wrap(errs.KindValidationFailed, err)
+		}
+		if projected.ValueMetadataProtected() && entry.Source.Literal != "" {
+			return errs.New(errs.KindValidationFailed, "Environment desired input contains protected plaintext")
 		}
 	}
 	return nil

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -302,6 +303,42 @@ func TestConsoleUnavailableWithoutEmbeddedAssets(t *testing.T) {
 	assertConsoleProblem(t, response, errs.CodeRequestFailed)
 }
 
+// Rationale: an API-changing paired upgrade may briefly have no compatible
+// Console. The Controller API remains the recovery surface while static assets
+// stay fail-closed, and the same handler observes activation without restart.
+func TestConsoleCompatibilityGateDoesNotBlockAPIOrRequireHandlerRestart(t *testing.T) {
+	t.Parallel()
+	assets := &switchingConsoleAssets{err: errs.New(errs.KindRequestUnavailable, "Console API mismatch")}
+	server := &Server{
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Mux:     http.NewServeMux(),
+		console: assets,
+	}
+	server.Mux.HandleFunc("GET /api/v1/ping", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("api-online"))
+	})
+	handler := server.requestHandler()
+
+	api := httptest.NewRecorder()
+	handler.ServeHTTP(api, httptest.NewRequest(http.MethodGet, "/api/v1/ping", nil))
+	if api.Code != http.StatusOK || api.Body.String() != "api-online" {
+		t.Fatalf("API response = %d %q", api.Code, api.Body.String())
+	}
+	unavailable := httptest.NewRecorder()
+	handler.ServeHTTP(unavailable, httptest.NewRequest(http.MethodGet, "/", nil))
+	if unavailable.Code != http.StatusServiceUnavailable {
+		t.Fatalf("mismatched Console response = %d %q", unavailable.Code, unavailable.Body.String())
+	}
+
+	assets.activate(fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("new-console")}})
+	activated := httptest.NewRecorder()
+	handler.ServeHTTP(activated, httptest.NewRequest(http.MethodGet, "/", nil))
+	if activated.Code != http.StatusOK || activated.Body.String() != "new-console" {
+		t.Fatalf("activated Console response = %d %q", activated.Code, activated.Body.String())
+	}
+}
+
 // Rationale: content types never depend on the host MIME registry or content sniffing.
 func TestConsoleContentTypeMapIsClosedAndCaseSensitive(t *testing.T) {
 	t.Parallel()
@@ -335,8 +372,28 @@ func consoleTestServer(assets fs.FS) *Server {
 	return &Server{
 		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Mux:     http.NewServeMux(),
-		console: assets,
+		console: FixedConsoleAssets(assets),
 	}
+}
+
+type switchingConsoleAssets struct {
+	mu     sync.RWMutex
+	assets fs.FS
+	err    error
+}
+
+func (assets *switchingConsoleAssets) Assets() (fs.FS, error) {
+	assets.mu.RLock()
+	defer assets.mu.RUnlock()
+	return assets.assets, assets.err
+}
+
+func (*switchingConsoleAssets) BindAPIDocument([]byte) error { return nil }
+
+func (assets *switchingConsoleAssets) activate(active fs.FS) {
+	assets.mu.Lock()
+	defer assets.mu.Unlock()
+	assets.assets, assets.err = active, nil
 }
 
 func assertConsoleProblem(t *testing.T, response *httptest.ResponseRecorder, code errs.Code) {

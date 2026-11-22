@@ -2,12 +2,14 @@ package operations
 
 import (
 	"context"
+	"unicode/utf8"
+
+	"github.com/AlanD20/groundplane/internal/core"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -33,6 +35,11 @@ type entryReadRepository interface {
 		string,
 		string,
 	) (entryvalues.SecretGeneration, bool, error)
+	GetPlainEntryValue(
+		context.Context,
+		string,
+		string,
+	) (entryvalues.PlainGeneration, bool, error)
 }
 
 type entryReadService struct {
@@ -100,11 +107,13 @@ func (service *entryReadService) RevealEntry(ctx context.Context, entryID string
 	if err != nil {
 		return "", err
 	}
-	if !current.Record.Entry.Secret {
-		return "", errs.New(errs.KindValidationFailed, "Entry value reveal requires a secret Entry")
+	switch current.Record.Entry.Kind {
+	case core.EntryKindEnv, core.EntryKindFile:
+	default:
+		return "", errs.New(errs.KindValidationFailed, "Entry value read requires a valid Entry kind")
 	}
 	var revealed string
-	available, err := service.openSelectedSecretValue(ctx, current.Record, func(plaintext []byte) error {
+	available, err := service.openSelectedValue(ctx, current.Record, func(plaintext []byte) error {
 		if !utf8.Valid(plaintext) {
 			return errs.New(errs.KindInternal, "Entry plaintext is not valid UTF-8")
 		}
@@ -133,18 +142,34 @@ func (service *entryReadService) SecretValueEmpty(
 		return false, errs.New(errs.KindValidationFailed, "Entry empty-value status requires a secret Entry")
 	}
 	empty := false
-	_, err := service.openSelectedSecretValue(ctx, record, func(plaintext []byte) error {
+	_, err := service.openSelectedValue(ctx, record, func(plaintext []byte) error {
 		empty = len(plaintext) == 0
 		return nil
 	})
 	return empty, err
 }
 
-func (service *entryReadService) openSelectedSecretValue(
+func (service *entryReadService) openSelectedValue(
 	ctx context.Context,
 	record entryrecord.Record,
 	consume secretvalue.PlaintextConsumer,
 ) (bool, error) {
+	if !record.Entry.Encrypted() {
+		stored, found, err := service.repository.GetPlainEntryValue(
+			ctx,
+			record.Entry.ID,
+			record.CurrentValueGenerationID,
+		)
+		if err != nil || !found {
+			return found, err
+		}
+		defer clear(stored.Content)
+		if stored.EnvironmentID != record.EnvironmentID || stored.EntryID != record.Entry.ID ||
+			stored.GenerationID != record.CurrentValueGenerationID {
+			return false, errs.New(errs.KindInternal, "Entry selected plain value generation is missing or mismatched")
+		}
+		return true, consume(stored.Content)
+	}
 	stored, found, err := service.repository.GetSecretEntryValue(
 		ctx,
 		record.Entry.ID,
@@ -264,4 +289,12 @@ func (repository *durableEntryReadRepository) GetSecretEntryValue(
 	generationID string,
 ) (entryvalues.SecretGeneration, bool, error) {
 	return repository.values.GetSecret(ctx, entryID, generationID)
+}
+
+func (repository *durableEntryReadRepository) GetPlainEntryValue(
+	ctx context.Context,
+	entryID string,
+	generationID string,
+) (entryvalues.PlainGeneration, bool, error) {
+	return repository.values.GetPlain(ctx, entryID, generationID)
 }

@@ -16,6 +16,7 @@ func Response(record entryrecord.Record) apiTypes.Entry {
 			Kind: string(entry.Source.Kind), Literal: entry.Source.Literal, SecretRef: entry.Source.SecretRef,
 		},
 		Exposure: append([]string(nil), entry.Exposure...), Secret: entry.Secret,
+		Encryption:        entry.EffectiveEncryption(),
 		ReconciliationKey: record.BlueprintKey,
 	}
 	if entry.UID != nil {

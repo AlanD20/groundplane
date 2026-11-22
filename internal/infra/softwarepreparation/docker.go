@@ -210,11 +210,13 @@ func (operation *dockerOperation) packageController(
 		"COPY controller /controller\n" +
 		"COPY controller-release.json /controller-release.json\n" +
 		"COPY groundplane /groundplane\n" +
+		"COPY openapi.json /openapi.json\n" +
 		"LABEL org.opencontainers.image.source=\"" + githubSourceURL + "\" \\\n" +
 		"      org.opencontainers.image.revision=\"" + revision + "\" \\\n" +
 		"      org.opencontainers.image.version=\"" + version + "\" \\\n" +
 		"      org.groundplane.artifact=\"controller-bundle\" \\\n" +
-		"      org.groundplane.controller.sha256=\"" + digests.binary + "\"\n")
+		"      org.groundplane.controller.sha256=\"" + digests.binary + "\" \\\n" +
+		"      org.groundplane.api.sha256=\"" + digests.api + "\"\n")
 	if err := os.WriteFile(filepath.Join(payload, "Dockerfile.groundplane-bundle"), dockerfile, 0o600); err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}
@@ -237,6 +239,7 @@ func (operation *dockerOperation) packageController(
 	}
 	if inspection.Config.Labels["org.groundplane.artifact"] != "controller-bundle" ||
 		inspection.Config.Labels["org.groundplane.controller.sha256"] != digests.binary ||
+		inspection.Config.Labels["org.groundplane.api.sha256"] != digests.api ||
 		inspection.Config.Labels["org.opencontainers.image.revision"] != revision {
 		return "", errs.New(errs.KindStateConflict, "controller OCI bundle labels are invalid")
 	}

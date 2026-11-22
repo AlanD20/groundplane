@@ -268,7 +268,7 @@ func (repository *durableRepository) BlueprintEntryValueGenerationExists(
 	ctx context.Context,
 	record entryrecord.Record,
 ) (bool, error) {
-	if record.Entry.Secret {
+	if record.Entry.Encrypted() {
 		value, found, err := repository.values.GetSecret(ctx, record.Entry.ID, record.CurrentValueGenerationID)
 		defer clear(value.Ciphertext)
 		return found && value.EnvironmentID == record.EnvironmentID, err

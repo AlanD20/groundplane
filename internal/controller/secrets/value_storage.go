@@ -20,6 +20,10 @@ func configurationSensitive(input apiTypes.SecretCreateRequest) bool {
 	return input.Sensitive == nil || *input.Sensitive
 }
 
+func validConfigurationEncryption(encryption string) bool {
+	return encryption == "" || encryption == "age" || encryption == "none"
+}
+
 func storeConfigurationValue(
 	ctx context.Context,
 	protector *secretvalue.Protector,

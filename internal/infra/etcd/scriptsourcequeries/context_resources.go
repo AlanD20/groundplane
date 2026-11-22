@@ -1,10 +1,11 @@
 package scriptsourcequeries
 
 import (
-	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
+	"github.com/AlanD20/groundplane/internal/core"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -57,6 +58,7 @@ func validateScriptContextResources(sources ScriptExecutionSources, snapshot *ag
 func scriptContextEntryBindingMatches(record entryrecord.Record, binding *agentpb.ScriptRunnerEntryBinding) bool {
 	expected := &agentpb.ScriptRunnerEntryBinding{
 		EntryId: record.Entry.ID, ValueGenerationId: record.CurrentValueGenerationID, Secret: record.Entry.Secret,
+		ValueStorage: scriptContextEntryValueStorage(record.Entry),
 		// Private value preparation owns the plaintext hash; metadata must match
 		// independently without decrypting anything at the publication boundary.
 		Sha256: binding.Sha256,
@@ -76,4 +78,15 @@ func scriptContextEntryBindingMatches(record entryrecord.Record, binding *agentp
 		expected.EnvironmentKey = record.Entry.Key
 	}
 	return proto.Equal(expected, binding)
+}
+
+func scriptContextEntryValueStorage(entry core.EnvEntry) agentpb.ScriptEntryValueStorage {
+	switch entry.Encryption {
+	case "age":
+		return agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_SECRET
+	case "none":
+		return agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_PLAIN
+	default:
+		return agentpb.ScriptEntryValueStorage_SCRIPT_ENTRY_VALUE_STORAGE_UNSPECIFIED
+	}
 }

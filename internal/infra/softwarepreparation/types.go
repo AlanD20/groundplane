@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/infra/consolerelease"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -52,15 +53,18 @@ type Selection string
 const (
 	SelectionController Selection = "controller"
 	SelectionAgent      Selection = "agent"
+	SelectionConsole    Selection = "console"
 	SelectionBoth       Selection = "both"
+	SelectionAll        Selection = "all"
 )
 
 func (selection Selection) valid() bool {
-	return selection == SelectionController || selection == SelectionAgent || selection == SelectionBoth
+	return selection == SelectionController || selection == SelectionAgent || selection == SelectionConsole ||
+		selection == SelectionBoth || selection == SelectionAll
 }
 
 func (selection Selection) includesController() bool {
-	return selection == SelectionController || selection == SelectionBoth
+	return selection == SelectionController || selection == SelectionBoth || selection == SelectionAll
 }
 
 func (selection Selection) IncludesController() bool { return selection.includesController() }
@@ -68,8 +72,14 @@ func (selection Selection) IncludesController() bool { return selection.includes
 func (selection Selection) IncludesAgent() bool { return selection.includesAgent() }
 
 func (selection Selection) includesAgent() bool {
-	return selection == SelectionAgent || selection == SelectionBoth
+	return selection == SelectionAgent || selection == SelectionBoth || selection == SelectionAll
 }
+
+func (selection Selection) includesConsole() bool {
+	return selection == SelectionConsole || selection == SelectionAll
+}
+
+func (selection Selection) IncludesConsole() bool { return selection.includesConsole() }
 
 type SourceKind string
 
@@ -126,6 +136,7 @@ type ResolvedSource struct {
 	Platform          Platform         `json:"platform"`
 	ControllerRelease *ResolvedRelease `json:"controller_release,omitempty"`
 	AgentRelease      *ResolvedRelease `json:"agent_release,omitempty"`
+	ConsoleRelease    *ResolvedRelease `json:"console_release,omitempty"`
 }
 
 func (source ResolvedSource) Equal(other ResolvedSource) bool {
@@ -133,7 +144,8 @@ func (source ResolvedSource) Equal(other ResolvedSource) bool {
 		source.OriginalRef == other.OriginalRef && source.ResolvedSHA == other.ResolvedSHA &&
 		source.CommitTime.Equal(other.CommitTime) && source.Platform == other.Platform &&
 		equalResolvedRelease(source.ControllerRelease, other.ControllerRelease) &&
-		equalResolvedRelease(source.AgentRelease, other.AgentRelease)
+		equalResolvedRelease(source.AgentRelease, other.AgentRelease) &&
+		equalResolvedRelease(source.ConsoleRelease, other.ConsoleRelease)
 }
 
 func ValidateResolvedSource(source ResolvedSource) error { return source.validate() }
@@ -165,6 +177,7 @@ type ControllerResult struct {
 	BinarySHA256   string   `json:"binary_sha256"`
 	MetadataSHA256 string   `json:"metadata_sha256"`
 	CLISHA256      string   `json:"cli_sha256"`
+	APISHA256      string   `json:"api_sha256,omitempty"`
 }
 
 type AgentResult struct {
@@ -172,15 +185,20 @@ type AgentResult struct {
 	UpstreamReference string   `json:"upstream_reference,omitempty"`
 }
 
+type ConsoleResult struct {
+	Artifact consolerelease.Artifact `json:"artifact"`
+}
+
 type Result struct {
 	Source     ResolvedSource    `json:"source"`
 	Controller *ControllerResult `json:"controller,omitempty"`
 	Agent      *AgentResult      `json:"agent,omitempty"`
+	Console    *ConsoleResult    `json:"console,omitempty"`
 }
 
 func (result Result) Equal(other Result) bool {
 	return result.Source.Equal(other.Source) && equalControllerResult(result.Controller, other.Controller) &&
-		equalAgentResult(result.Agent, other.Agent)
+		equalAgentResult(result.Agent, other.Agent) && equalConsoleResult(result.Console, other.Console)
 }
 
 func equalControllerResult(left, right *ControllerResult) bool {
@@ -197,6 +215,13 @@ func equalAgentResult(left, right *AgentResult) bool {
 	return *left == *right
 }
 
+func equalConsoleResult(left, right *ConsoleResult) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
+}
+
 type Phase string
 
 const (
@@ -204,6 +229,7 @@ const (
 	PhasePreparing           Phase = "preparing"
 	PhaseAgentPublished      Phase = "agent_published"
 	PhaseControllerPublished Phase = "controller_published"
+	PhaseConsolePublished    Phase = "console_published"
 	PhaseVerified            Phase = "verified"
 	PhaseFailed              Phase = "failed"
 )
@@ -235,9 +261,20 @@ type Preparer struct {
 	commands      runner.Runner
 	workspaceRoot string
 	http          *http.Client
+	console       ConsoleStore
+}
+
+type ConsoleStore interface {
+	StageArchive(context.Context, string, string, string, string) (consolerelease.Artifact, error)
+	Verify(consolerelease.Artifact) error
+	Compatible(consolerelease.Artifact) error
 }
 
 func NewPreparer(commands runner.Runner, workspaceRoot string) (*Preparer, error) {
+	return NewPreparerWithConsole(commands, workspaceRoot, nil)
+}
+
+func NewPreparerWithConsole(commands runner.Runner, workspaceRoot string, console ConsoleStore) (*Preparer, error) {
 	if commands == nil {
 		return nil, errs.New(errs.KindInternal, "software preparation runner is required")
 	}
@@ -271,7 +308,7 @@ func NewPreparer(commands runner.Runner, workspaceRoot string) (*Preparer, error
 			return nil
 		},
 	}
-	return &Preparer{commands: commands, workspaceRoot: clean, http: client}, nil
+	return &Preparer{commands: commands, workspaceRoot: clean, http: client, console: console}, nil
 }
 
 func trustedGitHubHost(host string) bool {
@@ -288,8 +325,12 @@ func (source ResolvedSource) validate() error {
 		return errs.New(errs.KindValidationFailed, "software preparation platform does not match this host")
 	}
 	if source.SourceKind == SourceRef {
+		if source.Selection.includesConsole() {
+			return errs.New(errs.KindStrategyNotImplemented, "Console and All preparation require a published release")
+		}
 		if !commitPattern.MatchString(source.ResolvedSHA) || source.CommitTime.Before(time.Unix(0, 0)) ||
-			source.CommitTime.Nanosecond() != 0 || source.ControllerRelease != nil || source.AgentRelease != nil {
+			source.CommitTime.Nanosecond() != 0 || source.ControllerRelease != nil || source.AgentRelease != nil ||
+			source.ConsoleRelease != nil {
 			return errs.New(errs.KindValidationFailed, "resolved source-ref authority is invalid")
 		}
 		return nil
@@ -299,7 +340,8 @@ func (source ResolvedSource) validate() error {
 		return errs.New(errs.KindValidationFailed, "published release tag is outside its component namespace")
 	}
 	if source.Selection.includesController() != (source.ControllerRelease != nil) ||
-		source.Selection.includesAgent() != (source.AgentRelease != nil) {
+		source.Selection.includesAgent() != (source.AgentRelease != nil) ||
+		source.Selection.includesConsole() != (source.ConsoleRelease != nil) {
 		return errs.New(errs.KindValidationFailed, "published release component authority is incomplete")
 	}
 	if source.ControllerRelease != nil {
@@ -311,6 +353,18 @@ func (source ResolvedSource) validate() error {
 		if err := source.AgentRelease.validate(SelectionAgent); err != nil {
 			return err
 		}
+	}
+	if source.ConsoleRelease != nil {
+		if err := source.ConsoleRelease.validate(SelectionConsole); err != nil {
+			return err
+		}
+	}
+	if source.Selection == SelectionAll && (source.ControllerRelease.ResolvedSHA != source.AgentRelease.ResolvedSHA ||
+		source.ControllerRelease.ResolvedSHA != source.ConsoleRelease.ResolvedSHA) {
+		return errs.New(
+			errs.KindStateConflict,
+			"All requires Controller, Agent, and Console releases from the same commit",
+		)
 	}
 	return nil
 }
@@ -342,7 +396,7 @@ func validOriginalRef(value string) bool {
 
 func validReleaseTag(selection Selection, value string) bool {
 	prefix := "v"
-	if selection != SelectionBoth {
+	if selection != SelectionBoth && selection != SelectionAll {
 		prefix = string(selection) + "/v"
 	}
 	return strings.HasPrefix(value, prefix) && versionPattern.MatchString(strings.TrimPrefix(value, prefix))

@@ -24,6 +24,7 @@ type acceptedEntryBulkUpsert struct {
 	Entries       []acceptedBulkEntry               `json:"entries"`
 	Exposure      []string                          `json:"exposure"`
 	Secret        bool                              `json:"secret"`
+	Encryption    string                            `json:"encryption,omitempty"`
 	After         []string                          `json:"after,omitempty"`
 	Locator       idempotency.IdempotencyLocator    `json:"locator"`
 	Intent        idempotency.ProtectedIntentRecord `json:"intent"`
@@ -40,6 +41,7 @@ func (request acceptedEntryBulkUpsert) input() (entryBulkUpsertInput, error) {
 			Entries:       entries,
 			Exposure:      request.Exposure,
 			Secret:        request.Secret,
+			Encryption:    request.Encryption,
 			After:         request.After,
 		},
 	)
@@ -136,6 +138,7 @@ func (service *entryBulkUpsertService) BulkUpsertEntries(
 		Entries:       entries,
 		Exposure:      input.exposure,
 		Secret:        input.secret,
+		Encryption:    input.encryption,
 		After:         input.after,
 		Locator:       locator,
 		Intent:        intent.Record(),

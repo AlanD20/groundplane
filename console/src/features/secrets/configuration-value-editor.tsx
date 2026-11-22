@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
+import { ConfigurationEncryption } from "@/components/common/configuration-encryption";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +43,8 @@ export function ConfigurationValueEditor({
   const [typed, setTyped] = useState("");
   const [draft, setDraft] = useState("");
   const [initial, setInitial] = useState("");
+  const [encryption, setEncryption] = useState(secret.encryption);
+  const [initialEncryption, setInitialEncryption] = useState(secret.encryption);
   const [revision, setRevision] = useState<number>();
   const [loading, setLoading] = useState(authorized);
   const [saving, setSaving] = useState(false);
@@ -88,6 +91,8 @@ export function ConfigurationValueEditor({
           setDraft(value.value);
           setInitial(value.value);
           setRevision(after.revision);
+          setEncryption(after.encryption);
+          setInitialEncryption(after.encryption);
         }
       } catch (cause) {
         if (!abort.signal.aborted)
@@ -105,12 +110,12 @@ export function ConfigurationValueEditor({
 
   const oversized = new TextEncoder().encode(draft).length > 255 * 1024;
   async function save() {
-    if (saving || loading || !revision || oversized || draft === initial)
+    if (saving || loading || !revision || oversized || (draft === initial && encryption === initialEncryption))
       return;
     setSaving(true);
     setError(null);
     const submission = pending.current ?? {
-      body: { revision, value: draft },
+      body: { revision, value: draft, encryption },
       key: crypto.randomUUID(),
     };
     pending.current = submission;
@@ -143,7 +148,7 @@ export function ConfigurationValueEditor({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !saving && !pending.current) onClose();
       }}
     >
       <DialogContent className="max-w-5xl">
@@ -194,6 +199,9 @@ export function ConfigurationValueEditor({
               disabled={saving || !!pending.current}
             />
           ) : null}
+          {authorized && revision && <ConfigurationEncryption value={encryption}
+            sensitive={secret.sensitive} disabled={loading || saving || !!pending.current}
+            onChange={setEncryption} />}
           {oversized && (
             <p role="alert" className="text-sm text-destructive">
               Values must not exceed 255 KiB.
@@ -218,7 +226,7 @@ export function ConfigurationValueEditor({
                 Reload
               </Button>
             )}
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving || !!pending.current}>
               Cancel
             </Button>
             {!authorized ? (
@@ -233,7 +241,7 @@ export function ConfigurationValueEditor({
                   saving ||
                   !revision ||
                   oversized ||
-                  draft === initial
+                  (draft === initial && encryption === initialEncryption)
                 }
               >
                 {saving

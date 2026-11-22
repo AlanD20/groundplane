@@ -79,13 +79,14 @@ func (service *Service) PrepareFinish(
 			}
 			continue
 		}
-		part, controllerApplied, agentApplied, failure, err := service.finishedItem(ctx, view, record)
+		part, controllerApplied, agentApplied, consoleApplied, failure, err := service.finishedItem(ctx, view, record)
 		if err != nil {
 			return workqueue.Change{}, err
 		}
 		change.Conditions = append(change.Conditions, part.Conditions...)
 		progress.ControllerApplied = progress.ControllerApplied || controllerApplied
 		progress.AgentApplied = progress.AgentApplied || agentApplied
+		progress.ConsoleApplied = progress.ConsoleApplied || consoleApplied
 		if failure != nil && progress.ErrorCode == "" {
 			progress.ErrorCode, progress.ErrorDetail = failure.Code, failure.Summary()
 		}
@@ -117,11 +118,11 @@ func (service *Service) finishedItem(
 	ctx context.Context,
 	view workqueue.View,
 	record keyvalue.Versioned[activation.Record],
-) (workqueue.Change, bool, bool, *taskprogress.Failure, error) {
+) (workqueue.Change, bool, bool, bool, *taskprogress.Failure, error) {
 	item := view.Item.Item
 	if item.AttemptNumber == 0 {
 		if item.Outcome == workexecution.Succeeded {
-			return workqueue.Change{}, false, false, nil, errs.New(
+			return workqueue.Change{}, false, false, false, nil, errs.New(
 				errs.KindStateConflict,
 				"unstarted software work cannot claim activation",
 			)
@@ -137,7 +138,7 @@ func (service *Service) finishedItem(
 			repository := service.controllerRecords
 			capture, loadErr := repository.Load(ctx, item, view.ReadRevision)
 			if loadErr != nil {
-				return workqueue.Change{}, false, false, nil, loadErr
+				return workqueue.Change{}, false, false, false, nil, loadErr
 			}
 			reference, err = capture.Record.Reference()
 			change = workqueue.Change{
@@ -149,7 +150,7 @@ func (service *Service) finishedItem(
 			repository := service.agentRecords
 			capture, loadErr := repository.Load(ctx, item, view.ReadRevision)
 			if loadErr != nil {
-				return workqueue.Change{}, false, false, nil, loadErr
+				return workqueue.Change{}, false, false, false, nil, loadErr
 			}
 			reference, err = capture.Record.Reference()
 			change = workqueue.Change{
@@ -157,36 +158,42 @@ func (service *Service) finishedItem(
 					{Key: agentoperations.InputKey(item.ID), ModRevision: capture.Revision},
 				},
 			}
+		case workexecution.ConsoleSoftware:
+			reference, err = record.Record.ConsoleReference()
+			change = activationGuard(record)
 		default:
 			err = errs.New(errs.KindStateConflict, "software activation has an unknown work operation")
 		}
 		if err != nil {
-			return workqueue.Change{}, false, false, nil, err
+			return workqueue.Change{}, false, false, false, nil, err
 		}
 		if *item.Result != reference {
-			return workqueue.Change{}, false, false, nil, errs.New(
+			return workqueue.Change{}, false, false, false, nil, errs.New(
 				errs.KindStateConflict,
 				"unstarted software work has a different captured rejection",
 			)
 		}
-		return change, false, false, nil, nil
+		return change, false, false, false, nil, nil
 	}
 	_, attempt, err := service.queue.ReadAttempt(ctx, item.TaskID, item.ID, item.AttemptNumber, view.ReadRevision)
 	if err != nil {
-		return workqueue.Change{}, false, false, nil, err
+		return workqueue.Change{}, false, false, false, nil, err
 	}
 	var proof workqueue.Change
 	var result workexecution.Completion
-	var controllerApplied, agentApplied bool
+	var controllerApplied, agentApplied, consoleApplied bool
 	var failure *taskprogress.Failure
 	switch item.Operation {
 	case workexecution.SoftwareStaging:
 		saved, found, readErr := service.records.StagingResult(ctx, attempt.Attempt, view.ReadRevision)
 		if readErr != nil {
-			return proof, false, false, nil, readErr
+			return proof, false, false, false, nil, readErr
 		}
 		if !found {
-			return proof, false, false, nil, errs.New(errs.KindStateConflict, "software staging result is missing")
+			return proof, false, false, false, nil, errs.New(
+				errs.KindStateConflict,
+				"software staging result is missing",
+			)
 		}
 		proof, result, err = activation.PrepareStagingResult(record, saved, attempt.Attempt)
 		failure = saved.Record.Result.Failure
@@ -194,14 +201,17 @@ func (service *Service) finishedItem(
 		repository := service.controllerRecords
 		capture, readErr := repository.Load(ctx, item, view.ReadRevision)
 		if readErr != nil {
-			return proof, false, false, nil, readErr
+			return proof, false, false, false, nil, readErr
 		}
 		saved, found, readErr := repository.ReadResult(ctx, attempt.Attempt, view.ReadRevision)
 		if readErr != nil {
-			return proof, false, false, nil, readErr
+			return proof, false, false, false, nil, readErr
 		}
 		if !found {
-			return proof, false, false, nil, errs.New(errs.KindStateConflict, "Controller activation result is missing")
+			return proof, false, false, false, nil, errs.New(
+				errs.KindStateConflict,
+				"Controller activation result is missing",
+			)
 		}
 		proof, result, err = controllersoftware.PrepareResult(capture, saved, attempt.Attempt)
 		controllerApplied = saved.Record.Result.Journal != nil &&
@@ -213,23 +223,34 @@ func (service *Service) finishedItem(
 		repository := service.agentRecords
 		capture, readErr := repository.Load(ctx, item, view.ReadRevision)
 		if readErr != nil {
-			return proof, false, false, nil, readErr
+			return proof, false, false, false, nil, readErr
 		}
 		saved, found, readErr := repository.ReadResult(ctx, attempt.Attempt, view.ReadRevision)
 		if readErr != nil {
-			return proof, false, false, nil, readErr
+			return proof, false, false, false, nil, readErr
 		}
 		if !found {
-			return proof, false, false, nil, errs.New(errs.KindStateConflict, "Agent activation result is missing")
+			return proof, false, false, false, nil, errs.New(
+				errs.KindStateConflict,
+				"Agent activation result is missing",
+			)
 		}
 		proof, result, err = agentoperations.PrepareResult(capture, saved, attempt.Attempt)
 		agentApplied = saved.Record.Result.Observed == agentoperations.ReadyDesired
 		failure = saved.Record.Result.Failure
+	case workexecution.ConsoleSoftware:
+		if service.console == nil {
+			err = errs.New(errs.KindStateConflict, "Console activation has no verified bundle store")
+			break
+		}
+		current, found := service.console.Current()
+		result, err = consoleCompletion(record.Record, attempt.Attempt, current, found)
+		consoleApplied = result.Outcome == workexecution.Succeeded
 	default:
 		err = errs.New(errs.KindStateConflict, "software activation has an unknown work operation")
 	}
 	if err != nil {
-		return proof, false, false, nil, err
+		return proof, false, false, false, nil, err
 	}
 	accepted := item.Result
 	if attempt.Attempt.Direction == workexecution.Recovery {
@@ -239,7 +260,7 @@ func (service *Service) finishedItem(
 		accepted == nil ||
 		*accepted != result.Evidence ||
 		*attempt.Attempt.Result != result.Evidence {
-		return workqueue.Change{}, false, false, nil, errs.New(
+		return workqueue.Change{}, false, false, false, nil, errs.New(
 			errs.KindStateConflict,
 			"software activation still has unresolved or unaccepted effects",
 		)
@@ -248,5 +269,5 @@ func (service *Service) finishedItem(
 		proof.Conditions,
 		keyvalue.Condition{Key: workqueue.AttemptKey(attempt.Attempt.ID), ModRevision: attempt.Revision},
 	)
-	return proof, controllerApplied, agentApplied, failure, nil
+	return proof, controllerApplied, agentApplied, consoleApplied, failure, nil
 }

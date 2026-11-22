@@ -1,4 +1,4 @@
-.PHONY: build cli controller controller-binary controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify deployment-check tooling-check verifier-helper-check format-check clean test tidy ci
+.PHONY: build cli controller controller-binary controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-bundle console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify deployment-check tooling-check verifier-helper-check format-check clean test tidy ci
 
 # Initialize validated repo-local paths before each recipe and recursive make.
 
@@ -112,6 +112,9 @@ console-verify:
 			*) echo "unfingerprinted Console asset: $$file" >&2; exit 1 ;; \
 		esac; \
 	done
+
+console-release-bundle: console
+	python3 scripts/release_console_bundle.py --version "$(VERSION)"
 
 console-release-smoke: | $(BIN_DIR)
 	@set -eu; \

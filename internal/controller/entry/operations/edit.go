@@ -22,9 +22,10 @@ const (
 )
 
 type entryEditInput struct {
-	After    []string
-	Source   core.EntrySource
-	Exposure []string
+	After      []string
+	Source     core.EntrySource
+	Exposure   []string
+	Encryption string
 }
 
 type entryEditEvidence struct {
@@ -95,11 +96,7 @@ func (service *durableEntryEditIdempotency) Prepare(
 		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
 		Path:   []requestidempotency.PathBinding{{Name: "id", Value: entryID}},
 		Query:  requestidempotency.Object(),
-		Body: requestidempotency.JSONBody(requestidempotency.Object(
-			requestidempotency.Field{Name: "after", Value: acceptedaction.AfterValue(input.After)},
-			requestidempotency.Field{Name: "exposure", Value: canonicalEntryExposure(input.Exposure)},
-			requestidempotency.Field{Name: "source", Value: canonicalEntryEditSource(input.Source)},
-		)),
+		Body:   requestidempotency.JSONBody(requestidempotency.Object(entryEditIntentFields(input)...)),
 	})
 	if err != nil {
 		return entryEditEvidence{}, err
@@ -158,6 +155,9 @@ func (service *durableEntryEditIdempotency) ResolveUnknown(
 }
 
 func prepareEntryEditInput(input apiTypes.EntryEditRequest) (entryEditInput, error) {
+	if err := validateEntryEncryption(input.Encryption); err != nil {
+		return entryEditInput{}, err
+	}
 	source, err := entryCreationSource(input.Source)
 	if err != nil {
 		return entryEditInput{}, err
@@ -166,7 +166,21 @@ func prepareEntryEditInput(input apiTypes.EntryEditRequest) (entryEditInput, err
 	if err != nil {
 		return entryEditInput{}, err
 	}
-	return entryEditInput{Source: source, Exposure: exposure}, nil
+	return entryEditInput{Source: source, Exposure: exposure, Encryption: input.Encryption}, nil
+}
+
+func entryEditIntentFields(input entryEditInput) []requestidempotency.Field {
+	fields := []requestidempotency.Field{
+		{Name: "after", Value: acceptedaction.AfterValue(input.After)},
+		{Name: "exposure", Value: canonicalEntryExposure(input.Exposure)},
+		{Name: "source", Value: canonicalEntryEditSource(input.Source)},
+	}
+	if input.Encryption != "" {
+		fields = append(fields, requestidempotency.Field{
+			Name: "encryption", Value: requestidempotency.String(input.Encryption),
+		})
+	}
+	return fields
 }
 
 func canonicalEntryEditSource(source core.EntrySource) requestidempotency.Value {

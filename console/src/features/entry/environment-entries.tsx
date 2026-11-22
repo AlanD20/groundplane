@@ -1,5 +1,6 @@
 import { ConfigurationTypeOptions } from "@/components/common/configuration-type-options";
 import { ConfigurationTypeFilter } from "@/components/common/configuration-type-filter";
+import { BulkConfigurationMenu, type BulkConfigurationKind } from "@/components/common/bulk-configuration-menu";
 import { EntryRemoveDialog } from "./entry-remove-dialog";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { EmptyState } from "@/components/common/empty-state";
@@ -23,7 +24,8 @@ import { EntryReferenceFields } from "./entry-reference-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import { Textarea } from "@/components/ui/textarea";
+import { ConfigurationEncryption } from "@/components/common/configuration-encryption";
+import { EntryLiteralValue } from "./entry-literal-value";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { Environment, EnvironmentEntry, Service } from "@/lib/types";
@@ -69,6 +71,8 @@ export function EnvVarsCard({
   const [factKey, setFactKey] = useState("");
   const [exposure, setExposure] = useState<string[]>([service?.name ?? "all"]);
   const [secret, setSecret] = useState(false);
+  const [encryption, setEncryption] = useState<"age" | "none">("none");
+  const [valueReady, setValueReady] = useState(true);
   const [editing, setEditing] = useState<EnvironmentEntry | null>(null);
   const [removing, setRemoving] = useState<EnvironmentEntry | null>(null);
   const [after, setAfter] = useState<string[]>([]);
@@ -76,6 +80,7 @@ export function EnvVarsCard({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkKind, setBulkKind] = useState<BulkConfigurationKind>("variables");
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const project = store.getProject(params.tenant, params.project);
@@ -95,6 +100,7 @@ export function EnvVarsCard({
     setFactGrantAttach(fromGrant);
     setFactKey(fromValue);
     setSecret(fact.secret);
+    setEncryption(fact.secret ? "age" : "none");
     setKey(fromValue);
     setOpen(true);
     setSearch(
@@ -132,13 +138,15 @@ export function EnvVarsCard({
   function startEdit(entry: EnvironmentEntry) {
     setKind(entry.type);
     setSecret(entry.secret);
+    setEncryption(entry.encryption ?? (entry.secret ? "age" : "none"));
+    setValueReady(!entry.secret && entry.encryption !== "age");
     setKey(entry.key ?? "");
     setPath(entry.path ?? "");
     setUID(String(entry.uid ?? 0));
     setGID(String(entry.gid ?? 0));
     setSourceKind(entry.source.kind);
     setValue(
-      entry.source.kind === "literal" && !entry.secret
+      entry.source.kind === "literal" && !entry.secret && entry.encryption !== "age"
         ? (entry.source.literal ?? "")
         : "",
     );
@@ -174,11 +182,17 @@ export function EnvVarsCard({
     setFactKey("");
     setExposure([service?.name ?? "all"]);
     setSecret(false);
+    setEncryption("none");
+    setValueReady(true);
     setSaveError(null);
   }
 
 
   async function saveEntry() {
+    if (sourceKind === "literal" && !valueReady) {
+      setSaveError("Load the current value, enter a replacement, or explicitly use an empty value.");
+      return;
+    }
     if (exposure.length === 0) {
       setSaveError("Select all services or at least one service.");
       return;
@@ -214,6 +228,7 @@ export function EnvVarsCard({
       if (editing) {
         await store.updateEntry(env.id, editing.id, {
           source,
+          encryption,
           exposure,
           after,
         });
@@ -225,6 +240,7 @@ export function EnvVarsCard({
           uid: kind === "file" ? Number(uid) : undefined,
           gid: kind === "file" ? Number(gid) : undefined,
           source,
+          encryption,
           exposure,
           secret,
           after,
@@ -248,7 +264,7 @@ export function EnvVarsCard({
     >
       <DialogHeader>
         <DialogTitle>
-          {editing ? "Edit variable or file" : "Add variable or file"} ·{" "}
+          {editing ? "Edit configuration" : "Add configuration"} ·{" "}
           {env.name}
         </DialogTitle>
       </DialogHeader>
@@ -263,6 +279,7 @@ export function EnvVarsCard({
               }
               setKind(type === "file" ? "file" : "env");
               setSecret(type === "secret");
+              setEncryption(type === "secret" ? "age" : "none");
             }}
           />
         </div>
@@ -342,39 +359,9 @@ export function EnvVarsCard({
             ))}
           </div>
         </div>
-        {sourceKind === "literal" && (
-          <div
-            className={
-              kind === "file"
-                ? "flex flex-col gap-1.5 md:col-span-2"
-                : "flex flex-col gap-1.5"
-            }
-          >
-            <Label htmlFor="entry-value">Value</Label>
-            {kind === "file" ? (
-              <Textarea
-                id="entry-value"
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                rows={6}
-                spellCheck={false}
-                className="font-mono text-xs"
-              />
-            ) : (
-              <Input
-                id="entry-value"
-                type={secret ? "password" : "text"}
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-              />
-            )}
-            {editing?.secret && (
-              <p className="text-xs text-muted-foreground">
-                Enter a replacement secret.
-              </p>
-            )}
-          </div>
-        )}
+        {sourceKind === "literal" && <EntryLiteralValue
+          key={editing?.id ?? "new"} entry={editing} file={kind === "file"} secret={secret}
+          value={value} onChange={setValue} ready={valueReady} onReadyChange={setValueReady} />}
         {sourceKind !== "literal" && (
           <EntryReferenceFields
             env={env}
@@ -392,7 +379,10 @@ export function EnvVarsCard({
               const source = store.reusableSecrets.find(
                 (item) => item.id === reference,
               );
-              if (source && !editing) setSecret(source.sensitive);
+              if (source && !editing) {
+                setSecret(source.sensitive);
+                setEncryption(source.sensitive ? "age" : "none");
+              }
             }}
             onConnectionChange={(source) => {
               setFactAttach(source.attachId);
@@ -415,9 +405,12 @@ export function EnvVarsCard({
           <EntryProtection
             secret={secret}
             editing={!!editing}
-            onChange={setSecret}
+            onChange={(secret) => { setSecret(secret); setEncryption(secret ? "age" : "none"); }}
           />
         )}
+        <div className="md:col-span-2">
+          <ConfigurationEncryption value={encryption} sensitive={secret} onChange={setEncryption} />
+        </div>
         {saveError && <p className="text-sm text-destructive">{saveError}</p>}
       </div>
       <TaskRunAfterSelector
@@ -435,6 +428,7 @@ export function EnvVarsCard({
             afterLoading ||
             (kind === "env" ? !key.trim() : !path.trim()) ||
             exposure.length === 0 ||
+            (sourceKind === "literal" && !valueReady) ||
             (sourceKind === "secret_ref" && !secretRef.trim()) ||
             (sourceKind === "fact" && (!factAttach.trim() || !factKey.trim()))
           }
@@ -445,7 +439,7 @@ export function EnvVarsCard({
             : editing
               ? "Save changes"
               : kind === "env"
-                ? "Add variable"
+                ? secret ? "Add secret" : "Add variable"
                 : "Add file"}
         </Button>
       </DialogFooter>
@@ -473,10 +467,11 @@ export function EnvVarsCard({
         )}
         exposure={entry.exposure}
         secret={entry.secret}
+        encryption={entry.encryption}
         emptySecretValue={entry.emptySecretValue}
         value={entry.secret ? undefined : (literal ?? "Resolved on apply")}
         copyValue={!entry.secret ? literal : undefined}
-        loadValue={entry.secret ? () => store.revealEntry(entry.id) : undefined}
+        loadValue={entry.secret || entry.encryption === "age" ? () => store.revealEntry(entry.id) : undefined}
         onEdit={() => startEdit(entry)}
         onRemove={() => setRemoving(entry)}
       />
@@ -494,26 +489,25 @@ export function EnvVarsCard({
         }
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setBulkOpen(true)}
-            >
-              Bulk edit
-            </Button>
+            <BulkConfigurationMenu size="sm" disabled={open || bulkOpen} onSelect={(kind) => {
+              setBulkKind(kind);
+              setBulkOpen(true);
+            }} />
             <CreationButton
               active={open || bulkOpen}
               variant="outline"
               size="sm"
               onClick={() => setOpen(true)}
             >
-              <Plus className="size-3.5" /> Add variable or file
+              <Plus className="size-3.5" /> Add configuration
             </CreationButton>
           </div>
         }
       >
         {!editing && editor}
         <BulkEntryDrawer
+          key={bulkKind}
+          kind={bulkKind}
           inline
           serviceName={service?.name}
           env={env}
@@ -529,7 +523,7 @@ export function EnvVarsCard({
           </p>
         )}
         <ListToolbar
-          label="Variables & files"
+          label="configuration"
           query={query}
           onQueryChange={setQuery}
           sort={table}
@@ -540,7 +534,7 @@ export function EnvVarsCard({
         >
           <ConfigurationTypeFilter value={typeFilter} onChange={setTypeFilter} />
         </ListToolbar>
-        <ul aria-label="Variables & files" className="min-w-0 space-y-2">
+        <ul aria-label="Configuration values" className="min-w-0 space-y-2">
           {editing &&
             open &&
             !table.rows.some((entry) => entry.id === editing.id) &&
@@ -552,8 +546,8 @@ export function EnvVarsCard({
             embedded
             title={
               entries.length
-                ? "No matching variables or files"
-                : "No variables or files yet"
+                ? "No matching configuration"
+                : "No configuration yet"
             }
             description={
               entries.length
@@ -562,7 +556,7 @@ export function EnvVarsCard({
             }
           />
         )}
-        <TablePagination table={table} label="Variables & files" />
+        <TablePagination table={table} label="Configuration values" />
         <p className="mt-2 text-xs text-muted-foreground">
           Saving updates desired configuration only. Deploy or apply the
           Blueprint to update managed files and running processes.

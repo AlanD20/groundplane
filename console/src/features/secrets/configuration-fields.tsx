@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { ConfigurationTypeOptions } from "@/components/common/configuration-type-options";
+import { ConfigurationEncryption } from "@/components/common/configuration-encryption";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { Input } from "@/components/ui/input";
@@ -118,23 +119,8 @@ export function ConfigurationFields({
         </div>
       )}
       <div className="space-y-2 border-t border-border pt-4 md:col-span-2">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <Checkbox
-            checked={draft.encryption === "age"}
-            onChange={(event) =>
-              update({ encryption: event.target.checked ? "age" : "none" })
-            }
-          />
-          Encrypt stored value
-        </label>
-        <p className="text-xs text-muted-foreground">
-          {draft.encryption === "age"
-            ? "Encrypted at rest in the Controller."
-            : "Stored without encryption in the Controller."}{" "}
-          {draft.sensitive
-            ? "Hidden until explicitly revealed, regardless of encryption."
-            : "Not classified as secret."}
-        </p>
+        <ConfigurationEncryption value={draft.encryption} sensitive={draft.sensitive}
+          onChange={(encryption) => update({ encryption })} />
       </div>
     </div>
   );

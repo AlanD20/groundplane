@@ -270,7 +270,7 @@ test "$actual" = "$checksum" || { echo 'Archive SHA256 mismatch; nothing execute
 python3 -c '
 import json, pathlib, sys, tarfile
 root = pathlib.Path(sys.argv[1])
-allowed = {"controller", "groundplane", "controller-release.json", "controller_release.py",
+allowed = {"controller", "groundplane", "controller-release.json", "openapi.json", "controller_release.py",
            "controller_bootstrap.py", "controller_update.py", "groundplane-controller.service",
            "groundplane.conf", "controller.yaml.example", "install_bundle.py",
            "install-runtime.sh", "setup-host.sh", "bundle.json", "install_agent.py", "release_selection.py",

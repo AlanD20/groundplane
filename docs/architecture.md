@@ -11,8 +11,8 @@ to a replacement container. The shared terminal owner governs host and container
 session limits, browser ownership, replay buffers and inactivity.
 
 Groundplane is a modular monolith with three Go binaries: Controller, Agent and
-CLI. The Console is a React/Vite SPA embedded in the Controller. One product
-decision has one owner, regardless of which client invokes it.
+CLI. The Console is a React/Vite SPA served by the Controller from a verified,
+independently selected static bundle. One product decision has one owner, regardless of which client invokes it.
 
 [Product scope](mvp.md) defines behavior. [Coding standards](standards.md) defines
 dependency and implementation rules. [Technical decisions](decisions/README.md)
@@ -168,7 +168,10 @@ it does not define product behavior or wire schemas. Environment operation state
 and observation are owned by their [feature](../console/src/features/environment).
 The existing plum/lavender light and dark design system remains shared.
 
-Production serves embedded Vite assets without Node or adjacent files. API and
+Production serves verified Vite assets without Node or adjacent build files.
+Embedded assets initialize the first durable selection; independent Console
+releases subsequently switch that selection. The release store owns manifest
+verification, API compatibility and bounded predecessor assets. API and
 operational routes take precedence over SPA fallback. Path validation and asset
 cache policy belong to the serving boundary, not individual pages.
 
