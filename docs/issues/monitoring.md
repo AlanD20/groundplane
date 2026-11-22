@@ -3,11 +3,13 @@
 Status: the visual direction and scoped navigation have been selected. The
 Console's Environment health roster and Service/Backing monitoring destinations
 use existing live runtime observations, including expiry, search and pagination.
-Shared read-only collection, bounded derived history and scoped query foundations
-are implemented. Their production lifecycle, public API/CLI and resource-chart
-integration remain unfinished; resource charts are not populated with
-demonstration data. This review records the remaining intended behavior before
-that work is promoted into the product and feature contracts.
+Shared read-only collection, bounded derived history, production lifecycle and
+Console/CLI/API integration are implemented in source. Real Docker/operator and
+upgrade qualification remain pending; production charts do not substitute
+demonstration data. The [monitoring guide](../features/monitoring.md) now owns
+operator behavior, and [Platform runtime](../decisions/platform-runtime.md#resource-telemetry)
+owns the implementation rationale. This review retains the selected visual
+direction and qualification concerns; it is not a delivery claim.
 
 The selected presentation is a health-first overview using the existing Console
 design system. There is one monitoring destination within each resource's own

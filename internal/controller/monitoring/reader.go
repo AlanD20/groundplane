@@ -69,6 +69,7 @@ type Reader struct {
 	backing      ReadBacking
 	consumers    ReadConsumers
 	observations HealthReader
+	health       HealthCache
 	host         *HostSampler
 	workloads    WorkloadCache
 	history      HistoryReader
@@ -76,14 +77,15 @@ type Reader struct {
 }
 
 func NewReader(hierarchy ReadHierarchy, services ReadServices, backing ReadBacking, consumers ReadConsumers,
-	observations HealthReader, host *HostSampler, workloads WorkloadCache,
+	observations HealthReader, health HealthCache, host *HostSampler, workloads WorkloadCache,
 	history HistoryReader, now func() time.Time) (*Reader, error) {
-	if hierarchy == nil || services == nil || backing == nil || consumers == nil || observations == nil ||
-		host == nil || workloads == nil || now == nil {
+	if hierarchy == nil || services == nil || backing == nil || consumers == nil || observations == nil || health == nil ||
+		host == nil || workloads == nil ||
+		now == nil {
 		return nil, errs.New(errs.KindInternal, "monitoring read dependencies are required")
 	}
 	return &Reader{hierarchy: hierarchy, services: services, backing: backing, consumers: consumers,
-		observations: observations, host: host, workloads: workloads, history: history, now: now}, nil
+		observations: observations, health: health, host: host, workloads: workloads, history: history, now: now}, nil
 }
 
 func (reader *Reader) Show(ctx context.Context, query Query) (api.MonitoringResponse, error) {

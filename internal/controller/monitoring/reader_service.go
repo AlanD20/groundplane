@@ -164,7 +164,7 @@ func (reader *Reader) serviceLive(sample ServiceSample, query Query) (api.Servic
 		Containers: api.Page[api.MonitoringContainer]{
 			Items: []api.MonitoringContainer{},
 		}, Volumes: []api.MonitoringVolume{}}
-	if !sample.ContainersComplete {
+	if !sample.ContainersComplete || !sample.Available {
 		if query.Cursor != "" {
 			return value, invalidContainerCursor()
 		}
@@ -183,7 +183,7 @@ func (reader *Reader) serviceLive(sample ServiceSample, query Query) (api.Servic
 		}
 	}
 	var containers []ContainerSample
-	if sample.ContainersComplete {
+	if sample.ContainersComplete && sample.Available {
 		containers = append(containers, sample.Containers...)
 	}
 	sort.Slice(containers, func(i, j int) bool { return containers[i].ID < containers[j].ID })

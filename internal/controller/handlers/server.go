@@ -112,6 +112,7 @@ type Server struct {
 	agentTaskWake           func()
 	console                 ConsoleAssets
 	logs                    *servicelogs.Service
+	monitoring              MonitoringReader
 	serviceTerminals        *serviceterminal.Service
 	routePolicies           map[string]routePolicy
 }
@@ -201,6 +202,7 @@ type Options struct {
 	AgentTaskWake           func()
 	Console                 ConsoleAssets
 	Logs                    *servicelogs.Service
+	Monitoring              MonitoringReader
 }
 
 func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
@@ -297,6 +299,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		agentTaskWake:         options.AgentTaskWake,
 		console:               options.Console,
 		logs:                  options.Logs,
+		monitoring:            options.Monitoring,
 		routePolicies:         make(map[string]routePolicy),
 	}
 	s.routes()
@@ -342,6 +345,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	s.registerEnvironmentDNS()
 	s.registerTasks()
 	s.registerHost()
+	s.registerMonitoring()
 	s.registerHostTerminal()
 	return s
 }

@@ -133,6 +133,11 @@ func TestMonitoringContainerPagesStayScopedAndKeepStorageSampleTime(t *testing.T
 	if err != nil || limited.ContainersStatus != "unavailable" || len(limited.Containers.Items) != 0 {
 		t.Fatalf("bounded cache claimed a complete container list: %#v, %v", limited, err)
 	}
+	sample.ContainersComplete, sample.Available = true, false
+	unknown, err := reader.serviceLive(sample, Query{Limit: 1})
+	if err != nil || unknown.ContainersStatus != "unavailable" || len(unknown.Containers.Items) != 0 {
+		t.Fatalf("missing runtime evidence claimed an empty complete list: %#v, %v", unknown, err)
+	}
 	if _, err := reader.Show(context.Background(), Query{Kind: "host", ID: "foreign"}); err == nil {
 		t.Fatal("non-local Host selector accepted")
 	}

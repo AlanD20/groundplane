@@ -34,6 +34,7 @@ func addCommands(root *cobra.Command, deps Dependencies) {
 		newTaskAlertCmd(),
 		newActivityCmd(),
 		newHostCmd(),
+		newMonitoringCmd(),
 		newImageCmd(),
 		newSoftwareCmd(),
 		withExecutionClass(newControllerCmd(deps), executionLocal),

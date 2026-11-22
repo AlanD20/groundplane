@@ -70,6 +70,16 @@ func (reader *Reader) aggregate(
 		}
 	}
 	value := api.AggregateMonitoring{Live: unavailableLive(), Children: children}
+	for index := range value.Children.Items {
+		child := &value.Children.Items[index]
+		selector := HealthScope{TenantID: scope.TenantID, ProjectID: scope.ProjectID}
+		if child.Scope.Kind == "project" {
+			selector.ProjectID = child.Scope.ID
+		} else {
+			selector.EnvironmentID = child.Scope.ID
+		}
+		child.RuntimeState = reader.health.State(selector)
+	}
 	if snapshot, ok := reader.workloads.Snapshot(); ok && snapshot.Complete {
 		value.Live = aggregateLive(snapshot, scope.TenantID, scope.ProjectID, reader.now())
 		for index := range value.Children.Items {

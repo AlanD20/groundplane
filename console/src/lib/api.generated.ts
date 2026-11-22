@@ -999,6 +999,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/monitoring/{scope}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show live and historical monitoring for one scope */
+        get: operations["monitoring.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects": {
         parameters: {
             query?: never;
@@ -2111,6 +2128,11 @@ export interface components {
             after?: string[] | null;
             image: string;
         };
+        AggregateMonitoring: {
+            children: components["schemas"]["PageMonitoringChild"];
+            history: components["schemas"]["MonitoringBucket"][] | null;
+            live: components["schemas"]["MonitoringLive"];
+        };
         Attach: {
             /**
              * Format: uri
@@ -2297,6 +2319,10 @@ export interface components {
             key: string;
             secret_ref?: string;
             value?: string;
+        };
+        BackingMonitoring: {
+            consumers: components["schemas"]["PageMonitoringScope"];
+            runtime: components["schemas"]["ServiceMonitoring"];
         };
         BackingService: {
             /**
@@ -3252,6 +3278,9 @@ export interface components {
             readonly $schema?: string;
             network_pool: string;
         };
+        EnvironmentMonitoring: {
+            services: components["schemas"]["PageMonitoringServiceHealth"];
+        };
         EnvironmentNetworkCapacity: {
             /** Format: int64 */
             allocated_addresses: number;
@@ -3426,6 +3455,12 @@ export interface components {
             size_bytes: number;
             tags: string[];
         };
+        HostMonitoring: {
+            devices: components["schemas"]["MonitoringDevice"][] | null;
+            history: components["schemas"]["MonitoringBucket"][] | null;
+            interfaces: components["schemas"]["MonitoringInterface"][] | null;
+            live: components["schemas"]["MonitoringLive"];
+        };
         HostResource: {
             total: string;
             used: string;
@@ -3516,6 +3551,154 @@ export interface components {
             rendered: string;
             template: string;
         };
+        MonitoringBucket: {
+            coverage: components["schemas"]["MonitoringCoverage"];
+            /** Format: date-time */
+            end: string;
+            /** Format: date-time */
+            start: string;
+            values: components["schemas"]["MonitoringValues"];
+        };
+        MonitoringChild: {
+            live: components["schemas"]["MonitoringLive"];
+            /** @enum {string} */
+            runtime_state: "unavailable" | "healthy" | "running" | "starting" | "degraded" | "stopped" | "failed" | "absent";
+            scope: components["schemas"]["MonitoringScope"];
+        };
+        MonitoringContainer: {
+            id: string;
+            live: components["schemas"]["MonitoringLive"];
+            /** Format: int32 */
+            replica: number;
+            /** Format: int64 */
+            restart_count: number;
+        };
+        MonitoringCoverage: {
+            /** Format: int32 */
+            eligible_resources: number;
+            /** Format: int32 */
+            eligible_volumes: number;
+            /** Format: int32 */
+            sampled_resources: number;
+            /** Format: int32 */
+            sampled_volumes: number;
+        };
+        MonitoringDevice: {
+            /** Format: int32 */
+            major: number;
+            /** Format: int32 */
+            minor: number;
+            name: string;
+            partition: boolean;
+            /** Format: double */
+            read_bytes_per_second: number | null;
+            root_filesystem: boolean;
+            /** Format: double */
+            write_bytes_per_second: number | null;
+        };
+        MonitoringInterface: {
+            name: string;
+            physical: boolean;
+            /** Format: double */
+            receive_bytes_per_second: number | null;
+            /** Format: double */
+            transmit_bytes_per_second: number | null;
+        };
+        MonitoringLive: {
+            coverage: components["schemas"]["MonitoringCoverage"];
+            /** Format: date-time */
+            observed_at: string | null;
+            /** @enum {string} */
+            status: "fresh" | "stale" | "unavailable";
+            values: components["schemas"]["MonitoringValues"];
+        };
+        MonitoringMetric: {
+            /** Format: double */
+            average: number | null;
+            /** Format: int32 */
+            expected_contributions: number;
+            /** Format: int32 */
+            expected_samples: number;
+            /** Format: double */
+            maximum: number | null;
+            /** Format: double */
+            minimum: number | null;
+            /** Format: int32 */
+            valid_contributions: number;
+            /** Format: int32 */
+            valid_samples: number;
+        };
+        MonitoringResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/MonitoringResponse.json
+             */
+            readonly $schema?: string;
+            backing?: components["schemas"]["BackingMonitoring"];
+            environment?: components["schemas"]["EnvironmentMonitoring"];
+            /** @enum {string} */
+            history_status: "available" | "unavailable";
+            host?: components["schemas"]["HostMonitoring"];
+            project?: components["schemas"]["AggregateMonitoring"];
+            scope: components["schemas"]["MonitoringScope"];
+            service?: components["schemas"]["ServiceMonitoring"];
+            tenant?: components["schemas"]["AggregateMonitoring"];
+            window: components["schemas"]["MonitoringWindow"];
+        };
+        MonitoringScope: {
+            id: string;
+            /** @enum {string} */
+            kind: "host" | "tenant" | "project" | "environment" | "service" | "backing";
+            name: string;
+        };
+        MonitoringServiceHealth: {
+            id: string;
+            name: string;
+            observation: components["schemas"]["ServiceObservation"];
+            /** Format: int64 */
+            restart_count: number | null;
+            /** Format: date-time */
+            restart_observed_at: string | null;
+            /** @enum {string} */
+            runtime_intent: "running" | "stopped" | "absent";
+        };
+        MonitoringValues: {
+            block_read_bytes_per_second?: components["schemas"]["MonitoringMetric"];
+            block_read_operations_per_second?: components["schemas"]["MonitoringMetric"];
+            block_write_bytes_per_second?: components["schemas"]["MonitoringMetric"];
+            block_write_operations_per_second?: components["schemas"]["MonitoringMetric"];
+            cpu_cores?: components["schemas"]["MonitoringMetric"];
+            cpu_limit_cores?: components["schemas"]["MonitoringMetric"];
+            cpu_utilization_ratio?: components["schemas"]["MonitoringMetric"];
+            disk_total_bytes?: components["schemas"]["MonitoringMetric"];
+            disk_used_bytes?: components["schemas"]["MonitoringMetric"];
+            memory_limit_bytes?: components["schemas"]["MonitoringMetric"];
+            memory_total_bytes?: components["schemas"]["MonitoringMetric"];
+            memory_used_bytes?: components["schemas"]["MonitoringMetric"];
+            memory_working_set_bytes?: components["schemas"]["MonitoringMetric"];
+            network_receive_bytes_per_second?: components["schemas"]["MonitoringMetric"];
+            network_transmit_bytes_per_second?: components["schemas"]["MonitoringMetric"];
+            persistent_volume_used_bytes?: components["schemas"]["MonitoringMetric"];
+            writable_layer_bytes?: components["schemas"]["MonitoringMetric"];
+        };
+        MonitoringVolume: {
+            id: string;
+            /** Format: date-time */
+            observed_at: string | null;
+            /** Format: int64 */
+            used_bytes: number | null;
+        };
+        MonitoringWindow: {
+            /** Format: int32 */
+            bucket_seconds: number;
+            /** Format: date-time */
+            end: string;
+            /** @enum {string} */
+            range: "1h" | "6h" | "24h" | "7d";
+            /** Format: date-time */
+            start: string;
+        };
         OptionalNullableString: {
             Present: boolean;
             Value: string | null;
@@ -3588,6 +3771,30 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["Entry"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
+        PageMonitoringChild: {
+            items: components["schemas"]["MonitoringChild"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
+        PageMonitoringContainer: {
+            items: components["schemas"]["MonitoringContainer"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
+        PageMonitoringScope: {
+            items: components["schemas"]["MonitoringScope"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
+        PageMonitoringServiceHealth: {
+            items: components["schemas"]["MonitoringServiceHealth"][] | null;
             next_cursor?: string;
             /** Format: int64 */
             revision?: number;
@@ -4598,6 +4805,14 @@ export interface components {
             max_file?: number;
             /** @description Docker log rotation size such as 10m; empty disables the size override */
             max_size?: string;
+        };
+        ServiceMonitoring: {
+            containers: components["schemas"]["PageMonitoringContainer"];
+            /** @enum {string} */
+            containers_status: "available" | "unavailable";
+            history: components["schemas"]["MonitoringBucket"][] | null;
+            live: components["schemas"]["MonitoringLive"];
+            volumes: components["schemas"]["MonitoringVolume"][] | null;
         };
         ServiceMount: {
             file?: string;
@@ -8308,6 +8523,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "monitoring.show": {
+        parameters: {
+            query?: {
+                range?: "1h" | "6h" | "24h" | "7d";
+                points?: number;
+                limit?: number;
+                cursor?: string;
+                consumer_cursor?: string;
+            };
+            header?: never;
+            path: {
+                scope: "host" | "tenant" | "project" | "environment" | "service" | "backing";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitoringResponse"];
                 };
             };
             /** @description Error */

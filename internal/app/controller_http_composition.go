@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/app/servicereadplatform"
 
 	"github.com/AlanD20/groundplane/internal/app/hostplatform"
 	"github.com/AlanD20/groundplane/internal/app/softwareplatform"
@@ -69,7 +71,7 @@ type controllerHTTPDependencies struct {
 	attachMutations         *attachments.MutationService
 }
 
-func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Controller, error) {
+func newControllerHTTPComposition(ctx context.Context, dependencies controllerHTTPDependencies) (*Controller, error) {
 	alerts, alertWorker, err := taskalerts.NewRuntime(
 		dependencies.store,
 		dependencies.authority.idempotency,
@@ -237,23 +239,22 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		_ = dependencies.platform.Close()
 		return nil, fmt.Errorf("controller: initialize Task inspection: %w", err)
 	}
-	serviceReads, err := newServiceReadResources(
-		dependencies.authority.hierarchyRecords,
-		dependencies.dataServices.serviceRecords,
-		dependencies.dataServices.zoneRecords,
-		dependencies.authority.releaseLedger,
-		dependencies.authority.agents,
-		dependencies.agentRuntime.Registry,
-	)
+	serviceReads, err := servicereadplatform.New(ctx, servicereadplatform.Dependencies{
+		Hierarchy: dependencies.authority.hierarchyRecords, Services: dependencies.dataServices.serviceRecords,
+		Zones: dependencies.dataServices.zoneRecords, Releases: dependencies.authority.releaseLedger,
+		Agents: dependencies.authority.agents, Channel: dependencies.agentRuntime.Registry,
+		Backing: dependencies.dataServices.backingServiceReads, Consumers: dependencies.execution.attachRecords,
+		Logger: dependencies.bootstrap.logger,
+	})
 	if err != nil {
 		_ = hostTerminals.Close()
 		_ = dependencies.platform.Close() // Preserve the initialization error; cleanup is best-effort.
 		return nil, fmt.Errorf("controller: initialize Service reads: %w", err)
 	}
 	server := handlers.New(dependencies.store, dependencies.bootstrap.logger, handlers.Options{
-		Host: dependencies.platform.Host, HostTerminals: hostTerminals,
+		Host: dependencies.platform.Host, HostTerminals: hostTerminals, Monitoring: serviceReads.Monitoring,
 		ServiceTerminals: serviceterminal.New(
-			serviceReads.services,
+			serviceReads.Services,
 			dependencies.authority.releaseLedger,
 			dependencies.agentRuntime.Registry,
 			hostTerminals,
@@ -275,9 +276,9 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		BackingServiceMutations: dependencies.backingServiceMutations,
 		Components:              dependencies.componentReads,
 		ComponentMutations:      dependencies.componentMutations,
-		Environments:            serviceReads.environments,
-		Services:                serviceReads.services,
-		ServiceObservations:     serviceReads.observations,
+		Environments:            serviceReads.Environments,
+		Services:                serviceReads.Services,
+		ServiceObservations:     serviceReads.Observations,
 		ServiceMutations:        dependencies.serviceMutations,
 		Zones:                   dependencies.network,
 		ZoneMutations:           dependencies.network,
@@ -332,9 +333,10 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		TenantMutations:       dependencies.hierarchy.tenantMutations,
 		TenantChanges:         dependencies.hierarchy.tenantChanges,
 		Console:               dependencies.bootstrap.console.Assets,
-		Logs:                  serviceReads.logs,
+		Logs:                  serviceReads.Logs,
 	})
 	if err := server.BindConsole(); err != nil {
+		_ = serviceReads.Close()
 		_, _ = hostTerminals.Close(), dependencies.platform.Close()
 		return nil, fmt.Errorf("controller: bind verified Console release: %w", err)
 	}
@@ -352,6 +354,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		server:          server,
 		agent:           dependencies.agentRuntime,
 		scheduler:       maintenanceScheduler,
+		monitoring:      serviceReads,
 		workExecution:   workRuntime,
 		taskAlerts:      alertWorker,
 		localAgent:      dependencies.platform,

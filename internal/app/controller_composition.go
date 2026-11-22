@@ -538,7 +538,7 @@ func NewController(ctx context.Context, configPath string) (_ *Controller, resul
 	acceptedPreparations = append(acceptedPreparations, platform.AcceptedPreparations()...)
 	acceptedPreparations = append(acceptedPreparations, software.AcceptedPreparations()...)
 	acceptedPreparations = append(acceptedPreparations, platform.EtcdConfig.AcceptedPreparations()...)
-	wired, err := newControllerHTTPComposition(controllerHTTPDependencies{
+	wired, err := newControllerHTTPComposition(ctx, controllerHTTPDependencies{
 		acceptedPreparations:    acceptedPreparations,
 		bootstrap:               bootstrap,
 		store:                   store,

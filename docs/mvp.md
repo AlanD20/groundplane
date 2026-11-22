@@ -97,6 +97,20 @@ and API endpoint. [Surface conventions](api-cli.md) owns the closed exceptions.
 Clients display Controller decisions rather than inventing health, permissions or
 operation success. Loading, failures and unavailable observations stay visible.
 
+### Resource monitoring
+
+Monitoring is read-only and scoped to the Host, Tenant, Project, Environment,
+Service or Backing instance. Host utilization includes infrastructure outside GP.
+Tenant and Project totals include their owned workloads; shared Backing usage
+remains Platform-owned. Environment monitoring shows Service health; detailed
+resource history belongs to each Service or Backing instance.
+
+Metric history is derived data outside etcd. Missing, stale or unsupported
+readings remain distinguishable from zero, and monitoring failures cannot become
+prerequisites for workload execution or application serving. The
+[monitoring guide](features/monitoring.md) owns metric meanings, inspection,
+retention and current implementation limits.
+
 ### Desired, applied and observed state
 
 Blueprints contain operator decisions only. They do not contain generated

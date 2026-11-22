@@ -12,6 +12,7 @@ import {
   SoftwareIdentity,
   ContainerSoftwareIdentity,
 } from "@/features/image-delivery/software-identity";
+import { ScopedMonitoring } from "@/features/monitoring/scoped-monitoring";
 
 export default function PlatformHostPage() {
   const { host, hostLoading, hostError, platform, platformComponentError } =
@@ -33,6 +34,11 @@ export default function PlatformHostPage() {
             Manage images
           </Link>
         }
+      />
+      <ScopedMonitoring
+        scope="host"
+        id="local"
+        name={host?.hostname ?? "Host"}
       />
       {hostError && (
         <p role="alert" className="text-sm text-warning">

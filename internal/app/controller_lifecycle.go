@@ -21,7 +21,7 @@ func (c *Controller) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var workers sync.WaitGroup
-	for _, worker := range []controllerScheduler{c.scheduler, c.localAgent, c.runners, c.resolverConfiguration, c.taskAlerts} {
+	for _, worker := range []controllerScheduler{c.scheduler, c.localAgent, c.runners, c.resolverConfiguration, c.taskAlerts, c.monitoring} {
 		if worker == nil {
 			continue
 		}

@@ -193,3 +193,31 @@ Current source: [shared observation contract](../../internal/common/serviceobser
 The observation architecture is accepted. Full deployment and live
 qualification remain tracked in the Service feature; this decision does not
 claim them.
+
+## Resource telemetry
+
+Resource monitoring uses the serving-authority capture and its revision recheck,
+rather than treating container labels or desired names alone as ownership.
+Restart identity also breaks a counter segment when Docker retains the same
+container id. The Agent exchange is bounded, authenticated and read-only; it
+does not grant a Task, shell, database probe or secret consumer.
+
+Collectors run once per process, independently of viewers. The native Controller
+reads whole-host counters so its totals include non-container processes. Workload
+readings retain exact container identities; a consumer relationship never copies
+shared Backing usage into a Tenant's ownership. Rate derivation and aggregation
+belong to the monitoring module, not the Console.
+
+Bounded SQLite history was selected instead of high-frequency writes to etcd or
+an additional mandatory telemetry server. It is disposable operational evidence,
+not authority for Deploy, recovery or health. Its failure domain stays outside
+the critical HTTP/execution/storage supervision group, with cancellation and join
+before closing its database. This trades a small local retention window for a
+simple single-host footprint; it is not a durable monitoring archive.
+
+Current owners: [Controller monitoring](../../internal/controller/monitoring),
+[derived history](../../internal/infra/monitoringstore), and
+[process composition](../../internal/app/servicereadplatform).
+Operator semantics and current bounds belong to the
+[monitoring guide](../features/monitoring.md). Source integration does not establish
+the pending live and upgrade qualification.

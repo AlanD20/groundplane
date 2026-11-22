@@ -137,6 +137,7 @@ export function useTableView<T>(
     });
   return {
     rows: sorted.slice(page * pageSize, (page + 1) * pageSize),
+    sortedRows: sorted,
     total: sorted.length,
     page,
     pages,

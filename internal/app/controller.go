@@ -41,6 +41,7 @@ type Controller struct {
 	server                controllerServer
 	agent                 controllerRunLoop
 	scheduler             controllerScheduler
+	monitoring            controllerScheduler
 	workExecution         controllerRunLoop
 	runners               controllerScheduler
 	resolverConfiguration controllerScheduler

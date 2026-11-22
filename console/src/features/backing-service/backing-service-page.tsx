@@ -152,7 +152,14 @@ export default function BackingServiceDetailPage() {
           </h2>
         )}
         {tab === "monitoring" && svc && (
-          <ServiceMonitoring service={svc} now={observationRefresh.now} onOpenLogs={() => setTab("logs")} />
+          <ServiceMonitoring
+            service={svc}
+            now={observationRefresh.now}
+            onOpenLogs={() => setTab("logs")}
+            scope="backing"
+            scopeID={g.id}
+            scopeName={g.name}
+          />
         )}
         {tab === "overview" && (
           <div className="space-y-5 pt-5">

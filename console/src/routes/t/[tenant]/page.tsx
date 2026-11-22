@@ -19,6 +19,7 @@ import { useStore } from "@/lib/store";
 import { useLinkedSlug } from "@/lib/use-linked-slug";
 import { Boxes, Cpu, Plus, ShieldCheck } from "lucide-react";
 import { useState } from "react";
+import { ScopedMonitoring } from "@/features/monitoring/scoped-monitoring";
 
 export default function TenantPage() {
   const params = useRequiredParams("tenant");
@@ -80,6 +81,16 @@ export default function TenantPage() {
             <Plus className="size-4" /> New project
           </CreationButton>
         }
+      />
+      <ScopedMonitoring
+        scope="tenant"
+        id={tenant.id}
+        name={tenant.name}
+        linkFor={(kind, id) => {
+          if (kind !== "project") return undefined;
+          const child = projects.find((project) => project.id === id);
+          return child ? `/t/${tenant.slug}/${child.slug}` : undefined;
+        }}
       />
       <ResourceForm open={open} onOpenChange={setOpen}>
         <DialogHeader>

@@ -19,11 +19,17 @@ import {
 } from "@/components/ui/table";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import type { Environment } from "@/lib/types";
-import { Activity, ArrowUpRight } from "lucide-react";
-import { useState } from "react";
+import { serviceObservationFromAPI } from "@/features/service/service-observation";
+import { Activity, ArrowUpRight, Pause, Play } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { HealthOverview } from "./health-overview";
 import { monitoringHealth } from "./health-summary";
+import { MonitoringCursorPagination } from "./scoped-monitoring";
+import {
+  useMonitoringCursor,
+  useMonitoringQuery,
+} from "./use-monitoring-query";
 
 export function EnvironmentMonitoring({
   env,
@@ -35,9 +41,41 @@ export function EnvironmentMonitoring({
   const [search] = useSearchParams();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
-  const summary = monitoringHealth(env.services, now);
+  const monitoringPage = useMonitoringCursor(env.id);
+  const monitoringRequest = useMemo(
+    () =>
+      ({
+        scope: "environment" as const,
+        id: env.id,
+        range: "1h" as const,
+        limit: 50,
+        cursor: monitoringPage.cursor,
+      }) as const,
+    [env.id, monitoringPage.cursor],
+  );
+  const monitoring = useMonitoringQuery(monitoringRequest);
+  const response =
+    monitoring.value?.scope.kind === "environment" &&
+    monitoring.value.scope.id === env.id
+      ? monitoring.value.environment
+      : undefined;
+  const monitored = new Map(
+    (response?.services.items ?? []).map((service) => [service.id, service]),
+  );
+  const services = env.services.map((service) => {
+    const live = monitored.get(service.id);
+    return live
+      ? {
+          ...service,
+          runtimeIntent: live.runtime_intent,
+          observation: serviceObservationFromAPI(live.observation),
+        }
+      : service;
+  });
+  const summary = monitoringHealth(services, now);
   const visible = summary.rows.filter(
     (row) =>
+      (!response || monitored.has(row.service.id)) &&
       row.service.name.toLowerCase().includes(query.trim().toLowerCase()) &&
       (filter === "all" ||
         (filter === "attention" ? row.attention : row.state === filter)),
@@ -87,14 +125,30 @@ export function EnvironmentMonitoring({
               its own monitoring and containers.
             </p>
           </div>
-          <span className="text-xs text-muted-foreground">
-            {summary.total} Services
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {summary.total} Services
+              {monitoring.paused ? " · live refresh paused" : ""}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => monitoring.setPaused(!monitoring.paused)}
+            >
+              {monitoring.paused ? <Play /> : <Pause />}
+              {monitoring.paused ? "Resume live" : "Pause live"}
+            </Button>
+          </div>
         </div>
+        {monitoring.error && (
+          <p role="alert" className="text-xs text-warning">
+            Showing the last available Service observations: {monitoring.error}
+          </p>
+        )}
         <CollectionToolbar
           query={query}
           onQueryChange={setQuery}
-          label="Service health"
+          label={response ? "Service health on this page" : "Service health"}
         >
           <Select
             aria-label="Filter Service health"
@@ -155,6 +209,7 @@ export function EnvironmentMonitoring({
                     </TableSortHead>
                     <TableHead>Observed replicas</TableHead>
                     <TableHead>Desired runtime</TableHead>
+                    <TableHead>Restarts</TableHead>
                     <TableSortHead sort={table} field="sampled">
                       Last observation
                     </TableSortHead>
@@ -164,7 +219,7 @@ export function EnvironmentMonitoring({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {table.rows.map((row) => (
+                  {(response ? table.sortedRows : table.rows).map((row) => (
                     <ResourceRow
                       key={row.service.id}
                       href={serviceHref(row.service.id)}
@@ -204,6 +259,20 @@ export function EnvironmentMonitoring({
                       <TableCell className="capitalize text-muted-foreground">
                         {row.service.runtimeIntent}
                       </TableCell>
+                      <TableCell className="text-xs tabular-nums text-muted-foreground">
+                        {monitored.get(row.service.id)?.restart_count ??
+                          "Unavailable"}
+                        {monitored.get(row.service.id)?.restart_observed_at && (
+                          <span className="block">
+                            {formatTimestamp(
+                              monitored.get(row.service.id)
+                                ?.restart_observed_at,
+                              "",
+                              { seconds: true },
+                            )}
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatTimestamp(row.sampledAt, "Not observed", {
                           seconds: true,
@@ -228,8 +297,16 @@ export function EnvironmentMonitoring({
                 </TableBody>
               </Table>
             </ResourceTable>
-            <TablePagination table={table} label="Services" />
+            {!response && <TablePagination table={table} label="Services" />}
           </>
+        )}
+        {response && (
+          <MonitoringCursorPagination
+            label="Services"
+            page={monitoringPage}
+            nextCursor={response.services.next_cursor}
+            loading={monitoring.loading}
+          />
         )}
       </section>
     </div>

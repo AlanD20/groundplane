@@ -197,6 +197,32 @@
         ],
         "type": "object"
       },
+      "AggregateMonitoring": {
+        "additionalProperties": false,
+        "properties": {
+          "children": {
+            "$ref": "#/components/schemas/PageMonitoringChild"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringBucket"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "live": {
+            "$ref": "#/components/schemas/MonitoringLive"
+          }
+        },
+        "required": [
+          "live",
+          "history",
+          "children"
+        ],
+        "type": "object"
+      },
       "Attach": {
         "additionalProperties": false,
         "properties": {
@@ -863,6 +889,22 @@
         },
         "required": [
           "key"
+        ],
+        "type": "object"
+      },
+      "BackingMonitoring": {
+        "additionalProperties": false,
+        "properties": {
+          "consumers": {
+            "$ref": "#/components/schemas/PageMonitoringScope"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/ServiceMonitoring"
+          }
+        },
+        "required": [
+          "runtime",
+          "consumers"
         ],
         "type": "object"
       },
@@ -4395,6 +4437,18 @@
         ],
         "type": "object"
       },
+      "EnvironmentMonitoring": {
+        "additionalProperties": false,
+        "properties": {
+          "services": {
+            "$ref": "#/components/schemas/PageMonitoringServiceHealth"
+          }
+        },
+        "required": [
+          "services"
+        ],
+        "type": "object"
+      },
       "EnvironmentNetworkCapacity": {
         "additionalProperties": false,
         "properties": {
@@ -4945,6 +4999,48 @@
         ],
         "type": "object"
       },
+      "HostMonitoring": {
+        "additionalProperties": false,
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringDevice"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringBucket"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "interfaces": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringInterface"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "live": {
+            "$ref": "#/components/schemas/MonitoringLive"
+          }
+        },
+        "required": [
+          "live",
+          "history",
+          "interfaces",
+          "devices"
+        ],
+        "type": "object"
+      },
       "HostResource": {
         "additionalProperties": false,
         "properties": {
@@ -5257,6 +5353,536 @@
         ],
         "type": "object"
       },
+      "MonitoringBucket": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/MonitoringCoverage"
+          },
+          "end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "values": {
+            "$ref": "#/components/schemas/MonitoringValues"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "values",
+          "coverage"
+        ],
+        "type": "object"
+      },
+      "MonitoringChild": {
+        "additionalProperties": false,
+        "properties": {
+          "live": {
+            "$ref": "#/components/schemas/MonitoringLive"
+          },
+          "runtime_state": {
+            "enum": [
+              "unavailable",
+              "healthy",
+              "running",
+              "starting",
+              "degraded",
+              "stopped",
+              "failed",
+              "absent"
+            ],
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/MonitoringScope"
+          }
+        },
+        "required": [
+          "scope",
+          "live",
+          "runtime_state"
+        ],
+        "type": "object"
+      },
+      "MonitoringContainer": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "live": {
+            "$ref": "#/components/schemas/MonitoringLive"
+          },
+          "replica": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "restart_count": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "replica",
+          "restart_count",
+          "live"
+        ],
+        "type": "object"
+      },
+      "MonitoringCoverage": {
+        "additionalProperties": false,
+        "properties": {
+          "eligible_resources": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "eligible_volumes": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sampled_resources": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sampled_volumes": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "eligible_resources",
+          "sampled_resources",
+          "eligible_volumes",
+          "sampled_volumes"
+        ],
+        "type": "object"
+      },
+      "MonitoringDevice": {
+        "additionalProperties": false,
+        "properties": {
+          "major": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minor": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "partition": {
+            "type": "boolean"
+          },
+          "read_bytes_per_second": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "root_filesystem": {
+            "type": "boolean"
+          },
+          "write_bytes_per_second": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "major",
+          "minor",
+          "partition",
+          "root_filesystem",
+          "read_bytes_per_second",
+          "write_bytes_per_second"
+        ],
+        "type": "object"
+      },
+      "MonitoringInterface": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "physical": {
+            "type": "boolean"
+          },
+          "receive_bytes_per_second": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "transmit_bytes_per_second": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "physical",
+          "receive_bytes_per_second",
+          "transmit_bytes_per_second"
+        ],
+        "type": "object"
+      },
+      "MonitoringLive": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/MonitoringCoverage"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "fresh",
+              "stale",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "values": {
+            "$ref": "#/components/schemas/MonitoringValues"
+          }
+        },
+        "required": [
+          "status",
+          "observed_at",
+          "values",
+          "coverage"
+        ],
+        "type": "object"
+      },
+      "MonitoringMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "average": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "expected_contributions": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expected_samples": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximum": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "minimum": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "valid_contributions": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "valid_samples": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "average",
+          "minimum",
+          "maximum",
+          "valid_samples",
+          "expected_samples",
+          "valid_contributions",
+          "expected_contributions"
+        ],
+        "type": "object"
+      },
+      "MonitoringResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/MonitoringResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "backing": {
+            "$ref": "#/components/schemas/BackingMonitoring"
+          },
+          "environment": {
+            "$ref": "#/components/schemas/EnvironmentMonitoring"
+          },
+          "history_status": {
+            "enum": [
+              "available",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "host": {
+            "$ref": "#/components/schemas/HostMonitoring"
+          },
+          "project": {
+            "$ref": "#/components/schemas/AggregateMonitoring"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/MonitoringScope"
+          },
+          "service": {
+            "$ref": "#/components/schemas/ServiceMonitoring"
+          },
+          "tenant": {
+            "$ref": "#/components/schemas/AggregateMonitoring"
+          },
+          "window": {
+            "$ref": "#/components/schemas/MonitoringWindow"
+          }
+        },
+        "required": [
+          "scope",
+          "window",
+          "history_status"
+        ],
+        "type": "object"
+      },
+      "MonitoringScope": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "host",
+              "tenant",
+              "project",
+              "environment",
+              "service",
+              "backing"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "MonitoringServiceHealth": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "observation": {
+            "$ref": "#/components/schemas/ServiceObservation"
+          },
+          "restart_count": {
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "restart_observed_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runtime_intent": {
+            "enum": [
+              "running",
+              "stopped",
+              "absent"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "runtime_intent",
+          "observation",
+          "restart_count",
+          "restart_observed_at"
+        ],
+        "type": "object"
+      },
+      "MonitoringValues": {
+        "additionalProperties": false,
+        "properties": {
+          "block_read_bytes_per_second": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "block_read_operations_per_second": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "block_write_bytes_per_second": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "block_write_operations_per_second": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "cpu_cores": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "cpu_limit_cores": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "cpu_utilization_ratio": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "disk_total_bytes": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "disk_used_bytes": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "memory_limit_bytes": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "memory_total_bytes": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "memory_used_bytes": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "memory_working_set_bytes": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "network_receive_bytes_per_second": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "network_transmit_bytes_per_second": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "persistent_volume_used_bytes": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          },
+          "writable_layer_bytes": {
+            "$ref": "#/components/schemas/MonitoringMetric"
+          }
+        },
+        "type": "object"
+      },
+      "MonitoringVolume": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "used_bytes": {
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "observed_at",
+          "used_bytes"
+        ],
+        "type": "object"
+      },
+      "MonitoringWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "bucket_seconds": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "range": {
+            "enum": [
+              "1h",
+              "6h",
+              "24h",
+              "7d"
+            ],
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "range",
+          "start",
+          "end",
+          "bucket_seconds"
+        ],
+        "type": "object"
+      },
       "OptionalNullableString": {
         "additionalProperties": false,
         "properties": {
@@ -5461,6 +6087,106 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/Entry"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageMonitoringChild": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringChild"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageMonitoringContainer": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringContainer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageMonitoringScope": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringScope"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageMonitoringServiceHealth": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringServiceHealth"
             },
             "type": [
               "array",
@@ -8699,6 +9425,50 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ServiceMonitoring": {
+        "additionalProperties": false,
+        "properties": {
+          "containers": {
+            "$ref": "#/components/schemas/PageMonitoringContainer"
+          },
+          "containers_status": {
+            "enum": [
+              "available",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringBucket"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "live": {
+            "$ref": "#/components/schemas/MonitoringLive"
+          },
+          "volumes": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringVolume"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "containers_status",
+          "live",
+          "history",
+          "containers",
+          "volumes"
+        ],
         "type": "object"
       },
       "ServiceMount": {
@@ -16147,6 +16917,122 @@
         "summary": "Remove an unreferenced host image without force or pruning",
         "tags": [
           "Images"
+        ]
+      }
+    },
+    "/monitoring/{scope}/{id}": {
+      "get": {
+        "operationId": "monitoring.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scope",
+            "required": true,
+            "schema": {
+              "enum": [
+                "host",
+                "tenant",
+                "project",
+                "environment",
+                "service",
+                "backing"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "1h",
+              "enum": [
+                "1h",
+                "6h",
+                "24h",
+                "7d"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "points",
+            "schema": {
+              "default": 240,
+              "format": "int64",
+              "maximum": 720,
+              "minimum": 16,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 25,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "consumer_cursor",
+            "schema": {
+              "maxLength": 8192,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show live and historical monitoring for one scope",
+        "tags": [
+          "Monitoring"
         ]
       }
     },

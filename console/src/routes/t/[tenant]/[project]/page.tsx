@@ -31,6 +31,7 @@ import {
 import { useState } from "react";
 import RunnerManager from "@/features/runners/runner-manager";
 import { Link, useSearchParams } from "react-router-dom";
+import { ScopedMonitoring } from "@/features/monitoring/scoped-monitoring";
 
 export default function TenantProjectPage() {
   const params = useRequiredParams("tenant", "project");
@@ -127,6 +128,18 @@ export default function TenantProjectPage() {
             </CreationButton>
           </>
         }
+      />
+      <ScopedMonitoring
+        scope="project"
+        id={project.id}
+        name={project.name}
+        linkFor={(kind, id) => {
+          if (kind !== "environment") return undefined;
+          const child = envs.find((environment) => environment.id === id);
+          return child
+            ? `/t/${tenant.slug}/${project.slug}/${child.name}`
+            : undefined;
+        }}
       />
       <ResourceForm open={open} onOpenChange={setOpen}>
         <DialogHeader>

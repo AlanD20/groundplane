@@ -32,6 +32,7 @@ building and deploying a small application with Caddy and Cloudflare Tunnel.
 | How do I store credentials and select object storage? | [Secrets and Connectors](features/secrets-and-connectors.md) |
 | How do setup and migration hooks run? | [Scripts](features/setup-scripts.md) |
 | How do I follow work, retry, abort or read logs? | [Tasks and logs](features/tasks-and-logs.md) |
+| How do I inspect health and resource utilization? | [Monitoring](features/monitoring.md) |
 | How do I run backups, select Recovery Points and restore data? | [Backups](features/backups.md) |
 | How are GitHub Runners isolated? | [Runners](features/runners.md) |
 | What must an update preserve? | [Update safety](features/upgrade-safety.md) |

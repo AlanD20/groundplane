@@ -1102,6 +1102,156 @@ func (e LogEventStream) Valid() bool {
 	}
 }
 
+// Defines values for MonitoringChildRuntimeState.
+const (
+	MonitoringChildRuntimeStateAbsent      MonitoringChildRuntimeState = "absent"
+	MonitoringChildRuntimeStateDegraded    MonitoringChildRuntimeState = "degraded"
+	MonitoringChildRuntimeStateFailed      MonitoringChildRuntimeState = "failed"
+	MonitoringChildRuntimeStateHealthy     MonitoringChildRuntimeState = "healthy"
+	MonitoringChildRuntimeStateRunning     MonitoringChildRuntimeState = "running"
+	MonitoringChildRuntimeStateStarting    MonitoringChildRuntimeState = "starting"
+	MonitoringChildRuntimeStateStopped     MonitoringChildRuntimeState = "stopped"
+	MonitoringChildRuntimeStateUnavailable MonitoringChildRuntimeState = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the MonitoringChildRuntimeState enum.
+func (e MonitoringChildRuntimeState) Valid() bool {
+	switch e {
+	case MonitoringChildRuntimeStateAbsent:
+		return true
+	case MonitoringChildRuntimeStateDegraded:
+		return true
+	case MonitoringChildRuntimeStateFailed:
+		return true
+	case MonitoringChildRuntimeStateHealthy:
+		return true
+	case MonitoringChildRuntimeStateRunning:
+		return true
+	case MonitoringChildRuntimeStateStarting:
+		return true
+	case MonitoringChildRuntimeStateStopped:
+		return true
+	case MonitoringChildRuntimeStateUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MonitoringLiveStatus.
+const (
+	MonitoringLiveStatusFresh       MonitoringLiveStatus = "fresh"
+	MonitoringLiveStatusStale       MonitoringLiveStatus = "stale"
+	MonitoringLiveStatusUnavailable MonitoringLiveStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the MonitoringLiveStatus enum.
+func (e MonitoringLiveStatus) Valid() bool {
+	switch e {
+	case MonitoringLiveStatusFresh:
+		return true
+	case MonitoringLiveStatusStale:
+		return true
+	case MonitoringLiveStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MonitoringResponseHistoryStatus.
+const (
+	MonitoringResponseHistoryStatusAvailable   MonitoringResponseHistoryStatus = "available"
+	MonitoringResponseHistoryStatusUnavailable MonitoringResponseHistoryStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the MonitoringResponseHistoryStatus enum.
+func (e MonitoringResponseHistoryStatus) Valid() bool {
+	switch e {
+	case MonitoringResponseHistoryStatusAvailable:
+		return true
+	case MonitoringResponseHistoryStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MonitoringScopeKind.
+const (
+	MonitoringScopeKindBacking     MonitoringScopeKind = "backing"
+	MonitoringScopeKindEnvironment MonitoringScopeKind = "environment"
+	MonitoringScopeKindHost        MonitoringScopeKind = "host"
+	MonitoringScopeKindProject     MonitoringScopeKind = "project"
+	MonitoringScopeKindService     MonitoringScopeKind = "service"
+	MonitoringScopeKindTenant      MonitoringScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the MonitoringScopeKind enum.
+func (e MonitoringScopeKind) Valid() bool {
+	switch e {
+	case MonitoringScopeKindBacking:
+		return true
+	case MonitoringScopeKindEnvironment:
+		return true
+	case MonitoringScopeKindHost:
+		return true
+	case MonitoringScopeKindProject:
+		return true
+	case MonitoringScopeKindService:
+		return true
+	case MonitoringScopeKindTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MonitoringServiceHealthRuntimeIntent.
+const (
+	MonitoringServiceHealthRuntimeIntentAbsent  MonitoringServiceHealthRuntimeIntent = "absent"
+	MonitoringServiceHealthRuntimeIntentRunning MonitoringServiceHealthRuntimeIntent = "running"
+	MonitoringServiceHealthRuntimeIntentStopped MonitoringServiceHealthRuntimeIntent = "stopped"
+)
+
+// Valid indicates whether the value is a known member of the MonitoringServiceHealthRuntimeIntent enum.
+func (e MonitoringServiceHealthRuntimeIntent) Valid() bool {
+	switch e {
+	case MonitoringServiceHealthRuntimeIntentAbsent:
+		return true
+	case MonitoringServiceHealthRuntimeIntentRunning:
+		return true
+	case MonitoringServiceHealthRuntimeIntentStopped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MonitoringWindowRange.
+const (
+	MonitoringWindowRangeN1h  MonitoringWindowRange = "1h"
+	MonitoringWindowRangeN24h MonitoringWindowRange = "24h"
+	MonitoringWindowRangeN6h  MonitoringWindowRange = "6h"
+	MonitoringWindowRangeN7d  MonitoringWindowRange = "7d"
+)
+
+// Valid indicates whether the value is a known member of the MonitoringWindowRange enum.
+func (e MonitoringWindowRange) Valid() bool {
+	switch e {
+	case MonitoringWindowRangeN1h:
+		return true
+	case MonitoringWindowRangeN24h:
+		return true
+	case MonitoringWindowRangeN6h:
+		return true
+	case MonitoringWindowRangeN7d:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PreparedSoftwareArtifactComponent.
 const (
 	PreparedSoftwareArtifactComponentAgent      PreparedSoftwareArtifactComponent = "agent"
@@ -1663,6 +1813,24 @@ func (e ServiceDependencyPhases) Valid() bool {
 	}
 }
 
+// Defines values for ServiceMonitoringContainersStatus.
+const (
+	ServiceMonitoringContainersStatusAvailable   ServiceMonitoringContainersStatus = "available"
+	ServiceMonitoringContainersStatusUnavailable ServiceMonitoringContainersStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the ServiceMonitoringContainersStatus enum.
+func (e ServiceMonitoringContainersStatus) Valid() bool {
+	switch e {
+	case ServiceMonitoringContainersStatusAvailable:
+		return true
+	case ServiceMonitoringContainersStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ServiceObservationState.
 const (
 	ServiceObservationStateAbsent      ServiceObservationState = "absent"
@@ -2173,6 +2341,60 @@ func (e ZoneRemovalImpactMode) Valid() bool {
 	}
 }
 
+// Defines values for MonitoringShowParamsRange.
+const (
+	MonitoringShowParamsRangeN1h  MonitoringShowParamsRange = "1h"
+	MonitoringShowParamsRangeN24h MonitoringShowParamsRange = "24h"
+	MonitoringShowParamsRangeN6h  MonitoringShowParamsRange = "6h"
+	MonitoringShowParamsRangeN7d  MonitoringShowParamsRange = "7d"
+)
+
+// Valid indicates whether the value is a known member of the MonitoringShowParamsRange enum.
+func (e MonitoringShowParamsRange) Valid() bool {
+	switch e {
+	case MonitoringShowParamsRangeN1h:
+		return true
+	case MonitoringShowParamsRangeN24h:
+		return true
+	case MonitoringShowParamsRangeN6h:
+		return true
+	case MonitoringShowParamsRangeN7d:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MonitoringShowParamsScope.
+const (
+	MonitoringShowParamsScopeBacking     MonitoringShowParamsScope = "backing"
+	MonitoringShowParamsScopeEnvironment MonitoringShowParamsScope = "environment"
+	MonitoringShowParamsScopeHost        MonitoringShowParamsScope = "host"
+	MonitoringShowParamsScopeProject     MonitoringShowParamsScope = "project"
+	MonitoringShowParamsScopeService     MonitoringShowParamsScope = "service"
+	MonitoringShowParamsScopeTenant      MonitoringShowParamsScope = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the MonitoringShowParamsScope enum.
+func (e MonitoringShowParamsScope) Valid() bool {
+	switch e {
+	case MonitoringShowParamsScopeBacking:
+		return true
+	case MonitoringShowParamsScopeEnvironment:
+		return true
+	case MonitoringShowParamsScopeHost:
+		return true
+	case MonitoringShowParamsScopeProject:
+		return true
+	case MonitoringShowParamsScopeService:
+		return true
+	case MonitoringShowParamsScopeTenant:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SoftwareReleasesParamsSelection.
 const (
 	SoftwareReleasesParamsSelectionAgent      SoftwareReleasesParamsSelection = "agent"
@@ -2251,6 +2473,13 @@ type AgentUpdate struct {
 	Schema *string   `json:"$schema,omitempty"`
 	After  *[]string `json:"after,omitempty"`
 	Image  string    `json:"image"`
+}
+
+// AggregateMonitoring defines model for AggregateMonitoring.
+type AggregateMonitoring struct {
+	Children PageMonitoringChild `json:"children"`
+	History  *[]MonitoringBucket `json:"history"`
+	Live     MonitoringLive      `json:"live"`
 }
 
 // Attach defines model for Attach.
@@ -2462,6 +2691,12 @@ type BackingHookInput struct {
 
 // BackingHookInputGenerate defines model for BackingHookInput.Generate.
 type BackingHookInputGenerate string
+
+// BackingMonitoring defines model for BackingMonitoring.
+type BackingMonitoring struct {
+	Consumers PageMonitoringScope `json:"consumers"`
+	Runtime   ServiceMonitoring   `json:"runtime"`
+}
 
 // BackingService defines model for BackingService.
 type BackingService struct {
@@ -3655,6 +3890,11 @@ type EnvironmentEdit struct {
 	NetworkPool string  `json:"network_pool"`
 }
 
+// EnvironmentMonitoring defines model for EnvironmentMonitoring.
+type EnvironmentMonitoring struct {
+	Services PageMonitoringServiceHealth `json:"services"`
+}
+
 // EnvironmentNetworkCapacity defines model for EnvironmentNetworkCapacity.
 type EnvironmentNetworkCapacity struct {
 	AllocatedAddresses int64 `json:"allocated_addresses"`
@@ -3839,6 +4079,14 @@ type HostImage struct {
 	Tags           []string `json:"tags"`
 }
 
+// HostMonitoring defines model for HostMonitoring.
+type HostMonitoring struct {
+	Devices    *[]MonitoringDevice    `json:"devices"`
+	History    *[]MonitoringBucket    `json:"history"`
+	Interfaces *[]MonitoringInterface `json:"interfaces"`
+	Live       MonitoringLive         `json:"live"`
+}
+
 // HostResource defines model for HostResource.
 type HostResource struct {
 	Total   string `json:"total"`
@@ -3946,6 +4194,163 @@ type ManagedConfigFile struct {
 	Template            string  `json:"template"`
 }
 
+// MonitoringBucket defines model for MonitoringBucket.
+type MonitoringBucket struct {
+	Coverage MonitoringCoverage `json:"coverage"`
+	End      time.Time          `json:"end"`
+	Start    time.Time          `json:"start"`
+	Values   MonitoringValues   `json:"values"`
+}
+
+// MonitoringChild defines model for MonitoringChild.
+type MonitoringChild struct {
+	Live         MonitoringLive              `json:"live"`
+	RuntimeState MonitoringChildRuntimeState `json:"runtime_state"`
+	Scope        MonitoringScope             `json:"scope"`
+}
+
+// MonitoringChildRuntimeState defines model for MonitoringChild.RuntimeState.
+type MonitoringChildRuntimeState string
+
+// MonitoringContainer defines model for MonitoringContainer.
+type MonitoringContainer struct {
+	Id           string         `json:"id"`
+	Live         MonitoringLive `json:"live"`
+	Replica      int32          `json:"replica"`
+	RestartCount int64          `json:"restart_count"`
+}
+
+// MonitoringCoverage defines model for MonitoringCoverage.
+type MonitoringCoverage struct {
+	EligibleResources int32 `json:"eligible_resources"`
+	EligibleVolumes   int32 `json:"eligible_volumes"`
+	SampledResources  int32 `json:"sampled_resources"`
+	SampledVolumes    int32 `json:"sampled_volumes"`
+}
+
+// MonitoringDevice defines model for MonitoringDevice.
+type MonitoringDevice struct {
+	Major               int32    `json:"major"`
+	Minor               int32    `json:"minor"`
+	Name                string   `json:"name"`
+	Partition           bool     `json:"partition"`
+	ReadBytesPerSecond  *float64 `json:"read_bytes_per_second"`
+	RootFilesystem      bool     `json:"root_filesystem"`
+	WriteBytesPerSecond *float64 `json:"write_bytes_per_second"`
+}
+
+// MonitoringInterface defines model for MonitoringInterface.
+type MonitoringInterface struct {
+	Name                   string   `json:"name"`
+	Physical               bool     `json:"physical"`
+	ReceiveBytesPerSecond  *float64 `json:"receive_bytes_per_second"`
+	TransmitBytesPerSecond *float64 `json:"transmit_bytes_per_second"`
+}
+
+// MonitoringLive defines model for MonitoringLive.
+type MonitoringLive struct {
+	Coverage   MonitoringCoverage   `json:"coverage"`
+	ObservedAt *time.Time           `json:"observed_at"`
+	Status     MonitoringLiveStatus `json:"status"`
+	Values     MonitoringValues     `json:"values"`
+}
+
+// MonitoringLiveStatus defines model for MonitoringLive.Status.
+type MonitoringLiveStatus string
+
+// MonitoringMetric defines model for MonitoringMetric.
+type MonitoringMetric struct {
+	Average               *float64 `json:"average"`
+	ExpectedContributions int32    `json:"expected_contributions"`
+	ExpectedSamples       int32    `json:"expected_samples"`
+	Maximum               *float64 `json:"maximum"`
+	Minimum               *float64 `json:"minimum"`
+	ValidContributions    int32    `json:"valid_contributions"`
+	ValidSamples          int32    `json:"valid_samples"`
+}
+
+// MonitoringResponse defines model for MonitoringResponse.
+type MonitoringResponse struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/MonitoringResponse.json
+	Schema        *string                         `json:"$schema,omitempty"`
+	Backing       *BackingMonitoring              `json:"backing,omitempty"`
+	Environment   *EnvironmentMonitoring          `json:"environment,omitempty"`
+	HistoryStatus MonitoringResponseHistoryStatus `json:"history_status"`
+	Host          *HostMonitoring                 `json:"host,omitempty"`
+	Project       *AggregateMonitoring            `json:"project,omitempty"`
+	Scope         MonitoringScope                 `json:"scope"`
+	Service       *ServiceMonitoring              `json:"service,omitempty"`
+	Tenant        *AggregateMonitoring            `json:"tenant,omitempty"`
+	Window        MonitoringWindow                `json:"window"`
+}
+
+// MonitoringResponseHistoryStatus defines model for MonitoringResponse.HistoryStatus.
+type MonitoringResponseHistoryStatus string
+
+// MonitoringScope defines model for MonitoringScope.
+type MonitoringScope struct {
+	Id   string              `json:"id"`
+	Kind MonitoringScopeKind `json:"kind"`
+	Name string              `json:"name"`
+}
+
+// MonitoringScopeKind defines model for MonitoringScope.Kind.
+type MonitoringScopeKind string
+
+// MonitoringServiceHealth defines model for MonitoringServiceHealth.
+type MonitoringServiceHealth struct {
+	Id                string                               `json:"id"`
+	Name              string                               `json:"name"`
+	Observation       ServiceObservation                   `json:"observation"`
+	RestartCount      *int64                               `json:"restart_count"`
+	RestartObservedAt *time.Time                           `json:"restart_observed_at"`
+	RuntimeIntent     MonitoringServiceHealthRuntimeIntent `json:"runtime_intent"`
+}
+
+// MonitoringServiceHealthRuntimeIntent defines model for MonitoringServiceHealth.RuntimeIntent.
+type MonitoringServiceHealthRuntimeIntent string
+
+// MonitoringValues defines model for MonitoringValues.
+type MonitoringValues struct {
+	BlockReadBytesPerSecond       *MonitoringMetric `json:"block_read_bytes_per_second,omitempty"`
+	BlockReadOperationsPerSecond  *MonitoringMetric `json:"block_read_operations_per_second,omitempty"`
+	BlockWriteBytesPerSecond      *MonitoringMetric `json:"block_write_bytes_per_second,omitempty"`
+	BlockWriteOperationsPerSecond *MonitoringMetric `json:"block_write_operations_per_second,omitempty"`
+	CpuCores                      *MonitoringMetric `json:"cpu_cores,omitempty"`
+	CpuLimitCores                 *MonitoringMetric `json:"cpu_limit_cores,omitempty"`
+	CpuUtilizationRatio           *MonitoringMetric `json:"cpu_utilization_ratio,omitempty"`
+	DiskTotalBytes                *MonitoringMetric `json:"disk_total_bytes,omitempty"`
+	DiskUsedBytes                 *MonitoringMetric `json:"disk_used_bytes,omitempty"`
+	MemoryLimitBytes              *MonitoringMetric `json:"memory_limit_bytes,omitempty"`
+	MemoryTotalBytes              *MonitoringMetric `json:"memory_total_bytes,omitempty"`
+	MemoryUsedBytes               *MonitoringMetric `json:"memory_used_bytes,omitempty"`
+	MemoryWorkingSetBytes         *MonitoringMetric `json:"memory_working_set_bytes,omitempty"`
+	NetworkReceiveBytesPerSecond  *MonitoringMetric `json:"network_receive_bytes_per_second,omitempty"`
+	NetworkTransmitBytesPerSecond *MonitoringMetric `json:"network_transmit_bytes_per_second,omitempty"`
+	PersistentVolumeUsedBytes     *MonitoringMetric `json:"persistent_volume_used_bytes,omitempty"`
+	WritableLayerBytes            *MonitoringMetric `json:"writable_layer_bytes,omitempty"`
+}
+
+// MonitoringVolume defines model for MonitoringVolume.
+type MonitoringVolume struct {
+	Id         string     `json:"id"`
+	ObservedAt *time.Time `json:"observed_at"`
+	UsedBytes  *int64     `json:"used_bytes"`
+}
+
+// MonitoringWindow defines model for MonitoringWindow.
+type MonitoringWindow struct {
+	BucketSeconds int32                 `json:"bucket_seconds"`
+	End           time.Time             `json:"end"`
+	Range         MonitoringWindowRange `json:"range"`
+	Start         time.Time             `json:"start"`
+}
+
+// MonitoringWindowRange defines model for MonitoringWindow.Range.
+type MonitoringWindowRange string
+
 // OptionalNullableString defines model for OptionalNullableString.
 type OptionalNullableString struct {
 	Present bool    `json:"Present"`
@@ -4016,6 +4421,34 @@ type PageEntry struct {
 	Items      *[]Entry `json:"items"`
 	NextCursor *string  `json:"next_cursor,omitempty"`
 	Revision   *int64   `json:"revision,omitempty"`
+}
+
+// PageMonitoringChild defines model for PageMonitoringChild.
+type PageMonitoringChild struct {
+	Items      *[]MonitoringChild `json:"items"`
+	NextCursor *string            `json:"next_cursor,omitempty"`
+	Revision   *int64             `json:"revision,omitempty"`
+}
+
+// PageMonitoringContainer defines model for PageMonitoringContainer.
+type PageMonitoringContainer struct {
+	Items      *[]MonitoringContainer `json:"items"`
+	NextCursor *string                `json:"next_cursor,omitempty"`
+	Revision   *int64                 `json:"revision,omitempty"`
+}
+
+// PageMonitoringScope defines model for PageMonitoringScope.
+type PageMonitoringScope struct {
+	Items      *[]MonitoringScope `json:"items"`
+	NextCursor *string            `json:"next_cursor,omitempty"`
+	Revision   *int64             `json:"revision,omitempty"`
+}
+
+// PageMonitoringServiceHealth defines model for PageMonitoringServiceHealth.
+type PageMonitoringServiceHealth struct {
+	Items      *[]MonitoringServiceHealth `json:"items"`
+	NextCursor *string                    `json:"next_cursor,omitempty"`
+	Revision   *int64                     `json:"revision,omitempty"`
 }
 
 // PageReleaseGroup defines model for PageReleaseGroup.
@@ -5077,6 +5510,18 @@ type ServiceLogging struct {
 	// MaxSize Docker log rotation size such as 10m; empty disables the size override
 	MaxSize *string `json:"max_size,omitempty"`
 }
+
+// ServiceMonitoring defines model for ServiceMonitoring.
+type ServiceMonitoring struct {
+	Containers       PageMonitoringContainer           `json:"containers"`
+	ContainersStatus ServiceMonitoringContainersStatus `json:"containers_status"`
+	History          *[]MonitoringBucket               `json:"history"`
+	Live             MonitoringLive                    `json:"live"`
+	Volumes          *[]MonitoringVolume               `json:"volumes"`
+}
+
+// ServiceMonitoringContainersStatus defines model for ServiceMonitoring.ContainersStatus.
+type ServiceMonitoringContainersStatus string
 
 // ServiceMount defines model for ServiceMount.
 type ServiceMount struct {
@@ -6220,6 +6665,21 @@ type ImageFetchParams struct {
 type ImageRemoveParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
+
+// MonitoringShowParams defines parameters for MonitoringShow.
+type MonitoringShowParams struct {
+	Range          *MonitoringShowParamsRange `form:"range,omitempty" json:"range,omitempty"`
+	Points         *int64                     `form:"points,omitempty" json:"points,omitempty"`
+	Limit          *int64                     `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor         *string                    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	ConsumerCursor *string                    `form:"consumer_cursor,omitempty" json:"consumer_cursor,omitempty"`
+}
+
+// MonitoringShowParamsRange defines parameters for MonitoringShow.
+type MonitoringShowParamsRange string
+
+// MonitoringShowParamsScope defines parameters for MonitoringShow.
+type MonitoringShowParamsScope string
 
 // ProjectListParams defines parameters for ProjectList.
 type ProjectListParams struct {
@@ -9165,6 +9625,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
 	ImageRemove(ctx context.Context, id string, params *ImageRemoveParams, body ImageRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// MonitoringShow Show live and historical monitoring for one scope
+	//
+	// Corresponds with GET /monitoring/{scope}/{id} (the `MonitoringShow` operationId).
+	MonitoringShow(ctx context.Context, scope MonitoringShowParamsScope, id string, params *MonitoringShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ProjectList List projects
 	//
@@ -12188,6 +12653,21 @@ func (c *Client) ImageRemoveWithBody(ctx context.Context, id string, params *Ima
 // Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
 func (c *Client) ImageRemove(ctx context.Context, id string, params *ImageRemoveParams, body ImageRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewImageRemoveRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// MonitoringShow Show live and historical monitoring for one scope
+//
+// Corresponds with GET /monitoring/{scope}/{id} (the `MonitoringShow` operationId).
+func (c *Client) MonitoringShow(ctx context.Context, scope MonitoringShowParamsScope, id string, params *MonitoringShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMonitoringShowRequest(c.Server, scope, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -19230,6 +19710,122 @@ func NewImageRemoveRequestWithBody(server string, id string, params *ImageRemove
 	return req, nil
 }
 
+// NewMonitoringShowRequest constructs an http.Request for the MonitoringShow method
+func NewMonitoringShowRequest(server string, scope MonitoringShowParamsScope, id string, params *MonitoringShowParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "scope", scope, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/monitoring/%s/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Range != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "range", *params.Range, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Points != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "points", *params.Points, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ConsumerCursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "consumer_cursor", *params.ConsumerCursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewProjectListRequest constructs an http.Request for the ProjectList method
 func NewProjectListRequest(server string, params *ProjectListParams) (*http.Request, error) {
 	var err error
@@ -25814,6 +26410,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
 	ImageRemoveWithResponse(ctx context.Context, id string, params *ImageRemoveParams, body ImageRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*ImageRemoveResponse, error)
 
+	// MonitoringShowWithResponse Show live and historical monitoring for one scope
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /monitoring/{scope}/{id} (the `MonitoringShow` operationId).
+	MonitoringShowWithResponse(ctx context.Context, scope MonitoringShowParamsScope, id string, params *MonitoringShowParams, reqEditors ...RequestEditorFn) (*MonitoringShowResponse, error)
+
 	// ProjectListWithResponse List projects
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -31107,6 +31710,54 @@ func (r ImageRemoveResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ImageRemoveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type MonitoringShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *MonitoringResponse
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r MonitoringShowResponse) GetJSON200() *MonitoringResponse {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r MonitoringShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r MonitoringShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r MonitoringShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r MonitoringShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r MonitoringShowResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -37575,6 +38226,19 @@ func (c *ClientWithResponses) ImageRemoveWithResponse(ctx context.Context, id st
 	return ParseImageRemoveResponse(rsp)
 }
 
+// MonitoringShowWithResponse Show live and historical monitoring for one scope
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /monitoring/{scope}/{id} (the `MonitoringShow` operationId).
+func (c *ClientWithResponses) MonitoringShowWithResponse(ctx context.Context, scope MonitoringShowParamsScope, id string, params *MonitoringShowParams, reqEditors ...RequestEditorFn) (*MonitoringShowResponse, error) {
+	rsp, err := c.MonitoringShow(ctx, scope, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMonitoringShowResponse(rsp)
+}
+
 // ProjectListWithResponse List projects
 //
 // Returns a wrapper object for the known response body format(s).
@@ -42778,6 +43442,39 @@ func ParseImageRemoveResponse(rsp *http.Response) (*ImageRemoveResponse, error) 
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseMonitoringShowResponse parses an HTTP response from a MonitoringShowWithResponse call
+func ParseMonitoringShowResponse(rsp *http.Response) (*MonitoringShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &MonitoringShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MonitoringResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil
