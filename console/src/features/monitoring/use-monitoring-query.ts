@@ -90,7 +90,7 @@ export function useMonitoringQuery(request: MonitoringRequest) {
   const [paused, setPaused] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const active = useRef<AbortController | undefined>(undefined);
-  const previousKey = useRef(key);
+  const selectionPending = useRef(!initial);
   const previousRequest = useRef(request);
 
   useEffect(() => {
@@ -98,6 +98,7 @@ export function useMonitoringQuery(request: MonitoringRequest) {
     active.current?.abort();
     const prior = previousRequest.current;
     previousRequest.current = request;
+    selectionPending.current = !entry || monitoringKey(prior) !== key;
     const sameScopeAndPage =
       prior.scope === request.scope &&
       prior.id === request.id &&
@@ -132,7 +133,10 @@ export function useMonitoringQuery(request: MonitoringRequest) {
         if (!controller.signal.aborted) setError(errorMessage(cause));
       } finally {
         lifetime.removeEventListener("abort", abort);
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) {
+          selectionPending.current = false;
+          setLoading(false);
+        }
       }
     },
     [key, request],
@@ -140,12 +144,10 @@ export function useMonitoringQuery(request: MonitoringRequest) {
 
   useVisibleRefresh(refresh, { key, interval: 5_000, enabled: !paused });
 
-  // Pause stops automatic updates. Explicit range/page navigation still needs
-  // one bounded read; otherwise an uncached selection would load forever.
+  // Pause stops automatic updates, but an explicit selection still needs one
+  // read to settle, including when the live read was aborted by pausing.
   useEffect(() => {
-    const changed = previousKey.current !== key;
-    previousKey.current = key;
-    if (!paused || !changed) return;
+    if (!paused || !selectionPending.current) return;
     let pending: AbortController | undefined;
     let completed = false;
     const read = () => {
