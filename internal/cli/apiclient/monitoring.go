@@ -256,6 +256,14 @@ func monitoringServiceFromGenerated(
 func monitoringEnvironmentFromGenerated(
 	value generated.EnvironmentMonitoring,
 ) (apiTypes.EnvironmentMonitoring, error) {
+	live, err := monitoringLiveFromGenerated(value.Live)
+	if err != nil {
+		return apiTypes.EnvironmentMonitoring{}, err
+	}
+	history, err := monitoringBucketsFromGenerated(value.History)
+	if err != nil {
+		return apiTypes.EnvironmentMonitoring{}, err
+	}
 	services := apiTypes.Page[apiTypes.MonitoringServiceHealth]{
 		NextCursor: monitoringString(value.Services.NextCursor),
 		Revision:   monitoringInt64(value.Services.Revision),
@@ -278,7 +286,7 @@ func monitoringEnvironmentFromGenerated(
 			})
 		}
 	}
-	return apiTypes.EnvironmentMonitoring{Services: services}, nil
+	return apiTypes.EnvironmentMonitoring{Live: live, History: history, Services: services}, nil
 }
 
 func monitoringBackingFromGenerated(

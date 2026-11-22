@@ -57,6 +57,49 @@ func TestShowMonitoringUsesGeneratedOperationAndPreservesUnsignedValues(t *testi
 	}
 }
 
+// MON-01/02: Preserve Environment totals and retained samples alongside one
+// page of Service health; a decoded service roster alone is incomplete.
+func TestShowMonitoringPreservesEnvironmentTotalsAndServicePage(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v1/monitoring/environment/env_test" || request.URL.Query().Get("limit") != "1" {
+			t.Errorf("request = %s", request.URL)
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{
+  "scope":{"kind":"environment","id":"env_test","name":"staging"},
+  "window":{"range":"1h","start":"2026-11-22T12:00:00Z","end":"2026-11-22T13:00:00Z","bucket_seconds":15},
+  "history_status":"available",
+  "environment":{
+    "live":{"status":"fresh","observed_at":"2026-11-22T13:00:04Z","coverage":{"eligible_resources":2,"sampled_resources":2},"values":{"cpu_cores":{"average":7.5}}},
+    "history":[{"start":"2026-11-22T12:59:45Z","end":"2026-11-22T13:00:00Z","coverage":{"eligible_resources":2,"sampled_resources":2},"values":{"cpu_cores":{"average":6.5}}}],
+    "services":{"items":[{"id":"svc_test","name":"api","runtime_intent":"running","observation":{"state":"healthy"}}],"next_cursor":"next","revision":42}
+  }
+}`))
+	}))
+	defer server.Close()
+
+	got, err := New(server.URL).ShowMonitoring(t.Context(), "environment", "env_test", "1h", 240, 1, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := got.Environment
+	if env == nil || env.Live.Status != "fresh" || env.Live.ObservedAt == nil ||
+		env.Live.Values.CPUCores == nil || env.Live.Values.CPUCores.Average == nil ||
+		*env.Live.Values.CPUCores.Average != 7.5 || env.Live.Coverage.SampledResources != 2 {
+		t.Fatalf("Environment live totals were lost: %+v", env)
+	}
+	if len(env.History) != 1 || env.History[0].Values.CPUCores == nil ||
+		env.History[0].Values.CPUCores.Average == nil || *env.History[0].Values.CPUCores.Average != 6.5 {
+		t.Fatalf("Environment history was lost: %+v", env.History)
+	}
+	if env.Services.NextCursor != "next" || env.Services.Revision != 42 || len(env.Services.Items) != 1 ||
+		env.Services.Items[0].Observation.State != "healthy" {
+		t.Fatalf("Environment Service page was lost: %+v", env.Services)
+	}
+}
+
 func TestShowMonitoringRejectsNegativeUnsignedWireValues(t *testing.T) {
 	t.Parallel()
 
