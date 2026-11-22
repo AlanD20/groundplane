@@ -9,6 +9,21 @@ that every deployment or failure scenario has been qualified.
 
 ### Replacement release corrections
 
+- Add scoped live resource monitoring for the Host, Tenant, Project, Service
+  and Backing instance, with Environment Service health, bounded history and
+  Console/CLI/API parity. Chart inspection shows exact UTC intervals, recorded
+  averages and extrema, sample coverage and gaps; shared Backing usage remains
+  separate from consumer totals. See [monitoring](docs/features/monitoring.md)
+  for retention, attribution and current qualification limits.
+
+- Start a new counter segment after container replacement or any process restart,
+  including manual Docker restarts that retain the container id and restart count.
+
+- Pause new execution admission during transient execution-storage outages,
+  retaining Controller ownership while draining and reconciling accepted work.
+  Permanent faults and unproven ownership still fail closed; this is not an
+  offline restore or permission to replay accepted application actions.
+
 - Mount the captured Environment root read-only in Entry execution helpers so
   Compose can inspect generated configuration during retained-operation recovery.
 
