@@ -302,7 +302,7 @@ export function LogStream({ target }: { target: LogTarget }) {
             el.scrollHeight - el.clientHeight - el.scrollTop < 32;
           setAtEnd(pinnedToEnd.current);
         }}
-        className="h-[60vh] min-h-72 min-w-0 max-w-full overflow-auto overscroll-contain rounded-xl border border-border bg-card p-3 font-mono text-sm"
+        className="h-[60vh] min-h-72 min-w-0 max-w-full overflow-auto overscroll-contain rounded-xl border border-border bg-card p-3 font-mono text-sm [overflow-anchor:none]"
       >
         {visible.length === 0 ? (
           <EmptyState

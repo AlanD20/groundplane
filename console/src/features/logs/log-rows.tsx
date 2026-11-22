@@ -24,6 +24,7 @@ export function LogRows({
     getItemKey: (index) => events[index].sequence,
     estimateSize: () => 28,
     overscan: 8,
+    anchorTo: "end",
   });
   const longest = useMemo(
     () =>
@@ -62,7 +63,7 @@ export function LogRows({
             event={events[row.index]}
             wrap={wrap}
             showSource={showSource}
-            alternate={row.index % 2 === 1}
+            alternate={events[row.index].sequence % 2 === 1}
           />
         </div>
       ))}
