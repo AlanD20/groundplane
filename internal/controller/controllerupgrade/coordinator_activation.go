@@ -139,8 +139,7 @@ func (coordinator *Coordinator) validateAndDrain(ctx context.Context, operation 
 	deadline := minTime(expected.CandidateDeadline(), coordinator.now().Add(upgrade.DrainTimeoutSeconds*time.Second))
 	for {
 		check := coordinator.work.RequireIdle
-		if expected.Manifest.ChannelSchema == coordinator.channelSchema &&
-			expected.Manifest.AgentImage == expected.Agent.Image {
+		if expected.Manifest.ChannelSchema == coordinator.channelSchema {
 			check = coordinator.work.RequireUpgradeReady
 		}
 		err := check(ctx, expected.Agent.ID, expected.Agent.Generation, maximum)

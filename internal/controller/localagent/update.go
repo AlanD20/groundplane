@@ -10,8 +10,21 @@ import (
 )
 
 func (manager *Manager) update(ctx context.Context, request UpdateRequest) error {
+	return manager.updateWithAuthority(ctx, request, nil)
+}
+
+func (manager *Manager) updateWithAuthority(
+	ctx context.Context,
+	request UpdateRequest,
+	authority *PreparedUpdateAuthority,
+) error {
 	if err := validateUpdateRequest(request); err != nil {
 		return err
+	}
+	if authority != nil {
+		if err := authority.Validate(request, UpdateFinish); err != nil {
+			return err
+		}
 	}
 	stored, err := manager.repository.GetSingleton(ctx)
 	if err != nil {
@@ -30,7 +43,7 @@ func (manager *Manager) update(ctx context.Context, request UpdateRequest) error
 		case PhaseReady:
 			return nil
 		case PhaseUpdating:
-			return manager.completeUpdateOrRollback(ctx, request, stored)
+			return manager.completeUpdateOrRollback(ctx, request, stored, authority)
 		default:
 			return errs.New(errs.KindStateConflict, "local agent replacement phase changed")
 		}
@@ -64,13 +77,15 @@ func (manager *Manager) update(ctx context.Context, request UpdateRequest) error
 			resume()
 		}
 	}()
-	if err := manager.tasks.RequireIdle(
-		ctx,
-		stored.Record.ID,
-		stored.Record.Generation,
-		stored.Record.Config.MaxConcurrentTasks*stored.Record.Config.MaxParallelOperationsPerTask,
+	maximum := stored.Record.Config.MaxConcurrentTasks * stored.Record.Config.MaxParallelOperationsPerTask
+	if authority == nil {
+		if err := manager.tasks.RequireIdle(ctx, stored.Record.ID, stored.Record.Generation, maximum); err != nil {
+			return safePortError(ctx, err, "local agent must be idle before update")
+		}
+	} else if err := manager.tasks.RequireUpgradeReady(
+		ctx, stored.Record.ID, stored.Record.Generation, maximum,
 	); err != nil {
-		return safePortError(ctx, err, "local agent must be idle before update")
+		return safePortError(ctx, err, "local agent retained recovery is not ready for update")
 	}
 	credential, err := manager.runtime.GenerateCredential(ctx, stored.Record.ID)
 	if err != nil {
@@ -134,13 +149,14 @@ func (manager *Manager) update(ctx context.Context, request UpdateRequest) error
 	if err := manager.sessions.WaitOffline(ctx, stored.Record.ID, stored.Record.Generation); err != nil {
 		return safePortError(ctx, err, "local agent previous session offline wait failed")
 	}
-	return manager.completeUpdateOrRollback(ctx, request, replacement)
+	return manager.completeUpdateOrRollback(ctx, request, replacement, authority)
 }
 
 func (manager *Manager) completeUpdateOrRollback(
 	ctx context.Context,
 	request UpdateRequest,
 	replacement StoredRecord,
+	authority *PreparedUpdateAuthority,
 ) error {
 	replacementErr := manager.resumeReplacement(ctx, replacement)
 	if replacementErr == nil {
@@ -166,6 +182,14 @@ func (manager *Manager) completeUpdateOrRollback(
 	}
 	if current.Record.Phase != PhaseUpdating {
 		return errs.New(errs.KindStateConflict, "local agent replacement cannot be rolled back")
+	}
+	if authority != nil {
+		if !authority.AllowsCandidateRollback() {
+			return replacementErr
+		}
+		if err := manager.requirePreparedReplacementRollback(ctx, request, current, *authority); err != nil {
+			return err
+		}
 	}
 	return manager.rollbackUpdate(ctx, request, current, taskprogress.CaptureControllerFailure(replacementErr))
 }

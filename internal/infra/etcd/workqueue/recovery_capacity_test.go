@@ -28,6 +28,7 @@ func TestNativeStoppedRecoveryRetainsClaimsAndRetryIdentity(t *testing.T) {
 func checkStoppedRecovery(t *testing.T, operation workexecution.Operation) {
 	store := &assignmentStore{revision: 1, values: make(map[string]keyvalue.KeyValue)}
 	initial := assignmentFixture(t, store, operation, nil)
+	initial.Executor.Record.Identity.Generation = 2
 	initial.Executor.Record.Operations = append(initial.Executor.Record.Operations, workexecution.EntryConfiguration)
 	executorBytes, err := EncodeExecutor(initial.Executor.Record)
 	if err != nil {
@@ -154,11 +155,20 @@ func checkStoppedRecovery(t *testing.T, operation workexecution.Operation) {
 	// Metadata qualifies only the supported Entry path, without releasing ownership.
 	window, retained, err := repository.HostUpgradeWindow(
 		t.Context(),
-		initial.Executor.Record.Identity.HostID,
+		initial.Executor.Record.Identity,
 		store.revision,
 	)
 	if err != nil || window != (operation == workexecution.EntryConfiguration) || !retained {
 		t.Fatalf("stopped recovery upgrade window = %v, retained=%v: %v", window, retained, err)
+	}
+	for _, alternate := range []workexecution.Identity{
+		{Executor: workexecution.Agent, HostID: initial.Executor.Record.Identity.HostID, AgentID: initial.Executor.Record.Identity.AgentID, Generation: 1},
+		{Executor: workexecution.Agent, HostID: initial.Executor.Record.Identity.HostID, AgentID: ids.New(ids.KindAgent), Generation: 2},
+	} {
+		eligible, _, err := repository.HostUpgradeWindow(t.Context(), alternate, store.revision)
+		if err != nil || eligible {
+			t.Fatalf("foreign or future recovery qualified update: %v %v", eligible, err)
+		}
 	}
 	idle, err := repository.HostIdle(t.Context(), initial.Executor.Record.Identity.HostID, store.revision)
 	if err != nil || idle {
@@ -171,7 +181,7 @@ func checkStoppedRecovery(t *testing.T, operation workexecution.Operation) {
 		t.Fatal(err)
 	}
 	commit(change)
-	window, _, err = repository.HostUpgradeWindow(t.Context(), initial.Executor.Record.Identity.HostID, store.revision)
+	window, _, err = repository.HostUpgradeWindow(t.Context(), initial.Executor.Record.Identity, store.revision)
 	if err != nil || window {
 		t.Fatalf("occupied slot admitted upgrade: %v %v", window, err)
 	}

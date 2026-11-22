@@ -133,9 +133,29 @@ func (coordinator *Coordinator) reconcileAgent(
 	agent := expected.Agent
 	desired := expected.Manifest.AgentImage
 	if agent.Image != desired {
-		result, err := coordinator.agents.RecoverUpdate(ctx, localagent.UpdateRequest{
+		request := localagent.UpdateRequest{
 			AgentID: agent.ID, PreviousImage: agent.Image, DesiredImage: desired, StartingGeneration: agent.Generation,
-		}, goal, nil)
+		}
+		var result localagent.UpdateResult
+		var err error
+		if expected.Manifest.ChannelSchema == coordinator.channelSchema {
+			journal, found, currentErr := coordinator.current(ctx, operation)
+			if currentErr != nil {
+				return currentErr
+			}
+			if !found {
+				return errs.New(errs.KindStateConflict, "native Agent update lost journal authority")
+			}
+			authority, authorityErr := localagent.AuthorizePreparedUpdate(
+				journal, coordinator.process, request, goal,
+			)
+			if authorityErr != nil {
+				return authorityErr
+			}
+			result, err = coordinator.agents.RecoverPreparedUpdate(ctx, request, goal, nil, authority)
+		} else {
+			result, err = coordinator.agents.RecoverUpdate(ctx, request, goal, nil)
+		}
 		if err != nil {
 			return err
 		}

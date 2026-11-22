@@ -187,12 +187,21 @@ type Sessions interface {
 	WaitOffline(ctx context.Context, agentID string, generation uint64) error
 }
 
-// Tasks observes native host reservations and unresolved effects for one exact
-// credential generation. AbortActive fences forward work but permits recovery;
-// success requires settlement, not just cancellation delivery or a free slot.
+// Tasks observes native host reservations and unresolved effects. Ordinary
+// checks bind one exact credential generation; prepared rollback additionally
+// proves the retained original window under an all-generation admission hold.
+// AbortActive fences forward work but permits recovery; success requires
+// settlement, not just cancellation delivery or a free slot.
 type Tasks interface {
 	RequireIdle(ctx context.Context, agentID string, generation uint64, maximum int32) error
 	RequireUpgradeReady(ctx context.Context, agentID string, generation uint64, maximum int32) error
+	RequireReplacementRollbackReady(
+		ctx context.Context,
+		agentID string,
+		originalGeneration uint64,
+		currentGeneration uint64,
+		maximum int32,
+	) error
 	AbortActive(ctx context.Context, agentID string, generation uint64, maximum int32, reason string) error
 	ResumeForward(context.Context, string, uint64) error
 }

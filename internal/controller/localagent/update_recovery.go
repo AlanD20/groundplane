@@ -33,6 +33,16 @@ func (manager *Manager) RecoverUpdate(
 	goal UpdateGoal,
 	failure *taskprogress.Failure,
 ) (UpdateResult, error) {
+	return manager.recoverUpdate(ctx, request, goal, failure, nil)
+}
+
+func (manager *Manager) recoverUpdate(
+	ctx context.Context,
+	request UpdateRequest,
+	goal UpdateGoal,
+	failure *taskprogress.Failure,
+	authority *PreparedUpdateAuthority,
+) (UpdateResult, error) {
 	if ctx == nil {
 		return "", errs.New(errs.KindInternal, "local agent recovery context is required")
 	}
@@ -47,6 +57,11 @@ func (manager *Manager) RecoverUpdate(
 	}
 	if request.StartingGeneration > math.MaxUint64-2 || goal != UpdateFinish && goal != UpdateRestore {
 		return "", errs.New(errs.KindValidationFailed, "local agent recovery goal is invalid")
+	}
+	if authority != nil {
+		if err := authority.Validate(request, goal); err != nil {
+			return "", err
+		}
 	}
 	// Recovery chooses its own direction; ordinary enter would first finish a
 	// retained candidate even when this Task now requires predecessor recovery.
@@ -74,11 +89,20 @@ func (manager *Manager) RecoverUpdate(
 		manager.pending.resume()
 		manager.pending = nil
 	}
+	settleOnly := false
+	if authority != nil {
+		settleOnly, err = preparedUpdateSettleOnly(stored, request, goal, *authority)
+		if err != nil {
+			return "", err
+		}
+	}
 	var executionErr error
-	if goal == UpdateFinish {
-		executionErr = manager.update(ctx, request)
-	} else {
-		executionErr = manager.restoreUpdate(ctx, request, stored, failure)
+	if !settleOnly {
+		if goal == UpdateFinish {
+			executionErr = manager.updateWithAuthority(ctx, request, authority)
+		} else {
+			executionErr = manager.restoreUpdate(ctx, request, stored, failure, authority)
+		}
 	}
 	if ctx.Err() != nil {
 		return "", ctx.Err()
@@ -166,11 +190,17 @@ func validateRecoveryRecord(stored StoredRecord, request UpdateRequest) error {
 
 func (manager *Manager) restoreUpdate(ctx context.Context, request UpdateRequest, stored StoredRecord,
 	failure *taskprogress.Failure,
+	authority *PreparedUpdateAuthority,
 ) error {
 	if stored.Record.Generation == request.StartingGeneration+1 {
-		if err := manager.tasks.RequireIdle(
-			ctx, request.AgentID, stored.Record.Generation, stored.Record.Config.MaxConcurrentTasks*stored.Record.Config.MaxParallelOperationsPerTask,
-		); err != nil {
+		if authority == nil {
+			if err := manager.tasks.RequireIdle(
+				ctx, request.AgentID, stored.Record.Generation,
+				stored.Record.Config.MaxConcurrentTasks*stored.Record.Config.MaxParallelOperationsPerTask,
+			); err != nil {
+				return err
+			}
+		} else if err := manager.requirePreparedReplacementRollback(ctx, request, stored, *authority); err != nil {
 			return err
 		}
 		return manager.rollbackUpdate(ctx, request, stored, failure)

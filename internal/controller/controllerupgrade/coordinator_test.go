@@ -47,7 +47,8 @@ func TestCoordinatorHandsOffThenQualifiesSameTask(t *testing.T) {
 	if err != nil || status.Outcome != workexecution.Succeeded ||
 		h.store.current().Phase != upgrade.PhaseHealthy ||
 		len(h.agents.goals) != 1 ||
-		h.agents.goals[0] != localagent.UpdateFinish {
+		h.agents.goals[0] != localagent.UpdateFinish ||
+		len(h.agents.preparedGoals) != 1 || h.agents.preparedGoals[0] != localagent.UpdateFinish {
 		t.Fatalf("qualification = %s, %v, journal %s", status.Outcome, err, h.store.current().Phase)
 	}
 }
@@ -113,7 +114,9 @@ func TestCoordinatorBadCandidateRequestsNativeRollbackAndPredecessorRecovers(t *
 	)
 	if err != nil || status.Outcome != workexecution.Failed ||
 		h.store.current().Phase != upgrade.PhaseRecovered ||
-		h.agents.goals[len(h.agents.goals)-1] != localagent.UpdateRestore {
+		h.agents.goals[len(h.agents.goals)-1] != localagent.UpdateRestore ||
+		len(h.agents.preparedGoals) == 0 ||
+		h.agents.preparedGoals[len(h.agents.preparedGoals)-1] != localagent.UpdateRestore {
 		t.Fatalf("predecessor recovery = %s, %v, journal %s", status.Outcome, err, h.store.current().Phase)
 	}
 }
@@ -323,9 +326,10 @@ func (unit *coordinatorUnit) Launch(context.Context, string) error {
 }
 
 type coordinatorAgents struct {
-	agent localagent.Agent
-	goals []localagent.UpdateGoal
-	err   error
+	agent         localagent.Agent
+	goals         []localagent.UpdateGoal
+	preparedGoals []localagent.UpdateGoal
+	err           error
 }
 
 func (agents *coordinatorAgents) ListHealth(context.Context) ([]localagent.Health, error) {
@@ -337,6 +341,22 @@ func (agents *coordinatorAgents) Health(context.Context, string) (localagent.Hea
 func (agents *coordinatorAgents) RecoverUpdate(
 	_ context.Context, request localagent.UpdateRequest, goal localagent.UpdateGoal,
 	_ *taskprogress.Failure,
+) (localagent.UpdateResult, error) {
+	return agents.recover(request, goal)
+}
+func (agents *coordinatorAgents) RecoverPreparedUpdate(
+	_ context.Context, request localagent.UpdateRequest, goal localagent.UpdateGoal,
+	_ *taskprogress.Failure, authority localagent.PreparedUpdateAuthority,
+) (localagent.UpdateResult, error) {
+	if err := authority.Validate(request, goal); err != nil {
+		return "", err
+	}
+	agents.preparedGoals = append(agents.preparedGoals, goal)
+	return agents.recover(request, goal)
+}
+func (agents *coordinatorAgents) recover(
+	request localagent.UpdateRequest,
+	goal localagent.UpdateGoal,
 ) (localagent.UpdateResult, error) {
 	agents.goals = append(agents.goals, goal)
 	if agents.err != nil {
@@ -378,9 +398,10 @@ func (owner *coordinatorWork) RequireUpgradeReady(
 	return owner.RequireIdle(ctx, agentID, generation, maximum)
 }
 
-// A retained-recovery exception cannot silently include Agent replacement or
-// channel-format cutover. Observe actual staging/handoff, not method selection.
-func TestControllerRecoveryAdmissionPreservesAgentAndChannel(t *testing.T) {
+// A retained-recovery exception may include a same-channel Agent replacement,
+// but it cannot silently cross the closed channel format. Observe actual
+// staging and handoff rather than method selection alone.
+func TestControllerRecoveryAdmissionRequiresSameChannel(t *testing.T) {
 	for _, changedAgent := range []bool{false, true} {
 		for _, changedChannel := range []bool{false, true} {
 			h := newCoordinatorHarness(t)
@@ -400,7 +421,7 @@ func TestControllerRecoveryAdmissionPreservesAgentAndChannel(t *testing.T) {
 				t.Fatal(err)
 			}
 			result, err := coordinator.Execute(ctx, h.expected, true, h.progress(ctx))
-			allowed := !changedAgent && !changedChannel
+			allowed := !changedChannel
 			if allowed {
 				if !errors.Is(err, context.Canceled) || !h.store.found || h.unit.launches != 1 ||
 					h.store.current().Phase != upgrade.PhaseActivating {

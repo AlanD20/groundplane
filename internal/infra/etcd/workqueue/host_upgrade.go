@@ -3,7 +3,6 @@ package workqueue
 import (
 	"context"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
@@ -14,14 +13,14 @@ import (
 // Removal continues to require HostIdle and complete effect settlement.
 func (repository *Repository) HostUpgradeWindow(
 	ctx context.Context,
-	hostID string,
+	identity workexecution.Identity,
 	revision int64,
 ) (bool, bool, error) {
-	if ids.Validate(ids.KindHost, hostID) != nil || revision <= 0 {
+	if identity.Validate() != nil || identity.Executor != workexecution.Agent || revision <= 0 {
 		return false, false, invalid("host upgrade read requires a fixed binding revision")
 	}
 	read, err := repository.store.Range(ctx, keyvalue.RangeRequest{
-		Prefix: SlotsPrefix(workexecution.Identity{Executor: workexecution.Agent, HostID: hostID}),
+		Prefix: SlotsPrefix(workexecution.Identity{Executor: workexecution.Agent, HostID: identity.HostID}),
 		Limit:  1, Revision: revision,
 	})
 	if err != nil {
@@ -37,7 +36,7 @@ func (repository *Repository) HostUpgradeWindow(
 	}
 	retained, after := false, ""
 	for {
-		page, err := repository.HostActivity(ctx, hostID, after, 64, revision)
+		page, err := repository.HostActivity(ctx, identity.HostID, after, 64, revision)
 		if err != nil {
 			return false, false, err
 		}
@@ -55,7 +54,8 @@ func (repository *Repository) HostUpgradeWindow(
 			}
 			attempt := latest.Attempt
 			if attempt.FinishedAt == nil || attempt.Result == nil || attempt.Input != *item.Input ||
-				attempt.Executor.HostID != hostID {
+				attempt.Executor.HostID != identity.HostID || attempt.Executor.AgentID != identity.AgentID ||
+				attempt.Executor.Generation > identity.Generation {
 				return false, retained, nil
 			}
 		}

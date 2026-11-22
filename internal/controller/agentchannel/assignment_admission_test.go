@@ -3,8 +3,11 @@ package agentchannel
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 	"time"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // QA: HOST-07, UP-04; local admission and wake signals, not an Agent update.
@@ -64,6 +67,40 @@ func TestRegistryAssignmentPauseOwnsOnlyItsAdmissionHold(t *testing.T) {
 	assertAssignmentSendRejected(t, reconnected)
 	second()
 	assertAdmissionAllowed(t, reconnected)
+}
+
+// Rationale: native Agent rollback needs proof that the restored Controller
+// still owns the all-generation hold; a narrower or released pause cannot
+// authorize an offline candidate transition.
+func TestRegistryRequireAssignmentPauseNeedsCoveringLiveHold(t *testing.T) {
+	registry := NewRegistry()
+	narrow, err := registry.PauseAssignments(t.Context(), testAgentID, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer narrow()
+	if err := registry.RequireAssignmentPause(t.Context(), testAgentID, math.MaxUint64); !errors.Is(
+		err, errs.New(errs.KindStateConflict, ""),
+	) {
+		t.Fatalf("narrow pause authorized all generations: %v", err)
+	}
+
+	all, err := registry.PauseAssignments(t.Context(), testAgentID, math.MaxUint64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.RequireAssignmentPause(t.Context(), testAgentID, math.MaxUint64); err != nil {
+		t.Fatalf("all-generation pause unavailable: %v", err)
+	}
+	if err := registry.RequireAssignmentPause(t.Context(), testAgentID, 8); err != nil {
+		t.Fatalf("covering pause unavailable to candidate generation: %v", err)
+	}
+	all()
+	if err := registry.RequireAssignmentPause(t.Context(), testAgentID, 8); !errors.Is(
+		err, errs.New(errs.KindStateConflict, ""),
+	) {
+		t.Fatalf("released all-generation pause remained available: %v", err)
+	}
 }
 
 // QA: HOST-04/07, UP-04; local generation fences, not token rotation or deletion.

@@ -8,6 +8,7 @@ import (
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -89,7 +90,8 @@ func TestCoordinatorHealthyReplayCompletesAfterDeadline(t *testing.T) {
 		h.progress(context.Background()),
 	)
 	if err != nil || status.Outcome != workexecution.Succeeded || h.unit.launches != 0 ||
-		h.store.current().Phase != upgrade.PhaseHealthy {
+		h.store.current().Phase != upgrade.PhaseHealthy || len(h.agents.preparedGoals) != 1 ||
+		h.agents.preparedGoals[0] != localagent.UpdateFinish {
 		t.Fatalf("healthy replay = %s, %v", status.Outcome, err)
 	}
 }

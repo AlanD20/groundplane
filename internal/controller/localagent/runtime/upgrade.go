@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"math"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -22,7 +24,13 @@ func (owner *localAgentWork) RequireUpgradeReady(
 	if err != nil {
 		return err
 	}
-	ready, retained, err := owner.queue.HostUpgradeWindow(ctx, binding.HostID, binding.ReadRevision)
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     binding.HostID,
+		AgentID:    agentID,
+		Generation: generation,
+	}
+	ready, retained, err := owner.queue.HostUpgradeWindow(ctx, identity, binding.ReadRevision)
 	if err != nil {
 		return err
 	}
@@ -43,7 +51,10 @@ func (owner *localAgentWork) RequireUpgradeReady(
 	if err != nil {
 		return err
 	}
-	ready, _, err = owner.queue.HostUpgradeWindow(ctx, binding.HostID, binding.ReadRevision)
+	if binding.HostID != identity.HostID {
+		return errs.New(errs.KindStateConflict, "Agent host binding changed during execution qualification")
+	}
+	ready, _, err = owner.queue.HostUpgradeWindow(ctx, identity, binding.ReadRevision)
 	if err != nil {
 		return err
 	}
@@ -54,4 +65,46 @@ func (owner *localAgentWork) RequireUpgradeReady(
 		)
 	}
 	return nil
+}
+
+// RequireReplacementRollbackReady is only for predecessor recovery authorized by
+// the matching native activation journal. That journal proves original execution
+// quiescence and preserves closed admission across candidate startup. No command
+// was admitted to the candidate, so an offline candidate need not answer a probe.
+func (owner *localAgentWork) RequireReplacementRollbackReady(
+	ctx context.Context,
+	agentID string,
+	original, current uint64,
+	maximum int32,
+) error {
+	if err := validateWorkBound(maximum); err != nil {
+		return err
+	}
+	if original == 0 || current <= original || current-original != 1 {
+		return errs.New(errs.KindStateConflict, "Agent rollback generation differs from its prepared update")
+	}
+	if err := owner.sessions.RequireAssignmentPause(ctx, agentID, math.MaxUint64); err != nil {
+		return err
+	}
+	binding, err := owner.agents.MaintenanceBinding(ctx, agentID, current)
+	if err != nil {
+		return err
+	}
+	identity := workexecution.Identity{
+		Executor:   workexecution.Agent,
+		HostID:     binding.HostID,
+		AgentID:    agentID,
+		Generation: original,
+	}
+	ready, _, err := owner.queue.HostUpgradeWindow(ctx, identity, binding.ReadRevision)
+	if err != nil {
+		return err
+	}
+	if !ready {
+		return errs.New(
+			errs.KindResourceInUse,
+			"Agent rollback is blocked by work outside the original quiescence proof; ownership is retained",
+		)
+	}
+	return owner.sessions.RequireAssignmentPause(ctx, agentID, math.MaxUint64)
 }

@@ -178,6 +178,16 @@ the reply and journal publication. The observer never stops a helper or changes
 recovery evidence. Unsupported operations and readers remain blocking; an Agent
 replacement additionally needs proof of compatible retained-journal recovery.
 
+The candidate repeats qualification before replacing the Agent. If it cannot
+finish, rollback authority comes from the matching native journal after the
+predecessor Controller is restored. The original process check and the hold
+restored before every listener exclude commands throughout candidate startup;
+receipt replay does not authorize effects. This permits restoring an offline
+candidate without depending on its cooperation. The rollback window rejects
+occupied slots, another Agent's recovery, or attempts newer than the original
+generation. It advances durable credentials before revoking the candidate
+session and converging the predecessor. No second receipt format is needed.
+
 The candidate resumes the Task and brings the Agent to the release-pinned
 digest through the normal Agent replacement contract. Failure restores the
 Controller predecessor and, when changed, the prior Agent with fresh generation

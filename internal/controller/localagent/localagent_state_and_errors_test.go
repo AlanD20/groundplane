@@ -171,9 +171,16 @@ func (sessions *fakeSessions) WaitOffline(ctx context.Context, _ string, _ uint6
 }
 
 type fakeTasks struct {
-	trace      *traceLog
-	abortError error
-	idleError  error
+	trace              *traceLog
+	abortError         error
+	idleError          error
+	upgradeReadyError  error
+	rollbackReadyError error
+	upgradeReadyCalls  int
+	rollbackReadyCalls int
+	rollbackOriginal   uint64
+	rollbackCurrent    uint64
+	rollbackMaximum    int32
 }
 
 func (tasks *fakeTasks) ResumeForward(ctx context.Context, agentID string, generation uint64) error {
@@ -368,9 +375,32 @@ func TestSafePortErrorPreservesKindWithoutPrivateCause(t *testing.T) {
 
 func (owner *fakeTasks) RequireUpgradeReady(
 	ctx context.Context,
-	agentID string,
-	generation uint64,
+	_ string,
+	_ uint64,
+	_ int32,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	owner.trace.add("require_upgrade_ready")
+	owner.upgradeReadyCalls++
+	return owner.upgradeReadyError
+}
+
+func (owner *fakeTasks) RequireReplacementRollbackReady(
+	ctx context.Context,
+	_ string,
+	originalGeneration uint64,
+	currentGeneration uint64,
 	maximum int32,
 ) error {
-	return owner.RequireIdle(ctx, agentID, generation, maximum)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	owner.trace.add("require_replacement_rollback_ready")
+	owner.rollbackReadyCalls++
+	owner.rollbackOriginal = originalGeneration
+	owner.rollbackCurrent = currentGeneration
+	owner.rollbackMaximum = maximum
+	return owner.rollbackReadyError
 }

@@ -32,6 +32,13 @@ type ActivationUnit interface {
 type ManagedAgent interface {
 	ListHealth(context.Context) ([]localagent.Health, error)
 	Health(context.Context, string) (localagent.Health, error)
+	RecoverPreparedUpdate(
+		context.Context,
+		localagent.UpdateRequest,
+		localagent.UpdateGoal,
+		*taskprogress.Failure,
+		localagent.PreparedUpdateAuthority,
+	) (localagent.UpdateResult, error)
 	RecoverUpdate(
 		context.Context,
 		localagent.UpdateRequest,

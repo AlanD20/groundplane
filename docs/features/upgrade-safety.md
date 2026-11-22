@@ -84,14 +84,24 @@ Busy work is not aborted to make an update proceed. The bounded drain can reject
 an update with `resource.in_use`; let the existing work finish before trying again.
 Application Scripts and migrations are not replayed during an update.
 
-A same-channel Controller update that preserves the exact Agent image can also
+A same-channel native Controller or coordinated Controller/Agent update can also
 proceed with retained Entry configuration recovery, provided its attempts have
 finished and a fresh check of the authenticated Agent proves that no local work,
 command-capable auxiliary sessions or transient execution helpers remain active.
 The check is read-only. Resource claims, captured inputs, failed Tasks and Agent
 journals remain available for explicit recovery afterward. A stopped cleanup
-label alone does not supply this proof. Agent replacement and other retained
-operation types still require full settlement.
+label alone does not supply this proof. A coordinated Agent replacement repeats
+the fresh check after Controller handoff, before replacing the Agent.
+
+If that candidate never becomes ready, the recovered predecessor Controller uses
+the original native update journal and its continuously closed assignment hold
+to authorize rollback. It does not wait for an offline candidate to answer a
+probe. Recovery rejects work from outside the original Agent generation and
+preserves the original failed Entry operation for explicit Retry afterward.
+
+Agent-only activation and other retained operation types still require full
+settlement. To repair an Agent while Entry recovery is retained, prepare a
+compatible coordinated update with a new Controller build.
 
 An older Agent that cannot answer this check blocks the update before activation.
 Installing a candidate does not change the predecessor's admission rules. An

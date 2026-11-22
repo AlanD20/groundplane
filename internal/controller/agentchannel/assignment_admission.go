@@ -3,6 +3,8 @@ package agentchannel
 import (
 	"context"
 	"sync"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // assignmentPause is an operation-owned hold, distinct from irreversible
@@ -84,6 +86,27 @@ func (r *Registry) PauseAssignments(ctx context.Context, agentID string, generat
 		return nil, err
 	}
 	return resume, nil
+}
+
+// RequireAssignmentPause observes a covering operation-owned hold without
+// creating one. In particular, MaxUint64 requires the native all-generation
+// pause; an ordinary generation pause cannot stand in for recovery admission.
+func (r *Registry) RequireAssignmentPause(ctx context.Context, agentID string, generation uint64) error {
+	if r == nil {
+		return errs.New(errs.KindInternal, "Agent session registry is required")
+	}
+	if err := validateLifecycleTarget(ctx, agentID, generation); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !r.assignmentsPausedLocked(agentID, generation) {
+		return errs.New(errs.KindStateConflict, "Agent assignment admission hold is unavailable")
+	}
+	return nil
 }
 
 func (r *Registry) assignmentsPausedLocked(agentID string, generation uint64) bool {
