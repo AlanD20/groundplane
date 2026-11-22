@@ -1,6 +1,11 @@
 import { useSyncExternalStore } from "react";
 
-export type TaskNotification = { id: string; toast: boolean; unread: boolean };
+export type TaskNotification = {
+  id: string;
+  toastUntil?: number;
+  unread: boolean;
+};
+const toastLifetimeMs = 5_000;
 let accepted: TaskNotification[] = [];
 const listeners = new Set<() => void>();
 
@@ -24,8 +29,10 @@ export function reportAcceptedTasks(response: unknown) {
   const next = [...new Set(ids)].filter(
     (id) => !accepted.some((item) => item.id === id),
   );
+  if (!next.length) return;
+  const toastUntil = Date.now() + toastLifetimeMs;
   accepted = [
-    ...next.map((id) => ({ id, toast: true, unread: true })),
+    ...next.map((id) => ({ id, toastUntil, unread: true })),
     ...accepted,
   ].slice(0, 50);
   listeners.forEach((listener) => listener());
@@ -33,13 +40,34 @@ export function reportAcceptedTasks(response: unknown) {
 
 export function dismissAcceptedTask(id: string) {
   accepted = accepted.map((item) =>
-    item.id === id ? { ...item, toast: false } : item,
+    item.id === id ? { ...item, toastUntil: undefined } : item,
+  );
+  listeners.forEach((listener) => listener());
+}
+
+export function readTaskNotification(id: string) {
+  accepted = accepted.map((item) =>
+    item.id === id ? { ...item, unread: false, toastUntil: undefined } : item,
   );
   listeners.forEach((listener) => listener());
 }
 
 export function markTaskNotificationsRead() {
-  accepted = accepted.map((item) => ({ ...item, unread: false, toast: false }));
+  if (!accepted.some((item) => item.unread || item.toastUntil)) return;
+  accepted = accepted.map((item) => ({
+    ...item,
+    unread: false,
+    toastUntil: undefined,
+  }));
+  listeners.forEach((listener) => listener());
+}
+
+export function expireTaskToasts(now: number) {
+  accepted = accepted.map((item) =>
+    item.toastUntil !== undefined && item.toastUntil <= now
+      ? { ...item, toastUntil: undefined }
+      : item,
+  );
   listeners.forEach((listener) => listener());
 }
 

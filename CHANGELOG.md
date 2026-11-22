@@ -10,6 +10,8 @@ that every deployment or failure scenario has been qualified.
   contains no samples.
 - Expand monitoring charts within the Console using the same fullscreen
   behavior as Zones & topology.
+- Dismiss Task notification popups automatically after five seconds. Keep
+  their entries in a compact drawer with direct links to Task Inspect.
 - Keep Service health steady during overlapping observations. Refresh Task
   Inspect from live events while retaining the current view on reconnect, and
   keep existing container logs visible until new output arrives.
