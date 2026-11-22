@@ -106,7 +106,7 @@ func stagingReceiptFixture(
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	digest := "sha256:" + strings.Repeat("a", 64)
 	source := preparation.ResolvedSource{Selection: selection, Platform: preparation.HostPlatform()}
-	prepared := preparation.Result{}
+	var prepared preparation.Result
 	staging := StagingResult{Settled: true}
 	switch selection {
 	case preparation.SelectionAgent:
