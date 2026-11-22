@@ -25,6 +25,13 @@ func (repository *Repository) ReadInputSettlement(ctx context.Context, view View
 	if item.Input != nil || item.Phase != workexecution.Settled || item.AttemptNumber != 0 || item.Result == nil {
 		return nil, nil
 	}
+	settlementID := ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "input-settlement")
+	if item.Result.ID != settlementID {
+		// An unstarted Controller action may carry operation-owned evidence. Its
+		// owner validates that result; only this derived identity selects the
+		// generic input-settlement record and its strict policy proof.
+		return nil, nil
+	}
 	read, err := repository.read(ctx, []string{inputSettlementKey(item.ID)}, view.ReadRevision)
 	if err != nil {
 		return nil, err
@@ -46,7 +53,7 @@ func (repository *Repository) ReadInputSettlement(ctx context.Context, view View
 	}
 	digest := sha256.Sum256(value.Value)
 	expected := workexecution.Input{
-		ID:     ids.DeriveAt(ids.KindPlan, item.CreatedAt, item.ID, "input-settlement"),
+		ID:     settlementID,
 		SHA256: hex.EncodeToString(digest[:]),
 	}
 	if *item.Result != expected {

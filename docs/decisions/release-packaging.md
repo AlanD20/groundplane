@@ -156,6 +156,13 @@ future-channel journal for rollback; only the candidate qualifies against its
 own compiled protocol. The shared record decoder lives in
 `internal/controller/controllerupgrade/task.go`.
 
+Completion receipts are immutable evidence across a Controller handoff. Adding
+an optional field must preserve its encoded presence: absent, explicitly false
+and true may have different accepted digests even when their default behavior
+matches. Readers must reproduce the originally accepted bytes rather than add
+new defaults while checking old evidence. Compatibility checks cover retained
+receipts as well as the storage epoch and Agent channel.
+
 Console, CLI, and API invoke the same protected update operation. The Task
 freezes candidate, predecessor, Agent, and idempotency identity. Lost acceptance
 is resolved from durable evidence, and only one native activation may be

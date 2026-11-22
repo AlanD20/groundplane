@@ -19,10 +19,14 @@ import (
 type StagingResult struct {
 	Controller     *upgrade.Release      `json:"controller,omitempty"`
 	Agent          bool                  `json:"agent"`
-	Console        bool                  `json:"console"`
+	Console        *bool                 `json:"console,omitempty"`
 	Settled        bool                  `json:"settled"`
 	Failure        *taskprogress.Failure `json:"failure,omitempty"`
 	CleanupFailure *taskprogress.Failure `json:"cleanup_failure,omitempty"`
+}
+
+func (result StagingResult) consoleEnabled() bool {
+	return result.Console != nil && *result.Console
 }
 
 type StagingReceipt struct {
@@ -55,12 +59,12 @@ func (result StagingResult) validate(input Input) error {
 	if result.Controller != nil && (!selection.IncludesController() || result.Controller.ValidateRecord() != nil ||
 		string(result.Controller.Manifest.ControllerSHA256) != input.Preparation.Progress.Result.Controller.BinarySHA256 ||
 		result.Controller.Manifest.AgentImage != input.StagingAgentImage) || result.Agent && !selection.IncludesAgent() ||
-		result.Console && !selection.IncludesConsole() {
+		result.consoleEnabled() && !selection.IncludesConsole() {
 		return errs.New(errs.KindStateConflict, "software staging output differs from its captured artifacts")
 	}
 	if result.Failure == nil &&
 		(!result.Settled || selection.IncludesController() != (result.Controller != nil) ||
-			selection.IncludesAgent() != result.Agent || selection.IncludesConsole() != result.Console) {
+			selection.IncludesAgent() != result.Agent || selection.IncludesConsole() != result.consoleEnabled()) {
 		return errs.New(errs.KindStateConflict, "software staging success requires every selected artifact and cleanup")
 	}
 	return nil
@@ -198,7 +202,7 @@ func (repository *Repository) SaveStagingResult(
 	if result.Settled && result.Failure == nil {
 		updated := record.Record
 		updated.Progress = Progress{Phase: PhaseStaged, StagedController: result.Controller, AgentStaged: result.Agent,
-			ConsoleStaged: result.Console}
+			ConsoleStaged: result.consoleEnabled()}
 		updated.UpdatedAt = at
 		value, err := Encode(updated)
 		if err != nil {

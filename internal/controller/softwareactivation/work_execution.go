@@ -126,7 +126,8 @@ func (service *Service) Execute(ctx context.Context, delivery workqueue.Delivery
 			}); err != nil {
 			return service.failStaging(ctx, delivery, record, err)
 		}
-		result.Console = true
+		consoleStaged := true
+		result.Console = &consoleStaged
 	}
 	result.Settled = true
 	saving, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
