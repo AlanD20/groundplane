@@ -99,6 +99,12 @@ the current MVP and API contract. Destroy removes runtime, not the Project,
 Environment, Zone, Volume, Entries, Attach history, credentials, or data. There
 is a separate permanent deletion action.
 
+**Start** brings up a stopped instance using its last acknowledged
+configuration. To apply saved runtime, healthcheck or other Service settings
+while the instance is running, choose **Deploy saved configuration**.
+Deploy recreates the containers and retains persistent Volumes. Connected
+applications can lose access while the containers are replaced.
+
 ### Permanent deletion
 
 Open the Backing Service's **Runtime & image** page and choose **Delete Backing Service**.

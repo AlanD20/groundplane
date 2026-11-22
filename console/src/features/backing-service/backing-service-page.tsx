@@ -1,4 +1,3 @@
-import { ArrowUpCircle } from "lucide-react";
 import { ServiceMetadata } from "@/features/service/service-metadata";
 import { EmptyState } from "@/components/common/empty-state";
 import { DetailRow } from "@/components/common/detail-row";
@@ -18,7 +17,14 @@ import { ServiceStateBadges } from "@/features/service/service-runtime-actions";
 import { useVisibleServiceObservations } from "@/features/service/use-service-observation-refresh";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
-import { ArrowLeft, Database, Power, PowerOff, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpCircle,
+  Database,
+  Power,
+  PowerOff,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ServiceTab } from "./service-tab";
@@ -50,7 +56,7 @@ export default function BackingServiceDetailPage() {
       return next;
     });
   const [pendingAction, setPendingAction] = useState<
-    "start" | "stop" | "destroy" | null
+    "start" | "stop" | "destroy" | "deploy" | null
   >(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const needsHookShutdown =
@@ -79,6 +85,19 @@ export default function BackingServiceDetailPage() {
   }
 
   const adapter = store.adapters.find((a) => a.key === svc.adapter);
+  const runtimeRunning = svc.runtimeIntent === "running";
+  const actionLabel =
+    pendingAction === "deploy"
+      ? "Deploy saved configuration"
+      : pendingAction === "destroy"
+        ? "Remove containers"
+        : pendingAction === "stop"
+          ? "Stop"
+          : "Start";
+  const actionMatchesIntent =
+    (pendingAction === "start" && runtimeRunning) ||
+    (pendingAction === "stop" && svc.runtimeIntent === "stopped") ||
+    (pendingAction === "destroy" && svc.runtimeIntent === "absent");
   const observation = currentServiceObservation(
     svc.observation,
     observationRefresh.now,
@@ -114,15 +133,11 @@ export default function BackingServiceDetailPage() {
               Edit name
             </Button>
             <Button
-              variant={svc.runtimeIntent === "running" ? "outline" : "default"}
+              variant={runtimeRunning ? "outline" : "default"}
               disabled={pendingAction !== null}
-              onClick={() =>
-                setPendingAction(
-                  svc.runtimeIntent === "running" ? "stop" : "start",
-                )
-              }
+              onClick={() => setPendingAction(runtimeRunning ? "stop" : "start")}
             >
-              {svc.runtimeIntent === "running" ? (
+              {runtimeRunning ? (
                 <>
                   <PowerOff className="size-4" /> Stop
                 </>
@@ -132,6 +147,14 @@ export default function BackingServiceDetailPage() {
                 </>
               )}
             </Button>
+            {runtimeRunning && (
+              <Button
+                disabled={pendingAction !== null}
+                onClick={() => setPendingAction("deploy")}
+              >
+                <ArrowUpCircle className="size-4" /> Deploy saved configuration
+              </Button>
+            )}
           </>
         }
       />
@@ -399,48 +422,51 @@ export default function BackingServiceDetailPage() {
           open
           runAfter
           onOpenChange={(open) => !open && setPendingAction(null)}
-          title={`${pendingAction === "destroy" ? "Remove containers" : pendingAction === "start" ? "Start" : "Stop"} · ${g.name}`}
+          title={`${actionLabel} · ${g.name}`}
           description={
-            pendingAction === "destroy"
-              ? "Remove this Backing Service's containers. Configuration, connections and persistent Volumes are kept; Start recreates the containers. Files stored only inside the containers are lost."
-              : pendingAction === "stop"
-                ? "Stop this shared instance. Connected applications lose access until it starts again."
-                : "Start this shared instance using its last acknowledged configuration."
+            pendingAction === "deploy"
+              ? "Recreate the containers using the saved configuration and image. Persistent volumes are retained. Connected applications can lose access while the containers are replaced."
+              : pendingAction === "destroy"
+                ? "Remove the containers, including files stored only inside them. Configuration, connections and persistent volumes are retained. Start recreates the containers."
+                : pendingAction === "stop"
+                  ? "Stop this shared instance. Connected applications lose access until it starts again."
+                  : "Start this shared instance using its last acknowledged configuration."
           }
           type={pendingAction}
           target={svc.id}
           workspace="platform"
           destructive={pendingAction === "destroy"}
-          startDisabled={(after) =>
-            after.length === 0 &&
-            ((pendingAction === "start" && svc.runtimeIntent === "running") ||
-              (pendingAction === "stop" && svc.runtimeIntent === "stopped") ||
-              (pendingAction === "destroy" && svc.runtimeIntent === "absent"))
-          }
+          startDisabled={(after) => after.length === 0 && actionMatchesIntent}
           review={(after) =>
-            after.length === 0 &&
-            ((pendingAction === "start" && svc.runtimeIntent === "running") ||
-              (pendingAction === "stop" && svc.runtimeIntent === "stopped") ||
-              (pendingAction === "destroy" &&
-                svc.runtimeIntent === "absent")) ? (
+            after.length === 0 && actionMatchesIntent ? (
               <p className="text-sm text-muted-foreground">
                 This instance already has this runtime state. Choose a
                 prerequisite to run the action after another Task changes it.
               </p>
             ) : null
           }
-          startLabel={
-            pendingAction === "destroy"
-              ? "Remove containers"
-              : pendingAction === "start"
-                ? "Start instance"
-                : "Stop instance"
-          }
+          startLabel={actionLabel}
           onDispatch={(after) => {
-            if (!pendingAction) throw new Error("Choose a runtime action");
+            if (pendingAction === "deploy") {
+              return store.commitDeploy(
+                env.id,
+                svc.name,
+                svc.image,
+                svc.strategy,
+                svc.onFailure,
+                after,
+              );
+            }
             return store.runBackingRuntimeAction(g.id, pendingAction, after);
           }}
-          onSettled={() => store.refreshEnvironmentServices(env.id)}
+          onSettled={async () => {
+            await Promise.all([
+              store.refreshEnvironmentServices(env.id),
+              ...(pendingAction === "deploy"
+                ? [store.refreshEnvironmentReleases(env.id)]
+                : []),
+            ]);
+          }}
         />
       )}
       {deleteOpen && (
