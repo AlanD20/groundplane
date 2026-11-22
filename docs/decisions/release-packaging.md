@@ -192,8 +192,13 @@ restored before every listener exclude commands throughout candidate startup;
 receipt replay does not authorize effects. This permits restoring an offline
 candidate without depending on its cooperation. The rollback window rejects
 occupied slots, another Agent's recovery, or attempts newer than the original
-generation. It advances durable credentials before revoking the candidate
-session and converging the predecessor. No second receipt format is needed.
+executor generation. Credential generation and executor generation are separate:
+the native Task seals the exact authenticated executor identity and process nonce
+after fresh qualification and before credential replacement. That private proof
+survives the candidate and is retired only after the journal reaches Healthy or
+Recovered, when no later rollback can need the old boundary. It advances durable
+credentials before revoking the candidate session and converging the predecessor;
+the native journal format remains unchanged.
 
 The candidate resumes the Task and brings the Agent to the release-pinned
 digest through the normal Agent replacement contract. Failure restores the

@@ -35,6 +35,7 @@ func (manager *Manager) requirePreparedReplacementRollback(
 	maximum := current.Record.Config.MaxConcurrentTasks * current.Record.Config.MaxParallelOperationsPerTask
 	if err := manager.tasks.RequireReplacementRollbackReady(
 		ctx,
+		authority.taskID,
 		request.AgentID,
 		request.StartingGeneration,
 		current.Record.Generation,

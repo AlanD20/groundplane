@@ -195,12 +195,27 @@ type Sessions interface {
 type Tasks interface {
 	RequireIdle(ctx context.Context, agentID string, generation uint64, maximum int32) error
 	RequireUpgradeReady(ctx context.Context, agentID string, generation uint64, maximum int32) error
+	RequirePreparedReplacementReady(
+		ctx context.Context,
+		agentID string,
+		generation uint64,
+		maximum int32,
+		taskID string,
+	) error
 	RequireReplacementRollbackReady(
 		ctx context.Context,
+		taskID string,
 		agentID string,
 		originalGeneration uint64,
 		currentGeneration uint64,
 		maximum int32,
+	) error
+	ReleasePreparedReplacement(
+		ctx context.Context,
+		taskID string,
+		agentID string,
+		originalGeneration uint64,
+		currentGeneration uint64,
 	) error
 	AbortActive(ctx context.Context, agentID string, generation uint64, maximum int32, reason string) error
 	ResumeForward(context.Context, string, uint64) error

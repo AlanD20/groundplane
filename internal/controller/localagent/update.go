@@ -82,8 +82,8 @@ func (manager *Manager) updateWithAuthority(
 		if err := manager.tasks.RequireIdle(ctx, stored.Record.ID, stored.Record.Generation, maximum); err != nil {
 			return safePortError(ctx, err, "local agent must be idle before update")
 		}
-	} else if err := manager.tasks.RequireUpgradeReady(
-		ctx, stored.Record.ID, stored.Record.Generation, maximum,
+	} else if err := manager.tasks.RequirePreparedReplacementReady(
+		ctx, stored.Record.ID, stored.Record.Generation, maximum, authority.taskID,
 	); err != nil {
 		return safePortError(ctx, err, "local agent retained recovery is not ready for update")
 	}

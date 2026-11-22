@@ -38,6 +38,29 @@ func (registry *Registry) CheckExecutionQuiescence(
 	agentID string,
 	generation uint64,
 ) error {
+	return registry.checkExecutionQuiescence(ctx, agentID, generation, [16]byte{})
+}
+
+// CheckExecutionQuiescenceForProcess additionally binds the fresh response to
+// the process nonce read from durable executor registration.
+func (registry *Registry) CheckExecutionQuiescenceForProcess(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	processGeneration [16]byte,
+) error {
+	if processGeneration == [16]byte{} {
+		return errs.New(errs.KindValidationFailed, "Agent execution process identity is invalid")
+	}
+	return registry.checkExecutionQuiescence(ctx, agentID, generation, processGeneration)
+}
+
+func (registry *Registry) checkExecutionQuiescence(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	expectedProcess [16]byte,
+) error {
 	if registry == nil {
 		return errs.New(errs.KindInternal, "Agent session registry is required")
 	}
@@ -67,6 +90,10 @@ func (registry *Registry) CheckExecutionQuiescence(
 	if state.processAuthentication.ExecutionPlanSchema == 0 {
 		registry.mu.Unlock()
 		return executionQuiescenceUnavailable()
+	}
+	if expectedProcess != [16]byte{} && state.processAuthentication.ProcessGeneration != expectedProcess {
+		registry.mu.Unlock()
+		return errs.New(errs.KindStateConflict, "Agent execution process differs from durable registration")
 	}
 	if state.activeQuiescence != nil || registry.hasActiveAuxiliaryLocked(state) {
 		registry.mu.Unlock()

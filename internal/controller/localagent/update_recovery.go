@@ -145,6 +145,17 @@ func (manager *Manager) recoverUpdate(
 		manager.pending.resume()
 		manager.pending = nil
 	}
+	if authority != nil && authority.phase.Settled() {
+		if err := manager.tasks.ReleasePreparedReplacement(
+			ctx,
+			authority.taskID,
+			request.AgentID,
+			request.StartingGeneration,
+			current.Record.Generation,
+		); err != nil {
+			return "", err
+		}
+	}
 	return result, nil
 }
 

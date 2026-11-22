@@ -171,16 +171,17 @@ func (sessions *fakeSessions) WaitOffline(ctx context.Context, _ string, _ uint6
 }
 
 type fakeTasks struct {
-	trace              *traceLog
-	abortError         error
-	idleError          error
-	upgradeReadyError  error
-	rollbackReadyError error
-	upgradeReadyCalls  int
-	rollbackReadyCalls int
-	rollbackOriginal   uint64
-	rollbackCurrent    uint64
-	rollbackMaximum    int32
+	trace                *traceLog
+	abortError           error
+	idleError            error
+	upgradeReadyError    error
+	rollbackReadyError   error
+	upgradeReadyCalls    int
+	rollbackReadyCalls   int
+	releasePreparedCalls int
+	rollbackOriginal     uint64
+	rollbackCurrent      uint64
+	rollbackMaximum      int32
 }
 
 func (tasks *fakeTasks) ResumeForward(ctx context.Context, agentID string, generation uint64) error {
@@ -387,8 +388,19 @@ func (owner *fakeTasks) RequireUpgradeReady(
 	return owner.upgradeReadyError
 }
 
+func (owner *fakeTasks) RequirePreparedReplacementReady(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	maximum int32,
+	_ string,
+) error {
+	return owner.RequireUpgradeReady(ctx, agentID, generation, maximum)
+}
+
 func (owner *fakeTasks) RequireReplacementRollbackReady(
 	ctx context.Context,
+	_ string,
 	_ string,
 	originalGeneration uint64,
 	currentGeneration uint64,
@@ -403,4 +415,18 @@ func (owner *fakeTasks) RequireReplacementRollbackReady(
 	owner.rollbackCurrent = currentGeneration
 	owner.rollbackMaximum = maximum
 	return owner.rollbackReadyError
+}
+
+func (owner *fakeTasks) ReleasePreparedReplacement(
+	ctx context.Context,
+	_ string,
+	_ string,
+	_ uint64,
+	_ uint64,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	owner.releasePreparedCalls++
+	return nil
 }

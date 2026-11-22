@@ -166,10 +166,15 @@ func TestPreparedUpdateSettledPhasesCannotStartOrResumeReplacement(t *testing.T)
 			} else if err != nil || result != scenario.wantResult {
 				t.Fatalf("settled phase result = %q, %v", result, err)
 			}
+			wantRelease := 0
+			if !scenario.wantError {
+				wantRelease = 1
+			}
 			if repository.record.Record.Generation != scenario.generation ||
 				repository.record.Record.Image != scenario.image || repository.record.Record.Phase != scenario.agentPhase ||
 				harness.runtime.generateCalls != 0 || harness.tasks.upgradeReadyCalls != 0 ||
-				harness.tasks.rollbackReadyCalls != 0 || trace.contains("begin_replacement") {
+				harness.tasks.rollbackReadyCalls != 0 || harness.tasks.releasePreparedCalls != wantRelease ||
+				trace.contains("begin_replacement") {
 				t.Fatalf(
 					"settled native phase changed Agent lifecycle: record=%#v trace=%v",
 					repository.record.Record,

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/controllersoftware"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -39,6 +40,13 @@ func (owner *Work) RetireWork(
 			change.Mutations,
 			keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: controllersoftware.InputKey(item.ID)},
 		)
+		if capture.Record.Input.Agent != nil {
+			change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete,
+				Key: agentregistration.PreparedReplacementExecutionKey(
+					capture.Record.Input.Agent.ID,
+					capture.Record.TaskID,
+				)})
+		}
 	}
 	// Installed releases, the local recovery journal and the independent latest
 	// update projection are not diagnostic history and are never deleted here.

@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"math"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,20 +16,34 @@ func (owner *localAgentWork) RequireUpgradeReady(
 	generation uint64,
 	maximum int32,
 ) error {
+	return owner.requireUpgradeReady(ctx, agentID, generation, maximum, "")
+}
+
+func (owner *localAgentWork) RequirePreparedReplacementReady(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	maximum int32,
+	taskID string,
+) error {
+	return owner.requireUpgradeReady(ctx, agentID, generation, maximum, taskID)
+}
+
+func (owner *localAgentWork) requireUpgradeReady(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	maximum int32,
+	preparedTaskID string,
+) error {
 	if err := validateWorkBound(maximum); err != nil {
 		return err
 	}
-	binding, err := owner.agents.MaintenanceBinding(ctx, agentID, generation)
+	execution, err := owner.agents.MaintenanceExecution(ctx, agentID, generation)
 	if err != nil {
 		return err
 	}
-	identity := workexecution.Identity{
-		Executor:   workexecution.Agent,
-		HostID:     binding.HostID,
-		AgentID:    agentID,
-		Generation: generation,
-	}
-	ready, retained, err := owner.queue.HostUpgradeWindow(ctx, identity, binding.ReadRevision)
+	ready, retained, err := owner.queue.HostUpgradeWindow(ctx, execution.Identity, execution.Binding.ReadRevision)
 	if err != nil {
 		return err
 	}
@@ -40,21 +53,27 @@ func (owner *localAgentWork) RequireUpgradeReady(
 			"Agent update is blocked by active work or unsupported recovery; ownership is retained",
 		)
 	}
-	if !retained {
-		return nil
+	if retained {
+		if err := owner.sessions.CheckExecutionQuiescenceForProcess(
+			ctx,
+			agentID,
+			generation,
+			execution.ProcessGeneration,
+		); err != nil {
+			return err
+		}
 	}
-	if err := owner.sessions.CheckExecutionQuiescence(ctx, agentID, generation); err != nil {
-		return err
-	}
-	// Reject a concurrent Retry or binding change after the fresh process proof.
-	binding, err = owner.agents.MaintenanceBinding(ctx, agentID, generation)
+	// Reject a concurrent process replacement, Retry or binding change after
+	// the fresh process proof.
+	confirmed, err := owner.agents.MaintenanceExecution(ctx, agentID, generation)
 	if err != nil {
 		return err
 	}
-	if binding.HostID != identity.HostID {
-		return errs.New(errs.KindStateConflict, "Agent host binding changed during execution qualification")
+	if execution.Identity != confirmed.Identity || execution.ProcessGeneration != confirmed.ProcessGeneration ||
+		execution.Binding.HostID != confirmed.Binding.HostID {
+		return errs.New(errs.KindStateConflict, "Agent executor changed during execution qualification")
 	}
-	ready, _, err = owner.queue.HostUpgradeWindow(ctx, identity, binding.ReadRevision)
+	ready, _, err = owner.queue.HostUpgradeWindow(ctx, confirmed.Identity, confirmed.Binding.ReadRevision)
 	if err != nil {
 		return err
 	}
@@ -63,6 +82,12 @@ func (owner *localAgentWork) RequireUpgradeReady(
 			errs.KindResourceInUse,
 			"Agent work changed during upgrade qualification; ownership is retained",
 		)
+	}
+	if preparedTaskID != "" {
+		if err := owner.sessions.RequireAssignmentPause(ctx, agentID, generation); err != nil {
+			return err
+		}
+		return owner.agents.BindPreparedReplacementExecution(ctx, preparedTaskID, confirmed)
 	}
 	return nil
 }
@@ -73,6 +98,7 @@ func (owner *localAgentWork) RequireUpgradeReady(
 // was admitted to the candidate, so an offline candidate need not answer a probe.
 func (owner *localAgentWork) RequireReplacementRollbackReady(
 	ctx context.Context,
+	taskID string,
 	agentID string,
 	original, current uint64,
 	maximum int32,
@@ -86,17 +112,11 @@ func (owner *localAgentWork) RequireReplacementRollbackReady(
 	if err := owner.sessions.RequireAssignmentPause(ctx, agentID, math.MaxUint64); err != nil {
 		return err
 	}
-	binding, err := owner.agents.MaintenanceBinding(ctx, agentID, current)
+	execution, err := owner.agents.PreparedReplacementExecution(ctx, taskID, agentID, original, current)
 	if err != nil {
 		return err
 	}
-	identity := workexecution.Identity{
-		Executor:   workexecution.Agent,
-		HostID:     binding.HostID,
-		AgentID:    agentID,
-		Generation: original,
-	}
-	ready, _, err := owner.queue.HostUpgradeWindow(ctx, identity, binding.ReadRevision)
+	ready, _, err := owner.queue.HostUpgradeWindow(ctx, execution.Identity, execution.Binding.ReadRevision)
 	if err != nil {
 		return err
 	}
@@ -107,4 +127,13 @@ func (owner *localAgentWork) RequireReplacementRollbackReady(
 		)
 	}
 	return owner.sessions.RequireAssignmentPause(ctx, agentID, math.MaxUint64)
+}
+
+func (owner *localAgentWork) ReleasePreparedReplacement(
+	ctx context.Context,
+	taskID string,
+	agentID string,
+	original, current uint64,
+) error {
+	return owner.agents.ReleasePreparedReplacementExecution(ctx, taskID, agentID, original, current)
 }

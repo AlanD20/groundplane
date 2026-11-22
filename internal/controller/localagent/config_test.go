@@ -218,12 +218,27 @@ func (owner configTestTasks) RequireUpgradeReady(
 	return owner.RequireIdle(ctx, agentID, generation, maximum)
 }
 
+func (owner configTestTasks) RequirePreparedReplacementReady(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	maximum int32,
+	_ string,
+) error {
+	return owner.RequireIdle(ctx, agentID, generation, maximum)
+}
+
 func (owner configTestTasks) RequireReplacementRollbackReady(
 	ctx context.Context,
+	_ string,
 	agentID string,
 	_ uint64,
 	currentGeneration uint64,
 	maximum int32,
 ) error {
 	return owner.RequireIdle(ctx, agentID, currentGeneration, maximum)
+}
+
+func (configTestTasks) ReleasePreparedReplacement(context.Context, string, string, uint64, uint64) error {
+	return nil
 }

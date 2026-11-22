@@ -2,12 +2,15 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
@@ -17,6 +20,164 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func TestPreparedAgentMaintenanceUsesExecutorGenerationNotCredentialGeneration(t *testing.T) {
+	store := newMemoryHierarchyStore()
+	store.revision = 1
+	agents, err := agentregistration.NewRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := agentConfigurationTestRecord()
+	record.Generation = 2
+	created, err := agents.CreateSingleton(t.Context(), record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, err := agents.MarkReady(t.Context(), record.ID, record.Generation, created.Revision,
+		record.CreatedAt.Add(time.Second), buildversion.BuildIdentity{Version: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := agents.MaintenanceBinding(t.Context(), record.ID, record.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor := workqueue.ExecutorRecord{Identity: workexecution.Identity{Executor: workexecution.Agent,
+		HostID: binding.HostID, AgentID: record.ID, Generation: 6}, ProcessGeneration: [16]byte{6},
+		Ready: true, Capacity: 1, MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1,
+		Operations: []workexecution.Operation{workexecution.EntryConfiguration}}
+	raw, err := workqueue.EncodeExecutor(executor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Transact(t.Context(), nil, []keyvalue.Mutation{{
+		Type: keyvalue.MutationPut, Key: workqueue.ExecutorKey(executor.Identity), Value: raw,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	queue, err := workqueue.NewRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := agentchannel.NewRegistry()
+	maintenance, err := agentruntime.NewWork(queue, agents, sessions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resume, err := sessions.PauseAssignments(t.Context(), record.ID, record.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := ids.NewAt(ids.KindTask, record.CreatedAt, 100)
+	if err := maintenance.RequirePreparedReplacementReady(
+		t.Context(), record.ID, record.Generation, 1, taskID,
+	); err != nil {
+		t.Fatalf("credential 2 / executor 6 qualification: %v", err)
+	}
+	seedRetainedEntryAttempt(t, store, binding.HostID, record.ID, 6)
+	if err := maintenance.RequireUpgradeReady(t.Context(), record.ID, record.Generation, 1); !errors.Is(
+		err,
+		errs.New(errs.KindRequestUnavailable, ""),
+	) {
+		t.Fatalf("executor 6 retained work did not reach the missing-session nonce proof: %v", err)
+	}
+	resume()
+
+	token := sha256.Sum256([]byte("candidate-token"))
+	candidate, err := agents.ReplaceGeneration(t.Context(), ready,
+		"ghcr.io/groundplane/agent@sha256:"+strings.Repeat("b", 64), []byte("candidate-encrypted-token"),
+		base64.RawURLEncoding.EncodeToString(token[:]), nil, record.CreatedAt.Add(2*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, err := sessions.PauseAssignments(t.Context(), record.ID, ^uint64(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer all()
+	if err := maintenance.RequireReplacementRollbackReady(t.Context(), taskID, record.ID,
+		record.Generation, candidate.Record.Generation, 1); err != nil {
+		t.Fatalf("offline rollback rejected saved executor 6 boundary: %v", err)
+	}
+	seedRetainedEntryAttempt(t, store, binding.HostID, record.ID, 7)
+	if err := maintenance.RequireReplacementRollbackReady(t.Context(), taskID, record.ID,
+		record.Generation, candidate.Record.Generation, 1); !errors.Is(
+		err,
+		errs.New(errs.KindResourceInUse, ""),
+	) {
+		t.Fatalf("candidate executor work crossed saved generation 6 boundary: %v", err)
+	}
+}
+
+func seedRetainedEntryAttempt(
+	t *testing.T,
+	store *memoryHierarchyStore,
+	hostID, agentID string,
+	generation uint64,
+) {
+	t.Helper()
+	at := time.Date(2026, 11, 22, 13, 0, 0, 0, time.UTC)
+	seed := int64(generation * 10)
+	input := workexecution.Input{ID: ids.NewAt(ids.KindPlan, at, seed+1), SHA256: strings.Repeat("c", 64)}
+	evidence := workexecution.Input{ID: ids.NewAt(ids.KindPlan, at, seed+2), SHA256: strings.Repeat("d", 64)}
+	taskID := ids.NewAt(ids.KindTask, at, seed+3)
+	itemID := ids.NewAt(ids.KindWorkItem, at, seed+4)
+	attemptID := ids.NewAt(ids.KindAttempt, at, seed+5)
+	started, finished := at.Add(time.Second), at.Add(2*time.Second)
+	task := workexecution.Task{ID: taskID, Actor: workexecution.OperatorActor, Action: workexecution.ActionUpdate,
+		TargetID: ids.NewAt(ids.KindEnvEntry, at, seed+6), TargetName: "retained Entry", Intent: input,
+		CreatedAt: at, UpdatedAt: finished, Deadline: at.Add(time.Hour), ExpectedItems: 1,
+		PublicationComplete: true, Progress: workexecution.Progress{Attention: 1}}
+	item := workexecution.Item{ID: itemID, TaskID: taskID, Operation: workexecution.EntryConfiguration,
+		TargetID: task.TargetID, Placement: workexecution.Placement{Executor: workexecution.Agent, HostID: hostID},
+		Claims: []workexecution.Claim{{HostID: hostID, ScopeID: task.TargetID}}, Input: &input,
+		Phase: workexecution.Attention, AttemptNumber: 1, Outcome: workexecution.Failed,
+		Result: &evidence, Cleanup: workexecution.CleanupRequired,
+		CreatedAt: at, UpdatedAt: finished, Deadline: task.Deadline}
+	attempt := workexecution.Attempt{ID: attemptID, WorkItemID: itemID, TaskID: taskID, Number: 1,
+		Executor: workexecution.Identity{Executor: workexecution.Agent, HostID: hostID,
+			AgentID: agentID, Generation: generation},
+		Direction: workexecution.Forward, Input: input, AssignedAt: at, Deadline: task.Deadline,
+		StartedAt: &started, FinishedAt: &finished, Outcome: workexecution.Failed, Result: &evidence}
+	taskRaw, err := workqueue.EncodeTask(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	itemRaw, err := workqueue.EncodeItem(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attemptRaw, err := workqueue.EncodeAttempt(attempt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := workqueue.ClaimOwner{TaskID: taskID, WorkItemID: itemID}
+	ownerRaw, err := recordcodec.Encode("execution_owner", owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostRaw, err := recordcodec.Encode("execution_host_effect", owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexRaw, err := recordcodec.Encode("execution_slot", workqueue.Slot{
+		TaskID: taskID, WorkItemID: itemID, AttemptID: attemptID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Transact(t.Context(), nil, []keyvalue.Mutation{
+		{Type: keyvalue.MutationPut, Key: workqueue.TaskKey(taskID), Value: taskRaw},
+		{Type: keyvalue.MutationPut, Key: workqueue.ItemKey(itemID), Value: itemRaw},
+		{Type: keyvalue.MutationPut, Key: workqueue.TaskItemKey(taskID, itemID), Value: ownerRaw},
+		{Type: keyvalue.MutationPut, Key: workqueue.AttemptKey(attemptID), Value: attemptRaw},
+		{Type: keyvalue.MutationPut, Key: workqueue.AttemptIndexKey(itemID, 1), Value: indexRaw},
+		{Type: keyvalue.MutationPut, Key: workqueue.HostEffectKey(hostID, itemID), Value: hostRaw},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
 
 // Rationale: updating an Agent must not cancel host work to manufacture idleness.
 // The maintenance owner reads native effect membership, not channel subscribers.

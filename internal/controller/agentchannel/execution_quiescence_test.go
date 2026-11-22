@@ -91,6 +91,27 @@ func TestExecutionQuiescenceRejectsReplacedSession(t *testing.T) {
 	}
 }
 
+func TestExecutionQuiescenceRejectsDifferentDurableProcessNonce(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	registry, _, agentID := nativeConnectedQueryChannel(t, ctx)
+	resume, err := registry.PauseAssignments(ctx, agentID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resume()
+	registry.mu.Lock()
+	expected := registry.agents[agentID].processAuthentication.ProcessGeneration
+	registry.mu.Unlock()
+	expected[0]++
+	if err := registry.CheckExecutionQuiescenceForProcess(ctx, agentID, 1, expected); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
+	) {
+		t.Fatalf("different durable process nonce qualified current session: %v", err)
+	}
+}
+
 // The proof is available only inside an assignment hold. Existing auxiliary
 // work blocks it, and the same hold prevents a new auxiliary command or shell
 // from racing the Agent's execution observation.
