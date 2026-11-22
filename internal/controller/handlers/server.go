@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/AlanD20/groundplane/internal/common/version"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	"github.com/AlanD20/groundplane/internal/controller/hostterminal"
 	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
@@ -207,7 +206,8 @@ type Options struct {
 func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	configureProblemResponses()
 	mux := http.NewServeMux()
-	config := problemAPIConfig("Groundplane API", version.Value)
+	// API identity follows the wire namespace, independently from software releases.
+	config := problemAPIConfig("Groundplane API", "1")
 
 	s := &Server{
 		Store:                   store,

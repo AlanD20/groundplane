@@ -11075,7 +11075,7 @@
   },
   "info": {
     "title": "Groundplane API",
-    "version": "dev"
+    "version": "1"
   },
   "openapi": "3.1.0",
   "paths": {

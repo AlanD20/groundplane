@@ -171,7 +171,8 @@ The existing plum/lavender light and dark design system remains shared.
 Production serves verified Vite assets without Node or adjacent build files.
 Embedded assets initialize the first durable selection; independent Console
 releases subsequently switch that selection. The release store owns manifest
-verification, API compatibility and bounded predecessor assets. API and
+verification, API compatibility and bounded predecessor assets. OpenAPI identifies
+the wire API version independently from the Controller build version. API and
 operational routes take precedence over SPA fallback. Path validation and asset
 cache policy belong to the serving boundary, not individual pages.
 
