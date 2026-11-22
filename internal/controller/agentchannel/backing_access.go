@@ -50,6 +50,10 @@ func (registry *Registry) CheckBackingAccess(ctx context.Context, agentID string
 		registry.mu.Unlock()
 		return nil, backingAccessUnavailable()
 	}
+	if !registry.auxiliaryAllowedLocked(agentID, state) {
+		registry.mu.Unlock()
+		return nil, auxiliaryPaused()
+	}
 	if state.activeBackingAccess != nil {
 		registry.mu.Unlock()
 		return nil, errs.New(errs.KindResourceInUse, "Agent Backing access check is busy")

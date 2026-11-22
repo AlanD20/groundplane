@@ -208,3 +208,12 @@ func (configTestTasks) RequireIdle(context.Context, string, uint64, int32) error
 func (configTestTasks) AbortActive(context.Context, string, uint64, int32, string) error {
 	return nil
 }
+
+func (owner configTestTasks) RequireUpgradeReady(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	maximum int32,
+) error {
+	return owner.RequireIdle(ctx, agentID, generation, maximum)
+}

@@ -38,6 +38,10 @@ func (r *Registry) ResolveWorkloadImages(
 		r.mu.Unlock()
 		return nil, imageUnavailable()
 	}
+	if !r.auxiliaryAllowedLocked(agentID, state) {
+		r.mu.Unlock()
+		return nil, auxiliaryPaused()
+	}
 	if state.activeImage != nil {
 		r.mu.Unlock()
 		return nil, errs.New(errs.KindWorkloadImageResolutionBusy, "Agent image resolution is busy")

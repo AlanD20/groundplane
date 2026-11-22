@@ -26,6 +26,7 @@ const (
 	connectPayloadFrame
 	connectPayloadFailed
 	connectTerminalCommand
+	connectExecutionQuiescenceCommand
 )
 
 type connectEvent struct {
@@ -37,6 +38,7 @@ type connectEvent struct {
 	image         *imageCommand
 	log           logCommand
 	terminal      terminalCommand
+	quiescence    *executionQuiescenceCommand
 	received      agentReceiveResult
 	frame         *assignmentPayloadFrame
 	err           error
@@ -96,6 +98,8 @@ func nextConnectEvent(
 		return connectEvent{kind: connectLogCommand, log: command}
 	case command := <-session.state.terminalCommands:
 		return connectEvent{kind: connectTerminalCommand, terminal: command}
+	case command := <-session.state.quiescenceCommands:
+		return connectEvent{kind: connectExecutionQuiescenceCommand, quiescence: command}
 	case <-session.taskDispatchWake():
 		return connectEvent{kind: connectDispatchWake}
 	case result := <-received:
@@ -129,6 +133,8 @@ func nextConnectEvent(
 		return connectEvent{kind: connectLogCommand, log: command}
 	case command := <-session.state.terminalCommands:
 		return connectEvent{kind: connectTerminalCommand, terminal: command}
+	case command := <-session.state.quiescenceCommands:
+		return connectEvent{kind: connectExecutionQuiescenceCommand, quiescence: command}
 	case <-session.taskDispatchWake():
 		return connectEvent{kind: connectDispatchWake}
 	case result := <-received:

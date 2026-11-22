@@ -106,6 +106,7 @@ type Client struct {
 	backingAccess           BackingAccessChecker
 	dnsChecks               DNSConnectionChecker
 	edgeChecks              EdgeConnectionChecker
+	executionQuiescence     ExecutionQuiescenceChecker
 	logs                    *logstream.Subscriptions
 	containerTerminals      containerterminal.Opener
 	stagingJournal          *agentstagingjournal.Journal

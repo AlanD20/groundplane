@@ -221,6 +221,10 @@ predecessors if qualification fails. Single-component updates must retain channe
 compatibility; persistent-format incompatibility still rejects activation. Host-built
 development versions remain distinct from qualified published releases. See
 [update safety](features/upgrade-safety.md#prepare-software-then-apply).
+Retained recovery ownership is distinct from executing work. A compatible software
+update may preserve that ownership only through a supported, fresh execution
+quiescence check under closed assignment admission; uncertainty blocks activation.
+Updates never discard claims or replay application actions to manufacture success.
 Explicit image Fetch accepts public registries and GP's managed private registry
 before Deploy; it is not an implicit Deploy side effect. Host image inventory and
 protected removal are available through the Console, CLI and API. Removal must

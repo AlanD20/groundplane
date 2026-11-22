@@ -118,6 +118,18 @@ func (lease *Lease) Check() error {
 	return nil
 }
 
+// Quiescent reports whether this live process lease owns no local execution.
+// It does not inspect or alter retained journals, helper containers or Docker
+// execs; those require their own read-only reconciliation.
+func (lease *Lease) Quiescent() bool {
+	if lease == nil {
+		return false
+	}
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
+	return !lease.closed && lease.opened && lease.held && len(lease.active) == 0
+}
+
 // Close is called only after local workers are joined and runtime clients close.
 func (lease *Lease) Close() error {
 	if lease == nil {

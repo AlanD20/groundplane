@@ -46,6 +46,10 @@ func (registry *Registry) CheckEdgeConnections(
 		registry.mu.Unlock()
 		return nil, edgeCheckUnavailable()
 	}
+	if !registry.auxiliaryAllowedLocked(agentID, state) {
+		registry.mu.Unlock()
+		return nil, auxiliaryPaused()
+	}
 	if state.activeEdgeCheck != nil {
 		registry.mu.Unlock()
 		return nil, errs.New(errs.KindResourceInUse, "Agent Tunnel check is busy")

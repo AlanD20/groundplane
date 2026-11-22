@@ -365,3 +365,12 @@ func TestSafePortErrorPreservesKindWithoutPrivateCause(t *testing.T) {
 		t.Fatalf("safe port problem = %#v", problem)
 	}
 }
+
+func (owner *fakeTasks) RequireUpgradeReady(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	maximum int32,
+) error {
+	return owner.RequireIdle(ctx, agentID, generation, maximum)
+}

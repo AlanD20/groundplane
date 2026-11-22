@@ -84,6 +84,20 @@ Busy work is not aborted to make an update proceed. The bounded drain can reject
 an update with `resource.in_use`; let the existing work finish before trying again.
 Application Scripts and migrations are not replayed during an update.
 
+A same-channel Controller update that preserves the exact Agent image can also
+proceed with retained Entry configuration recovery, provided its attempts have
+finished and a fresh check of the authenticated Agent proves that no local work,
+command-capable auxiliary sessions or transient execution helpers remain active.
+The check is read-only. Resource claims, captured inputs, failed Tasks and Agent
+journals remain available for explicit recovery afterward. A stopped cleanup
+label alone does not supply this proof. Agent replacement and other retained
+operation types still require full settlement.
+
+An older Agent that cannot answer this check blocks the update before activation.
+Installing a candidate does not change the predecessor's admission rules. An
+already affected older installation can therefore still require a separately
+reviewed repair; this path does not authorize deleting its recovery records.
+
 A rejected preparation releases only its own temporary pause. Removal restrictions
 and newer Agent generations remain protected. Reconnect cannot bypass the pause.
 When publication may have committed, GP retains the hold until it resolves the

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -15,15 +16,20 @@ import (
 // alone are insufficient: an interrupted operation can release capacity while
 // retaining exact resource effects that must still be reconciled.
 type localAgentWork struct {
-	queue  *workqueue.Repository
-	agents *agentregistration.Repository
+	queue    *workqueue.Repository
+	agents   *agentregistration.Repository
+	sessions *agentchannel.Registry
 }
 
-func NewWork(queue *workqueue.Repository, agents *agentregistration.Repository) (*localAgentWork, error) {
-	if queue == nil || agents == nil {
+func NewWork(
+	queue *workqueue.Repository,
+	agents *agentregistration.Repository,
+	sessions *agentchannel.Registry,
+) (*localAgentWork, error) {
+	if queue == nil || agents == nil || sessions == nil {
 		return nil, errs.New(errs.KindInternal, "Agent maintenance requires native execution and host binding storage")
 	}
-	return &localAgentWork{queue: queue, agents: agents}, nil
+	return &localAgentWork{queue: queue, agents: agents, sessions: sessions}, nil
 }
 
 func validateWorkBound(maximum int32) error {

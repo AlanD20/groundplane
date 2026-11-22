@@ -2,6 +2,8 @@ package workqueue
 
 import (
 	"bytes"
+	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,9 +20,34 @@ import (
 // original failure when cleanup eventually succeeds. Atomic-CAS storage proof;
 // operation authorization, public request replay and host effects are not run.
 func TestNativeStoppedRecoveryRetainsClaimsAndRetryIdentity(t *testing.T) {
+	for _, operation := range []workexecution.Operation{workexecution.Release, workexecution.EntryConfiguration} {
+		t.Run(string(operation), func(t *testing.T) { checkStoppedRecovery(t, operation) })
+	}
+}
+
+func checkStoppedRecovery(t *testing.T, operation workexecution.Operation) {
 	store := &assignmentStore{revision: 1, values: make(map[string]keyvalue.KeyValue)}
-	initial := assignmentFixture(t, store, workexecution.Release, nil)
-	repository, err := NewRepository(store)
+	initial := assignmentFixture(t, store, operation, nil)
+	initial.Executor.Record.Operations = append(initial.Executor.Record.Operations, workexecution.EntryConfiguration)
+	executorBytes, err := EncodeExecutor(initial.Executor.Record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.values[ExecutorKey(initial.Executor.Record.Identity)] = keyvalue.KeyValue{
+		Key:         ExecutorKey(initial.Executor.Record.Identity),
+		Value:       executorBytes,
+		ModRevision: 1,
+	}
+	ownerBytes, err := recordcodec.Encode(
+		"execution_owner",
+		ClaimOwner{TaskID: initial.Task.Task.ID, WorkItemID: initial.Item.Item.ID},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerKey := TaskItemKey(initial.Task.Task.ID, initial.Item.Item.ID)
+	store.values[ownerKey] = keyvalue.KeyValue{Key: ownerKey, Value: ownerBytes, ModRevision: 1}
+	repository, err := NewRepository(&upgradeReadStore{readAuthorizationStore{store}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,6 +151,19 @@ func TestNativeStoppedRecoveryRetainsClaimsAndRetryIdentity(t *testing.T) {
 	if claimBefore.ModRevision == 0 || hostBefore.ModRevision == 0 {
 		t.Fatal("stopped cleanup released unresolved resource or host-effect ownership")
 	}
+	// Metadata qualifies only the supported Entry path, without releasing ownership.
+	window, retained, err := repository.HostUpgradeWindow(
+		t.Context(),
+		initial.Executor.Record.Identity.HostID,
+		store.revision,
+	)
+	if err != nil || window != (operation == workexecution.EntryConfiguration) || !retained {
+		t.Fatalf("stopped recovery upgrade window = %v, retained=%v: %v", window, retained, err)
+	}
+	idle, err := repository.HostIdle(t.Context(), initial.Executor.Record.Identity.HostID, store.revision)
+	if err != nil || idle {
+		t.Fatalf("retained recovery counted as settled: idle=%v %v", idle, err)
+	}
 	unrelated := assignmentFixture(t, store, workexecution.Release, &initial.Executor)
 	unrelated.At = at.Add(7 * time.Second)
 	change, _, err := PrepareAssignment(unrelated)
@@ -131,12 +171,16 @@ func TestNativeStoppedRecoveryRetainsClaimsAndRetryIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	commit(change)
+	window, _, err = repository.HostUpgradeWindow(t.Context(), initial.Executor.Record.Identity.HostID, store.revision)
+	if err != nil || window {
+		t.Fatalf("occupied slot admitted upgrade: %v %v", window, err)
+	}
 	if current := store.values[claimKey]; current.ModRevision != claimBefore.ModRevision ||
 		!bytes.Equal(current.Value, claimBefore.Value) {
 		t.Fatal("unrelated assignment changed stopped cleanup ownership")
 	}
 	// Reconstruct all retry inputs from stored records through a new repository.
-	repository, err = NewRepository(store)
+	repository, err = NewRepository(&upgradeReadStore{readAuthorizationStore{store}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,4 +332,29 @@ func recoveryClaims(t *testing.T, store *assignmentStore, item workexecution.Ite
 		claims[index].Owner, claims[index].Revision = &owner, value.ModRevision
 	}
 	return claims
+}
+
+// This read adapter models only the current snapshot of the CAS fixture.
+type upgradeReadStore struct{ readAuthorizationStore }
+
+func (store *upgradeReadStore) Range(_ context.Context, request keyvalue.RangeRequest) (*keyvalue.RangeResult, error) {
+	keys := make([]string, 0)
+	for key := range store.values {
+		if strings.HasPrefix(key, request.Prefix) && key > request.StartExclusive {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	result := &keyvalue.RangeResult{ReadRevision: store.revision, ResponseRevision: store.revision}
+	for _, key := range keys {
+		if int64(len(result.Values)) >= request.Limit {
+			result.More = true
+			break
+		}
+		value := store.values[key]
+		value.Key = key
+		value.Value = bytes.Clone(value.Value)
+		result.Values = append(result.Values, value)
+	}
+	return result, nil
 }

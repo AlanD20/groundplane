@@ -138,7 +138,12 @@ func (coordinator *Coordinator) validateAndDrain(ctx context.Context, operation 
 	maximum := agents[0].Agent.Config.MaxConcurrentTasks * agents[0].Agent.Config.MaxParallelOperationsPerTask
 	deadline := minTime(expected.CandidateDeadline(), coordinator.now().Add(upgrade.DrainTimeoutSeconds*time.Second))
 	for {
-		err := coordinator.work.RequireIdle(ctx, expected.Agent.ID, expected.Agent.Generation, maximum)
+		check := coordinator.work.RequireIdle
+		if expected.Manifest.ChannelSchema == coordinator.channelSchema &&
+			expected.Manifest.AgentImage == expected.Agent.Image {
+			check = coordinator.work.RequireUpgradeReady
+		}
+		err := check(ctx, expected.Agent.ID, expected.Agent.Generation, maximum)
 		if err == nil {
 			return nil
 		}

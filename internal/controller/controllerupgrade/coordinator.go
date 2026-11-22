@@ -42,6 +42,7 @@ type ManagedAgent interface {
 
 type ActiveAgentWork interface {
 	RequireIdle(context.Context, string, uint64, int32) error
+	RequireUpgradeReady(context.Context, string, uint64, int32) error
 }
 
 type Admission interface {

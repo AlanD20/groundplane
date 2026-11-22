@@ -46,6 +46,10 @@ func (r *Registry) ObserveServices(
 		r.mu.Unlock()
 		return nil, observationUnavailable()
 	}
+	if !r.auxiliaryAllowedLocked(agentID, state) {
+		r.mu.Unlock()
+		return nil, auxiliaryPaused()
+	}
 	if state.activeObservation != nil {
 		r.mu.Unlock()
 		return nil, errs.New(errs.KindResourceInUse, "agent service observation is busy")

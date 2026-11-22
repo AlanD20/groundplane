@@ -115,7 +115,7 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	work, err := agentruntime.NewWork(maintenanceQueue, dependencies.Agents)
+	work, err := agentruntime.NewWork(maintenanceQueue, dependencies.Agents, dependencies.Channel.Registry)
 	if err != nil {
 		return nil, err
 	}

@@ -192,6 +192,7 @@ type Sessions interface {
 // success requires settlement, not just cancellation delivery or a free slot.
 type Tasks interface {
 	RequireIdle(ctx context.Context, agentID string, generation uint64, maximum int32) error
+	RequireUpgradeReady(ctx context.Context, agentID string, generation uint64, maximum int32) error
 	AbortActive(ctx context.Context, agentID string, generation uint64, maximum int32, reason string) error
 	ResumeForward(context.Context, string, uint64) error
 }

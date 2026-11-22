@@ -50,6 +50,10 @@ func (r *Registry) PauseAssignments(ctx context.Context, agentID string, generat
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			delete(lifecycle.pauses, pause)
+			if lifecycle.quiescenceProof != nil &&
+				!r.assignmentsPausedLocked(agentID, lifecycle.quiescenceProof.generation) {
+				lifecycle.quiescenceProof = nil
+			}
 			current := r.agents[agentID]
 			if current == nil || current.generation > generation || !current.online ||
 				current.assignmentsStopped || current.revoked || r.assignmentsPausedLocked(agentID, current.generation) {
@@ -99,6 +103,9 @@ func (fence *lifecycleFence) discardPausedThrough(generation uint64) {
 		if pause.generation <= generation {
 			delete(fence.pauses, pause)
 		}
+	}
+	if fence.quiescenceProof != nil && fence.quiescenceProof.generation <= generation {
+		fence.quiescenceProof = nil
 	}
 }
 

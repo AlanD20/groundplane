@@ -42,6 +42,8 @@ type sessionState struct {
 	activeDNSCheck        *dnsCheckCommand
 	edgeCheckCommands     chan *edgeCheckCommand
 	activeEdgeCheck       *edgeCheckCommand
+	quiescenceCommands    chan *executionQuiescenceCommand
+	activeQuiescence      *executionQuiescenceCommand
 }
 
 func newSessionState(
@@ -63,6 +65,7 @@ func newSessionState(
 		backingAccessCommands: make(chan *backingAccessCommand),
 		dnsCheckCommands:      make(chan *dnsCheckCommand),
 		edgeCheckCommands:     make(chan *edgeCheckCommand),
+		quiescenceCommands:    make(chan *executionQuiescenceCommand),
 	}
 	if stopped {
 		state.fenceAssignmentSendsLocked()

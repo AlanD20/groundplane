@@ -38,6 +38,7 @@ type lifecycleFence struct {
 	revokedThrough  uint64
 	pauses          map[*assignmentPause]struct{}
 	preparations    map[*assignmentPreparation]struct{}
+	quiescenceProof *executionQuiescenceProof
 }
 
 type logCommand struct {
@@ -129,6 +130,13 @@ func (r *Registry) Open(parent context.Context, agentID string, generation uint6
 		if lifecycle != nil && generation <= lifecycle.revokedThrough {
 			r.mu.Unlock()
 			return nil, errs.New(errs.KindStateConflict, "agent session generation is revoked")
+		}
+		if lifecycle != nil && lifecycle.quiescenceProof != nil {
+			if r.assignmentsPausedLocked(agentID, lifecycle.quiescenceProof.generation) {
+				r.mu.Unlock()
+				return nil, errs.New(errs.KindStateConflict, "qualified Agent process is pinned for update")
+			}
+			lifecycle.quiescenceProof = nil
 		}
 		current := r.agents[agentID]
 		if current != nil {

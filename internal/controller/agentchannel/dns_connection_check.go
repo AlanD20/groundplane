@@ -43,6 +43,10 @@ func (registry *Registry) CheckDNSConnections(ctx context.Context, agentID strin
 		registry.mu.Unlock()
 		return nil, dnsCheckUnavailable()
 	}
+	if !registry.auxiliaryAllowedLocked(agentID, state) {
+		registry.mu.Unlock()
+		return nil, auxiliaryPaused()
+	}
 	if state.activeDNSCheck != nil {
 		registry.mu.Unlock()
 		return nil, errs.New(errs.KindResourceInUse, "Agent DNS connection check is busy")

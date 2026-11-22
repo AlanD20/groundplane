@@ -11622,6 +11622,7 @@ type AgentMessage struct {
 	//	*AgentMessage_ResolverWorkRecoveryRequest
 	//	*AgentMessage_WorkJournalReplayRequest
 	//	*AgentMessage_ContainerTerminalEvent
+	//	*AgentMessage_ExecutionQuiescenceResult
 	Payload       isAgentMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -12492,6 +12493,15 @@ func (x *AgentMessage) GetContainerTerminalEvent() *ContainerTerminalEvent {
 	return nil
 }
 
+func (x *AgentMessage) GetExecutionQuiescenceResult() *ExecutionQuiescenceResult {
+	if x != nil {
+		if x, ok := x.Payload.(*AgentMessage_ExecutionQuiescenceResult); ok {
+			return x.ExecutionQuiescenceResult
+		}
+	}
+	return nil
+}
+
 type isAgentMessage_Payload interface {
 	isAgentMessage_Payload()
 }
@@ -12864,6 +12874,10 @@ type AgentMessage_ContainerTerminalEvent struct {
 	ContainerTerminalEvent *ContainerTerminalEvent `protobuf:"bytes,114,opt,name=container_terminal_event,json=containerTerminalEvent,proto3,oneof"`
 }
 
+type AgentMessage_ExecutionQuiescenceResult struct {
+	ExecutionQuiescenceResult *ExecutionQuiescenceResult `protobuf:"bytes,115,opt,name=execution_quiescence_result,json=executionQuiescenceResult,proto3,oneof"`
+}
+
 func (*AgentMessage_Authenticate) isAgentMessage_Payload() {}
 
 func (*AgentMessage_Ready) isAgentMessage_Payload() {}
@@ -13048,6 +13062,60 @@ func (*AgentMessage_WorkJournalReplayRequest) isAgentMessage_Payload() {}
 
 func (*AgentMessage_ContainerTerminalEvent) isAgentMessage_Payload() {}
 
+func (*AgentMessage_ExecutionQuiescenceResult) isAgentMessage_Payload() {}
+
+type ExecutionQuiescenceResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Quiescent     bool                   `protobuf:"varint,2,opt,name=quiescent,proto3" json:"quiescent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecutionQuiescenceResult) Reset() {
+	*x = ExecutionQuiescenceResult{}
+	mi := &file_proto_agent_proto_msgTypes[124]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecutionQuiescenceResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecutionQuiescenceResult) ProtoMessage() {}
+
+func (x *ExecutionQuiescenceResult) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[124]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecutionQuiescenceResult.ProtoReflect.Descriptor instead.
+func (*ExecutionQuiescenceResult) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{124}
+}
+
+func (x *ExecutionQuiescenceResult) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *ExecutionQuiescenceResult) GetQuiescent() bool {
+	if x != nil {
+		return x.Quiescent
+	}
+	return false
+}
+
 type Ready struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	Capacity            int32                  `protobuf:"varint,1,opt,name=capacity,proto3" json:"capacity,omitempty"` // free native execution slots, independent of Backup staging readiness
@@ -13063,7 +13131,7 @@ type Ready struct {
 
 func (x *Ready) Reset() {
 	*x = Ready{}
-	mi := &file_proto_agent_proto_msgTypes[124]
+	mi := &file_proto_agent_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13075,7 +13143,7 @@ func (x *Ready) String() string {
 func (*Ready) ProtoMessage() {}
 
 func (x *Ready) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[124]
+	mi := &file_proto_agent_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13088,7 +13156,7 @@ func (x *Ready) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ready.ProtoReflect.Descriptor instead.
 func (*Ready) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{124}
+	return file_proto_agent_proto_rawDescGZIP(), []int{125}
 }
 
 func (x *Ready) GetCapacity() int32 {
@@ -13150,7 +13218,7 @@ type BuildProvenance struct {
 
 func (x *BuildProvenance) Reset() {
 	*x = BuildProvenance{}
-	mi := &file_proto_agent_proto_msgTypes[125]
+	mi := &file_proto_agent_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13162,7 +13230,7 @@ func (x *BuildProvenance) String() string {
 func (*BuildProvenance) ProtoMessage() {}
 
 func (x *BuildProvenance) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[125]
+	mi := &file_proto_agent_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13175,7 +13243,7 @@ func (x *BuildProvenance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildProvenance.ProtoReflect.Descriptor instead.
 func (*BuildProvenance) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{125}
+	return file_proto_agent_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *BuildProvenance) GetKind() string {
@@ -13206,7 +13274,7 @@ type WorkloadImageSelector struct {
 
 func (x *WorkloadImageSelector) Reset() {
 	*x = WorkloadImageSelector{}
-	mi := &file_proto_agent_proto_msgTypes[126]
+	mi := &file_proto_agent_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13218,7 +13286,7 @@ func (x *WorkloadImageSelector) String() string {
 func (*WorkloadImageSelector) ProtoMessage() {}
 
 func (x *WorkloadImageSelector) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[126]
+	mi := &file_proto_agent_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13231,7 +13299,7 @@ func (x *WorkloadImageSelector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadImageSelector.ProtoReflect.Descriptor instead.
 func (*WorkloadImageSelector) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{126}
+	return file_proto_agent_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *WorkloadImageSelector) GetSelector() isWorkloadImageSelector_Selector {
@@ -13285,7 +13353,7 @@ type ResolveWorkloadImages struct {
 
 func (x *ResolveWorkloadImages) Reset() {
 	*x = ResolveWorkloadImages{}
-	mi := &file_proto_agent_proto_msgTypes[127]
+	mi := &file_proto_agent_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13297,7 +13365,7 @@ func (x *ResolveWorkloadImages) String() string {
 func (*ResolveWorkloadImages) ProtoMessage() {}
 
 func (x *ResolveWorkloadImages) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[127]
+	mi := &file_proto_agent_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13310,7 +13378,7 @@ func (x *ResolveWorkloadImages) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveWorkloadImages.ProtoReflect.Descriptor instead.
 func (*ResolveWorkloadImages) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{127}
+	return file_proto_agent_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *ResolveWorkloadImages) GetRequestId() string {
@@ -13337,7 +13405,7 @@ type WorkloadImageResolution struct {
 
 func (x *WorkloadImageResolution) Reset() {
 	*x = WorkloadImageResolution{}
-	mi := &file_proto_agent_proto_msgTypes[128]
+	mi := &file_proto_agent_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13349,7 +13417,7 @@ func (x *WorkloadImageResolution) String() string {
 func (*WorkloadImageResolution) ProtoMessage() {}
 
 func (x *WorkloadImageResolution) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[128]
+	mi := &file_proto_agent_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13362,7 +13430,7 @@ func (x *WorkloadImageResolution) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadImageResolution.ProtoReflect.Descriptor instead.
 func (*WorkloadImageResolution) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{128}
+	return file_proto_agent_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *WorkloadImageResolution) GetSelector() *WorkloadImageSelector {
@@ -13388,7 +13456,7 @@ type WorkloadImageResolutions struct {
 
 func (x *WorkloadImageResolutions) Reset() {
 	*x = WorkloadImageResolutions{}
-	mi := &file_proto_agent_proto_msgTypes[129]
+	mi := &file_proto_agent_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13400,7 +13468,7 @@ func (x *WorkloadImageResolutions) String() string {
 func (*WorkloadImageResolutions) ProtoMessage() {}
 
 func (x *WorkloadImageResolutions) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[129]
+	mi := &file_proto_agent_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13413,7 +13481,7 @@ func (x *WorkloadImageResolutions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadImageResolutions.ProtoReflect.Descriptor instead.
 func (*WorkloadImageResolutions) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{129}
+	return file_proto_agent_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *WorkloadImageResolutions) GetResolutions() []*WorkloadImageResolution {
@@ -13433,7 +13501,7 @@ type WorkloadImageResolutionFailure struct {
 
 func (x *WorkloadImageResolutionFailure) Reset() {
 	*x = WorkloadImageResolutionFailure{}
-	mi := &file_proto_agent_proto_msgTypes[130]
+	mi := &file_proto_agent_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13445,7 +13513,7 @@ func (x *WorkloadImageResolutionFailure) String() string {
 func (*WorkloadImageResolutionFailure) ProtoMessage() {}
 
 func (x *WorkloadImageResolutionFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[130]
+	mi := &file_proto_agent_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13458,7 +13526,7 @@ func (x *WorkloadImageResolutionFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadImageResolutionFailure.ProtoReflect.Descriptor instead.
 func (*WorkloadImageResolutionFailure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{130}
+	return file_proto_agent_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *WorkloadImageResolutionFailure) GetSelectorOrdinal() uint32 {
@@ -13489,7 +13557,7 @@ type WorkloadImageResolutionResult struct {
 
 func (x *WorkloadImageResolutionResult) Reset() {
 	*x = WorkloadImageResolutionResult{}
-	mi := &file_proto_agent_proto_msgTypes[131]
+	mi := &file_proto_agent_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13501,7 +13569,7 @@ func (x *WorkloadImageResolutionResult) String() string {
 func (*WorkloadImageResolutionResult) ProtoMessage() {}
 
 func (x *WorkloadImageResolutionResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[131]
+	mi := &file_proto_agent_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13514,7 +13582,7 @@ func (x *WorkloadImageResolutionResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadImageResolutionResult.ProtoReflect.Descriptor instead.
 func (*WorkloadImageResolutionResult) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{131}
+	return file_proto_agent_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *WorkloadImageResolutionResult) GetRequestId() string {
@@ -13589,7 +13657,7 @@ type ServiceObservationTarget struct {
 
 func (x *ServiceObservationTarget) Reset() {
 	*x = ServiceObservationTarget{}
-	mi := &file_proto_agent_proto_msgTypes[132]
+	mi := &file_proto_agent_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13601,7 +13669,7 @@ func (x *ServiceObservationTarget) String() string {
 func (*ServiceObservationTarget) ProtoMessage() {}
 
 func (x *ServiceObservationTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[132]
+	mi := &file_proto_agent_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13614,7 +13682,7 @@ func (x *ServiceObservationTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceObservationTarget.ProtoReflect.Descriptor instead.
 func (*ServiceObservationTarget) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{132}
+	return file_proto_agent_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *ServiceObservationTarget) GetEnvironmentId() string {
@@ -13727,7 +13795,7 @@ type ServiceWorkloadObservation struct {
 
 func (x *ServiceWorkloadObservation) Reset() {
 	*x = ServiceWorkloadObservation{}
-	mi := &file_proto_agent_proto_msgTypes[133]
+	mi := &file_proto_agent_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13739,7 +13807,7 @@ func (x *ServiceWorkloadObservation) String() string {
 func (*ServiceWorkloadObservation) ProtoMessage() {}
 
 func (x *ServiceWorkloadObservation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[133]
+	mi := &file_proto_agent_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13752,7 +13820,7 @@ func (x *ServiceWorkloadObservation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceWorkloadObservation.ProtoReflect.Descriptor instead.
 func (*ServiceWorkloadObservation) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{133}
+	return file_proto_agent_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *ServiceWorkloadObservation) GetPlanId() string {
@@ -13794,7 +13862,7 @@ type DatabaseVersionProbe struct {
 
 func (x *DatabaseVersionProbe) Reset() {
 	*x = DatabaseVersionProbe{}
-	mi := &file_proto_agent_proto_msgTypes[134]
+	mi := &file_proto_agent_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13806,7 +13874,7 @@ func (x *DatabaseVersionProbe) String() string {
 func (*DatabaseVersionProbe) ProtoMessage() {}
 
 func (x *DatabaseVersionProbe) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[134]
+	mi := &file_proto_agent_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13819,7 +13887,7 @@ func (x *DatabaseVersionProbe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DatabaseVersionProbe.ProtoReflect.Descriptor instead.
 func (*DatabaseVersionProbe) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{134}
+	return file_proto_agent_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *DatabaseVersionProbe) GetAuthority() *BackupStepAuthority {
@@ -13856,7 +13924,7 @@ type DatabaseVersionObservation struct {
 
 func (x *DatabaseVersionObservation) Reset() {
 	*x = DatabaseVersionObservation{}
-	mi := &file_proto_agent_proto_msgTypes[135]
+	mi := &file_proto_agent_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13868,7 +13936,7 @@ func (x *DatabaseVersionObservation) String() string {
 func (*DatabaseVersionObservation) ProtoMessage() {}
 
 func (x *DatabaseVersionObservation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[135]
+	mi := &file_proto_agent_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13881,7 +13949,7 @@ func (x *DatabaseVersionObservation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DatabaseVersionObservation.ProtoReflect.Descriptor instead.
 func (*DatabaseVersionObservation) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{135}
+	return file_proto_agent_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *DatabaseVersionObservation) GetFamily() string {
@@ -13929,7 +13997,7 @@ type ObserveServices struct {
 
 func (x *ObserveServices) Reset() {
 	*x = ObserveServices{}
-	mi := &file_proto_agent_proto_msgTypes[136]
+	mi := &file_proto_agent_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13941,7 +14009,7 @@ func (x *ObserveServices) String() string {
 func (*ObserveServices) ProtoMessage() {}
 
 func (x *ObserveServices) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[136]
+	mi := &file_proto_agent_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13954,7 +14022,7 @@ func (x *ObserveServices) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObserveServices.ProtoReflect.Descriptor instead.
 func (*ObserveServices) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{136}
+	return file_proto_agent_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *ObserveServices) GetRequestId() string {
@@ -13980,7 +14048,7 @@ type CancelServiceObservation struct {
 
 func (x *CancelServiceObservation) Reset() {
 	*x = CancelServiceObservation{}
-	mi := &file_proto_agent_proto_msgTypes[137]
+	mi := &file_proto_agent_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13992,7 +14060,7 @@ func (x *CancelServiceObservation) String() string {
 func (*CancelServiceObservation) ProtoMessage() {}
 
 func (x *CancelServiceObservation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[137]
+	mi := &file_proto_agent_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14005,7 +14073,7 @@ func (x *CancelServiceObservation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelServiceObservation.ProtoReflect.Descriptor instead.
 func (*CancelServiceObservation) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{137}
+	return file_proto_agent_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *CancelServiceObservation) GetRequestId() string {
@@ -14031,7 +14099,7 @@ type ServiceReplicaCounts struct {
 
 func (x *ServiceReplicaCounts) Reset() {
 	*x = ServiceReplicaCounts{}
-	mi := &file_proto_agent_proto_msgTypes[138]
+	mi := &file_proto_agent_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14043,7 +14111,7 @@ func (x *ServiceReplicaCounts) String() string {
 func (*ServiceReplicaCounts) ProtoMessage() {}
 
 func (x *ServiceReplicaCounts) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[138]
+	mi := &file_proto_agent_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14056,7 +14124,7 @@ func (x *ServiceReplicaCounts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceReplicaCounts.ProtoReflect.Descriptor instead.
 func (*ServiceReplicaCounts) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{138}
+	return file_proto_agent_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *ServiceReplicaCounts) GetRunning() uint32 {
@@ -14126,7 +14194,7 @@ type ServiceObservationRow struct {
 
 func (x *ServiceObservationRow) Reset() {
 	*x = ServiceObservationRow{}
-	mi := &file_proto_agent_proto_msgTypes[139]
+	mi := &file_proto_agent_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14138,7 +14206,7 @@ func (x *ServiceObservationRow) String() string {
 func (*ServiceObservationRow) ProtoMessage() {}
 
 func (x *ServiceObservationRow) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[139]
+	mi := &file_proto_agent_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14151,7 +14219,7 @@ func (x *ServiceObservationRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceObservationRow.ProtoReflect.Descriptor instead.
 func (*ServiceObservationRow) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{139}
+	return file_proto_agent_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *ServiceObservationRow) GetServiceId() string {
@@ -14245,7 +14313,7 @@ type ServiceContainerObservation struct {
 
 func (x *ServiceContainerObservation) Reset() {
 	*x = ServiceContainerObservation{}
-	mi := &file_proto_agent_proto_msgTypes[140]
+	mi := &file_proto_agent_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14257,7 +14325,7 @@ func (x *ServiceContainerObservation) String() string {
 func (*ServiceContainerObservation) ProtoMessage() {}
 
 func (x *ServiceContainerObservation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[140]
+	mi := &file_proto_agent_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14270,7 +14338,7 @@ func (x *ServiceContainerObservation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceContainerObservation.ProtoReflect.Descriptor instead.
 func (*ServiceContainerObservation) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{140}
+	return file_proto_agent_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *ServiceContainerObservation) GetId() string {
@@ -14325,7 +14393,7 @@ type ServiceObservationResult struct {
 
 func (x *ServiceObservationResult) Reset() {
 	*x = ServiceObservationResult{}
-	mi := &file_proto_agent_proto_msgTypes[141]
+	mi := &file_proto_agent_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14337,7 +14405,7 @@ func (x *ServiceObservationResult) String() string {
 func (*ServiceObservationResult) ProtoMessage() {}
 
 func (x *ServiceObservationResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[141]
+	mi := &file_proto_agent_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14350,7 +14418,7 @@ func (x *ServiceObservationResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceObservationResult.ProtoReflect.Descriptor instead.
 func (*ServiceObservationResult) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{141}
+	return file_proto_agent_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *ServiceObservationResult) GetRequestId() string {
@@ -14377,7 +14445,7 @@ type StepFailure struct {
 
 func (x *StepFailure) Reset() {
 	*x = StepFailure{}
-	mi := &file_proto_agent_proto_msgTypes[142]
+	mi := &file_proto_agent_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14389,7 +14457,7 @@ func (x *StepFailure) String() string {
 func (*StepFailure) ProtoMessage() {}
 
 func (x *StepFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[142]
+	mi := &file_proto_agent_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14402,7 +14470,7 @@ func (x *StepFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StepFailure.ProtoReflect.Descriptor instead.
 func (*StepFailure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{142}
+	return file_proto_agent_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *StepFailure) GetCode() string {
@@ -14431,7 +14499,7 @@ type ObservedState struct {
 
 func (x *ObservedState) Reset() {
 	*x = ObservedState{}
-	mi := &file_proto_agent_proto_msgTypes[143]
+	mi := &file_proto_agent_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14443,7 +14511,7 @@ func (x *ObservedState) String() string {
 func (*ObservedState) ProtoMessage() {}
 
 func (x *ObservedState) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[143]
+	mi := &file_proto_agent_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14456,7 +14524,7 @@ func (x *ObservedState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObservedState.ProtoReflect.Descriptor instead.
 func (*ObservedState) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{143}
+	return file_proto_agent_proto_rawDescGZIP(), []int{144}
 }
 
 func (x *ObservedState) GetProjects() []*ObservedProject {
@@ -14501,7 +14569,7 @@ type ObservedProject struct {
 
 func (x *ObservedProject) Reset() {
 	*x = ObservedProject{}
-	mi := &file_proto_agent_proto_msgTypes[144]
+	mi := &file_proto_agent_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14513,7 +14581,7 @@ func (x *ObservedProject) String() string {
 func (*ObservedProject) ProtoMessage() {}
 
 func (x *ObservedProject) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[144]
+	mi := &file_proto_agent_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14526,7 +14594,7 @@ func (x *ObservedProject) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObservedProject.ProtoReflect.Descriptor instead.
 func (*ObservedProject) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{144}
+	return file_proto_agent_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *ObservedProject) GetProjectName() string {
@@ -14590,7 +14658,7 @@ type ObservedContainer struct {
 
 func (x *ObservedContainer) Reset() {
 	*x = ObservedContainer{}
-	mi := &file_proto_agent_proto_msgTypes[145]
+	mi := &file_proto_agent_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14602,7 +14670,7 @@ func (x *ObservedContainer) String() string {
 func (*ObservedContainer) ProtoMessage() {}
 
 func (x *ObservedContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[145]
+	mi := &file_proto_agent_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14615,7 +14683,7 @@ func (x *ObservedContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObservedContainer.ProtoReflect.Descriptor instead.
 func (*ObservedContainer) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{145}
+	return file_proto_agent_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *ObservedContainer) GetContainerId() string {
@@ -14699,7 +14767,7 @@ type ObservedNetwork struct {
 
 func (x *ObservedNetwork) Reset() {
 	*x = ObservedNetwork{}
-	mi := &file_proto_agent_proto_msgTypes[146]
+	mi := &file_proto_agent_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14711,7 +14779,7 @@ func (x *ObservedNetwork) String() string {
 func (*ObservedNetwork) ProtoMessage() {}
 
 func (x *ObservedNetwork) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[146]
+	mi := &file_proto_agent_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14724,7 +14792,7 @@ func (x *ObservedNetwork) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObservedNetwork.ProtoReflect.Descriptor instead.
 func (*ObservedNetwork) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{146}
+	return file_proto_agent_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *ObservedNetwork) GetNetworkId() string {
@@ -14759,7 +14827,7 @@ type ObservedVolume struct {
 
 func (x *ObservedVolume) Reset() {
 	*x = ObservedVolume{}
-	mi := &file_proto_agent_proto_msgTypes[147]
+	mi := &file_proto_agent_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14771,7 +14839,7 @@ func (x *ObservedVolume) String() string {
 func (*ObservedVolume) ProtoMessage() {}
 
 func (x *ObservedVolume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[147]
+	mi := &file_proto_agent_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14784,7 +14852,7 @@ func (x *ObservedVolume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObservedVolume.ProtoReflect.Descriptor instead.
 func (*ObservedVolume) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{147}
+	return file_proto_agent_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *ObservedVolume) GetName() string {
@@ -14821,7 +14889,7 @@ type ObservedCollision struct {
 
 func (x *ObservedCollision) Reset() {
 	*x = ObservedCollision{}
-	mi := &file_proto_agent_proto_msgTypes[148]
+	mi := &file_proto_agent_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14833,7 +14901,7 @@ func (x *ObservedCollision) String() string {
 func (*ObservedCollision) ProtoMessage() {}
 
 func (x *ObservedCollision) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[148]
+	mi := &file_proto_agent_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14846,7 +14914,7 @@ func (x *ObservedCollision) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObservedCollision.ProtoReflect.Descriptor instead.
 func (*ObservedCollision) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{148}
+	return file_proto_agent_proto_rawDescGZIP(), []int{149}
 }
 
 func (x *ObservedCollision) GetKind() ObservedCollisionKind {
@@ -14900,7 +14968,7 @@ type RollingReleaseEvidence struct {
 
 func (x *RollingReleaseEvidence) Reset() {
 	*x = RollingReleaseEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[149]
+	mi := &file_proto_agent_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14912,7 +14980,7 @@ func (x *RollingReleaseEvidence) String() string {
 func (*RollingReleaseEvidence) ProtoMessage() {}
 
 func (x *RollingReleaseEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[149]
+	mi := &file_proto_agent_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14925,7 +14993,7 @@ func (x *RollingReleaseEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollingReleaseEvidence.ProtoReflect.Descriptor instead.
 func (*RollingReleaseEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{149}
+	return file_proto_agent_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *RollingReleaseEvidence) GetServiceId() string {
@@ -14999,7 +15067,7 @@ type CandidateAbsenceEvidence struct {
 
 func (x *CandidateAbsenceEvidence) Reset() {
 	*x = CandidateAbsenceEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[150]
+	mi := &file_proto_agent_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15011,7 +15079,7 @@ func (x *CandidateAbsenceEvidence) String() string {
 func (*CandidateAbsenceEvidence) ProtoMessage() {}
 
 func (x *CandidateAbsenceEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[150]
+	mi := &file_proto_agent_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15024,7 +15092,7 @@ func (x *CandidateAbsenceEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CandidateAbsenceEvidence.ProtoReflect.Descriptor instead.
 func (*CandidateAbsenceEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{150}
+	return file_proto_agent_proto_rawDescGZIP(), []int{151}
 }
 
 func (x *CandidateAbsenceEvidence) GetAssignmentId() string {
@@ -15107,7 +15175,7 @@ type DNSResolverObservationEvidence struct {
 
 func (x *DNSResolverObservationEvidence) Reset() {
 	*x = DNSResolverObservationEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[151]
+	mi := &file_proto_agent_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15119,7 +15187,7 @@ func (x *DNSResolverObservationEvidence) String() string {
 func (*DNSResolverObservationEvidence) ProtoMessage() {}
 
 func (x *DNSResolverObservationEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[151]
+	mi := &file_proto_agent_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15132,7 +15200,7 @@ func (x *DNSResolverObservationEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNSResolverObservationEvidence.ProtoReflect.Descriptor instead.
 func (*DNSResolverObservationEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{151}
+	return file_proto_agent_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *DNSResolverObservationEvidence) GetComponentId() string {
@@ -15287,7 +15355,7 @@ type DNSAnswerRecord struct {
 
 func (x *DNSAnswerRecord) Reset() {
 	*x = DNSAnswerRecord{}
-	mi := &file_proto_agent_proto_msgTypes[152]
+	mi := &file_proto_agent_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15299,7 +15367,7 @@ func (x *DNSAnswerRecord) String() string {
 func (*DNSAnswerRecord) ProtoMessage() {}
 
 func (x *DNSAnswerRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[152]
+	mi := &file_proto_agent_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15312,7 +15380,7 @@ func (x *DNSAnswerRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNSAnswerRecord.ProtoReflect.Descriptor instead.
 func (*DNSAnswerRecord) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{152}
+	return file_proto_agent_proto_rawDescGZIP(), []int{153}
 }
 
 func (x *DNSAnswerRecord) GetOwnerName() string {
@@ -15355,7 +15423,7 @@ type DNSForwardCounter struct {
 
 func (x *DNSForwardCounter) Reset() {
 	*x = DNSForwardCounter{}
-	mi := &file_proto_agent_proto_msgTypes[153]
+	mi := &file_proto_agent_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15367,7 +15435,7 @@ func (x *DNSForwardCounter) String() string {
 func (*DNSForwardCounter) ProtoMessage() {}
 
 func (x *DNSForwardCounter) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[153]
+	mi := &file_proto_agent_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15380,7 +15448,7 @@ func (x *DNSForwardCounter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNSForwardCounter.ProtoReflect.Descriptor instead.
 func (*DNSForwardCounter) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{153}
+	return file_proto_agent_proto_rawDescGZIP(), []int{154}
 }
 
 func (x *DNSForwardCounter) GetUpstream() string {
@@ -15430,7 +15498,7 @@ type DNSQueryProof struct {
 
 func (x *DNSQueryProof) Reset() {
 	*x = DNSQueryProof{}
-	mi := &file_proto_agent_proto_msgTypes[154]
+	mi := &file_proto_agent_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15442,7 +15510,7 @@ func (x *DNSQueryProof) String() string {
 func (*DNSQueryProof) ProtoMessage() {}
 
 func (x *DNSQueryProof) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[154]
+	mi := &file_proto_agent_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15455,7 +15523,7 @@ func (x *DNSQueryProof) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNSQueryProof.ProtoReflect.Descriptor instead.
 func (*DNSQueryProof) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{154}
+	return file_proto_agent_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *DNSQueryProof) GetName() string {
@@ -15656,6 +15724,7 @@ type ControllerMessage struct {
 	//	*ControllerMessage_WorkReportRejection
 	//	*ControllerMessage_ContainerTerminalOpen
 	//	*ControllerMessage_ContainerTerminalControl
+	//	*ControllerMessage_CheckExecutionQuiescence
 	Payload       isControllerMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -15663,7 +15732,7 @@ type ControllerMessage struct {
 
 func (x *ControllerMessage) Reset() {
 	*x = ControllerMessage{}
-	mi := &file_proto_agent_proto_msgTypes[155]
+	mi := &file_proto_agent_proto_msgTypes[156]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15675,7 +15744,7 @@ func (x *ControllerMessage) String() string {
 func (*ControllerMessage) ProtoMessage() {}
 
 func (x *ControllerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[155]
+	mi := &file_proto_agent_proto_msgTypes[156]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15688,7 +15757,7 @@ func (x *ControllerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControllerMessage.ProtoReflect.Descriptor instead.
 func (*ControllerMessage) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{155}
+	return file_proto_agent_proto_rawDescGZIP(), []int{156}
 }
 
 func (x *ControllerMessage) GetPayload() isControllerMessage_Payload {
@@ -16751,6 +16820,15 @@ func (x *ControllerMessage) GetContainerTerminalControl() *ContainerTerminalCont
 	return nil
 }
 
+func (x *ControllerMessage) GetCheckExecutionQuiescence() *CheckExecutionQuiescence {
+	if x != nil {
+		if x, ok := x.Payload.(*ControllerMessage_CheckExecutionQuiescence); ok {
+			return x.CheckExecutionQuiescence
+		}
+	}
+	return nil
+}
+
 type isControllerMessage_Payload interface {
 	isControllerMessage_Payload()
 }
@@ -17223,6 +17301,10 @@ type ControllerMessage_ContainerTerminalControl struct {
 	ContainerTerminalControl *ContainerTerminalControl `protobuf:"bytes,137,opt,name=container_terminal_control,json=containerTerminalControl,proto3,oneof"`
 }
 
+type ControllerMessage_CheckExecutionQuiescence struct {
+	CheckExecutionQuiescence *CheckExecutionQuiescence `protobuf:"bytes,138,opt,name=check_execution_quiescence,json=checkExecutionQuiescence,proto3,oneof"`
+}
+
 func (*ControllerMessage_ConfigUpdate) isControllerMessage_Payload() {}
 
 func (*ControllerMessage_Shutdown) isControllerMessage_Payload() {}
@@ -17457,6 +17539,52 @@ func (*ControllerMessage_ContainerTerminalOpen) isControllerMessage_Payload() {}
 
 func (*ControllerMessage_ContainerTerminalControl) isControllerMessage_Payload() {}
 
+func (*ControllerMessage_CheckExecutionQuiescence) isControllerMessage_Payload() {}
+
+type CheckExecutionQuiescence struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckExecutionQuiescence) Reset() {
+	*x = CheckExecutionQuiescence{}
+	mi := &file_proto_agent_proto_msgTypes[157]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckExecutionQuiescence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckExecutionQuiescence) ProtoMessage() {}
+
+func (x *CheckExecutionQuiescence) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[157]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckExecutionQuiescence.ProtoReflect.Descriptor instead.
+func (*CheckExecutionQuiescence) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{157}
+}
+
+func (x *CheckExecutionQuiescence) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
 type LogTarget struct {
 	state         protoimpl.MessageState    `protogen:"open.v1"`
 	Runtime       *ServiceObservationTarget `protobuf:"bytes,1,opt,name=runtime,proto3" json:"runtime,omitempty"`
@@ -17467,7 +17595,7 @@ type LogTarget struct {
 
 func (x *LogTarget) Reset() {
 	*x = LogTarget{}
-	mi := &file_proto_agent_proto_msgTypes[156]
+	mi := &file_proto_agent_proto_msgTypes[158]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -17479,7 +17607,7 @@ func (x *LogTarget) String() string {
 func (*LogTarget) ProtoMessage() {}
 
 func (x *LogTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[156]
+	mi := &file_proto_agent_proto_msgTypes[158]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -17492,7 +17620,7 @@ func (x *LogTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogTarget.ProtoReflect.Descriptor instead.
 func (*LogTarget) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{156}
+	return file_proto_agent_proto_rawDescGZIP(), []int{158}
 }
 
 func (x *LogTarget) GetRuntime() *ServiceObservationTarget {
@@ -17529,7 +17657,7 @@ type ContainerTerminalOpen struct {
 
 func (x *ContainerTerminalOpen) Reset() {
 	*x = ContainerTerminalOpen{}
-	mi := &file_proto_agent_proto_msgTypes[157]
+	mi := &file_proto_agent_proto_msgTypes[159]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -17541,7 +17669,7 @@ func (x *ContainerTerminalOpen) String() string {
 func (*ContainerTerminalOpen) ProtoMessage() {}
 
 func (x *ContainerTerminalOpen) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[157]
+	mi := &file_proto_agent_proto_msgTypes[159]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -17554,7 +17682,7 @@ func (x *ContainerTerminalOpen) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerTerminalOpen.ProtoReflect.Descriptor instead.
 func (*ContainerTerminalOpen) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{157}
+	return file_proto_agent_proto_rawDescGZIP(), []int{159}
 }
 
 func (x *ContainerTerminalOpen) GetSessionId() string {
@@ -17637,7 +17765,7 @@ type ContainerTerminalSize struct {
 
 func (x *ContainerTerminalSize) Reset() {
 	*x = ContainerTerminalSize{}
-	mi := &file_proto_agent_proto_msgTypes[158]
+	mi := &file_proto_agent_proto_msgTypes[160]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -17649,7 +17777,7 @@ func (x *ContainerTerminalSize) String() string {
 func (*ContainerTerminalSize) ProtoMessage() {}
 
 func (x *ContainerTerminalSize) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[158]
+	mi := &file_proto_agent_proto_msgTypes[160]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -17662,7 +17790,7 @@ func (x *ContainerTerminalSize) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerTerminalSize.ProtoReflect.Descriptor instead.
 func (*ContainerTerminalSize) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{158}
+	return file_proto_agent_proto_rawDescGZIP(), []int{160}
 }
 
 func (x *ContainerTerminalSize) GetColumns() uint32 {
@@ -17695,7 +17823,7 @@ type ContainerTerminalControl struct {
 
 func (x *ContainerTerminalControl) Reset() {
 	*x = ContainerTerminalControl{}
-	mi := &file_proto_agent_proto_msgTypes[159]
+	mi := &file_proto_agent_proto_msgTypes[161]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -17707,7 +17835,7 @@ func (x *ContainerTerminalControl) String() string {
 func (*ContainerTerminalControl) ProtoMessage() {}
 
 func (x *ContainerTerminalControl) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[159]
+	mi := &file_proto_agent_proto_msgTypes[161]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -17720,7 +17848,7 @@ func (x *ContainerTerminalControl) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerTerminalControl.ProtoReflect.Descriptor instead.
 func (*ContainerTerminalControl) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{159}
+	return file_proto_agent_proto_rawDescGZIP(), []int{161}
 }
 
 func (x *ContainerTerminalControl) GetSessionId() string {
@@ -17812,7 +17940,7 @@ type ContainerTerminalClosed struct {
 
 func (x *ContainerTerminalClosed) Reset() {
 	*x = ContainerTerminalClosed{}
-	mi := &file_proto_agent_proto_msgTypes[160]
+	mi := &file_proto_agent_proto_msgTypes[162]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -17824,7 +17952,7 @@ func (x *ContainerTerminalClosed) String() string {
 func (*ContainerTerminalClosed) ProtoMessage() {}
 
 func (x *ContainerTerminalClosed) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[160]
+	mi := &file_proto_agent_proto_msgTypes[162]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -17837,7 +17965,7 @@ func (x *ContainerTerminalClosed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerTerminalClosed.ProtoReflect.Descriptor instead.
 func (*ContainerTerminalClosed) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{160}
+	return file_proto_agent_proto_rawDescGZIP(), []int{162}
 }
 
 func (x *ContainerTerminalClosed) GetReason() string {
@@ -17876,7 +18004,7 @@ type ContainerTerminalEvent struct {
 
 func (x *ContainerTerminalEvent) Reset() {
 	*x = ContainerTerminalEvent{}
-	mi := &file_proto_agent_proto_msgTypes[161]
+	mi := &file_proto_agent_proto_msgTypes[163]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -17888,7 +18016,7 @@ func (x *ContainerTerminalEvent) String() string {
 func (*ContainerTerminalEvent) ProtoMessage() {}
 
 func (x *ContainerTerminalEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[161]
+	mi := &file_proto_agent_proto_msgTypes[163]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -17901,7 +18029,7 @@ func (x *ContainerTerminalEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerTerminalEvent.ProtoReflect.Descriptor instead.
 func (*ContainerTerminalEvent) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{161}
+	return file_proto_agent_proto_rawDescGZIP(), []int{163}
 }
 
 func (x *ContainerTerminalEvent) GetSessionId() string {
@@ -17980,7 +18108,7 @@ type LogSubscribe struct {
 
 func (x *LogSubscribe) Reset() {
 	*x = LogSubscribe{}
-	mi := &file_proto_agent_proto_msgTypes[162]
+	mi := &file_proto_agent_proto_msgTypes[164]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -17992,7 +18120,7 @@ func (x *LogSubscribe) String() string {
 func (*LogSubscribe) ProtoMessage() {}
 
 func (x *LogSubscribe) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[162]
+	mi := &file_proto_agent_proto_msgTypes[164]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18005,7 +18133,7 @@ func (x *LogSubscribe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogSubscribe.ProtoReflect.Descriptor instead.
 func (*LogSubscribe) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{162}
+	return file_proto_agent_proto_rawDescGZIP(), []int{164}
 }
 
 func (x *LogSubscribe) GetRequestId() string {
@@ -18052,7 +18180,7 @@ type LogCancel struct {
 
 func (x *LogCancel) Reset() {
 	*x = LogCancel{}
-	mi := &file_proto_agent_proto_msgTypes[163]
+	mi := &file_proto_agent_proto_msgTypes[165]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18064,7 +18192,7 @@ func (x *LogCancel) String() string {
 func (*LogCancel) ProtoMessage() {}
 
 func (x *LogCancel) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[163]
+	mi := &file_proto_agent_proto_msgTypes[165]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18077,7 +18205,7 @@ func (x *LogCancel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogCancel.ProtoReflect.Descriptor instead.
 func (*LogCancel) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{163}
+	return file_proto_agent_proto_rawDescGZIP(), []int{165}
 }
 
 func (x *LogCancel) GetRequestId() string {
@@ -18097,7 +18225,7 @@ type LogCredit struct {
 
 func (x *LogCredit) Reset() {
 	*x = LogCredit{}
-	mi := &file_proto_agent_proto_msgTypes[164]
+	mi := &file_proto_agent_proto_msgTypes[166]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18109,7 +18237,7 @@ func (x *LogCredit) String() string {
 func (*LogCredit) ProtoMessage() {}
 
 func (x *LogCredit) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[164]
+	mi := &file_proto_agent_proto_msgTypes[166]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18122,7 +18250,7 @@ func (x *LogCredit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogCredit.ProtoReflect.Descriptor instead.
 func (*LogCredit) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{164}
+	return file_proto_agent_proto_rawDescGZIP(), []int{166}
 }
 
 func (x *LogCredit) GetRequestId() string {
@@ -18148,7 +18276,7 @@ type LogReady struct {
 
 func (x *LogReady) Reset() {
 	*x = LogReady{}
-	mi := &file_proto_agent_proto_msgTypes[165]
+	mi := &file_proto_agent_proto_msgTypes[167]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18160,7 +18288,7 @@ func (x *LogReady) String() string {
 func (*LogReady) ProtoMessage() {}
 
 func (x *LogReady) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[165]
+	mi := &file_proto_agent_proto_msgTypes[167]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18173,7 +18301,7 @@ func (x *LogReady) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogReady.ProtoReflect.Descriptor instead.
 func (*LogReady) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{165}
+	return file_proto_agent_proto_rawDescGZIP(), []int{167}
 }
 
 func (x *LogReady) GetRequestId() string {
@@ -18203,7 +18331,7 @@ type LogEvent struct {
 
 func (x *LogEvent) Reset() {
 	*x = LogEvent{}
-	mi := &file_proto_agent_proto_msgTypes[166]
+	mi := &file_proto_agent_proto_msgTypes[168]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18215,7 +18343,7 @@ func (x *LogEvent) String() string {
 func (*LogEvent) ProtoMessage() {}
 
 func (x *LogEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[166]
+	mi := &file_proto_agent_proto_msgTypes[168]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18228,7 +18356,7 @@ func (x *LogEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEvent.ProtoReflect.Descriptor instead.
 func (*LogEvent) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{166}
+	return file_proto_agent_proto_rawDescGZIP(), []int{168}
 }
 
 func (x *LogEvent) GetRequestId() string {
@@ -18325,7 +18453,7 @@ type LogEnd struct {
 
 func (x *LogEnd) Reset() {
 	*x = LogEnd{}
-	mi := &file_proto_agent_proto_msgTypes[167]
+	mi := &file_proto_agent_proto_msgTypes[169]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18337,7 +18465,7 @@ func (x *LogEnd) String() string {
 func (*LogEnd) ProtoMessage() {}
 
 func (x *LogEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[167]
+	mi := &file_proto_agent_proto_msgTypes[169]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18350,7 +18478,7 @@ func (x *LogEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEnd.ProtoReflect.Descriptor instead.
 func (*LogEnd) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{167}
+	return file_proto_agent_proto_rawDescGZIP(), []int{169}
 }
 
 func (x *LogEnd) GetRequestId() string {
@@ -18375,7 +18503,7 @@ type ScriptStartAuthorizedCheckpoint struct {
 
 func (x *ScriptStartAuthorizedCheckpoint) Reset() {
 	*x = ScriptStartAuthorizedCheckpoint{}
-	mi := &file_proto_agent_proto_msgTypes[168]
+	mi := &file_proto_agent_proto_msgTypes[170]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18387,7 +18515,7 @@ func (x *ScriptStartAuthorizedCheckpoint) String() string {
 func (*ScriptStartAuthorizedCheckpoint) ProtoMessage() {}
 
 func (x *ScriptStartAuthorizedCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[168]
+	mi := &file_proto_agent_proto_msgTypes[170]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18400,7 +18528,7 @@ func (x *ScriptStartAuthorizedCheckpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptStartAuthorizedCheckpoint.ProtoReflect.Descriptor instead.
 func (*ScriptStartAuthorizedCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{168}
+	return file_proto_agent_proto_rawDescGZIP(), []int{170}
 }
 
 type ScriptBodyPreparedCheckpoint struct {
@@ -18417,7 +18545,7 @@ type ScriptBodyPreparedCheckpoint struct {
 
 func (x *ScriptBodyPreparedCheckpoint) Reset() {
 	*x = ScriptBodyPreparedCheckpoint{}
-	mi := &file_proto_agent_proto_msgTypes[169]
+	mi := &file_proto_agent_proto_msgTypes[171]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18429,7 +18557,7 @@ func (x *ScriptBodyPreparedCheckpoint) String() string {
 func (*ScriptBodyPreparedCheckpoint) ProtoMessage() {}
 
 func (x *ScriptBodyPreparedCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[169]
+	mi := &file_proto_agent_proto_msgTypes[171]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18442,7 +18570,7 @@ func (x *ScriptBodyPreparedCheckpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptBodyPreparedCheckpoint.ProtoReflect.Descriptor instead.
 func (*ScriptBodyPreparedCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{169}
+	return file_proto_agent_proto_rawDescGZIP(), []int{171}
 }
 
 func (x *ScriptBodyPreparedCheckpoint) GetBodySha256() []byte {
@@ -18497,7 +18625,7 @@ type ScriptContainerCreatedCheckpoint struct {
 
 func (x *ScriptContainerCreatedCheckpoint) Reset() {
 	*x = ScriptContainerCreatedCheckpoint{}
-	mi := &file_proto_agent_proto_msgTypes[170]
+	mi := &file_proto_agent_proto_msgTypes[172]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18509,7 +18637,7 @@ func (x *ScriptContainerCreatedCheckpoint) String() string {
 func (*ScriptContainerCreatedCheckpoint) ProtoMessage() {}
 
 func (x *ScriptContainerCreatedCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[170]
+	mi := &file_proto_agent_proto_msgTypes[172]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18522,7 +18650,7 @@ func (x *ScriptContainerCreatedCheckpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptContainerCreatedCheckpoint.ProtoReflect.Descriptor instead.
 func (*ScriptContainerCreatedCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{170}
+	return file_proto_agent_proto_rawDescGZIP(), []int{172}
 }
 
 func (x *ScriptContainerCreatedCheckpoint) GetContainerId() string {
@@ -18551,7 +18679,7 @@ type ScriptOutcomeCheckpoint struct {
 
 func (x *ScriptOutcomeCheckpoint) Reset() {
 	*x = ScriptOutcomeCheckpoint{}
-	mi := &file_proto_agent_proto_msgTypes[171]
+	mi := &file_proto_agent_proto_msgTypes[173]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18563,7 +18691,7 @@ func (x *ScriptOutcomeCheckpoint) String() string {
 func (*ScriptOutcomeCheckpoint) ProtoMessage() {}
 
 func (x *ScriptOutcomeCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[171]
+	mi := &file_proto_agent_proto_msgTypes[173]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18576,7 +18704,7 @@ func (x *ScriptOutcomeCheckpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptOutcomeCheckpoint.ProtoReflect.Descriptor instead.
 func (*ScriptOutcomeCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{171}
+	return file_proto_agent_proto_rawDescGZIP(), []int{173}
 }
 
 func (x *ScriptOutcomeCheckpoint) GetReason() ScriptOutcomeReason {
@@ -18622,7 +18750,7 @@ type ScriptCleanupCheckpoint struct {
 
 func (x *ScriptCleanupCheckpoint) Reset() {
 	*x = ScriptCleanupCheckpoint{}
-	mi := &file_proto_agent_proto_msgTypes[172]
+	mi := &file_proto_agent_proto_msgTypes[174]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18634,7 +18762,7 @@ func (x *ScriptCleanupCheckpoint) String() string {
 func (*ScriptCleanupCheckpoint) ProtoMessage() {}
 
 func (x *ScriptCleanupCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[172]
+	mi := &file_proto_agent_proto_msgTypes[174]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18647,7 +18775,7 @@ func (x *ScriptCleanupCheckpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptCleanupCheckpoint.ProtoReflect.Descriptor instead.
 func (*ScriptCleanupCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{172}
+	return file_proto_agent_proto_rawDescGZIP(), []int{174}
 }
 
 func (x *ScriptCleanupCheckpoint) GetContainerId() string {
@@ -18715,7 +18843,7 @@ type ScriptExecutionCheckpoint struct {
 
 func (x *ScriptExecutionCheckpoint) Reset() {
 	*x = ScriptExecutionCheckpoint{}
-	mi := &file_proto_agent_proto_msgTypes[173]
+	mi := &file_proto_agent_proto_msgTypes[175]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18727,7 +18855,7 @@ func (x *ScriptExecutionCheckpoint) String() string {
 func (*ScriptExecutionCheckpoint) ProtoMessage() {}
 
 func (x *ScriptExecutionCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[173]
+	mi := &file_proto_agent_proto_msgTypes[175]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18740,7 +18868,7 @@ func (x *ScriptExecutionCheckpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptExecutionCheckpoint.ProtoReflect.Descriptor instead.
 func (*ScriptExecutionCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{173}
+	return file_proto_agent_proto_rawDescGZIP(), []int{175}
 }
 
 func (x *ScriptExecutionCheckpoint) GetState() ScriptExecutionState {
@@ -18827,7 +18955,7 @@ type ScriptCheckpointRequest struct {
 
 func (x *ScriptCheckpointRequest) Reset() {
 	*x = ScriptCheckpointRequest{}
-	mi := &file_proto_agent_proto_msgTypes[174]
+	mi := &file_proto_agent_proto_msgTypes[176]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -18839,7 +18967,7 @@ func (x *ScriptCheckpointRequest) String() string {
 func (*ScriptCheckpointRequest) ProtoMessage() {}
 
 func (x *ScriptCheckpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[174]
+	mi := &file_proto_agent_proto_msgTypes[176]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -18852,7 +18980,7 @@ func (x *ScriptCheckpointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptCheckpointRequest.ProtoReflect.Descriptor instead.
 func (*ScriptCheckpointRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{174}
+	return file_proto_agent_proto_rawDescGZIP(), []int{176}
 }
 
 func (x *ScriptCheckpointRequest) GetTaskId() string {
@@ -19044,7 +19172,7 @@ type ScriptCheckpointAck struct {
 
 func (x *ScriptCheckpointAck) Reset() {
 	*x = ScriptCheckpointAck{}
-	mi := &file_proto_agent_proto_msgTypes[175]
+	mi := &file_proto_agent_proto_msgTypes[177]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19056,7 +19184,7 @@ func (x *ScriptCheckpointAck) String() string {
 func (*ScriptCheckpointAck) ProtoMessage() {}
 
 func (x *ScriptCheckpointAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[175]
+	mi := &file_proto_agent_proto_msgTypes[177]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19069,7 +19197,7 @@ func (x *ScriptCheckpointAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptCheckpointAck.ProtoReflect.Descriptor instead.
 func (*ScriptCheckpointAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{175}
+	return file_proto_agent_proto_rawDescGZIP(), []int{177}
 }
 
 func (x *ScriptCheckpointAck) GetTaskId() string {
@@ -19159,7 +19287,7 @@ type BackingHookValue struct {
 
 func (x *BackingHookValue) Reset() {
 	*x = BackingHookValue{}
-	mi := &file_proto_agent_proto_msgTypes[176]
+	mi := &file_proto_agent_proto_msgTypes[178]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19171,7 +19299,7 @@ func (x *BackingHookValue) String() string {
 func (*BackingHookValue) ProtoMessage() {}
 
 func (x *BackingHookValue) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[176]
+	mi := &file_proto_agent_proto_msgTypes[178]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19184,7 +19312,7 @@ func (x *BackingHookValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingHookValue.ProtoReflect.Descriptor instead.
 func (*BackingHookValue) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{176}
+	return file_proto_agent_proto_rawDescGZIP(), []int{178}
 }
 
 func (x *BackingHookValue) GetKey() string {
@@ -19211,7 +19339,7 @@ type BackingHookFactDefinition struct {
 
 func (x *BackingHookFactDefinition) Reset() {
 	*x = BackingHookFactDefinition{}
-	mi := &file_proto_agent_proto_msgTypes[177]
+	mi := &file_proto_agent_proto_msgTypes[179]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19223,7 +19351,7 @@ func (x *BackingHookFactDefinition) String() string {
 func (*BackingHookFactDefinition) ProtoMessage() {}
 
 func (x *BackingHookFactDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[177]
+	mi := &file_proto_agent_proto_msgTypes[179]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19236,7 +19364,7 @@ func (x *BackingHookFactDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingHookFactDefinition.ProtoReflect.Descriptor instead.
 func (*BackingHookFactDefinition) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{177}
+	return file_proto_agent_proto_rawDescGZIP(), []int{179}
 }
 
 func (x *BackingHookFactDefinition) GetKey() string {
@@ -19276,7 +19404,7 @@ type BackingHookProcedure struct {
 
 func (x *BackingHookProcedure) Reset() {
 	*x = BackingHookProcedure{}
-	mi := &file_proto_agent_proto_msgTypes[178]
+	mi := &file_proto_agent_proto_msgTypes[180]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19288,7 +19416,7 @@ func (x *BackingHookProcedure) String() string {
 func (*BackingHookProcedure) ProtoMessage() {}
 
 func (x *BackingHookProcedure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[178]
+	mi := &file_proto_agent_proto_msgTypes[180]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19301,7 +19429,7 @@ func (x *BackingHookProcedure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingHookProcedure.ProtoReflect.Descriptor instead.
 func (*BackingHookProcedure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{178}
+	return file_proto_agent_proto_rawDescGZIP(), []int{180}
 }
 
 func (x *BackingHookProcedure) GetEvent() BackingHookEvent {
@@ -19415,7 +19543,7 @@ type ExecutionPlan struct {
 
 func (x *ExecutionPlan) Reset() {
 	*x = ExecutionPlan{}
-	mi := &file_proto_agent_proto_msgTypes[179]
+	mi := &file_proto_agent_proto_msgTypes[181]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19427,7 +19555,7 @@ func (x *ExecutionPlan) String() string {
 func (*ExecutionPlan) ProtoMessage() {}
 
 func (x *ExecutionPlan) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[179]
+	mi := &file_proto_agent_proto_msgTypes[181]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19440,7 +19568,7 @@ func (x *ExecutionPlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionPlan.ProtoReflect.Descriptor instead.
 func (*ExecutionPlan) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{179}
+	return file_proto_agent_proto_rawDescGZIP(), []int{181}
 }
 
 func (x *ExecutionPlan) GetSchema() uint32 {
@@ -19593,7 +19721,7 @@ type ManagedNetworkRecoveryProcedure struct {
 
 func (x *ManagedNetworkRecoveryProcedure) Reset() {
 	*x = ManagedNetworkRecoveryProcedure{}
-	mi := &file_proto_agent_proto_msgTypes[180]
+	mi := &file_proto_agent_proto_msgTypes[182]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19605,7 +19733,7 @@ func (x *ManagedNetworkRecoveryProcedure) String() string {
 func (*ManagedNetworkRecoveryProcedure) ProtoMessage() {}
 
 func (x *ManagedNetworkRecoveryProcedure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[180]
+	mi := &file_proto_agent_proto_msgTypes[182]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19618,7 +19746,7 @@ func (x *ManagedNetworkRecoveryProcedure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedNetworkRecoveryProcedure.ProtoReflect.Descriptor instead.
 func (*ManagedNetworkRecoveryProcedure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{180}
+	return file_proto_agent_proto_rawDescGZIP(), []int{182}
 }
 
 func (x *ManagedNetworkRecoveryProcedure) GetEnvironmentId() string {
@@ -19680,7 +19808,7 @@ type ManagedNetworkRemovalRecovery struct {
 
 func (x *ManagedNetworkRemovalRecovery) Reset() {
 	*x = ManagedNetworkRemovalRecovery{}
-	mi := &file_proto_agent_proto_msgTypes[181]
+	mi := &file_proto_agent_proto_msgTypes[183]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19692,7 +19820,7 @@ func (x *ManagedNetworkRemovalRecovery) String() string {
 func (*ManagedNetworkRemovalRecovery) ProtoMessage() {}
 
 func (x *ManagedNetworkRemovalRecovery) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[181]
+	mi := &file_proto_agent_proto_msgTypes[183]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19705,7 +19833,7 @@ func (x *ManagedNetworkRemovalRecovery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedNetworkRemovalRecovery.ProtoReflect.Descriptor instead.
 func (*ManagedNetworkRemovalRecovery) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{181}
+	return file_proto_agent_proto_rawDescGZIP(), []int{183}
 }
 
 func (x *ManagedNetworkRemovalRecovery) GetStepId() string {
@@ -19739,7 +19867,7 @@ type ManagedNetworkPreparationRecovery struct {
 
 func (x *ManagedNetworkPreparationRecovery) Reset() {
 	*x = ManagedNetworkPreparationRecovery{}
-	mi := &file_proto_agent_proto_msgTypes[182]
+	mi := &file_proto_agent_proto_msgTypes[184]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19751,7 +19879,7 @@ func (x *ManagedNetworkPreparationRecovery) String() string {
 func (*ManagedNetworkPreparationRecovery) ProtoMessage() {}
 
 func (x *ManagedNetworkPreparationRecovery) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[182]
+	mi := &file_proto_agent_proto_msgTypes[184]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19764,7 +19892,7 @@ func (x *ManagedNetworkPreparationRecovery) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ManagedNetworkPreparationRecovery.ProtoReflect.Descriptor instead.
 func (*ManagedNetworkPreparationRecovery) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{182}
+	return file_proto_agent_proto_rawDescGZIP(), []int{184}
 }
 
 func (x *ManagedNetworkPreparationRecovery) GetArtifactId() string {
@@ -19792,7 +19920,7 @@ type ManagedNetworkPreparationMember struct {
 
 func (x *ManagedNetworkPreparationMember) Reset() {
 	*x = ManagedNetworkPreparationMember{}
-	mi := &file_proto_agent_proto_msgTypes[183]
+	mi := &file_proto_agent_proto_msgTypes[185]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19804,7 +19932,7 @@ func (x *ManagedNetworkPreparationMember) String() string {
 func (*ManagedNetworkPreparationMember) ProtoMessage() {}
 
 func (x *ManagedNetworkPreparationMember) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[183]
+	mi := &file_proto_agent_proto_msgTypes[185]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19817,7 +19945,7 @@ func (x *ManagedNetworkPreparationMember) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedNetworkPreparationMember.ProtoReflect.Descriptor instead.
 func (*ManagedNetworkPreparationMember) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{183}
+	return file_proto_agent_proto_rawDescGZIP(), []int{185}
 }
 
 func (x *ManagedNetworkPreparationMember) GetNetworkId() string {
@@ -19857,7 +19985,7 @@ type ServiceAbsenceRecoveryProcedure struct {
 
 func (x *ServiceAbsenceRecoveryProcedure) Reset() {
 	*x = ServiceAbsenceRecoveryProcedure{}
-	mi := &file_proto_agent_proto_msgTypes[184]
+	mi := &file_proto_agent_proto_msgTypes[186]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19869,7 +19997,7 @@ func (x *ServiceAbsenceRecoveryProcedure) String() string {
 func (*ServiceAbsenceRecoveryProcedure) ProtoMessage() {}
 
 func (x *ServiceAbsenceRecoveryProcedure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[184]
+	mi := &file_proto_agent_proto_msgTypes[186]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19882,7 +20010,7 @@ func (x *ServiceAbsenceRecoveryProcedure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceAbsenceRecoveryProcedure.ProtoReflect.Descriptor instead.
 func (*ServiceAbsenceRecoveryProcedure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{184}
+	return file_proto_agent_proto_rawDescGZIP(), []int{186}
 }
 
 func (x *ServiceAbsenceRecoveryProcedure) GetServiceId() string {
@@ -19931,7 +20059,7 @@ type ServiceLifecycleProcedure struct {
 
 func (x *ServiceLifecycleProcedure) Reset() {
 	*x = ServiceLifecycleProcedure{}
-	mi := &file_proto_agent_proto_msgTypes[185]
+	mi := &file_proto_agent_proto_msgTypes[187]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19943,7 +20071,7 @@ func (x *ServiceLifecycleProcedure) String() string {
 func (*ServiceLifecycleProcedure) ProtoMessage() {}
 
 func (x *ServiceLifecycleProcedure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[185]
+	mi := &file_proto_agent_proto_msgTypes[187]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -19956,7 +20084,7 @@ func (x *ServiceLifecycleProcedure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleProcedure.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleProcedure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{185}
+	return file_proto_agent_proto_rawDescGZIP(), []int{187}
 }
 
 func (x *ServiceLifecycleProcedure) GetSources() []*ServiceLifecycleSource {
@@ -19980,7 +20108,7 @@ type ServiceLifecycleSource struct {
 
 func (x *ServiceLifecycleSource) Reset() {
 	*x = ServiceLifecycleSource{}
-	mi := &file_proto_agent_proto_msgTypes[186]
+	mi := &file_proto_agent_proto_msgTypes[188]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -19992,7 +20120,7 @@ func (x *ServiceLifecycleSource) String() string {
 func (*ServiceLifecycleSource) ProtoMessage() {}
 
 func (x *ServiceLifecycleSource) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[186]
+	mi := &file_proto_agent_proto_msgTypes[188]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20005,7 +20133,7 @@ func (x *ServiceLifecycleSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleSource.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleSource) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{186}
+	return file_proto_agent_proto_rawDescGZIP(), []int{188}
 }
 
 func (x *ServiceLifecycleSource) GetArtifactId() string {
@@ -20062,7 +20190,7 @@ type ManagedComponentProcedure struct {
 
 func (x *ManagedComponentProcedure) Reset() {
 	*x = ManagedComponentProcedure{}
-	mi := &file_proto_agent_proto_msgTypes[187]
+	mi := &file_proto_agent_proto_msgTypes[189]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20074,7 +20202,7 @@ func (x *ManagedComponentProcedure) String() string {
 func (*ManagedComponentProcedure) ProtoMessage() {}
 
 func (x *ManagedComponentProcedure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[187]
+	mi := &file_proto_agent_proto_msgTypes[189]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20087,7 +20215,7 @@ func (x *ManagedComponentProcedure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedComponentProcedure.ProtoReflect.Descriptor instead.
 func (*ManagedComponentProcedure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{187}
+	return file_proto_agent_proto_rawDescGZIP(), []int{189}
 }
 
 func (x *ManagedComponentProcedure) GetServices() []*ManagedComponentService {
@@ -20113,7 +20241,7 @@ type ManagedComponentService struct {
 
 func (x *ManagedComponentService) Reset() {
 	*x = ManagedComponentService{}
-	mi := &file_proto_agent_proto_msgTypes[188]
+	mi := &file_proto_agent_proto_msgTypes[190]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20125,7 +20253,7 @@ func (x *ManagedComponentService) String() string {
 func (*ManagedComponentService) ProtoMessage() {}
 
 func (x *ManagedComponentService) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[188]
+	mi := &file_proto_agent_proto_msgTypes[190]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20138,7 +20266,7 @@ func (x *ManagedComponentService) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedComponentService.ProtoReflect.Descriptor instead.
 func (*ManagedComponentService) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{188}
+	return file_proto_agent_proto_rawDescGZIP(), []int{190}
 }
 
 func (x *ManagedComponentService) GetComponentKind() string {
@@ -20209,7 +20337,7 @@ type CandidateReleaseProcedure struct {
 
 func (x *CandidateReleaseProcedure) Reset() {
 	*x = CandidateReleaseProcedure{}
-	mi := &file_proto_agent_proto_msgTypes[189]
+	mi := &file_proto_agent_proto_msgTypes[191]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20221,7 +20349,7 @@ func (x *CandidateReleaseProcedure) String() string {
 func (*CandidateReleaseProcedure) ProtoMessage() {}
 
 func (x *CandidateReleaseProcedure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[189]
+	mi := &file_proto_agent_proto_msgTypes[191]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20234,7 +20362,7 @@ func (x *CandidateReleaseProcedure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CandidateReleaseProcedure.ProtoReflect.Descriptor instead.
 func (*CandidateReleaseProcedure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{189}
+	return file_proto_agent_proto_rawDescGZIP(), []int{191}
 }
 
 func (x *CandidateReleaseProcedure) GetMembers() []*CandidateReleaseMember {
@@ -20265,7 +20393,7 @@ type ConfigurationRestoration struct {
 
 func (x *ConfigurationRestoration) Reset() {
 	*x = ConfigurationRestoration{}
-	mi := &file_proto_agent_proto_msgTypes[190]
+	mi := &file_proto_agent_proto_msgTypes[192]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20277,7 +20405,7 @@ func (x *ConfigurationRestoration) String() string {
 func (*ConfigurationRestoration) ProtoMessage() {}
 
 func (x *ConfigurationRestoration) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[190]
+	mi := &file_proto_agent_proto_msgTypes[192]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20290,7 +20418,7 @@ func (x *ConfigurationRestoration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigurationRestoration.ProtoReflect.Descriptor instead.
 func (*ConfigurationRestoration) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{190}
+	return file_proto_agent_proto_rawDescGZIP(), []int{192}
 }
 
 func (x *ConfigurationRestoration) GetPriorSnapshotId() string {
@@ -20325,7 +20453,7 @@ type ConfigurationFileRestoration struct {
 
 func (x *ConfigurationFileRestoration) Reset() {
 	*x = ConfigurationFileRestoration{}
-	mi := &file_proto_agent_proto_msgTypes[191]
+	mi := &file_proto_agent_proto_msgTypes[193]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20337,7 +20465,7 @@ func (x *ConfigurationFileRestoration) String() string {
 func (*ConfigurationFileRestoration) ProtoMessage() {}
 
 func (x *ConfigurationFileRestoration) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[191]
+	mi := &file_proto_agent_proto_msgTypes[193]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20350,7 +20478,7 @@ func (x *ConfigurationFileRestoration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigurationFileRestoration.ProtoReflect.Descriptor instead.
 func (*ConfigurationFileRestoration) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{191}
+	return file_proto_agent_proto_rawDescGZIP(), []int{193}
 }
 
 func (x *ConfigurationFileRestoration) GetForwardStepId() string {
@@ -20389,7 +20517,7 @@ type CandidateReleaseMember struct {
 
 func (x *CandidateReleaseMember) Reset() {
 	*x = CandidateReleaseMember{}
-	mi := &file_proto_agent_proto_msgTypes[192]
+	mi := &file_proto_agent_proto_msgTypes[194]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20401,7 +20529,7 @@ func (x *CandidateReleaseMember) String() string {
 func (*CandidateReleaseMember) ProtoMessage() {}
 
 func (x *CandidateReleaseMember) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[192]
+	mi := &file_proto_agent_proto_msgTypes[194]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20414,7 +20542,7 @@ func (x *CandidateReleaseMember) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CandidateReleaseMember.ProtoReflect.Descriptor instead.
 func (*CandidateReleaseMember) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{192}
+	return file_proto_agent_proto_rawDescGZIP(), []int{194}
 }
 
 func (x *CandidateReleaseMember) GetServiceId() string {
@@ -20483,7 +20611,7 @@ type RollingReleaseProcedure struct {
 
 func (x *RollingReleaseProcedure) Reset() {
 	*x = RollingReleaseProcedure{}
-	mi := &file_proto_agent_proto_msgTypes[193]
+	mi := &file_proto_agent_proto_msgTypes[195]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20495,7 +20623,7 @@ func (x *RollingReleaseProcedure) String() string {
 func (*RollingReleaseProcedure) ProtoMessage() {}
 
 func (x *RollingReleaseProcedure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[193]
+	mi := &file_proto_agent_proto_msgTypes[195]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20508,7 +20636,7 @@ func (x *RollingReleaseProcedure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollingReleaseProcedure.ProtoReflect.Descriptor instead.
 func (*RollingReleaseProcedure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{193}
+	return file_proto_agent_proto_rawDescGZIP(), []int{195}
 }
 
 func (x *RollingReleaseProcedure) GetReplicaTimeoutSeconds() uint32 {
@@ -20582,7 +20710,7 @@ type RollingReplica struct {
 
 func (x *RollingReplica) Reset() {
 	*x = RollingReplica{}
-	mi := &file_proto_agent_proto_msgTypes[194]
+	mi := &file_proto_agent_proto_msgTypes[196]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20594,7 +20722,7 @@ func (x *RollingReplica) String() string {
 func (*RollingReplica) ProtoMessage() {}
 
 func (x *RollingReplica) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[194]
+	mi := &file_proto_agent_proto_msgTypes[196]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20607,7 +20735,7 @@ func (x *RollingReplica) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollingReplica.ProtoReflect.Descriptor instead.
 func (*RollingReplica) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{194}
+	return file_proto_agent_proto_rawDescGZIP(), []int{196}
 }
 
 func (x *RollingReplica) GetReleaseId() string {
@@ -20672,7 +20800,7 @@ type RollingReplicaChange struct {
 
 func (x *RollingReplicaChange) Reset() {
 	*x = RollingReplicaChange{}
-	mi := &file_proto_agent_proto_msgTypes[195]
+	mi := &file_proto_agent_proto_msgTypes[197]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20684,7 +20812,7 @@ func (x *RollingReplicaChange) String() string {
 func (*RollingReplicaChange) ProtoMessage() {}
 
 func (x *RollingReplicaChange) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[195]
+	mi := &file_proto_agent_proto_msgTypes[197]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20697,7 +20825,7 @@ func (x *RollingReplicaChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollingReplicaChange.ProtoReflect.Descriptor instead.
 func (*RollingReplicaChange) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{195}
+	return file_proto_agent_proto_rawDescGZIP(), []int{197}
 }
 
 func (x *RollingReplicaChange) GetOrdinal() uint32 {
@@ -20749,7 +20877,7 @@ type ServingPredecessorRestoration struct {
 
 func (x *ServingPredecessorRestoration) Reset() {
 	*x = ServingPredecessorRestoration{}
-	mi := &file_proto_agent_proto_msgTypes[196]
+	mi := &file_proto_agent_proto_msgTypes[198]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20761,7 +20889,7 @@ func (x *ServingPredecessorRestoration) String() string {
 func (*ServingPredecessorRestoration) ProtoMessage() {}
 
 func (x *ServingPredecessorRestoration) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[196]
+	mi := &file_proto_agent_proto_msgTypes[198]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20774,7 +20902,7 @@ func (x *ServingPredecessorRestoration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServingPredecessorRestoration.ProtoReflect.Descriptor instead.
 func (*ServingPredecessorRestoration) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{196}
+	return file_proto_agent_proto_rawDescGZIP(), []int{198}
 }
 
 func (x *ServingPredecessorRestoration) GetProbeStepId() string {
@@ -20831,7 +20959,7 @@ type CandidateAbsenceRestoration struct {
 
 func (x *CandidateAbsenceRestoration) Reset() {
 	*x = CandidateAbsenceRestoration{}
-	mi := &file_proto_agent_proto_msgTypes[197]
+	mi := &file_proto_agent_proto_msgTypes[199]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20843,7 +20971,7 @@ func (x *CandidateAbsenceRestoration) String() string {
 func (*CandidateAbsenceRestoration) ProtoMessage() {}
 
 func (x *CandidateAbsenceRestoration) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[197]
+	mi := &file_proto_agent_proto_msgTypes[199]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20856,7 +20984,7 @@ func (x *CandidateAbsenceRestoration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CandidateAbsenceRestoration.ProtoReflect.Descriptor instead.
 func (*CandidateAbsenceRestoration) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{197}
+	return file_proto_agent_proto_rawDescGZIP(), []int{199}
 }
 
 func (x *CandidateAbsenceRestoration) GetComposeProjectName() string {
@@ -20897,7 +21025,7 @@ type CandidateReleaseService struct {
 
 func (x *CandidateReleaseService) Reset() {
 	*x = CandidateReleaseService{}
-	mi := &file_proto_agent_proto_msgTypes[198]
+	mi := &file_proto_agent_proto_msgTypes[200]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20909,7 +21037,7 @@ func (x *CandidateReleaseService) String() string {
 func (*CandidateReleaseService) ProtoMessage() {}
 
 func (x *CandidateReleaseService) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[198]
+	mi := &file_proto_agent_proto_msgTypes[200]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20922,7 +21050,7 @@ func (x *CandidateReleaseService) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CandidateReleaseService.ProtoReflect.Descriptor instead.
 func (*CandidateReleaseService) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{198}
+	return file_proto_agent_proto_rawDescGZIP(), []int{200}
 }
 
 func (x *CandidateReleaseService) GetServiceId() string {
@@ -20950,7 +21078,7 @@ type CandidateRestorationProbe struct {
 
 func (x *CandidateRestorationProbe) Reset() {
 	*x = CandidateRestorationProbe{}
-	mi := &file_proto_agent_proto_msgTypes[199]
+	mi := &file_proto_agent_proto_msgTypes[201]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -20962,7 +21090,7 @@ func (x *CandidateRestorationProbe) String() string {
 func (*CandidateRestorationProbe) ProtoMessage() {}
 
 func (x *CandidateRestorationProbe) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[199]
+	mi := &file_proto_agent_proto_msgTypes[201]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -20975,7 +21103,7 @@ func (x *CandidateRestorationProbe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CandidateRestorationProbe.ProtoReflect.Descriptor instead.
 func (*CandidateRestorationProbe) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{199}
+	return file_proto_agent_proto_rawDescGZIP(), []int{201}
 }
 
 func (x *CandidateRestorationProbe) GetCandidateArtifactId() string {
@@ -21010,7 +21138,7 @@ type CandidateRestorationCompensate struct {
 
 func (x *CandidateRestorationCompensate) Reset() {
 	*x = CandidateRestorationCompensate{}
-	mi := &file_proto_agent_proto_msgTypes[200]
+	mi := &file_proto_agent_proto_msgTypes[202]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21022,7 +21150,7 @@ func (x *CandidateRestorationCompensate) String() string {
 func (*CandidateRestorationCompensate) ProtoMessage() {}
 
 func (x *CandidateRestorationCompensate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[200]
+	mi := &file_proto_agent_proto_msgTypes[202]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21035,7 +21163,7 @@ func (x *CandidateRestorationCompensate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CandidateRestorationCompensate.ProtoReflect.Descriptor instead.
 func (*CandidateRestorationCompensate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{200}
+	return file_proto_agent_proto_rawDescGZIP(), []int{202}
 }
 
 func (x *CandidateRestorationCompensate) GetCandidateArtifactId() string {
@@ -21080,7 +21208,7 @@ type EntryConfigurationWorkInput struct {
 
 func (x *EntryConfigurationWorkInput) Reset() {
 	*x = EntryConfigurationWorkInput{}
-	mi := &file_proto_agent_proto_msgTypes[201]
+	mi := &file_proto_agent_proto_msgTypes[203]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21092,7 +21220,7 @@ func (x *EntryConfigurationWorkInput) String() string {
 func (*EntryConfigurationWorkInput) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkInput) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[201]
+	mi := &file_proto_agent_proto_msgTypes[203]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21105,7 +21233,7 @@ func (x *EntryConfigurationWorkInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntryConfigurationWorkInput.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkInput) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{201}
+	return file_proto_agent_proto_rawDescGZIP(), []int{203}
 }
 
 func (x *EntryConfigurationWorkInput) GetOperationId() string {
@@ -21191,7 +21319,7 @@ type ResolverWorkAssignment struct {
 
 func (x *ResolverWorkAssignment) Reset() {
 	*x = ResolverWorkAssignment{}
-	mi := &file_proto_agent_proto_msgTypes[202]
+	mi := &file_proto_agent_proto_msgTypes[204]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21203,7 +21331,7 @@ func (x *ResolverWorkAssignment) String() string {
 func (*ResolverWorkAssignment) ProtoMessage() {}
 
 func (x *ResolverWorkAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[202]
+	mi := &file_proto_agent_proto_msgTypes[204]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21216,7 +21344,7 @@ func (x *ResolverWorkAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolverWorkAssignment.ProtoReflect.Descriptor instead.
 func (*ResolverWorkAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{202}
+	return file_proto_agent_proto_rawDescGZIP(), []int{204}
 }
 
 func (x *ResolverWorkAssignment) GetAttempt() *WorkAttemptIdentity {
@@ -21250,7 +21378,7 @@ type ResolverWorkCheckpointRequest struct {
 
 func (x *ResolverWorkCheckpointRequest) Reset() {
 	*x = ResolverWorkCheckpointRequest{}
-	mi := &file_proto_agent_proto_msgTypes[203]
+	mi := &file_proto_agent_proto_msgTypes[205]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21262,7 +21390,7 @@ func (x *ResolverWorkCheckpointRequest) String() string {
 func (*ResolverWorkCheckpointRequest) ProtoMessage() {}
 
 func (x *ResolverWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[203]
+	mi := &file_proto_agent_proto_msgTypes[205]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21275,7 +21403,7 @@ func (x *ResolverWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolverWorkCheckpointRequest.ProtoReflect.Descriptor instead.
 func (*ResolverWorkCheckpointRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{203}
+	return file_proto_agent_proto_rawDescGZIP(), []int{205}
 }
 
 func (x *ResolverWorkCheckpointRequest) GetAttempt() *WorkAttemptIdentity {
@@ -21303,7 +21431,7 @@ type ResolverWorkCheckpointAck struct {
 
 func (x *ResolverWorkCheckpointAck) Reset() {
 	*x = ResolverWorkCheckpointAck{}
-	mi := &file_proto_agent_proto_msgTypes[204]
+	mi := &file_proto_agent_proto_msgTypes[206]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21315,7 +21443,7 @@ func (x *ResolverWorkCheckpointAck) String() string {
 func (*ResolverWorkCheckpointAck) ProtoMessage() {}
 
 func (x *ResolverWorkCheckpointAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[204]
+	mi := &file_proto_agent_proto_msgTypes[206]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21328,7 +21456,7 @@ func (x *ResolverWorkCheckpointAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolverWorkCheckpointAck.ProtoReflect.Descriptor instead.
 func (*ResolverWorkCheckpointAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{204}
+	return file_proto_agent_proto_rawDescGZIP(), []int{206}
 }
 
 func (x *ResolverWorkCheckpointAck) GetAttempt() *WorkAttemptIdentity {
@@ -21363,7 +21491,7 @@ type ResolverWorkCompletionRequest struct {
 
 func (x *ResolverWorkCompletionRequest) Reset() {
 	*x = ResolverWorkCompletionRequest{}
-	mi := &file_proto_agent_proto_msgTypes[205]
+	mi := &file_proto_agent_proto_msgTypes[207]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21375,7 +21503,7 @@ func (x *ResolverWorkCompletionRequest) String() string {
 func (*ResolverWorkCompletionRequest) ProtoMessage() {}
 
 func (x *ResolverWorkCompletionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[205]
+	mi := &file_proto_agent_proto_msgTypes[207]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21388,7 +21516,7 @@ func (x *ResolverWorkCompletionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolverWorkCompletionRequest.ProtoReflect.Descriptor instead.
 func (*ResolverWorkCompletionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{205}
+	return file_proto_agent_proto_rawDescGZIP(), []int{207}
 }
 
 func (x *ResolverWorkCompletionRequest) GetAttempt() *WorkAttemptIdentity {
@@ -21422,7 +21550,7 @@ type ResolverWorkFailureRequest struct {
 
 func (x *ResolverWorkFailureRequest) Reset() {
 	*x = ResolverWorkFailureRequest{}
-	mi := &file_proto_agent_proto_msgTypes[206]
+	mi := &file_proto_agent_proto_msgTypes[208]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21434,7 +21562,7 @@ func (x *ResolverWorkFailureRequest) String() string {
 func (*ResolverWorkFailureRequest) ProtoMessage() {}
 
 func (x *ResolverWorkFailureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[206]
+	mi := &file_proto_agent_proto_msgTypes[208]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21447,7 +21575,7 @@ func (x *ResolverWorkFailureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolverWorkFailureRequest.ProtoReflect.Descriptor instead.
 func (*ResolverWorkFailureRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{206}
+	return file_proto_agent_proto_rawDescGZIP(), []int{208}
 }
 
 func (x *ResolverWorkFailureRequest) GetAttempt() *WorkAttemptIdentity {
@@ -21474,7 +21602,7 @@ type ResolverWorkRecoveryRequest struct {
 
 func (x *ResolverWorkRecoveryRequest) Reset() {
 	*x = ResolverWorkRecoveryRequest{}
-	mi := &file_proto_agent_proto_msgTypes[207]
+	mi := &file_proto_agent_proto_msgTypes[209]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21486,7 +21614,7 @@ func (x *ResolverWorkRecoveryRequest) String() string {
 func (*ResolverWorkRecoveryRequest) ProtoMessage() {}
 
 func (x *ResolverWorkRecoveryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[207]
+	mi := &file_proto_agent_proto_msgTypes[209]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21499,7 +21627,7 @@ func (x *ResolverWorkRecoveryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolverWorkRecoveryRequest.ProtoReflect.Descriptor instead.
 func (*ResolverWorkRecoveryRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{207}
+	return file_proto_agent_proto_rawDescGZIP(), []int{209}
 }
 
 func (x *ResolverWorkRecoveryRequest) GetAttempt() *WorkAttemptIdentity {
@@ -21531,7 +21659,7 @@ type ResolverWorkResultAck struct {
 
 func (x *ResolverWorkResultAck) Reset() {
 	*x = ResolverWorkResultAck{}
-	mi := &file_proto_agent_proto_msgTypes[208]
+	mi := &file_proto_agent_proto_msgTypes[210]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21543,7 +21671,7 @@ func (x *ResolverWorkResultAck) String() string {
 func (*ResolverWorkResultAck) ProtoMessage() {}
 
 func (x *ResolverWorkResultAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[208]
+	mi := &file_proto_agent_proto_msgTypes[210]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21556,7 +21684,7 @@ func (x *ResolverWorkResultAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolverWorkResultAck.ProtoReflect.Descriptor instead.
 func (*ResolverWorkResultAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{208}
+	return file_proto_agent_proto_rawDescGZIP(), []int{210}
 }
 
 func (x *ResolverWorkResultAck) GetAttempt() *WorkAttemptIdentity {
@@ -21620,7 +21748,7 @@ type ResolverWorkHelperRequest struct {
 
 func (x *ResolverWorkHelperRequest) Reset() {
 	*x = ResolverWorkHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[209]
+	mi := &file_proto_agent_proto_msgTypes[211]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21632,7 +21760,7 @@ func (x *ResolverWorkHelperRequest) String() string {
 func (*ResolverWorkHelperRequest) ProtoMessage() {}
 
 func (x *ResolverWorkHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[209]
+	mi := &file_proto_agent_proto_msgTypes[211]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21645,7 +21773,7 @@ func (x *ResolverWorkHelperRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolverWorkHelperRequest.ProtoReflect.Descriptor instead.
 func (*ResolverWorkHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{209}
+	return file_proto_agent_proto_rawDescGZIP(), []int{211}
 }
 
 func (x *ResolverWorkHelperRequest) GetAssignment() *ResolverWorkAssignment {
@@ -21687,7 +21815,7 @@ type ResolverWorkHelperResponse struct {
 
 func (x *ResolverWorkHelperResponse) Reset() {
 	*x = ResolverWorkHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[210]
+	mi := &file_proto_agent_proto_msgTypes[212]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21699,7 +21827,7 @@ func (x *ResolverWorkHelperResponse) String() string {
 func (*ResolverWorkHelperResponse) ProtoMessage() {}
 
 func (x *ResolverWorkHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[210]
+	mi := &file_proto_agent_proto_msgTypes[212]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21712,7 +21840,7 @@ func (x *ResolverWorkHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolverWorkHelperResponse.ProtoReflect.Descriptor instead.
 func (*ResolverWorkHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{210}
+	return file_proto_agent_proto_rawDescGZIP(), []int{212}
 }
 
 func (x *ResolverWorkHelperResponse) GetObservation() []byte {
@@ -21758,7 +21886,7 @@ type ComponentWorkInput struct {
 
 func (x *ComponentWorkInput) Reset() {
 	*x = ComponentWorkInput{}
-	mi := &file_proto_agent_proto_msgTypes[211]
+	mi := &file_proto_agent_proto_msgTypes[213]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21770,7 +21898,7 @@ func (x *ComponentWorkInput) String() string {
 func (*ComponentWorkInput) ProtoMessage() {}
 
 func (x *ComponentWorkInput) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[211]
+	mi := &file_proto_agent_proto_msgTypes[213]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21783,7 +21911,7 @@ func (x *ComponentWorkInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkInput.ProtoReflect.Descriptor instead.
 func (*ComponentWorkInput) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{211}
+	return file_proto_agent_proto_rawDescGZIP(), []int{213}
 }
 
 func (x *ComponentWorkInput) GetOperationId() string {
@@ -21876,7 +22004,7 @@ type ComponentWorkPredecessor struct {
 
 func (x *ComponentWorkPredecessor) Reset() {
 	*x = ComponentWorkPredecessor{}
-	mi := &file_proto_agent_proto_msgTypes[212]
+	mi := &file_proto_agent_proto_msgTypes[214]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21888,7 +22016,7 @@ func (x *ComponentWorkPredecessor) String() string {
 func (*ComponentWorkPredecessor) ProtoMessage() {}
 
 func (x *ComponentWorkPredecessor) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[212]
+	mi := &file_proto_agent_proto_msgTypes[214]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21901,7 +22029,7 @@ func (x *ComponentWorkPredecessor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkPredecessor.ProtoReflect.Descriptor instead.
 func (*ComponentWorkPredecessor) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{212}
+	return file_proto_agent_proto_rawDescGZIP(), []int{214}
 }
 
 func (x *ComponentWorkPredecessor) GetAbsent() bool {
@@ -21939,7 +22067,7 @@ type ComponentWorkRetainedConfiguration struct {
 
 func (x *ComponentWorkRetainedConfiguration) Reset() {
 	*x = ComponentWorkRetainedConfiguration{}
-	mi := &file_proto_agent_proto_msgTypes[213]
+	mi := &file_proto_agent_proto_msgTypes[215]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -21951,7 +22079,7 @@ func (x *ComponentWorkRetainedConfiguration) String() string {
 func (*ComponentWorkRetainedConfiguration) ProtoMessage() {}
 
 func (x *ComponentWorkRetainedConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[213]
+	mi := &file_proto_agent_proto_msgTypes[215]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -21964,7 +22092,7 @@ func (x *ComponentWorkRetainedConfiguration) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ComponentWorkRetainedConfiguration.ProtoReflect.Descriptor instead.
 func (*ComponentWorkRetainedConfiguration) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{213}
+	return file_proto_agent_proto_rawDescGZIP(), []int{215}
 }
 
 func (x *ComponentWorkRetainedConfiguration) GetFile() *MaterializeFile {
@@ -22019,7 +22147,7 @@ type EntryConfigurationRequest struct {
 
 func (x *EntryConfigurationRequest) Reset() {
 	*x = EntryConfigurationRequest{}
-	mi := &file_proto_agent_proto_msgTypes[214]
+	mi := &file_proto_agent_proto_msgTypes[216]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22031,7 +22159,7 @@ func (x *EntryConfigurationRequest) String() string {
 func (*EntryConfigurationRequest) ProtoMessage() {}
 
 func (x *EntryConfigurationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[214]
+	mi := &file_proto_agent_proto_msgTypes[216]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22044,7 +22172,7 @@ func (x *EntryConfigurationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntryConfigurationRequest.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{214}
+	return file_proto_agent_proto_rawDescGZIP(), []int{216}
 }
 
 func (x *EntryConfigurationRequest) GetAttempt() *WorkAttemptIdentity {
@@ -22078,7 +22206,7 @@ type EntryConfigurationFile struct {
 
 func (x *EntryConfigurationFile) Reset() {
 	*x = EntryConfigurationFile{}
-	mi := &file_proto_agent_proto_msgTypes[215]
+	mi := &file_proto_agent_proto_msgTypes[217]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22090,7 +22218,7 @@ func (x *EntryConfigurationFile) String() string {
 func (*EntryConfigurationFile) ProtoMessage() {}
 
 func (x *EntryConfigurationFile) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[215]
+	mi := &file_proto_agent_proto_msgTypes[217]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22103,7 +22231,7 @@ func (x *EntryConfigurationFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntryConfigurationFile.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationFile) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{215}
+	return file_proto_agent_proto_rawDescGZIP(), []int{217}
 }
 
 func (x *EntryConfigurationFile) GetDestination() string {
@@ -22181,7 +22309,7 @@ type EntryConfigurationManifest struct {
 
 func (x *EntryConfigurationManifest) Reset() {
 	*x = EntryConfigurationManifest{}
-	mi := &file_proto_agent_proto_msgTypes[216]
+	mi := &file_proto_agent_proto_msgTypes[218]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22193,7 +22321,7 @@ func (x *EntryConfigurationManifest) String() string {
 func (*EntryConfigurationManifest) ProtoMessage() {}
 
 func (x *EntryConfigurationManifest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[216]
+	mi := &file_proto_agent_proto_msgTypes[218]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22206,7 +22334,7 @@ func (x *EntryConfigurationManifest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntryConfigurationManifest.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationManifest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{216}
+	return file_proto_agent_proto_rawDescGZIP(), []int{218}
 }
 
 func (x *EntryConfigurationManifest) GetAttempt() *WorkAttemptIdentity {
@@ -22248,7 +22376,7 @@ type EntryConfigurationFileRequest struct {
 
 func (x *EntryConfigurationFileRequest) Reset() {
 	*x = EntryConfigurationFileRequest{}
-	mi := &file_proto_agent_proto_msgTypes[217]
+	mi := &file_proto_agent_proto_msgTypes[219]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22260,7 +22388,7 @@ func (x *EntryConfigurationFileRequest) String() string {
 func (*EntryConfigurationFileRequest) ProtoMessage() {}
 
 func (x *EntryConfigurationFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[217]
+	mi := &file_proto_agent_proto_msgTypes[219]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22273,7 +22401,7 @@ func (x *EntryConfigurationFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntryConfigurationFileRequest.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationFileRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{217}
+	return file_proto_agent_proto_rawDescGZIP(), []int{219}
 }
 
 func (x *EntryConfigurationFileRequest) GetAttempt() *WorkAttemptIdentity {
@@ -22310,7 +22438,7 @@ type EntryConfigurationFileDelivery struct {
 
 func (x *EntryConfigurationFileDelivery) Reset() {
 	*x = EntryConfigurationFileDelivery{}
-	mi := &file_proto_agent_proto_msgTypes[218]
+	mi := &file_proto_agent_proto_msgTypes[220]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22322,7 +22450,7 @@ func (x *EntryConfigurationFileDelivery) String() string {
 func (*EntryConfigurationFileDelivery) ProtoMessage() {}
 
 func (x *EntryConfigurationFileDelivery) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[218]
+	mi := &file_proto_agent_proto_msgTypes[220]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22335,7 +22463,7 @@ func (x *EntryConfigurationFileDelivery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntryConfigurationFileDelivery.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationFileDelivery) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{218}
+	return file_proto_agent_proto_rawDescGZIP(), []int{220}
 }
 
 func (x *EntryConfigurationFileDelivery) GetAttempt() *WorkAttemptIdentity {
@@ -22383,7 +22511,7 @@ type EntryConfigurationWorkCheckpointRequest struct {
 
 func (x *EntryConfigurationWorkCheckpointRequest) Reset() {
 	*x = EntryConfigurationWorkCheckpointRequest{}
-	mi := &file_proto_agent_proto_msgTypes[219]
+	mi := &file_proto_agent_proto_msgTypes[221]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22395,7 +22523,7 @@ func (x *EntryConfigurationWorkCheckpointRequest) String() string {
 func (*EntryConfigurationWorkCheckpointRequest) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[219]
+	mi := &file_proto_agent_proto_msgTypes[221]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22408,7 +22536,7 @@ func (x *EntryConfigurationWorkCheckpointRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use EntryConfigurationWorkCheckpointRequest.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkCheckpointRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{219}
+	return file_proto_agent_proto_rawDescGZIP(), []int{221}
 }
 
 func (x *EntryConfigurationWorkCheckpointRequest) GetAttempt() *WorkAttemptIdentity {
@@ -22438,7 +22566,7 @@ type EntryConfigurationWorkCheckpointAck struct {
 
 func (x *EntryConfigurationWorkCheckpointAck) Reset() {
 	*x = EntryConfigurationWorkCheckpointAck{}
-	mi := &file_proto_agent_proto_msgTypes[220]
+	mi := &file_proto_agent_proto_msgTypes[222]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22450,7 +22578,7 @@ func (x *EntryConfigurationWorkCheckpointAck) String() string {
 func (*EntryConfigurationWorkCheckpointAck) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkCheckpointAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[220]
+	mi := &file_proto_agent_proto_msgTypes[222]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22463,7 +22591,7 @@ func (x *EntryConfigurationWorkCheckpointAck) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use EntryConfigurationWorkCheckpointAck.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkCheckpointAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{220}
+	return file_proto_agent_proto_rawDescGZIP(), []int{222}
 }
 
 func (x *EntryConfigurationWorkCheckpointAck) GetAttempt() *WorkAttemptIdentity {
@@ -22511,7 +22639,7 @@ type EntryConfigurationWorkCompletionRequest struct {
 
 func (x *EntryConfigurationWorkCompletionRequest) Reset() {
 	*x = EntryConfigurationWorkCompletionRequest{}
-	mi := &file_proto_agent_proto_msgTypes[221]
+	mi := &file_proto_agent_proto_msgTypes[223]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22523,7 +22651,7 @@ func (x *EntryConfigurationWorkCompletionRequest) String() string {
 func (*EntryConfigurationWorkCompletionRequest) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkCompletionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[221]
+	mi := &file_proto_agent_proto_msgTypes[223]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22536,7 +22664,7 @@ func (x *EntryConfigurationWorkCompletionRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use EntryConfigurationWorkCompletionRequest.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkCompletionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{221}
+	return file_proto_agent_proto_rawDescGZIP(), []int{223}
 }
 
 func (x *EntryConfigurationWorkCompletionRequest) GetAttempt() *WorkAttemptIdentity {
@@ -22566,7 +22694,7 @@ type EntryConfigurationWorkCompletionAck struct {
 
 func (x *EntryConfigurationWorkCompletionAck) Reset() {
 	*x = EntryConfigurationWorkCompletionAck{}
-	mi := &file_proto_agent_proto_msgTypes[222]
+	mi := &file_proto_agent_proto_msgTypes[224]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22578,7 +22706,7 @@ func (x *EntryConfigurationWorkCompletionAck) String() string {
 func (*EntryConfigurationWorkCompletionAck) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkCompletionAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[222]
+	mi := &file_proto_agent_proto_msgTypes[224]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22591,7 +22719,7 @@ func (x *EntryConfigurationWorkCompletionAck) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use EntryConfigurationWorkCompletionAck.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkCompletionAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{222}
+	return file_proto_agent_proto_rawDescGZIP(), []int{224}
 }
 
 func (x *EntryConfigurationWorkCompletionAck) GetAttempt() *WorkAttemptIdentity {
@@ -22639,7 +22767,7 @@ type EntryConfigurationWorkFailureRequest struct {
 
 func (x *EntryConfigurationWorkFailureRequest) Reset() {
 	*x = EntryConfigurationWorkFailureRequest{}
-	mi := &file_proto_agent_proto_msgTypes[223]
+	mi := &file_proto_agent_proto_msgTypes[225]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22651,7 +22779,7 @@ func (x *EntryConfigurationWorkFailureRequest) String() string {
 func (*EntryConfigurationWorkFailureRequest) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkFailureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[223]
+	mi := &file_proto_agent_proto_msgTypes[225]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22664,7 +22792,7 @@ func (x *EntryConfigurationWorkFailureRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use EntryConfigurationWorkFailureRequest.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkFailureRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{223}
+	return file_proto_agent_proto_rawDescGZIP(), []int{225}
 }
 
 func (x *EntryConfigurationWorkFailureRequest) GetAttempt() *WorkAttemptIdentity {
@@ -22695,7 +22823,7 @@ type EntryConfigurationWorkFailureAck struct {
 
 func (x *EntryConfigurationWorkFailureAck) Reset() {
 	*x = EntryConfigurationWorkFailureAck{}
-	mi := &file_proto_agent_proto_msgTypes[224]
+	mi := &file_proto_agent_proto_msgTypes[226]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22707,7 +22835,7 @@ func (x *EntryConfigurationWorkFailureAck) String() string {
 func (*EntryConfigurationWorkFailureAck) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkFailureAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[224]
+	mi := &file_proto_agent_proto_msgTypes[226]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22720,7 +22848,7 @@ func (x *EntryConfigurationWorkFailureAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntryConfigurationWorkFailureAck.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkFailureAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{224}
+	return file_proto_agent_proto_rawDescGZIP(), []int{226}
 }
 
 func (x *EntryConfigurationWorkFailureAck) GetAttempt() *WorkAttemptIdentity {
@@ -22777,7 +22905,7 @@ type EntryConfigurationWorkAssignment struct {
 
 func (x *EntryConfigurationWorkAssignment) Reset() {
 	*x = EntryConfigurationWorkAssignment{}
-	mi := &file_proto_agent_proto_msgTypes[225]
+	mi := &file_proto_agent_proto_msgTypes[227]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22789,7 +22917,7 @@ func (x *EntryConfigurationWorkAssignment) String() string {
 func (*EntryConfigurationWorkAssignment) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[225]
+	mi := &file_proto_agent_proto_msgTypes[227]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22802,7 +22930,7 @@ func (x *EntryConfigurationWorkAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntryConfigurationWorkAssignment.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{225}
+	return file_proto_agent_proto_rawDescGZIP(), []int{227}
 }
 
 func (x *EntryConfigurationWorkAssignment) GetAttempt() *WorkAttemptIdentity {
@@ -22843,7 +22971,7 @@ type EntryConfigurationWorkRecoveryReportRequest struct {
 
 func (x *EntryConfigurationWorkRecoveryReportRequest) Reset() {
 	*x = EntryConfigurationWorkRecoveryReportRequest{}
-	mi := &file_proto_agent_proto_msgTypes[226]
+	mi := &file_proto_agent_proto_msgTypes[228]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22855,7 +22983,7 @@ func (x *EntryConfigurationWorkRecoveryReportRequest) String() string {
 func (*EntryConfigurationWorkRecoveryReportRequest) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkRecoveryReportRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[226]
+	mi := &file_proto_agent_proto_msgTypes[228]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22868,7 +22996,7 @@ func (x *EntryConfigurationWorkRecoveryReportRequest) ProtoReflect() protoreflec
 
 // Deprecated: Use EntryConfigurationWorkRecoveryReportRequest.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkRecoveryReportRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{226}
+	return file_proto_agent_proto_rawDescGZIP(), []int{228}
 }
 
 func (x *EntryConfigurationWorkRecoveryReportRequest) GetAttempt() *WorkAttemptIdentity {
@@ -22899,7 +23027,7 @@ type EntryConfigurationWorkRecoveryReportAck struct {
 
 func (x *EntryConfigurationWorkRecoveryReportAck) Reset() {
 	*x = EntryConfigurationWorkRecoveryReportAck{}
-	mi := &file_proto_agent_proto_msgTypes[227]
+	mi := &file_proto_agent_proto_msgTypes[229]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22911,7 +23039,7 @@ func (x *EntryConfigurationWorkRecoveryReportAck) String() string {
 func (*EntryConfigurationWorkRecoveryReportAck) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkRecoveryReportAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[227]
+	mi := &file_proto_agent_proto_msgTypes[229]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -22924,7 +23052,7 @@ func (x *EntryConfigurationWorkRecoveryReportAck) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use EntryConfigurationWorkRecoveryReportAck.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkRecoveryReportAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{227}
+	return file_proto_agent_proto_rawDescGZIP(), []int{229}
 }
 
 func (x *EntryConfigurationWorkRecoveryReportAck) GetAttempt() *WorkAttemptIdentity {
@@ -22981,7 +23109,7 @@ type ComponentWorkAssignment struct {
 
 func (x *ComponentWorkAssignment) Reset() {
 	*x = ComponentWorkAssignment{}
-	mi := &file_proto_agent_proto_msgTypes[228]
+	mi := &file_proto_agent_proto_msgTypes[230]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -22993,7 +23121,7 @@ func (x *ComponentWorkAssignment) String() string {
 func (*ComponentWorkAssignment) ProtoMessage() {}
 
 func (x *ComponentWorkAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[228]
+	mi := &file_proto_agent_proto_msgTypes[230]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23006,7 +23134,7 @@ func (x *ComponentWorkAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkAssignment.ProtoReflect.Descriptor instead.
 func (*ComponentWorkAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{228}
+	return file_proto_agent_proto_rawDescGZIP(), []int{230}
 }
 
 func (x *ComponentWorkAssignment) GetAttempt() *WorkAttemptIdentity {
@@ -23047,7 +23175,7 @@ type ComponentWorkCheckpointRequest struct {
 
 func (x *ComponentWorkCheckpointRequest) Reset() {
 	*x = ComponentWorkCheckpointRequest{}
-	mi := &file_proto_agent_proto_msgTypes[229]
+	mi := &file_proto_agent_proto_msgTypes[231]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23059,7 +23187,7 @@ func (x *ComponentWorkCheckpointRequest) String() string {
 func (*ComponentWorkCheckpointRequest) ProtoMessage() {}
 
 func (x *ComponentWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[229]
+	mi := &file_proto_agent_proto_msgTypes[231]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23072,7 +23200,7 @@ func (x *ComponentWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkCheckpointRequest.ProtoReflect.Descriptor instead.
 func (*ComponentWorkCheckpointRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{229}
+	return file_proto_agent_proto_rawDescGZIP(), []int{231}
 }
 
 func (x *ComponentWorkCheckpointRequest) GetAttempt() *WorkAttemptIdentity {
@@ -23102,7 +23230,7 @@ type ComponentWorkCheckpointAck struct {
 
 func (x *ComponentWorkCheckpointAck) Reset() {
 	*x = ComponentWorkCheckpointAck{}
-	mi := &file_proto_agent_proto_msgTypes[230]
+	mi := &file_proto_agent_proto_msgTypes[232]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23114,7 +23242,7 @@ func (x *ComponentWorkCheckpointAck) String() string {
 func (*ComponentWorkCheckpointAck) ProtoMessage() {}
 
 func (x *ComponentWorkCheckpointAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[230]
+	mi := &file_proto_agent_proto_msgTypes[232]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23127,7 +23255,7 @@ func (x *ComponentWorkCheckpointAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkCheckpointAck.ProtoReflect.Descriptor instead.
 func (*ComponentWorkCheckpointAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{230}
+	return file_proto_agent_proto_rawDescGZIP(), []int{232}
 }
 
 func (x *ComponentWorkCheckpointAck) GetAttempt() *WorkAttemptIdentity {
@@ -23175,7 +23303,7 @@ type ComponentWorkCompletionRequest struct {
 
 func (x *ComponentWorkCompletionRequest) Reset() {
 	*x = ComponentWorkCompletionRequest{}
-	mi := &file_proto_agent_proto_msgTypes[231]
+	mi := &file_proto_agent_proto_msgTypes[233]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23187,7 +23315,7 @@ func (x *ComponentWorkCompletionRequest) String() string {
 func (*ComponentWorkCompletionRequest) ProtoMessage() {}
 
 func (x *ComponentWorkCompletionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[231]
+	mi := &file_proto_agent_proto_msgTypes[233]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23200,7 +23328,7 @@ func (x *ComponentWorkCompletionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkCompletionRequest.ProtoReflect.Descriptor instead.
 func (*ComponentWorkCompletionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{231}
+	return file_proto_agent_proto_rawDescGZIP(), []int{233}
 }
 
 func (x *ComponentWorkCompletionRequest) GetAttempt() *WorkAttemptIdentity {
@@ -23230,7 +23358,7 @@ type ComponentWorkCompletionAck struct {
 
 func (x *ComponentWorkCompletionAck) Reset() {
 	*x = ComponentWorkCompletionAck{}
-	mi := &file_proto_agent_proto_msgTypes[232]
+	mi := &file_proto_agent_proto_msgTypes[234]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23242,7 +23370,7 @@ func (x *ComponentWorkCompletionAck) String() string {
 func (*ComponentWorkCompletionAck) ProtoMessage() {}
 
 func (x *ComponentWorkCompletionAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[232]
+	mi := &file_proto_agent_proto_msgTypes[234]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23255,7 +23383,7 @@ func (x *ComponentWorkCompletionAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkCompletionAck.ProtoReflect.Descriptor instead.
 func (*ComponentWorkCompletionAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{232}
+	return file_proto_agent_proto_rawDescGZIP(), []int{234}
 }
 
 func (x *ComponentWorkCompletionAck) GetAttempt() *WorkAttemptIdentity {
@@ -23303,7 +23431,7 @@ type ComponentWorkFailureRequest struct {
 
 func (x *ComponentWorkFailureRequest) Reset() {
 	*x = ComponentWorkFailureRequest{}
-	mi := &file_proto_agent_proto_msgTypes[233]
+	mi := &file_proto_agent_proto_msgTypes[235]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23315,7 +23443,7 @@ func (x *ComponentWorkFailureRequest) String() string {
 func (*ComponentWorkFailureRequest) ProtoMessage() {}
 
 func (x *ComponentWorkFailureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[233]
+	mi := &file_proto_agent_proto_msgTypes[235]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23328,7 +23456,7 @@ func (x *ComponentWorkFailureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkFailureRequest.ProtoReflect.Descriptor instead.
 func (*ComponentWorkFailureRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{233}
+	return file_proto_agent_proto_rawDescGZIP(), []int{235}
 }
 
 func (x *ComponentWorkFailureRequest) GetAttempt() *WorkAttemptIdentity {
@@ -23359,7 +23487,7 @@ type ComponentWorkFailureAck struct {
 
 func (x *ComponentWorkFailureAck) Reset() {
 	*x = ComponentWorkFailureAck{}
-	mi := &file_proto_agent_proto_msgTypes[234]
+	mi := &file_proto_agent_proto_msgTypes[236]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23371,7 +23499,7 @@ func (x *ComponentWorkFailureAck) String() string {
 func (*ComponentWorkFailureAck) ProtoMessage() {}
 
 func (x *ComponentWorkFailureAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[234]
+	mi := &file_proto_agent_proto_msgTypes[236]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23384,7 +23512,7 @@ func (x *ComponentWorkFailureAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkFailureAck.ProtoReflect.Descriptor instead.
 func (*ComponentWorkFailureAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{234}
+	return file_proto_agent_proto_rawDescGZIP(), []int{236}
 }
 
 func (x *ComponentWorkFailureAck) GetAttempt() *WorkAttemptIdentity {
@@ -23439,7 +23567,7 @@ type ComponentWorkRecoveryReportRequest struct {
 
 func (x *ComponentWorkRecoveryReportRequest) Reset() {
 	*x = ComponentWorkRecoveryReportRequest{}
-	mi := &file_proto_agent_proto_msgTypes[235]
+	mi := &file_proto_agent_proto_msgTypes[237]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23451,7 +23579,7 @@ func (x *ComponentWorkRecoveryReportRequest) String() string {
 func (*ComponentWorkRecoveryReportRequest) ProtoMessage() {}
 
 func (x *ComponentWorkRecoveryReportRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[235]
+	mi := &file_proto_agent_proto_msgTypes[237]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23464,7 +23592,7 @@ func (x *ComponentWorkRecoveryReportRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ComponentWorkRecoveryReportRequest.ProtoReflect.Descriptor instead.
 func (*ComponentWorkRecoveryReportRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{235}
+	return file_proto_agent_proto_rawDescGZIP(), []int{237}
 }
 
 func (x *ComponentWorkRecoveryReportRequest) GetAttempt() *WorkAttemptIdentity {
@@ -23493,7 +23621,7 @@ type ComponentWorkRecoveryReportAck struct {
 
 func (x *ComponentWorkRecoveryReportAck) Reset() {
 	*x = ComponentWorkRecoveryReportAck{}
-	mi := &file_proto_agent_proto_msgTypes[236]
+	mi := &file_proto_agent_proto_msgTypes[238]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23505,7 +23633,7 @@ func (x *ComponentWorkRecoveryReportAck) String() string {
 func (*ComponentWorkRecoveryReportAck) ProtoMessage() {}
 
 func (x *ComponentWorkRecoveryReportAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[236]
+	mi := &file_proto_agent_proto_msgTypes[238]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23518,7 +23646,7 @@ func (x *ComponentWorkRecoveryReportAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkRecoveryReportAck.ProtoReflect.Descriptor instead.
 func (*ComponentWorkRecoveryReportAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{236}
+	return file_proto_agent_proto_rawDescGZIP(), []int{238}
 }
 
 func (x *ComponentWorkRecoveryReportAck) GetAttempt() *WorkAttemptIdentity {
@@ -23569,7 +23697,7 @@ type NetworkWorkInput struct {
 
 func (x *NetworkWorkInput) Reset() {
 	*x = NetworkWorkInput{}
-	mi := &file_proto_agent_proto_msgTypes[237]
+	mi := &file_proto_agent_proto_msgTypes[239]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23581,7 +23709,7 @@ func (x *NetworkWorkInput) String() string {
 func (*NetworkWorkInput) ProtoMessage() {}
 
 func (x *NetworkWorkInput) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[237]
+	mi := &file_proto_agent_proto_msgTypes[239]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23594,7 +23722,7 @@ func (x *NetworkWorkInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkInput.ProtoReflect.Descriptor instead.
 func (*NetworkWorkInput) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{237}
+	return file_proto_agent_proto_rawDescGZIP(), []int{239}
 }
 
 func (x *NetworkWorkInput) GetAction() NetworkWorkAction {
@@ -23665,7 +23793,7 @@ type NetworkWorkAssignment struct {
 
 func (x *NetworkWorkAssignment) Reset() {
 	*x = NetworkWorkAssignment{}
-	mi := &file_proto_agent_proto_msgTypes[238]
+	mi := &file_proto_agent_proto_msgTypes[240]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23677,7 +23805,7 @@ func (x *NetworkWorkAssignment) String() string {
 func (*NetworkWorkAssignment) ProtoMessage() {}
 
 func (x *NetworkWorkAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[238]
+	mi := &file_proto_agent_proto_msgTypes[240]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23690,7 +23818,7 @@ func (x *NetworkWorkAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkAssignment.ProtoReflect.Descriptor instead.
 func (*NetworkWorkAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{238}
+	return file_proto_agent_proto_rawDescGZIP(), []int{240}
 }
 
 func (x *NetworkWorkAssignment) GetAttempt() *WorkAttemptIdentity {
@@ -23731,7 +23859,7 @@ type NetworkWorkCheckpointRequest struct {
 
 func (x *NetworkWorkCheckpointRequest) Reset() {
 	*x = NetworkWorkCheckpointRequest{}
-	mi := &file_proto_agent_proto_msgTypes[239]
+	mi := &file_proto_agent_proto_msgTypes[241]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23743,7 +23871,7 @@ func (x *NetworkWorkCheckpointRequest) String() string {
 func (*NetworkWorkCheckpointRequest) ProtoMessage() {}
 
 func (x *NetworkWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[239]
+	mi := &file_proto_agent_proto_msgTypes[241]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23756,7 +23884,7 @@ func (x *NetworkWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkCheckpointRequest.ProtoReflect.Descriptor instead.
 func (*NetworkWorkCheckpointRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{239}
+	return file_proto_agent_proto_rawDescGZIP(), []int{241}
 }
 
 func (x *NetworkWorkCheckpointRequest) GetAttempt() *WorkAttemptIdentity {
@@ -23786,7 +23914,7 @@ type NetworkWorkCheckpointAck struct {
 
 func (x *NetworkWorkCheckpointAck) Reset() {
 	*x = NetworkWorkCheckpointAck{}
-	mi := &file_proto_agent_proto_msgTypes[240]
+	mi := &file_proto_agent_proto_msgTypes[242]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23798,7 +23926,7 @@ func (x *NetworkWorkCheckpointAck) String() string {
 func (*NetworkWorkCheckpointAck) ProtoMessage() {}
 
 func (x *NetworkWorkCheckpointAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[240]
+	mi := &file_proto_agent_proto_msgTypes[242]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23811,7 +23939,7 @@ func (x *NetworkWorkCheckpointAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkCheckpointAck.ProtoReflect.Descriptor instead.
 func (*NetworkWorkCheckpointAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{240}
+	return file_proto_agent_proto_rawDescGZIP(), []int{242}
 }
 
 func (x *NetworkWorkCheckpointAck) GetAttempt() *WorkAttemptIdentity {
@@ -23859,7 +23987,7 @@ type NetworkWorkCompletionRequest struct {
 
 func (x *NetworkWorkCompletionRequest) Reset() {
 	*x = NetworkWorkCompletionRequest{}
-	mi := &file_proto_agent_proto_msgTypes[241]
+	mi := &file_proto_agent_proto_msgTypes[243]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23871,7 +23999,7 @@ func (x *NetworkWorkCompletionRequest) String() string {
 func (*NetworkWorkCompletionRequest) ProtoMessage() {}
 
 func (x *NetworkWorkCompletionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[241]
+	mi := &file_proto_agent_proto_msgTypes[243]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23884,7 +24012,7 @@ func (x *NetworkWorkCompletionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkCompletionRequest.ProtoReflect.Descriptor instead.
 func (*NetworkWorkCompletionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{241}
+	return file_proto_agent_proto_rawDescGZIP(), []int{243}
 }
 
 func (x *NetworkWorkCompletionRequest) GetAttempt() *WorkAttemptIdentity {
@@ -23914,7 +24042,7 @@ type NetworkWorkCompletionAck struct {
 
 func (x *NetworkWorkCompletionAck) Reset() {
 	*x = NetworkWorkCompletionAck{}
-	mi := &file_proto_agent_proto_msgTypes[242]
+	mi := &file_proto_agent_proto_msgTypes[244]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23926,7 +24054,7 @@ func (x *NetworkWorkCompletionAck) String() string {
 func (*NetworkWorkCompletionAck) ProtoMessage() {}
 
 func (x *NetworkWorkCompletionAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[242]
+	mi := &file_proto_agent_proto_msgTypes[244]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -23939,7 +24067,7 @@ func (x *NetworkWorkCompletionAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkCompletionAck.ProtoReflect.Descriptor instead.
 func (*NetworkWorkCompletionAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{242}
+	return file_proto_agent_proto_rawDescGZIP(), []int{244}
 }
 
 func (x *NetworkWorkCompletionAck) GetAttempt() *WorkAttemptIdentity {
@@ -23987,7 +24115,7 @@ type NetworkWorkFailureRequest struct {
 
 func (x *NetworkWorkFailureRequest) Reset() {
 	*x = NetworkWorkFailureRequest{}
-	mi := &file_proto_agent_proto_msgTypes[243]
+	mi := &file_proto_agent_proto_msgTypes[245]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -23999,7 +24127,7 @@ func (x *NetworkWorkFailureRequest) String() string {
 func (*NetworkWorkFailureRequest) ProtoMessage() {}
 
 func (x *NetworkWorkFailureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[243]
+	mi := &file_proto_agent_proto_msgTypes[245]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24012,7 +24140,7 @@ func (x *NetworkWorkFailureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkFailureRequest.ProtoReflect.Descriptor instead.
 func (*NetworkWorkFailureRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{243}
+	return file_proto_agent_proto_rawDescGZIP(), []int{245}
 }
 
 func (x *NetworkWorkFailureRequest) GetAttempt() *WorkAttemptIdentity {
@@ -24043,7 +24171,7 @@ type NetworkWorkFailureAck struct {
 
 func (x *NetworkWorkFailureAck) Reset() {
 	*x = NetworkWorkFailureAck{}
-	mi := &file_proto_agent_proto_msgTypes[244]
+	mi := &file_proto_agent_proto_msgTypes[246]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24055,7 +24183,7 @@ func (x *NetworkWorkFailureAck) String() string {
 func (*NetworkWorkFailureAck) ProtoMessage() {}
 
 func (x *NetworkWorkFailureAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[244]
+	mi := &file_proto_agent_proto_msgTypes[246]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24068,7 +24196,7 @@ func (x *NetworkWorkFailureAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkFailureAck.ProtoReflect.Descriptor instead.
 func (*NetworkWorkFailureAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{244}
+	return file_proto_agent_proto_rawDescGZIP(), []int{246}
 }
 
 func (x *NetworkWorkFailureAck) GetAttempt() *WorkAttemptIdentity {
@@ -24123,7 +24251,7 @@ type NetworkWorkRecoveryReportRequest struct {
 
 func (x *NetworkWorkRecoveryReportRequest) Reset() {
 	*x = NetworkWorkRecoveryReportRequest{}
-	mi := &file_proto_agent_proto_msgTypes[245]
+	mi := &file_proto_agent_proto_msgTypes[247]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24135,7 +24263,7 @@ func (x *NetworkWorkRecoveryReportRequest) String() string {
 func (*NetworkWorkRecoveryReportRequest) ProtoMessage() {}
 
 func (x *NetworkWorkRecoveryReportRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[245]
+	mi := &file_proto_agent_proto_msgTypes[247]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24148,7 +24276,7 @@ func (x *NetworkWorkRecoveryReportRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkRecoveryReportRequest.ProtoReflect.Descriptor instead.
 func (*NetworkWorkRecoveryReportRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{245}
+	return file_proto_agent_proto_rawDescGZIP(), []int{247}
 }
 
 func (x *NetworkWorkRecoveryReportRequest) GetAttempt() *WorkAttemptIdentity {
@@ -24177,7 +24305,7 @@ type NetworkWorkRecoveryReportAck struct {
 
 func (x *NetworkWorkRecoveryReportAck) Reset() {
 	*x = NetworkWorkRecoveryReportAck{}
-	mi := &file_proto_agent_proto_msgTypes[246]
+	mi := &file_proto_agent_proto_msgTypes[248]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24189,7 +24317,7 @@ func (x *NetworkWorkRecoveryReportAck) String() string {
 func (*NetworkWorkRecoveryReportAck) ProtoMessage() {}
 
 func (x *NetworkWorkRecoveryReportAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[246]
+	mi := &file_proto_agent_proto_msgTypes[248]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24202,7 +24330,7 @@ func (x *NetworkWorkRecoveryReportAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkRecoveryReportAck.ProtoReflect.Descriptor instead.
 func (*NetworkWorkRecoveryReportAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{246}
+	return file_proto_agent_proto_rawDescGZIP(), []int{248}
 }
 
 func (x *NetworkWorkRecoveryReportAck) GetAttempt() *WorkAttemptIdentity {
@@ -24246,7 +24374,7 @@ type ComponentWorkHelperRequest struct {
 
 func (x *ComponentWorkHelperRequest) Reset() {
 	*x = ComponentWorkHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[247]
+	mi := &file_proto_agent_proto_msgTypes[249]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24258,7 +24386,7 @@ func (x *ComponentWorkHelperRequest) String() string {
 func (*ComponentWorkHelperRequest) ProtoMessage() {}
 
 func (x *ComponentWorkHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[247]
+	mi := &file_proto_agent_proto_msgTypes[249]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24271,7 +24399,7 @@ func (x *ComponentWorkHelperRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkHelperRequest.ProtoReflect.Descriptor instead.
 func (*ComponentWorkHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{247}
+	return file_proto_agent_proto_rawDescGZIP(), []int{249}
 }
 
 func (x *ComponentWorkHelperRequest) GetAssignment() *ComponentWorkAssignment {
@@ -24322,7 +24450,7 @@ type EntryConfigurationWorkHelperRequest struct {
 
 func (x *EntryConfigurationWorkHelperRequest) Reset() {
 	*x = EntryConfigurationWorkHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[248]
+	mi := &file_proto_agent_proto_msgTypes[250]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24334,7 +24462,7 @@ func (x *EntryConfigurationWorkHelperRequest) String() string {
 func (*EntryConfigurationWorkHelperRequest) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[248]
+	mi := &file_proto_agent_proto_msgTypes[250]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24347,7 +24475,7 @@ func (x *EntryConfigurationWorkHelperRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use EntryConfigurationWorkHelperRequest.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{248}
+	return file_proto_agent_proto_rawDescGZIP(), []int{250}
 }
 
 func (x *EntryConfigurationWorkHelperRequest) GetAssignment() *EntryConfigurationWorkAssignment {
@@ -24394,7 +24522,7 @@ type EntryConfigurationWorkHelperResponse struct {
 
 func (x *EntryConfigurationWorkHelperResponse) Reset() {
 	*x = EntryConfigurationWorkHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[249]
+	mi := &file_proto_agent_proto_msgTypes[251]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24406,7 +24534,7 @@ func (x *EntryConfigurationWorkHelperResponse) String() string {
 func (*EntryConfigurationWorkHelperResponse) ProtoMessage() {}
 
 func (x *EntryConfigurationWorkHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[249]
+	mi := &file_proto_agent_proto_msgTypes[251]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24419,7 +24547,7 @@ func (x *EntryConfigurationWorkHelperResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use EntryConfigurationWorkHelperResponse.ProtoReflect.Descriptor instead.
 func (*EntryConfigurationWorkHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{249}
+	return file_proto_agent_proto_rawDescGZIP(), []int{251}
 }
 
 func (x *EntryConfigurationWorkHelperResponse) GetObservation() []byte {
@@ -24439,7 +24567,7 @@ type ComponentWorkHelperResponse struct {
 
 func (x *ComponentWorkHelperResponse) Reset() {
 	*x = ComponentWorkHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[250]
+	mi := &file_proto_agent_proto_msgTypes[252]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24451,7 +24579,7 @@ func (x *ComponentWorkHelperResponse) String() string {
 func (*ComponentWorkHelperResponse) ProtoMessage() {}
 
 func (x *ComponentWorkHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[250]
+	mi := &file_proto_agent_proto_msgTypes[252]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24464,7 +24592,7 @@ func (x *ComponentWorkHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentWorkHelperResponse.ProtoReflect.Descriptor instead.
 func (*ComponentWorkHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{250}
+	return file_proto_agent_proto_rawDescGZIP(), []int{252}
 }
 
 func (x *ComponentWorkHelperResponse) GetObservation() []byte {
@@ -24494,7 +24622,7 @@ type NetworkWorkHelperRequest struct {
 
 func (x *NetworkWorkHelperRequest) Reset() {
 	*x = NetworkWorkHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[251]
+	mi := &file_proto_agent_proto_msgTypes[253]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24506,7 +24634,7 @@ func (x *NetworkWorkHelperRequest) String() string {
 func (*NetworkWorkHelperRequest) ProtoMessage() {}
 
 func (x *NetworkWorkHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[251]
+	mi := &file_proto_agent_proto_msgTypes[253]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24519,7 +24647,7 @@ func (x *NetworkWorkHelperRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkHelperRequest.ProtoReflect.Descriptor instead.
 func (*NetworkWorkHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{251}
+	return file_proto_agent_proto_rawDescGZIP(), []int{253}
 }
 
 func (x *NetworkWorkHelperRequest) GetAssignment() *NetworkWorkAssignment {
@@ -24572,7 +24700,7 @@ type NetworkWorkHelperResponse struct {
 
 func (x *NetworkWorkHelperResponse) Reset() {
 	*x = NetworkWorkHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[252]
+	mi := &file_proto_agent_proto_msgTypes[254]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24584,7 +24712,7 @@ func (x *NetworkWorkHelperResponse) String() string {
 func (*NetworkWorkHelperResponse) ProtoMessage() {}
 
 func (x *NetworkWorkHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[252]
+	mi := &file_proto_agent_proto_msgTypes[254]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24597,7 +24725,7 @@ func (x *NetworkWorkHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkWorkHelperResponse.ProtoReflect.Descriptor instead.
 func (*NetworkWorkHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{252}
+	return file_proto_agent_proto_rawDescGZIP(), []int{254}
 }
 
 func (x *NetworkWorkHelperResponse) GetNetworkId() string {
@@ -24665,7 +24793,7 @@ type ServiceRemovalRecoveryAssignment struct {
 
 func (x *ServiceRemovalRecoveryAssignment) Reset() {
 	*x = ServiceRemovalRecoveryAssignment{}
-	mi := &file_proto_agent_proto_msgTypes[253]
+	mi := &file_proto_agent_proto_msgTypes[255]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24677,7 +24805,7 @@ func (x *ServiceRemovalRecoveryAssignment) String() string {
 func (*ServiceRemovalRecoveryAssignment) ProtoMessage() {}
 
 func (x *ServiceRemovalRecoveryAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[253]
+	mi := &file_proto_agent_proto_msgTypes[255]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24690,7 +24818,7 @@ func (x *ServiceRemovalRecoveryAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceRemovalRecoveryAssignment.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalRecoveryAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{253}
+	return file_proto_agent_proto_rawDescGZIP(), []int{255}
 }
 
 func (x *ServiceRemovalRecoveryAssignment) GetAttempt() *WorkAttemptIdentity {
@@ -24731,7 +24859,7 @@ type ServiceRemovalConfigurationRequest struct {
 
 func (x *ServiceRemovalConfigurationRequest) Reset() {
 	*x = ServiceRemovalConfigurationRequest{}
-	mi := &file_proto_agent_proto_msgTypes[254]
+	mi := &file_proto_agent_proto_msgTypes[256]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24743,7 +24871,7 @@ func (x *ServiceRemovalConfigurationRequest) String() string {
 func (*ServiceRemovalConfigurationRequest) ProtoMessage() {}
 
 func (x *ServiceRemovalConfigurationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[254]
+	mi := &file_proto_agent_proto_msgTypes[256]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24756,7 +24884,7 @@ func (x *ServiceRemovalConfigurationRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ServiceRemovalConfigurationRequest.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalConfigurationRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{254}
+	return file_proto_agent_proto_rawDescGZIP(), []int{256}
 }
 
 func (x *ServiceRemovalConfigurationRequest) GetAttempt() *WorkAttemptIdentity {
@@ -24790,7 +24918,7 @@ type ServiceRemovalConfigurationFile struct {
 
 func (x *ServiceRemovalConfigurationFile) Reset() {
 	*x = ServiceRemovalConfigurationFile{}
-	mi := &file_proto_agent_proto_msgTypes[255]
+	mi := &file_proto_agent_proto_msgTypes[257]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24802,7 +24930,7 @@ func (x *ServiceRemovalConfigurationFile) String() string {
 func (*ServiceRemovalConfigurationFile) ProtoMessage() {}
 
 func (x *ServiceRemovalConfigurationFile) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[255]
+	mi := &file_proto_agent_proto_msgTypes[257]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24815,7 +24943,7 @@ func (x *ServiceRemovalConfigurationFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceRemovalConfigurationFile.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalConfigurationFile) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{255}
+	return file_proto_agent_proto_rawDescGZIP(), []int{257}
 }
 
 func (x *ServiceRemovalConfigurationFile) GetDestination() string {
@@ -24893,7 +25021,7 @@ type ServiceRemovalConfigurationManifest struct {
 
 func (x *ServiceRemovalConfigurationManifest) Reset() {
 	*x = ServiceRemovalConfigurationManifest{}
-	mi := &file_proto_agent_proto_msgTypes[256]
+	mi := &file_proto_agent_proto_msgTypes[258]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24905,7 +25033,7 @@ func (x *ServiceRemovalConfigurationManifest) String() string {
 func (*ServiceRemovalConfigurationManifest) ProtoMessage() {}
 
 func (x *ServiceRemovalConfigurationManifest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[256]
+	mi := &file_proto_agent_proto_msgTypes[258]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24918,7 +25046,7 @@ func (x *ServiceRemovalConfigurationManifest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ServiceRemovalConfigurationManifest.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalConfigurationManifest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{256}
+	return file_proto_agent_proto_rawDescGZIP(), []int{258}
 }
 
 func (x *ServiceRemovalConfigurationManifest) GetAttempt() *WorkAttemptIdentity {
@@ -24960,7 +25088,7 @@ type ServiceRemovalConfigurationFileRequest struct {
 
 func (x *ServiceRemovalConfigurationFileRequest) Reset() {
 	*x = ServiceRemovalConfigurationFileRequest{}
-	mi := &file_proto_agent_proto_msgTypes[257]
+	mi := &file_proto_agent_proto_msgTypes[259]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -24972,7 +25100,7 @@ func (x *ServiceRemovalConfigurationFileRequest) String() string {
 func (*ServiceRemovalConfigurationFileRequest) ProtoMessage() {}
 
 func (x *ServiceRemovalConfigurationFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[257]
+	mi := &file_proto_agent_proto_msgTypes[259]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -24985,7 +25113,7 @@ func (x *ServiceRemovalConfigurationFileRequest) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use ServiceRemovalConfigurationFileRequest.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalConfigurationFileRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{257}
+	return file_proto_agent_proto_rawDescGZIP(), []int{259}
 }
 
 func (x *ServiceRemovalConfigurationFileRequest) GetAttempt() *WorkAttemptIdentity {
@@ -25022,7 +25150,7 @@ type ServiceRemovalConfigurationFileDelivery struct {
 
 func (x *ServiceRemovalConfigurationFileDelivery) Reset() {
 	*x = ServiceRemovalConfigurationFileDelivery{}
-	mi := &file_proto_agent_proto_msgTypes[258]
+	mi := &file_proto_agent_proto_msgTypes[260]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25034,7 +25162,7 @@ func (x *ServiceRemovalConfigurationFileDelivery) String() string {
 func (*ServiceRemovalConfigurationFileDelivery) ProtoMessage() {}
 
 func (x *ServiceRemovalConfigurationFileDelivery) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[258]
+	mi := &file_proto_agent_proto_msgTypes[260]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25047,7 +25175,7 @@ func (x *ServiceRemovalConfigurationFileDelivery) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use ServiceRemovalConfigurationFileDelivery.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalConfigurationFileDelivery) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{258}
+	return file_proto_agent_proto_rawDescGZIP(), []int{260}
 }
 
 func (x *ServiceRemovalConfigurationFileDelivery) GetAttempt() *WorkAttemptIdentity {
@@ -25095,7 +25223,7 @@ type ServiceRemovalRecoveryCheckpointRequest struct {
 
 func (x *ServiceRemovalRecoveryCheckpointRequest) Reset() {
 	*x = ServiceRemovalRecoveryCheckpointRequest{}
-	mi := &file_proto_agent_proto_msgTypes[259]
+	mi := &file_proto_agent_proto_msgTypes[261]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25107,7 +25235,7 @@ func (x *ServiceRemovalRecoveryCheckpointRequest) String() string {
 func (*ServiceRemovalRecoveryCheckpointRequest) ProtoMessage() {}
 
 func (x *ServiceRemovalRecoveryCheckpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[259]
+	mi := &file_proto_agent_proto_msgTypes[261]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25120,7 +25248,7 @@ func (x *ServiceRemovalRecoveryCheckpointRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use ServiceRemovalRecoveryCheckpointRequest.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalRecoveryCheckpointRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{259}
+	return file_proto_agent_proto_rawDescGZIP(), []int{261}
 }
 
 func (x *ServiceRemovalRecoveryCheckpointRequest) GetAttempt() *WorkAttemptIdentity {
@@ -25150,7 +25278,7 @@ type ServiceRemovalRecoveryCheckpointAck struct {
 
 func (x *ServiceRemovalRecoveryCheckpointAck) Reset() {
 	*x = ServiceRemovalRecoveryCheckpointAck{}
-	mi := &file_proto_agent_proto_msgTypes[260]
+	mi := &file_proto_agent_proto_msgTypes[262]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25162,7 +25290,7 @@ func (x *ServiceRemovalRecoveryCheckpointAck) String() string {
 func (*ServiceRemovalRecoveryCheckpointAck) ProtoMessage() {}
 
 func (x *ServiceRemovalRecoveryCheckpointAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[260]
+	mi := &file_proto_agent_proto_msgTypes[262]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25175,7 +25303,7 @@ func (x *ServiceRemovalRecoveryCheckpointAck) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ServiceRemovalRecoveryCheckpointAck.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalRecoveryCheckpointAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{260}
+	return file_proto_agent_proto_rawDescGZIP(), []int{262}
 }
 
 func (x *ServiceRemovalRecoveryCheckpointAck) GetAttempt() *WorkAttemptIdentity {
@@ -25223,7 +25351,7 @@ type ServiceRemovalRecoveryCompletionRequest struct {
 
 func (x *ServiceRemovalRecoveryCompletionRequest) Reset() {
 	*x = ServiceRemovalRecoveryCompletionRequest{}
-	mi := &file_proto_agent_proto_msgTypes[261]
+	mi := &file_proto_agent_proto_msgTypes[263]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25235,7 +25363,7 @@ func (x *ServiceRemovalRecoveryCompletionRequest) String() string {
 func (*ServiceRemovalRecoveryCompletionRequest) ProtoMessage() {}
 
 func (x *ServiceRemovalRecoveryCompletionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[261]
+	mi := &file_proto_agent_proto_msgTypes[263]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25248,7 +25376,7 @@ func (x *ServiceRemovalRecoveryCompletionRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use ServiceRemovalRecoveryCompletionRequest.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalRecoveryCompletionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{261}
+	return file_proto_agent_proto_rawDescGZIP(), []int{263}
 }
 
 func (x *ServiceRemovalRecoveryCompletionRequest) GetAttempt() *WorkAttemptIdentity {
@@ -25277,7 +25405,7 @@ type ServiceRemovalRecoveryCompletionAck struct {
 
 func (x *ServiceRemovalRecoveryCompletionAck) Reset() {
 	*x = ServiceRemovalRecoveryCompletionAck{}
-	mi := &file_proto_agent_proto_msgTypes[262]
+	mi := &file_proto_agent_proto_msgTypes[264]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25289,7 +25417,7 @@ func (x *ServiceRemovalRecoveryCompletionAck) String() string {
 func (*ServiceRemovalRecoveryCompletionAck) ProtoMessage() {}
 
 func (x *ServiceRemovalRecoveryCompletionAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[262]
+	mi := &file_proto_agent_proto_msgTypes[264]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25302,7 +25430,7 @@ func (x *ServiceRemovalRecoveryCompletionAck) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ServiceRemovalRecoveryCompletionAck.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalRecoveryCompletionAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{262}
+	return file_proto_agent_proto_rawDescGZIP(), []int{264}
 }
 
 func (x *ServiceRemovalRecoveryCompletionAck) GetAttempt() *WorkAttemptIdentity {
@@ -25343,7 +25471,7 @@ type ServiceRemovalRecoveryFailureRequest struct {
 
 func (x *ServiceRemovalRecoveryFailureRequest) Reset() {
 	*x = ServiceRemovalRecoveryFailureRequest{}
-	mi := &file_proto_agent_proto_msgTypes[263]
+	mi := &file_proto_agent_proto_msgTypes[265]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25355,7 +25483,7 @@ func (x *ServiceRemovalRecoveryFailureRequest) String() string {
 func (*ServiceRemovalRecoveryFailureRequest) ProtoMessage() {}
 
 func (x *ServiceRemovalRecoveryFailureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[263]
+	mi := &file_proto_agent_proto_msgTypes[265]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25368,7 +25496,7 @@ func (x *ServiceRemovalRecoveryFailureRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use ServiceRemovalRecoveryFailureRequest.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalRecoveryFailureRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{263}
+	return file_proto_agent_proto_rawDescGZIP(), []int{265}
 }
 
 func (x *ServiceRemovalRecoveryFailureRequest) GetAttempt() *WorkAttemptIdentity {
@@ -25397,7 +25525,7 @@ type ServiceRemovalRecoveryFailureAck struct {
 
 func (x *ServiceRemovalRecoveryFailureAck) Reset() {
 	*x = ServiceRemovalRecoveryFailureAck{}
-	mi := &file_proto_agent_proto_msgTypes[264]
+	mi := &file_proto_agent_proto_msgTypes[266]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25409,7 +25537,7 @@ func (x *ServiceRemovalRecoveryFailureAck) String() string {
 func (*ServiceRemovalRecoveryFailureAck) ProtoMessage() {}
 
 func (x *ServiceRemovalRecoveryFailureAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[264]
+	mi := &file_proto_agent_proto_msgTypes[266]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25422,7 +25550,7 @@ func (x *ServiceRemovalRecoveryFailureAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceRemovalRecoveryFailureAck.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalRecoveryFailureAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{264}
+	return file_proto_agent_proto_rawDescGZIP(), []int{266}
 }
 
 func (x *ServiceRemovalRecoveryFailureAck) GetAttempt() *WorkAttemptIdentity {
@@ -25466,7 +25594,7 @@ type ServiceRemovalRecoveryHelperRequest struct {
 
 func (x *ServiceRemovalRecoveryHelperRequest) Reset() {
 	*x = ServiceRemovalRecoveryHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[265]
+	mi := &file_proto_agent_proto_msgTypes[267]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25478,7 +25606,7 @@ func (x *ServiceRemovalRecoveryHelperRequest) String() string {
 func (*ServiceRemovalRecoveryHelperRequest) ProtoMessage() {}
 
 func (x *ServiceRemovalRecoveryHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[265]
+	mi := &file_proto_agent_proto_msgTypes[267]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25491,7 +25619,7 @@ func (x *ServiceRemovalRecoveryHelperRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ServiceRemovalRecoveryHelperRequest.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalRecoveryHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{265}
+	return file_proto_agent_proto_rawDescGZIP(), []int{267}
 }
 
 func (x *ServiceRemovalRecoveryHelperRequest) GetAssignment() *ServiceRemovalRecoveryAssignment {
@@ -25542,7 +25670,7 @@ type ServiceRemovalRecoveryHelperResponse struct {
 
 func (x *ServiceRemovalRecoveryHelperResponse) Reset() {
 	*x = ServiceRemovalRecoveryHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[266]
+	mi := &file_proto_agent_proto_msgTypes[268]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25554,7 +25682,7 @@ func (x *ServiceRemovalRecoveryHelperResponse) String() string {
 func (*ServiceRemovalRecoveryHelperResponse) ProtoMessage() {}
 
 func (x *ServiceRemovalRecoveryHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[266]
+	mi := &file_proto_agent_proto_msgTypes[268]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25567,7 +25695,7 @@ func (x *ServiceRemovalRecoveryHelperResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use ServiceRemovalRecoveryHelperResponse.ProtoReflect.Descriptor instead.
 func (*ServiceRemovalRecoveryHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{266}
+	return file_proto_agent_proto_rawDescGZIP(), []int{268}
 }
 
 func (x *ServiceRemovalRecoveryHelperResponse) GetStageId() string {
@@ -25619,7 +25747,7 @@ type ServiceLifecycleAssignment struct {
 
 func (x *ServiceLifecycleAssignment) Reset() {
 	*x = ServiceLifecycleAssignment{}
-	mi := &file_proto_agent_proto_msgTypes[267]
+	mi := &file_proto_agent_proto_msgTypes[269]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25631,7 +25759,7 @@ func (x *ServiceLifecycleAssignment) String() string {
 func (*ServiceLifecycleAssignment) ProtoMessage() {}
 
 func (x *ServiceLifecycleAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[267]
+	mi := &file_proto_agent_proto_msgTypes[269]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25644,7 +25772,7 @@ func (x *ServiceLifecycleAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleAssignment.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{267}
+	return file_proto_agent_proto_rawDescGZIP(), []int{269}
 }
 
 func (x *ServiceLifecycleAssignment) GetAttempt() *WorkAttemptIdentity {
@@ -25690,7 +25818,7 @@ type ServiceLifecycleWorkInput struct {
 
 func (x *ServiceLifecycleWorkInput) Reset() {
 	*x = ServiceLifecycleWorkInput{}
-	mi := &file_proto_agent_proto_msgTypes[268]
+	mi := &file_proto_agent_proto_msgTypes[270]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25702,7 +25830,7 @@ func (x *ServiceLifecycleWorkInput) String() string {
 func (*ServiceLifecycleWorkInput) ProtoMessage() {}
 
 func (x *ServiceLifecycleWorkInput) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[268]
+	mi := &file_proto_agent_proto_msgTypes[270]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25715,7 +25843,7 @@ func (x *ServiceLifecycleWorkInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleWorkInput.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleWorkInput) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{268}
+	return file_proto_agent_proto_rawDescGZIP(), []int{270}
 }
 
 func (x *ServiceLifecycleWorkInput) GetCapturedSource() *WorkInputReference {
@@ -25777,7 +25905,7 @@ type ServiceLifecycleMember struct {
 
 func (x *ServiceLifecycleMember) Reset() {
 	*x = ServiceLifecycleMember{}
-	mi := &file_proto_agent_proto_msgTypes[269]
+	mi := &file_proto_agent_proto_msgTypes[271]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25789,7 +25917,7 @@ func (x *ServiceLifecycleMember) String() string {
 func (*ServiceLifecycleMember) ProtoMessage() {}
 
 func (x *ServiceLifecycleMember) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[269]
+	mi := &file_proto_agent_proto_msgTypes[271]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25802,7 +25930,7 @@ func (x *ServiceLifecycleMember) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleMember.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleMember) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{269}
+	return file_proto_agent_proto_rawDescGZIP(), []int{271}
 }
 
 func (x *ServiceLifecycleMember) GetArtifact() *ComposeArtifact {
@@ -25833,7 +25961,7 @@ type ServiceLifecycleHook struct {
 
 func (x *ServiceLifecycleHook) Reset() {
 	*x = ServiceLifecycleHook{}
-	mi := &file_proto_agent_proto_msgTypes[270]
+	mi := &file_proto_agent_proto_msgTypes[272]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25845,7 +25973,7 @@ func (x *ServiceLifecycleHook) String() string {
 func (*ServiceLifecycleHook) ProtoMessage() {}
 
 func (x *ServiceLifecycleHook) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[270]
+	mi := &file_proto_agent_proto_msgTypes[272]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25858,7 +25986,7 @@ func (x *ServiceLifecycleHook) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleHook.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleHook) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{270}
+	return file_proto_agent_proto_rawDescGZIP(), []int{272}
 }
 
 func (x *ServiceLifecycleHook) GetStageId() string {
@@ -25899,7 +26027,7 @@ type ServiceLifecycleHookRequest struct {
 
 func (x *ServiceLifecycleHookRequest) Reset() {
 	*x = ServiceLifecycleHookRequest{}
-	mi := &file_proto_agent_proto_msgTypes[271]
+	mi := &file_proto_agent_proto_msgTypes[273]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25911,7 +26039,7 @@ func (x *ServiceLifecycleHookRequest) String() string {
 func (*ServiceLifecycleHookRequest) ProtoMessage() {}
 
 func (x *ServiceLifecycleHookRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[271]
+	mi := &file_proto_agent_proto_msgTypes[273]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25924,7 +26052,7 @@ func (x *ServiceLifecycleHookRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleHookRequest.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleHookRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{271}
+	return file_proto_agent_proto_rawDescGZIP(), []int{273}
 }
 
 func (x *ServiceLifecycleHookRequest) GetAttempt() *WorkAttemptIdentity {
@@ -25952,7 +26080,7 @@ type ServiceLifecycleHookDelivery struct {
 
 func (x *ServiceLifecycleHookDelivery) Reset() {
 	*x = ServiceLifecycleHookDelivery{}
-	mi := &file_proto_agent_proto_msgTypes[272]
+	mi := &file_proto_agent_proto_msgTypes[274]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -25964,7 +26092,7 @@ func (x *ServiceLifecycleHookDelivery) String() string {
 func (*ServiceLifecycleHookDelivery) ProtoMessage() {}
 
 func (x *ServiceLifecycleHookDelivery) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[272]
+	mi := &file_proto_agent_proto_msgTypes[274]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -25977,7 +26105,7 @@ func (x *ServiceLifecycleHookDelivery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleHookDelivery.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleHookDelivery) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{272}
+	return file_proto_agent_proto_rawDescGZIP(), []int{274}
 }
 
 func (x *ServiceLifecycleHookDelivery) GetAttempt() *WorkAttemptIdentity {
@@ -26013,7 +26141,7 @@ type ServiceLifecycleRecoveryReportRequest struct {
 
 func (x *ServiceLifecycleRecoveryReportRequest) Reset() {
 	*x = ServiceLifecycleRecoveryReportRequest{}
-	mi := &file_proto_agent_proto_msgTypes[273]
+	mi := &file_proto_agent_proto_msgTypes[275]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26025,7 +26153,7 @@ func (x *ServiceLifecycleRecoveryReportRequest) String() string {
 func (*ServiceLifecycleRecoveryReportRequest) ProtoMessage() {}
 
 func (x *ServiceLifecycleRecoveryReportRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[273]
+	mi := &file_proto_agent_proto_msgTypes[275]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26038,7 +26166,7 @@ func (x *ServiceLifecycleRecoveryReportRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use ServiceLifecycleRecoveryReportRequest.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleRecoveryReportRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{273}
+	return file_proto_agent_proto_rawDescGZIP(), []int{275}
 }
 
 func (x *ServiceLifecycleRecoveryReportRequest) GetAttempt() *WorkAttemptIdentity {
@@ -26068,7 +26196,7 @@ type ServiceLifecycleRecoveryReportAck struct {
 
 func (x *ServiceLifecycleRecoveryReportAck) Reset() {
 	*x = ServiceLifecycleRecoveryReportAck{}
-	mi := &file_proto_agent_proto_msgTypes[274]
+	mi := &file_proto_agent_proto_msgTypes[276]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26080,7 +26208,7 @@ func (x *ServiceLifecycleRecoveryReportAck) String() string {
 func (*ServiceLifecycleRecoveryReportAck) ProtoMessage() {}
 
 func (x *ServiceLifecycleRecoveryReportAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[274]
+	mi := &file_proto_agent_proto_msgTypes[276]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26093,7 +26221,7 @@ func (x *ServiceLifecycleRecoveryReportAck) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ServiceLifecycleRecoveryReportAck.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleRecoveryReportAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{274}
+	return file_proto_agent_proto_rawDescGZIP(), []int{276}
 }
 
 func (x *ServiceLifecycleRecoveryReportAck) GetAttempt() *WorkAttemptIdentity {
@@ -26141,7 +26269,7 @@ type ServiceLifecycleCheckpointRequest struct {
 
 func (x *ServiceLifecycleCheckpointRequest) Reset() {
 	*x = ServiceLifecycleCheckpointRequest{}
-	mi := &file_proto_agent_proto_msgTypes[275]
+	mi := &file_proto_agent_proto_msgTypes[277]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26153,7 +26281,7 @@ func (x *ServiceLifecycleCheckpointRequest) String() string {
 func (*ServiceLifecycleCheckpointRequest) ProtoMessage() {}
 
 func (x *ServiceLifecycleCheckpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[275]
+	mi := &file_proto_agent_proto_msgTypes[277]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26166,7 +26294,7 @@ func (x *ServiceLifecycleCheckpointRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ServiceLifecycleCheckpointRequest.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleCheckpointRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{275}
+	return file_proto_agent_proto_rawDescGZIP(), []int{277}
 }
 
 func (x *ServiceLifecycleCheckpointRequest) GetAttempt() *WorkAttemptIdentity {
@@ -26196,7 +26324,7 @@ type ServiceLifecycleCheckpointAck struct {
 
 func (x *ServiceLifecycleCheckpointAck) Reset() {
 	*x = ServiceLifecycleCheckpointAck{}
-	mi := &file_proto_agent_proto_msgTypes[276]
+	mi := &file_proto_agent_proto_msgTypes[278]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26208,7 +26336,7 @@ func (x *ServiceLifecycleCheckpointAck) String() string {
 func (*ServiceLifecycleCheckpointAck) ProtoMessage() {}
 
 func (x *ServiceLifecycleCheckpointAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[276]
+	mi := &file_proto_agent_proto_msgTypes[278]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26221,7 +26349,7 @@ func (x *ServiceLifecycleCheckpointAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleCheckpointAck.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleCheckpointAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{276}
+	return file_proto_agent_proto_rawDescGZIP(), []int{278}
 }
 
 func (x *ServiceLifecycleCheckpointAck) GetAttempt() *WorkAttemptIdentity {
@@ -26269,7 +26397,7 @@ type ServiceLifecycleCompletionRequest struct {
 
 func (x *ServiceLifecycleCompletionRequest) Reset() {
 	*x = ServiceLifecycleCompletionRequest{}
-	mi := &file_proto_agent_proto_msgTypes[277]
+	mi := &file_proto_agent_proto_msgTypes[279]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26281,7 +26409,7 @@ func (x *ServiceLifecycleCompletionRequest) String() string {
 func (*ServiceLifecycleCompletionRequest) ProtoMessage() {}
 
 func (x *ServiceLifecycleCompletionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[277]
+	mi := &file_proto_agent_proto_msgTypes[279]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26294,7 +26422,7 @@ func (x *ServiceLifecycleCompletionRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ServiceLifecycleCompletionRequest.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleCompletionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{277}
+	return file_proto_agent_proto_rawDescGZIP(), []int{279}
 }
 
 func (x *ServiceLifecycleCompletionRequest) GetAttempt() *WorkAttemptIdentity {
@@ -26327,7 +26455,7 @@ type ServiceLifecycleCompletionAck struct {
 
 func (x *ServiceLifecycleCompletionAck) Reset() {
 	*x = ServiceLifecycleCompletionAck{}
-	mi := &file_proto_agent_proto_msgTypes[278]
+	mi := &file_proto_agent_proto_msgTypes[280]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26339,7 +26467,7 @@ func (x *ServiceLifecycleCompletionAck) String() string {
 func (*ServiceLifecycleCompletionAck) ProtoMessage() {}
 
 func (x *ServiceLifecycleCompletionAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[278]
+	mi := &file_proto_agent_proto_msgTypes[280]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26352,7 +26480,7 @@ func (x *ServiceLifecycleCompletionAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleCompletionAck.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleCompletionAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{278}
+	return file_proto_agent_proto_rawDescGZIP(), []int{280}
 }
 
 func (x *ServiceLifecycleCompletionAck) GetAttempt() *WorkAttemptIdentity {
@@ -26407,7 +26535,7 @@ type ServiceLifecycleFailureRequest struct {
 
 func (x *ServiceLifecycleFailureRequest) Reset() {
 	*x = ServiceLifecycleFailureRequest{}
-	mi := &file_proto_agent_proto_msgTypes[279]
+	mi := &file_proto_agent_proto_msgTypes[281]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26419,7 +26547,7 @@ func (x *ServiceLifecycleFailureRequest) String() string {
 func (*ServiceLifecycleFailureRequest) ProtoMessage() {}
 
 func (x *ServiceLifecycleFailureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[279]
+	mi := &file_proto_agent_proto_msgTypes[281]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26432,7 +26560,7 @@ func (x *ServiceLifecycleFailureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleFailureRequest.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleFailureRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{279}
+	return file_proto_agent_proto_rawDescGZIP(), []int{281}
 }
 
 func (x *ServiceLifecycleFailureRequest) GetAttempt() *WorkAttemptIdentity {
@@ -26462,7 +26590,7 @@ type ServiceLifecycleFailureAck struct {
 
 func (x *ServiceLifecycleFailureAck) Reset() {
 	*x = ServiceLifecycleFailureAck{}
-	mi := &file_proto_agent_proto_msgTypes[280]
+	mi := &file_proto_agent_proto_msgTypes[282]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26474,7 +26602,7 @@ func (x *ServiceLifecycleFailureAck) String() string {
 func (*ServiceLifecycleFailureAck) ProtoMessage() {}
 
 func (x *ServiceLifecycleFailureAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[280]
+	mi := &file_proto_agent_proto_msgTypes[282]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26487,7 +26615,7 @@ func (x *ServiceLifecycleFailureAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleFailureAck.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleFailureAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{280}
+	return file_proto_agent_proto_rawDescGZIP(), []int{282}
 }
 
 func (x *ServiceLifecycleFailureAck) GetAttempt() *WorkAttemptIdentity {
@@ -26540,7 +26668,7 @@ type ServiceLifecycleHelperRequest struct {
 
 func (x *ServiceLifecycleHelperRequest) Reset() {
 	*x = ServiceLifecycleHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[281]
+	mi := &file_proto_agent_proto_msgTypes[283]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26552,7 +26680,7 @@ func (x *ServiceLifecycleHelperRequest) String() string {
 func (*ServiceLifecycleHelperRequest) ProtoMessage() {}
 
 func (x *ServiceLifecycleHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[281]
+	mi := &file_proto_agent_proto_msgTypes[283]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26565,7 +26693,7 @@ func (x *ServiceLifecycleHelperRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleHelperRequest.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{281}
+	return file_proto_agent_proto_rawDescGZIP(), []int{283}
 }
 
 func (x *ServiceLifecycleHelperRequest) GetAssignment() *ServiceLifecycleAssignment {
@@ -26618,7 +26746,7 @@ type ServiceLifecycleHelperResponse struct {
 
 func (x *ServiceLifecycleHelperResponse) Reset() {
 	*x = ServiceLifecycleHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[282]
+	mi := &file_proto_agent_proto_msgTypes[284]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26630,7 +26758,7 @@ func (x *ServiceLifecycleHelperResponse) String() string {
 func (*ServiceLifecycleHelperResponse) ProtoMessage() {}
 
 func (x *ServiceLifecycleHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[282]
+	mi := &file_proto_agent_proto_msgTypes[284]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26643,7 +26771,7 @@ func (x *ServiceLifecycleHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceLifecycleHelperResponse.ProtoReflect.Descriptor instead.
 func (*ServiceLifecycleHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{282}
+	return file_proto_agent_proto_rawDescGZIP(), []int{284}
 }
 
 func (x *ServiceLifecycleHelperResponse) GetStageId() string {
@@ -26712,7 +26840,7 @@ type VolumeWorkInput struct {
 
 func (x *VolumeWorkInput) Reset() {
 	*x = VolumeWorkInput{}
-	mi := &file_proto_agent_proto_msgTypes[283]
+	mi := &file_proto_agent_proto_msgTypes[285]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26724,7 +26852,7 @@ func (x *VolumeWorkInput) String() string {
 func (*VolumeWorkInput) ProtoMessage() {}
 
 func (x *VolumeWorkInput) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[283]
+	mi := &file_proto_agent_proto_msgTypes[285]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26737,7 +26865,7 @@ func (x *VolumeWorkInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkInput.ProtoReflect.Descriptor instead.
 func (*VolumeWorkInput) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{283}
+	return file_proto_agent_proto_rawDescGZIP(), []int{285}
 }
 
 func (x *VolumeWorkInput) GetAction() VolumeWorkAction {
@@ -26815,7 +26943,7 @@ type VolumeWorkAssignment struct {
 
 func (x *VolumeWorkAssignment) Reset() {
 	*x = VolumeWorkAssignment{}
-	mi := &file_proto_agent_proto_msgTypes[284]
+	mi := &file_proto_agent_proto_msgTypes[286]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26827,7 +26955,7 @@ func (x *VolumeWorkAssignment) String() string {
 func (*VolumeWorkAssignment) ProtoMessage() {}
 
 func (x *VolumeWorkAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[284]
+	mi := &file_proto_agent_proto_msgTypes[286]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26840,7 +26968,7 @@ func (x *VolumeWorkAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkAssignment.ProtoReflect.Descriptor instead.
 func (*VolumeWorkAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{284}
+	return file_proto_agent_proto_rawDescGZIP(), []int{286}
 }
 
 func (x *VolumeWorkAssignment) GetAttempt() *WorkAttemptIdentity {
@@ -26881,7 +27009,7 @@ type VolumeWorkCheckpointRequest struct {
 
 func (x *VolumeWorkCheckpointRequest) Reset() {
 	*x = VolumeWorkCheckpointRequest{}
-	mi := &file_proto_agent_proto_msgTypes[285]
+	mi := &file_proto_agent_proto_msgTypes[287]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26893,7 +27021,7 @@ func (x *VolumeWorkCheckpointRequest) String() string {
 func (*VolumeWorkCheckpointRequest) ProtoMessage() {}
 
 func (x *VolumeWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[285]
+	mi := &file_proto_agent_proto_msgTypes[287]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26906,7 +27034,7 @@ func (x *VolumeWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkCheckpointRequest.ProtoReflect.Descriptor instead.
 func (*VolumeWorkCheckpointRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{285}
+	return file_proto_agent_proto_rawDescGZIP(), []int{287}
 }
 
 func (x *VolumeWorkCheckpointRequest) GetAttempt() *WorkAttemptIdentity {
@@ -26936,7 +27064,7 @@ type VolumeWorkCheckpointAck struct {
 
 func (x *VolumeWorkCheckpointAck) Reset() {
 	*x = VolumeWorkCheckpointAck{}
-	mi := &file_proto_agent_proto_msgTypes[286]
+	mi := &file_proto_agent_proto_msgTypes[288]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -26948,7 +27076,7 @@ func (x *VolumeWorkCheckpointAck) String() string {
 func (*VolumeWorkCheckpointAck) ProtoMessage() {}
 
 func (x *VolumeWorkCheckpointAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[286]
+	mi := &file_proto_agent_proto_msgTypes[288]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -26961,7 +27089,7 @@ func (x *VolumeWorkCheckpointAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkCheckpointAck.ProtoReflect.Descriptor instead.
 func (*VolumeWorkCheckpointAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{286}
+	return file_proto_agent_proto_rawDescGZIP(), []int{288}
 }
 
 func (x *VolumeWorkCheckpointAck) GetAttempt() *WorkAttemptIdentity {
@@ -27009,7 +27137,7 @@ type VolumeWorkCompletionRequest struct {
 
 func (x *VolumeWorkCompletionRequest) Reset() {
 	*x = VolumeWorkCompletionRequest{}
-	mi := &file_proto_agent_proto_msgTypes[287]
+	mi := &file_proto_agent_proto_msgTypes[289]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27021,7 +27149,7 @@ func (x *VolumeWorkCompletionRequest) String() string {
 func (*VolumeWorkCompletionRequest) ProtoMessage() {}
 
 func (x *VolumeWorkCompletionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[287]
+	mi := &file_proto_agent_proto_msgTypes[289]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27034,7 +27162,7 @@ func (x *VolumeWorkCompletionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkCompletionRequest.ProtoReflect.Descriptor instead.
 func (*VolumeWorkCompletionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{287}
+	return file_proto_agent_proto_rawDescGZIP(), []int{289}
 }
 
 func (x *VolumeWorkCompletionRequest) GetAttempt() *WorkAttemptIdentity {
@@ -27063,7 +27191,7 @@ type VolumeWorkCompletionAck struct {
 
 func (x *VolumeWorkCompletionAck) Reset() {
 	*x = VolumeWorkCompletionAck{}
-	mi := &file_proto_agent_proto_msgTypes[288]
+	mi := &file_proto_agent_proto_msgTypes[290]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27075,7 +27203,7 @@ func (x *VolumeWorkCompletionAck) String() string {
 func (*VolumeWorkCompletionAck) ProtoMessage() {}
 
 func (x *VolumeWorkCompletionAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[288]
+	mi := &file_proto_agent_proto_msgTypes[290]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27088,7 +27216,7 @@ func (x *VolumeWorkCompletionAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkCompletionAck.ProtoReflect.Descriptor instead.
 func (*VolumeWorkCompletionAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{288}
+	return file_proto_agent_proto_rawDescGZIP(), []int{290}
 }
 
 func (x *VolumeWorkCompletionAck) GetAttempt() *WorkAttemptIdentity {
@@ -27129,7 +27257,7 @@ type VolumeWorkFailureRequest struct {
 
 func (x *VolumeWorkFailureRequest) Reset() {
 	*x = VolumeWorkFailureRequest{}
-	mi := &file_proto_agent_proto_msgTypes[289]
+	mi := &file_proto_agent_proto_msgTypes[291]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27141,7 +27269,7 @@ func (x *VolumeWorkFailureRequest) String() string {
 func (*VolumeWorkFailureRequest) ProtoMessage() {}
 
 func (x *VolumeWorkFailureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[289]
+	mi := &file_proto_agent_proto_msgTypes[291]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27154,7 +27282,7 @@ func (x *VolumeWorkFailureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkFailureRequest.ProtoReflect.Descriptor instead.
 func (*VolumeWorkFailureRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{289}
+	return file_proto_agent_proto_rawDescGZIP(), []int{291}
 }
 
 func (x *VolumeWorkFailureRequest) GetAttempt() *WorkAttemptIdentity {
@@ -27185,7 +27313,7 @@ type VolumeWorkFailureAck struct {
 
 func (x *VolumeWorkFailureAck) Reset() {
 	*x = VolumeWorkFailureAck{}
-	mi := &file_proto_agent_proto_msgTypes[290]
+	mi := &file_proto_agent_proto_msgTypes[292]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27197,7 +27325,7 @@ func (x *VolumeWorkFailureAck) String() string {
 func (*VolumeWorkFailureAck) ProtoMessage() {}
 
 func (x *VolumeWorkFailureAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[290]
+	mi := &file_proto_agent_proto_msgTypes[292]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27210,7 +27338,7 @@ func (x *VolumeWorkFailureAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkFailureAck.ProtoReflect.Descriptor instead.
 func (*VolumeWorkFailureAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{290}
+	return file_proto_agent_proto_rawDescGZIP(), []int{292}
 }
 
 func (x *VolumeWorkFailureAck) GetAttempt() *WorkAttemptIdentity {
@@ -27265,7 +27393,7 @@ type VolumeWorkRecoveryReportRequest struct {
 
 func (x *VolumeWorkRecoveryReportRequest) Reset() {
 	*x = VolumeWorkRecoveryReportRequest{}
-	mi := &file_proto_agent_proto_msgTypes[291]
+	mi := &file_proto_agent_proto_msgTypes[293]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27277,7 +27405,7 @@ func (x *VolumeWorkRecoveryReportRequest) String() string {
 func (*VolumeWorkRecoveryReportRequest) ProtoMessage() {}
 
 func (x *VolumeWorkRecoveryReportRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[291]
+	mi := &file_proto_agent_proto_msgTypes[293]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27290,7 +27418,7 @@ func (x *VolumeWorkRecoveryReportRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkRecoveryReportRequest.ProtoReflect.Descriptor instead.
 func (*VolumeWorkRecoveryReportRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{291}
+	return file_proto_agent_proto_rawDescGZIP(), []int{293}
 }
 
 func (x *VolumeWorkRecoveryReportRequest) GetAttempt() *WorkAttemptIdentity {
@@ -27319,7 +27447,7 @@ type VolumeWorkRecoveryReportAck struct {
 
 func (x *VolumeWorkRecoveryReportAck) Reset() {
 	*x = VolumeWorkRecoveryReportAck{}
-	mi := &file_proto_agent_proto_msgTypes[292]
+	mi := &file_proto_agent_proto_msgTypes[294]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27331,7 +27459,7 @@ func (x *VolumeWorkRecoveryReportAck) String() string {
 func (*VolumeWorkRecoveryReportAck) ProtoMessage() {}
 
 func (x *VolumeWorkRecoveryReportAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[292]
+	mi := &file_proto_agent_proto_msgTypes[294]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27344,7 +27472,7 @@ func (x *VolumeWorkRecoveryReportAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkRecoveryReportAck.ProtoReflect.Descriptor instead.
 func (*VolumeWorkRecoveryReportAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{292}
+	return file_proto_agent_proto_rawDescGZIP(), []int{294}
 }
 
 func (x *VolumeWorkRecoveryReportAck) GetAttempt() *WorkAttemptIdentity {
@@ -27389,7 +27517,7 @@ type VolumeWorkHelperRequest struct {
 
 func (x *VolumeWorkHelperRequest) Reset() {
 	*x = VolumeWorkHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[293]
+	mi := &file_proto_agent_proto_msgTypes[295]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27401,7 +27529,7 @@ func (x *VolumeWorkHelperRequest) String() string {
 func (*VolumeWorkHelperRequest) ProtoMessage() {}
 
 func (x *VolumeWorkHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[293]
+	mi := &file_proto_agent_proto_msgTypes[295]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27414,7 +27542,7 @@ func (x *VolumeWorkHelperRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkHelperRequest.ProtoReflect.Descriptor instead.
 func (*VolumeWorkHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{293}
+	return file_proto_agent_proto_rawDescGZIP(), []int{295}
 }
 
 func (x *VolumeWorkHelperRequest) GetAssignment() *VolumeWorkAssignment {
@@ -27477,7 +27605,7 @@ type VolumeWorkHelperResponse struct {
 
 func (x *VolumeWorkHelperResponse) Reset() {
 	*x = VolumeWorkHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[294]
+	mi := &file_proto_agent_proto_msgTypes[296]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27489,7 +27617,7 @@ func (x *VolumeWorkHelperResponse) String() string {
 func (*VolumeWorkHelperResponse) ProtoMessage() {}
 
 func (x *VolumeWorkHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[294]
+	mi := &file_proto_agent_proto_msgTypes[296]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27502,7 +27630,7 @@ func (x *VolumeWorkHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeWorkHelperResponse.ProtoReflect.Descriptor instead.
 func (*VolumeWorkHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{294}
+	return file_proto_agent_proto_rawDescGZIP(), []int{296}
 }
 
 func (x *VolumeWorkHelperResponse) GetVolumeId() string {
@@ -27593,7 +27721,7 @@ type ComposeArtifact struct {
 
 func (x *ComposeArtifact) Reset() {
 	*x = ComposeArtifact{}
-	mi := &file_proto_agent_proto_msgTypes[295]
+	mi := &file_proto_agent_proto_msgTypes[297]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27605,7 +27733,7 @@ func (x *ComposeArtifact) String() string {
 func (*ComposeArtifact) ProtoMessage() {}
 
 func (x *ComposeArtifact) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[295]
+	mi := &file_proto_agent_proto_msgTypes[297]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27618,7 +27746,7 @@ func (x *ComposeArtifact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeArtifact.ProtoReflect.Descriptor instead.
 func (*ComposeArtifact) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{295}
+	return file_proto_agent_proto_rawDescGZIP(), []int{297}
 }
 
 func (x *ComposeArtifact) GetArtifactId() string {
@@ -27721,7 +27849,7 @@ type ComposeService struct {
 
 func (x *ComposeService) Reset() {
 	*x = ComposeService{}
-	mi := &file_proto_agent_proto_msgTypes[296]
+	mi := &file_proto_agent_proto_msgTypes[298]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27733,7 +27861,7 @@ func (x *ComposeService) String() string {
 func (*ComposeService) ProtoMessage() {}
 
 func (x *ComposeService) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[296]
+	mi := &file_proto_agent_proto_msgTypes[298]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27746,7 +27874,7 @@ func (x *ComposeService) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeService.ProtoReflect.Descriptor instead.
 func (*ComposeService) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{296}
+	return file_proto_agent_proto_rawDescGZIP(), []int{298}
 }
 
 func (x *ComposeService) GetServiceId() string {
@@ -27915,7 +28043,7 @@ type ComposeNetwork struct {
 
 func (x *ComposeNetwork) Reset() {
 	*x = ComposeNetwork{}
-	mi := &file_proto_agent_proto_msgTypes[297]
+	mi := &file_proto_agent_proto_msgTypes[299]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27927,7 +28055,7 @@ func (x *ComposeNetwork) String() string {
 func (*ComposeNetwork) ProtoMessage() {}
 
 func (x *ComposeNetwork) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[297]
+	mi := &file_proto_agent_proto_msgTypes[299]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -27940,7 +28068,7 @@ func (x *ComposeNetwork) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeNetwork.ProtoReflect.Descriptor instead.
 func (*ComposeNetwork) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{297}
+	return file_proto_agent_proto_rawDescGZIP(), []int{299}
 }
 
 func (x *ComposeNetwork) GetNetworkId() string {
@@ -27983,7 +28111,7 @@ type ComposeVolume struct {
 
 func (x *ComposeVolume) Reset() {
 	*x = ComposeVolume{}
-	mi := &file_proto_agent_proto_msgTypes[298]
+	mi := &file_proto_agent_proto_msgTypes[300]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -27995,7 +28123,7 @@ func (x *ComposeVolume) String() string {
 func (*ComposeVolume) ProtoMessage() {}
 
 func (x *ComposeVolume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[298]
+	mi := &file_proto_agent_proto_msgTypes[300]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -28008,7 +28136,7 @@ func (x *ComposeVolume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeVolume.ProtoReflect.Descriptor instead.
 func (*ComposeVolume) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{298}
+	return file_proto_agent_proto_rawDescGZIP(), []int{300}
 }
 
 func (x *ComposeVolume) GetVolumeId() string {
@@ -28049,7 +28177,7 @@ type LabelPair struct {
 
 func (x *LabelPair) Reset() {
 	*x = LabelPair{}
-	mi := &file_proto_agent_proto_msgTypes[299]
+	mi := &file_proto_agent_proto_msgTypes[301]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -28061,7 +28189,7 @@ func (x *LabelPair) String() string {
 func (*LabelPair) ProtoMessage() {}
 
 func (x *LabelPair) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[299]
+	mi := &file_proto_agent_proto_msgTypes[301]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -28074,7 +28202,7 @@ func (x *LabelPair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LabelPair.ProtoReflect.Descriptor instead.
 func (*LabelPair) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{299}
+	return file_proto_agent_proto_rawDescGZIP(), []int{301}
 }
 
 func (x *LabelPair) GetKey() string {
@@ -28142,7 +28270,7 @@ type ExecutionStep struct {
 
 func (x *ExecutionStep) Reset() {
 	*x = ExecutionStep{}
-	mi := &file_proto_agent_proto_msgTypes[300]
+	mi := &file_proto_agent_proto_msgTypes[302]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -28154,7 +28282,7 @@ func (x *ExecutionStep) String() string {
 func (*ExecutionStep) ProtoMessage() {}
 
 func (x *ExecutionStep) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[300]
+	mi := &file_proto_agent_proto_msgTypes[302]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -28167,7 +28295,7 @@ func (x *ExecutionStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionStep.ProtoReflect.Descriptor instead.
 func (*ExecutionStep) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{300}
+	return file_proto_agent_proto_rawDescGZIP(), []int{302}
 }
 
 func (x *ExecutionStep) GetStepId() string {
@@ -28761,7 +28889,7 @@ type ServiceAbsenceProbe struct {
 
 func (x *ServiceAbsenceProbe) Reset() {
 	*x = ServiceAbsenceProbe{}
-	mi := &file_proto_agent_proto_msgTypes[301]
+	mi := &file_proto_agent_proto_msgTypes[303]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -28773,7 +28901,7 @@ func (x *ServiceAbsenceProbe) String() string {
 func (*ServiceAbsenceProbe) ProtoMessage() {}
 
 func (x *ServiceAbsenceProbe) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[301]
+	mi := &file_proto_agent_proto_msgTypes[303]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -28786,7 +28914,7 @@ func (x *ServiceAbsenceProbe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceAbsenceProbe.ProtoReflect.Descriptor instead.
 func (*ServiceAbsenceProbe) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{301}
+	return file_proto_agent_proto_rawDescGZIP(), []int{303}
 }
 
 func (x *ServiceAbsenceProbe) GetArtifactId() string {
@@ -28814,7 +28942,7 @@ type ManagedNetworkEnsure struct {
 
 func (x *ManagedNetworkEnsure) Reset() {
 	*x = ManagedNetworkEnsure{}
-	mi := &file_proto_agent_proto_msgTypes[302]
+	mi := &file_proto_agent_proto_msgTypes[304]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -28826,7 +28954,7 @@ func (x *ManagedNetworkEnsure) String() string {
 func (*ManagedNetworkEnsure) ProtoMessage() {}
 
 func (x *ManagedNetworkEnsure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[302]
+	mi := &file_proto_agent_proto_msgTypes[304]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -28839,7 +28967,7 @@ func (x *ManagedNetworkEnsure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedNetworkEnsure.ProtoReflect.Descriptor instead.
 func (*ManagedNetworkEnsure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{302}
+	return file_proto_agent_proto_rawDescGZIP(), []int{304}
 }
 
 func (x *ManagedNetworkEnsure) GetArtifactId() string {
@@ -28868,7 +28996,7 @@ type ManagedNetworkPreparationProbe struct {
 
 func (x *ManagedNetworkPreparationProbe) Reset() {
 	*x = ManagedNetworkPreparationProbe{}
-	mi := &file_proto_agent_proto_msgTypes[303]
+	mi := &file_proto_agent_proto_msgTypes[305]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -28880,7 +29008,7 @@ func (x *ManagedNetworkPreparationProbe) String() string {
 func (*ManagedNetworkPreparationProbe) ProtoMessage() {}
 
 func (x *ManagedNetworkPreparationProbe) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[303]
+	mi := &file_proto_agent_proto_msgTypes[305]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -28893,7 +29021,7 @@ func (x *ManagedNetworkPreparationProbe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedNetworkPreparationProbe.ProtoReflect.Descriptor instead.
 func (*ManagedNetworkPreparationProbe) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{303}
+	return file_proto_agent_proto_rawDescGZIP(), []int{305}
 }
 
 func (x *ManagedNetworkPreparationProbe) GetArtifactId() string {
@@ -28924,7 +29052,7 @@ type ManagedVolumeEnsure struct {
 
 func (x *ManagedVolumeEnsure) Reset() {
 	*x = ManagedVolumeEnsure{}
-	mi := &file_proto_agent_proto_msgTypes[304]
+	mi := &file_proto_agent_proto_msgTypes[306]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -28936,7 +29064,7 @@ func (x *ManagedVolumeEnsure) String() string {
 func (*ManagedVolumeEnsure) ProtoMessage() {}
 
 func (x *ManagedVolumeEnsure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[304]
+	mi := &file_proto_agent_proto_msgTypes[306]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -28949,7 +29077,7 @@ func (x *ManagedVolumeEnsure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedVolumeEnsure.ProtoReflect.Descriptor instead.
 func (*ManagedVolumeEnsure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{304}
+	return file_proto_agent_proto_rawDescGZIP(), []int{306}
 }
 
 func (x *ManagedVolumeEnsure) GetArtifactId() string {
@@ -28992,7 +29120,7 @@ type RunScript struct {
 
 func (x *RunScript) Reset() {
 	*x = RunScript{}
-	mi := &file_proto_agent_proto_msgTypes[305]
+	mi := &file_proto_agent_proto_msgTypes[307]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29004,7 +29132,7 @@ func (x *RunScript) String() string {
 func (*RunScript) ProtoMessage() {}
 
 func (x *RunScript) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[305]
+	mi := &file_proto_agent_proto_msgTypes[307]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29017,7 +29145,7 @@ func (x *RunScript) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunScript.ProtoReflect.Descriptor instead.
 func (*RunScript) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{305}
+	return file_proto_agent_proto_rawDescGZIP(), []int{307}
 }
 
 func (x *RunScript) GetScriptExecutionId() string {
@@ -29131,7 +29259,7 @@ type ResolvedRunnerSnapshot struct {
 
 func (x *ResolvedRunnerSnapshot) Reset() {
 	*x = ResolvedRunnerSnapshot{}
-	mi := &file_proto_agent_proto_msgTypes[306]
+	mi := &file_proto_agent_proto_msgTypes[308]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29143,7 +29271,7 @@ func (x *ResolvedRunnerSnapshot) String() string {
 func (*ResolvedRunnerSnapshot) ProtoMessage() {}
 
 func (x *ResolvedRunnerSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[306]
+	mi := &file_proto_agent_proto_msgTypes[308]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29156,7 +29284,7 @@ func (x *ResolvedRunnerSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolvedRunnerSnapshot.ProtoReflect.Descriptor instead.
 func (*ResolvedRunnerSnapshot) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{306}
+	return file_proto_agent_proto_rawDescGZIP(), []int{308}
 }
 
 func (x *ResolvedRunnerSnapshot) GetSnapshotId() string {
@@ -29355,7 +29483,7 @@ type ScriptExplicitExecutionAuthority struct {
 
 func (x *ScriptExplicitExecutionAuthority) Reset() {
 	*x = ScriptExplicitExecutionAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[307]
+	mi := &file_proto_agent_proto_msgTypes[309]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29367,7 +29495,7 @@ func (x *ScriptExplicitExecutionAuthority) String() string {
 func (*ScriptExplicitExecutionAuthority) ProtoMessage() {}
 
 func (x *ScriptExplicitExecutionAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[307]
+	mi := &file_proto_agent_proto_msgTypes[309]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29380,7 +29508,7 @@ func (x *ScriptExplicitExecutionAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptExplicitExecutionAuthority.ProtoReflect.Descriptor instead.
 func (*ScriptExplicitExecutionAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{307}
+	return file_proto_agent_proto_rawDescGZIP(), []int{309}
 }
 
 func (x *ScriptExplicitExecutionAuthority) GetContext() *ScriptExplicitExecutionContext {
@@ -29425,7 +29553,7 @@ type ScriptExplicitExecutionContext struct {
 
 func (x *ScriptExplicitExecutionContext) Reset() {
 	*x = ScriptExplicitExecutionContext{}
-	mi := &file_proto_agent_proto_msgTypes[308]
+	mi := &file_proto_agent_proto_msgTypes[310]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29437,7 +29565,7 @@ func (x *ScriptExplicitExecutionContext) String() string {
 func (*ScriptExplicitExecutionContext) ProtoMessage() {}
 
 func (x *ScriptExplicitExecutionContext) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[308]
+	mi := &file_proto_agent_proto_msgTypes[310]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29450,7 +29578,7 @@ func (x *ScriptExplicitExecutionContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptExplicitExecutionContext.ProtoReflect.Descriptor instead.
 func (*ScriptExplicitExecutionContext) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{308}
+	return file_proto_agent_proto_rawDescGZIP(), []int{310}
 }
 
 func (x *ScriptExplicitExecutionContext) GetImageReference() string {
@@ -29492,7 +29620,7 @@ type ScriptExplicitVolumeGrant struct {
 
 func (x *ScriptExplicitVolumeGrant) Reset() {
 	*x = ScriptExplicitVolumeGrant{}
-	mi := &file_proto_agent_proto_msgTypes[309]
+	mi := &file_proto_agent_proto_msgTypes[311]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29504,7 +29632,7 @@ func (x *ScriptExplicitVolumeGrant) String() string {
 func (*ScriptExplicitVolumeGrant) ProtoMessage() {}
 
 func (x *ScriptExplicitVolumeGrant) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[309]
+	mi := &file_proto_agent_proto_msgTypes[311]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29517,7 +29645,7 @@ func (x *ScriptExplicitVolumeGrant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptExplicitVolumeGrant.ProtoReflect.Descriptor instead.
 func (*ScriptExplicitVolumeGrant) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{309}
+	return file_proto_agent_proto_rawDescGZIP(), []int{311}
 }
 
 func (x *ScriptExplicitVolumeGrant) GetVolumeId() string {
@@ -29553,7 +29681,7 @@ type ScriptRunnerNetwork struct {
 
 func (x *ScriptRunnerNetwork) Reset() {
 	*x = ScriptRunnerNetwork{}
-	mi := &file_proto_agent_proto_msgTypes[310]
+	mi := &file_proto_agent_proto_msgTypes[312]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29565,7 +29693,7 @@ func (x *ScriptRunnerNetwork) String() string {
 func (*ScriptRunnerNetwork) ProtoMessage() {}
 
 func (x *ScriptRunnerNetwork) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[310]
+	mi := &file_proto_agent_proto_msgTypes[312]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29578,7 +29706,7 @@ func (x *ScriptRunnerNetwork) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptRunnerNetwork.ProtoReflect.Descriptor instead.
 func (*ScriptRunnerNetwork) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{310}
+	return file_proto_agent_proto_rawDescGZIP(), []int{312}
 }
 
 func (x *ScriptRunnerNetwork) GetNetworkId() string {
@@ -29621,7 +29749,7 @@ type ScriptNetworkAttachment struct {
 
 func (x *ScriptNetworkAttachment) Reset() {
 	*x = ScriptNetworkAttachment{}
-	mi := &file_proto_agent_proto_msgTypes[311]
+	mi := &file_proto_agent_proto_msgTypes[313]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29633,7 +29761,7 @@ func (x *ScriptNetworkAttachment) String() string {
 func (*ScriptNetworkAttachment) ProtoMessage() {}
 
 func (x *ScriptNetworkAttachment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[311]
+	mi := &file_proto_agent_proto_msgTypes[313]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29646,7 +29774,7 @@ func (x *ScriptNetworkAttachment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptNetworkAttachment.ProtoReflect.Descriptor instead.
 func (*ScriptNetworkAttachment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{311}
+	return file_proto_agent_proto_rawDescGZIP(), []int{313}
 }
 
 func (x *ScriptNetworkAttachment) GetDockerNetworkName() string {
@@ -29688,7 +29816,7 @@ type ScriptRunnerMount struct {
 
 func (x *ScriptRunnerMount) Reset() {
 	*x = ScriptRunnerMount{}
-	mi := &file_proto_agent_proto_msgTypes[312]
+	mi := &file_proto_agent_proto_msgTypes[314]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29700,7 +29828,7 @@ func (x *ScriptRunnerMount) String() string {
 func (*ScriptRunnerMount) ProtoMessage() {}
 
 func (x *ScriptRunnerMount) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[312]
+	mi := &file_proto_agent_proto_msgTypes[314]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29713,7 +29841,7 @@ func (x *ScriptRunnerMount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptRunnerMount.ProtoReflect.Descriptor instead.
 func (*ScriptRunnerMount) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{312}
+	return file_proto_agent_proto_rawDescGZIP(), []int{314}
 }
 
 func (x *ScriptRunnerMount) GetSourceId() string {
@@ -29747,7 +29875,7 @@ type ScriptSourceAuthority struct {
 
 func (x *ScriptSourceAuthority) Reset() {
 	*x = ScriptSourceAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[313]
+	mi := &file_proto_agent_proto_msgTypes[315]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29759,7 +29887,7 @@ func (x *ScriptSourceAuthority) String() string {
 func (*ScriptSourceAuthority) ProtoMessage() {}
 
 func (x *ScriptSourceAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[313]
+	mi := &file_proto_agent_proto_msgTypes[315]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29772,7 +29900,7 @@ func (x *ScriptSourceAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptSourceAuthority.ProtoReflect.Descriptor instead.
 func (*ScriptSourceAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{313}
+	return file_proto_agent_proto_rawDescGZIP(), []int{315}
 }
 
 func (x *ScriptSourceAuthority) GetExisting() *ScriptExistingSourceAuthority {
@@ -29798,7 +29926,7 @@ type ScriptExistingSourceAuthority struct {
 
 func (x *ScriptExistingSourceAuthority) Reset() {
 	*x = ScriptExistingSourceAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[314]
+	mi := &file_proto_agent_proto_msgTypes[316]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29810,7 +29938,7 @@ func (x *ScriptExistingSourceAuthority) String() string {
 func (*ScriptExistingSourceAuthority) ProtoMessage() {}
 
 func (x *ScriptExistingSourceAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[314]
+	mi := &file_proto_agent_proto_msgTypes[316]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29823,7 +29951,7 @@ func (x *ScriptExistingSourceAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptExistingSourceAuthority.ProtoReflect.Descriptor instead.
 func (*ScriptExistingSourceAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{314}
+	return file_proto_agent_proto_rawDescGZIP(), []int{316}
 }
 
 func (x *ScriptExistingSourceAuthority) GetModRevision() uint64 {
@@ -29846,7 +29974,7 @@ type ScriptStagedSourceAuthority struct {
 
 func (x *ScriptStagedSourceAuthority) Reset() {
 	*x = ScriptStagedSourceAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[315]
+	mi := &file_proto_agent_proto_msgTypes[317]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29858,7 +29986,7 @@ func (x *ScriptStagedSourceAuthority) String() string {
 func (*ScriptStagedSourceAuthority) ProtoMessage() {}
 
 func (x *ScriptStagedSourceAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[315]
+	mi := &file_proto_agent_proto_msgTypes[317]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29871,7 +29999,7 @@ func (x *ScriptStagedSourceAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptStagedSourceAuthority.ProtoReflect.Descriptor instead.
 func (*ScriptStagedSourceAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{315}
+	return file_proto_agent_proto_rawDescGZIP(), []int{317}
 }
 
 func (x *ScriptStagedSourceAuthority) GetEnvironmentId() string {
@@ -29933,7 +30061,7 @@ type ScriptMount struct {
 
 func (x *ScriptMount) Reset() {
 	*x = ScriptMount{}
-	mi := &file_proto_agent_proto_msgTypes[316]
+	mi := &file_proto_agent_proto_msgTypes[318]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -29945,7 +30073,7 @@ func (x *ScriptMount) String() string {
 func (*ScriptMount) ProtoMessage() {}
 
 func (x *ScriptMount) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[316]
+	mi := &file_proto_agent_proto_msgTypes[318]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -29958,7 +30086,7 @@ func (x *ScriptMount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptMount.ProtoReflect.Descriptor instead.
 func (*ScriptMount) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{316}
+	return file_proto_agent_proto_rawDescGZIP(), []int{318}
 }
 
 func (x *ScriptMount) GetType() string {
@@ -30092,7 +30220,7 @@ type ScriptRunnerEntryBinding struct {
 
 func (x *ScriptRunnerEntryBinding) Reset() {
 	*x = ScriptRunnerEntryBinding{}
-	mi := &file_proto_agent_proto_msgTypes[317]
+	mi := &file_proto_agent_proto_msgTypes[319]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -30104,7 +30232,7 @@ func (x *ScriptRunnerEntryBinding) String() string {
 func (*ScriptRunnerEntryBinding) ProtoMessage() {}
 
 func (x *ScriptRunnerEntryBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[317]
+	mi := &file_proto_agent_proto_msgTypes[319]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -30117,7 +30245,7 @@ func (x *ScriptRunnerEntryBinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptRunnerEntryBinding.ProtoReflect.Descriptor instead.
 func (*ScriptRunnerEntryBinding) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{317}
+	return file_proto_agent_proto_rawDescGZIP(), []int{319}
 }
 
 func (x *ScriptRunnerEntryBinding) GetEntryId() string {
@@ -30208,7 +30336,7 @@ type ScriptRunnerSecretValue struct {
 
 func (x *ScriptRunnerSecretValue) Reset() {
 	*x = ScriptRunnerSecretValue{}
-	mi := &file_proto_agent_proto_msgTypes[318]
+	mi := &file_proto_agent_proto_msgTypes[320]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -30220,7 +30348,7 @@ func (x *ScriptRunnerSecretValue) String() string {
 func (*ScriptRunnerSecretValue) ProtoMessage() {}
 
 func (x *ScriptRunnerSecretValue) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[318]
+	mi := &file_proto_agent_proto_msgTypes[320]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -30233,7 +30361,7 @@ func (x *ScriptRunnerSecretValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptRunnerSecretValue.ProtoReflect.Descriptor instead.
 func (*ScriptRunnerSecretValue) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{318}
+	return file_proto_agent_proto_rawDescGZIP(), []int{320}
 }
 
 func (x *ScriptRunnerSecretValue) GetOwnerId() string {
@@ -30315,7 +30443,7 @@ type ScriptRunnerProjection struct {
 
 func (x *ScriptRunnerProjection) Reset() {
 	*x = ScriptRunnerProjection{}
-	mi := &file_proto_agent_proto_msgTypes[319]
+	mi := &file_proto_agent_proto_msgTypes[321]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -30327,7 +30455,7 @@ func (x *ScriptRunnerProjection) String() string {
 func (*ScriptRunnerProjection) ProtoMessage() {}
 
 func (x *ScriptRunnerProjection) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[319]
+	mi := &file_proto_agent_proto_msgTypes[321]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -30340,7 +30468,7 @@ func (x *ScriptRunnerProjection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptRunnerProjection.ProtoReflect.Descriptor instead.
 func (*ScriptRunnerProjection) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{319}
+	return file_proto_agent_proto_rawDescGZIP(), []int{321}
 }
 
 func (x *ScriptRunnerProjection) GetSnapshotId() string {
@@ -30703,7 +30831,7 @@ type ScriptStringPair struct {
 
 func (x *ScriptStringPair) Reset() {
 	*x = ScriptStringPair{}
-	mi := &file_proto_agent_proto_msgTypes[320]
+	mi := &file_proto_agent_proto_msgTypes[322]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -30715,7 +30843,7 @@ func (x *ScriptStringPair) String() string {
 func (*ScriptStringPair) ProtoMessage() {}
 
 func (x *ScriptStringPair) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[320]
+	mi := &file_proto_agent_proto_msgTypes[322]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -30728,7 +30856,7 @@ func (x *ScriptStringPair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptStringPair.ProtoReflect.Descriptor instead.
 func (*ScriptStringPair) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{320}
+	return file_proto_agent_proto_rawDescGZIP(), []int{322}
 }
 
 func (x *ScriptStringPair) GetKey() string {
@@ -30757,7 +30885,7 @@ type ScriptUlimit struct {
 
 func (x *ScriptUlimit) Reset() {
 	*x = ScriptUlimit{}
-	mi := &file_proto_agent_proto_msgTypes[321]
+	mi := &file_proto_agent_proto_msgTypes[323]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -30769,7 +30897,7 @@ func (x *ScriptUlimit) String() string {
 func (*ScriptUlimit) ProtoMessage() {}
 
 func (x *ScriptUlimit) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[321]
+	mi := &file_proto_agent_proto_msgTypes[323]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -30782,7 +30910,7 @@ func (x *ScriptUlimit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptUlimit.ProtoReflect.Descriptor instead.
 func (*ScriptUlimit) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{321}
+	return file_proto_agent_proto_rawDescGZIP(), []int{323}
 }
 
 func (x *ScriptUlimit) GetName() string {
@@ -30827,7 +30955,7 @@ type ScriptBlkio struct {
 
 func (x *ScriptBlkio) Reset() {
 	*x = ScriptBlkio{}
-	mi := &file_proto_agent_proto_msgTypes[322]
+	mi := &file_proto_agent_proto_msgTypes[324]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -30839,7 +30967,7 @@ func (x *ScriptBlkio) String() string {
 func (*ScriptBlkio) ProtoMessage() {}
 
 func (x *ScriptBlkio) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[322]
+	mi := &file_proto_agent_proto_msgTypes[324]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -30852,7 +30980,7 @@ func (x *ScriptBlkio) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptBlkio.ProtoReflect.Descriptor instead.
 func (*ScriptBlkio) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{322}
+	return file_proto_agent_proto_rawDescGZIP(), []int{324}
 }
 
 func (x *ScriptBlkio) GetWeight() uint32 {
@@ -30907,7 +31035,7 @@ type ScriptWeightDevice struct {
 
 func (x *ScriptWeightDevice) Reset() {
 	*x = ScriptWeightDevice{}
-	mi := &file_proto_agent_proto_msgTypes[323]
+	mi := &file_proto_agent_proto_msgTypes[325]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -30919,7 +31047,7 @@ func (x *ScriptWeightDevice) String() string {
 func (*ScriptWeightDevice) ProtoMessage() {}
 
 func (x *ScriptWeightDevice) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[323]
+	mi := &file_proto_agent_proto_msgTypes[325]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -30932,7 +31060,7 @@ func (x *ScriptWeightDevice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptWeightDevice.ProtoReflect.Descriptor instead.
 func (*ScriptWeightDevice) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{323}
+	return file_proto_agent_proto_rawDescGZIP(), []int{325}
 }
 
 func (x *ScriptWeightDevice) GetPath() string {
@@ -30959,7 +31087,7 @@ type ScriptThrottleDevice struct {
 
 func (x *ScriptThrottleDevice) Reset() {
 	*x = ScriptThrottleDevice{}
-	mi := &file_proto_agent_proto_msgTypes[324]
+	mi := &file_proto_agent_proto_msgTypes[326]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -30971,7 +31099,7 @@ func (x *ScriptThrottleDevice) String() string {
 func (*ScriptThrottleDevice) ProtoMessage() {}
 
 func (x *ScriptThrottleDevice) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[324]
+	mi := &file_proto_agent_proto_msgTypes[326]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -30984,7 +31112,7 @@ func (x *ScriptThrottleDevice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptThrottleDevice.ProtoReflect.Descriptor instead.
 func (*ScriptThrottleDevice) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{324}
+	return file_proto_agent_proto_rawDescGZIP(), []int{326}
 }
 
 func (x *ScriptThrottleDevice) GetPath() string {
@@ -31013,7 +31141,7 @@ type ScriptResource struct {
 
 func (x *ScriptResource) Reset() {
 	*x = ScriptResource{}
-	mi := &file_proto_agent_proto_msgTypes[325]
+	mi := &file_proto_agent_proto_msgTypes[327]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31025,7 +31153,7 @@ func (x *ScriptResource) String() string {
 func (*ScriptResource) ProtoMessage() {}
 
 func (x *ScriptResource) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[325]
+	mi := &file_proto_agent_proto_msgTypes[327]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31038,7 +31166,7 @@ func (x *ScriptResource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptResource.ProtoReflect.Descriptor instead.
 func (*ScriptResource) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{325}
+	return file_proto_agent_proto_rawDescGZIP(), []int{327}
 }
 
 func (x *ScriptResource) GetPresent() bool {
@@ -31084,7 +31212,7 @@ type ScriptBodyArtifactMetadata struct {
 
 func (x *ScriptBodyArtifactMetadata) Reset() {
 	*x = ScriptBodyArtifactMetadata{}
-	mi := &file_proto_agent_proto_msgTypes[326]
+	mi := &file_proto_agent_proto_msgTypes[328]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31096,7 +31224,7 @@ func (x *ScriptBodyArtifactMetadata) String() string {
 func (*ScriptBodyArtifactMetadata) ProtoMessage() {}
 
 func (x *ScriptBodyArtifactMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[326]
+	mi := &file_proto_agent_proto_msgTypes[328]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31109,7 +31237,7 @@ func (x *ScriptBodyArtifactMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptBodyArtifactMetadata.ProtoReflect.Descriptor instead.
 func (*ScriptBodyArtifactMetadata) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{326}
+	return file_proto_agent_proto_rawDescGZIP(), []int{328}
 }
 
 func (x *ScriptBodyArtifactMetadata) GetScriptExecutionId() string {
@@ -31171,7 +31299,7 @@ type ScriptBodyArtifact struct {
 
 func (x *ScriptBodyArtifact) Reset() {
 	*x = ScriptBodyArtifact{}
-	mi := &file_proto_agent_proto_msgTypes[327]
+	mi := &file_proto_agent_proto_msgTypes[329]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31183,7 +31311,7 @@ func (x *ScriptBodyArtifact) String() string {
 func (*ScriptBodyArtifact) ProtoMessage() {}
 
 func (x *ScriptBodyArtifact) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[327]
+	mi := &file_proto_agent_proto_msgTypes[329]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31196,7 +31324,7 @@ func (x *ScriptBodyArtifact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptBodyArtifact.ProtoReflect.Descriptor instead.
 func (*ScriptBodyArtifact) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{327}
+	return file_proto_agent_proto_rawDescGZIP(), []int{329}
 }
 
 func (x *ScriptBodyArtifact) GetMetadata() *ScriptBodyArtifactMetadata {
@@ -31223,7 +31351,7 @@ type ScriptEntryArtifact struct {
 
 func (x *ScriptEntryArtifact) Reset() {
 	*x = ScriptEntryArtifact{}
-	mi := &file_proto_agent_proto_msgTypes[328]
+	mi := &file_proto_agent_proto_msgTypes[330]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31235,7 +31363,7 @@ func (x *ScriptEntryArtifact) String() string {
 func (*ScriptEntryArtifact) ProtoMessage() {}
 
 func (x *ScriptEntryArtifact) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[328]
+	mi := &file_proto_agent_proto_msgTypes[330]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31248,7 +31376,7 @@ func (x *ScriptEntryArtifact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScriptEntryArtifact.ProtoReflect.Descriptor instead.
 func (*ScriptEntryArtifact) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{328}
+	return file_proto_agent_proto_rawDescGZIP(), []int{330}
 }
 
 func (x *ScriptEntryArtifact) GetBinding() *ScriptRunnerEntryBinding {
@@ -31278,7 +31406,7 @@ type RevisionDigest struct {
 
 func (x *RevisionDigest) Reset() {
 	*x = RevisionDigest{}
-	mi := &file_proto_agent_proto_msgTypes[329]
+	mi := &file_proto_agent_proto_msgTypes[331]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31290,7 +31418,7 @@ func (x *RevisionDigest) String() string {
 func (*RevisionDigest) ProtoMessage() {}
 
 func (x *RevisionDigest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[329]
+	mi := &file_proto_agent_proto_msgTypes[331]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31303,7 +31431,7 @@ func (x *RevisionDigest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevisionDigest.ProtoReflect.Descriptor instead.
 func (*RevisionDigest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{329}
+	return file_proto_agent_proto_rawDescGZIP(), []int{331}
 }
 
 func (x *RevisionDigest) GetModRevision() int64 {
@@ -31330,7 +31458,7 @@ type CheckpointFence struct {
 
 func (x *CheckpointFence) Reset() {
 	*x = CheckpointFence{}
-	mi := &file_proto_agent_proto_msgTypes[330]
+	mi := &file_proto_agent_proto_msgTypes[332]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31342,7 +31470,7 @@ func (x *CheckpointFence) String() string {
 func (*CheckpointFence) ProtoMessage() {}
 
 func (x *CheckpointFence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[330]
+	mi := &file_proto_agent_proto_msgTypes[332]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31355,7 +31483,7 @@ func (x *CheckpointFence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckpointFence.ProtoReflect.Descriptor instead.
 func (*CheckpointFence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{330}
+	return file_proto_agent_proto_rawDescGZIP(), []int{332}
 }
 
 func (x *CheckpointFence) GetAuthorityDigest() []byte {
@@ -31383,7 +31511,7 @@ type BackupResourceIdentity struct {
 
 func (x *BackupResourceIdentity) Reset() {
 	*x = BackupResourceIdentity{}
-	mi := &file_proto_agent_proto_msgTypes[331]
+	mi := &file_proto_agent_proto_msgTypes[333]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31395,7 +31523,7 @@ func (x *BackupResourceIdentity) String() string {
 func (*BackupResourceIdentity) ProtoMessage() {}
 
 func (x *BackupResourceIdentity) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[331]
+	mi := &file_proto_agent_proto_msgTypes[333]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31408,7 +31536,7 @@ func (x *BackupResourceIdentity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupResourceIdentity.ProtoReflect.Descriptor instead.
 func (*BackupResourceIdentity) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{331}
+	return file_proto_agent_proto_rawDescGZIP(), []int{333}
 }
 
 func (x *BackupResourceIdentity) GetKind() BackupResourceKind {
@@ -31445,7 +31573,7 @@ type BackupEncryptionAuthority struct {
 
 func (x *BackupEncryptionAuthority) Reset() {
 	*x = BackupEncryptionAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[332]
+	mi := &file_proto_agent_proto_msgTypes[334]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31457,7 +31585,7 @@ func (x *BackupEncryptionAuthority) String() string {
 func (*BackupEncryptionAuthority) ProtoMessage() {}
 
 func (x *BackupEncryptionAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[332]
+	mi := &file_proto_agent_proto_msgTypes[334]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31470,7 +31598,7 @@ func (x *BackupEncryptionAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupEncryptionAuthority.ProtoReflect.Descriptor instead.
 func (*BackupEncryptionAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{332}
+	return file_proto_agent_proto_rawDescGZIP(), []int{334}
 }
 
 func (x *BackupEncryptionAuthority) GetKind() BackupEncryption {
@@ -31518,7 +31646,7 @@ type BackupPriorRuntimeIntent struct {
 
 func (x *BackupPriorRuntimeIntent) Reset() {
 	*x = BackupPriorRuntimeIntent{}
-	mi := &file_proto_agent_proto_msgTypes[333]
+	mi := &file_proto_agent_proto_msgTypes[335]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31530,7 +31658,7 @@ func (x *BackupPriorRuntimeIntent) String() string {
 func (*BackupPriorRuntimeIntent) ProtoMessage() {}
 
 func (x *BackupPriorRuntimeIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[333]
+	mi := &file_proto_agent_proto_msgTypes[335]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31543,7 +31671,7 @@ func (x *BackupPriorRuntimeIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPriorRuntimeIntent.ProtoReflect.Descriptor instead.
 func (*BackupPriorRuntimeIntent) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{333}
+	return file_proto_agent_proto_rawDescGZIP(), []int{335}
 }
 
 func (x *BackupPriorRuntimeIntent) GetKind() BackupServiceRuntimeIntent {
@@ -31576,7 +31704,7 @@ type BackupServiceFact struct {
 
 func (x *BackupServiceFact) Reset() {
 	*x = BackupServiceFact{}
-	mi := &file_proto_agent_proto_msgTypes[334]
+	mi := &file_proto_agent_proto_msgTypes[336]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31588,7 +31716,7 @@ func (x *BackupServiceFact) String() string {
 func (*BackupServiceFact) ProtoMessage() {}
 
 func (x *BackupServiceFact) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[334]
+	mi := &file_proto_agent_proto_msgTypes[336]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31601,7 +31729,7 @@ func (x *BackupServiceFact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupServiceFact.ProtoReflect.Descriptor instead.
 func (*BackupServiceFact) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{334}
+	return file_proto_agent_proto_rawDescGZIP(), []int{336}
 }
 
 func (x *BackupServiceFact) GetServiceId() string {
@@ -31678,7 +31806,7 @@ type BackupConnectorAuthority struct {
 
 func (x *BackupConnectorAuthority) Reset() {
 	*x = BackupConnectorAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[335]
+	mi := &file_proto_agent_proto_msgTypes[337]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31690,7 +31818,7 @@ func (x *BackupConnectorAuthority) String() string {
 func (*BackupConnectorAuthority) ProtoMessage() {}
 
 func (x *BackupConnectorAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[335]
+	mi := &file_proto_agent_proto_msgTypes[337]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31703,7 +31831,7 @@ func (x *BackupConnectorAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConnectorAuthority.ProtoReflect.Descriptor instead.
 func (*BackupConnectorAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{335}
+	return file_proto_agent_proto_rawDescGZIP(), []int{337}
 }
 
 func (x *BackupConnectorAuthority) GetConnectorId() string {
@@ -31787,7 +31915,7 @@ type BackupObjectTarget struct {
 
 func (x *BackupObjectTarget) Reset() {
 	*x = BackupObjectTarget{}
-	mi := &file_proto_agent_proto_msgTypes[336]
+	mi := &file_proto_agent_proto_msgTypes[338]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31799,7 +31927,7 @@ func (x *BackupObjectTarget) String() string {
 func (*BackupObjectTarget) ProtoMessage() {}
 
 func (x *BackupObjectTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[336]
+	mi := &file_proto_agent_proto_msgTypes[338]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31812,7 +31940,7 @@ func (x *BackupObjectTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupObjectTarget.ProtoReflect.Descriptor instead.
 func (*BackupObjectTarget) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{336}
+	return file_proto_agent_proto_rawDescGZIP(), []int{338}
 }
 
 func (x *BackupObjectTarget) GetConnector() *BackupConnectorAuthority {
@@ -31847,7 +31975,7 @@ type BackupS3VersionId struct {
 
 func (x *BackupS3VersionId) Reset() {
 	*x = BackupS3VersionId{}
-	mi := &file_proto_agent_proto_msgTypes[337]
+	mi := &file_proto_agent_proto_msgTypes[339]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31859,7 +31987,7 @@ func (x *BackupS3VersionId) String() string {
 func (*BackupS3VersionId) ProtoMessage() {}
 
 func (x *BackupS3VersionId) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[337]
+	mi := &file_proto_agent_proto_msgTypes[339]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31872,7 +32000,7 @@ func (x *BackupS3VersionId) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupS3VersionId.ProtoReflect.Descriptor instead.
 func (*BackupS3VersionId) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{337}
+	return file_proto_agent_proto_rawDescGZIP(), []int{339}
 }
 
 func (x *BackupS3VersionId) GetValue() string {
@@ -31891,7 +32019,7 @@ type BackupS3ETag struct {
 
 func (x *BackupS3ETag) Reset() {
 	*x = BackupS3ETag{}
-	mi := &file_proto_agent_proto_msgTypes[338]
+	mi := &file_proto_agent_proto_msgTypes[340]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31903,7 +32031,7 @@ func (x *BackupS3ETag) String() string {
 func (*BackupS3ETag) ProtoMessage() {}
 
 func (x *BackupS3ETag) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[338]
+	mi := &file_proto_agent_proto_msgTypes[340]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31916,7 +32044,7 @@ func (x *BackupS3ETag) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupS3ETag.ProtoReflect.Descriptor instead.
 func (*BackupS3ETag) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{338}
+	return file_proto_agent_proto_rawDescGZIP(), []int{340}
 }
 
 func (x *BackupS3ETag) GetValue() string {
@@ -31942,7 +32070,7 @@ type BackupObjectIdentity struct {
 
 func (x *BackupObjectIdentity) Reset() {
 	*x = BackupObjectIdentity{}
-	mi := &file_proto_agent_proto_msgTypes[339]
+	mi := &file_proto_agent_proto_msgTypes[341]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -31954,7 +32082,7 @@ func (x *BackupObjectIdentity) String() string {
 func (*BackupObjectIdentity) ProtoMessage() {}
 
 func (x *BackupObjectIdentity) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[339]
+	mi := &file_proto_agent_proto_msgTypes[341]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -31967,7 +32095,7 @@ func (x *BackupObjectIdentity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupObjectIdentity.ProtoReflect.Descriptor instead.
 func (*BackupObjectIdentity) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{339}
+	return file_proto_agent_proto_rawDescGZIP(), []int{341}
 }
 
 func (x *BackupObjectIdentity) GetConnector() *BackupConnectorAuthority {
@@ -32044,7 +32172,7 @@ type BackupArtifactEvidence struct {
 
 func (x *BackupArtifactEvidence) Reset() {
 	*x = BackupArtifactEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[340]
+	mi := &file_proto_agent_proto_msgTypes[342]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32056,7 +32184,7 @@ func (x *BackupArtifactEvidence) String() string {
 func (*BackupArtifactEvidence) ProtoMessage() {}
 
 func (x *BackupArtifactEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[340]
+	mi := &file_proto_agent_proto_msgTypes[342]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32069,7 +32197,7 @@ func (x *BackupArtifactEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupArtifactEvidence.ProtoReflect.Descriptor instead.
 func (*BackupArtifactEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{340}
+	return file_proto_agent_proto_rawDescGZIP(), []int{342}
 }
 
 func (x *BackupArtifactEvidence) GetSourceSizeBytes() uint64 {
@@ -32121,7 +32249,7 @@ type BackupWorkInput struct {
 
 func (x *BackupWorkInput) Reset() {
 	*x = BackupWorkInput{}
-	mi := &file_proto_agent_proto_msgTypes[341]
+	mi := &file_proto_agent_proto_msgTypes[343]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32133,7 +32261,7 @@ func (x *BackupWorkInput) String() string {
 func (*BackupWorkInput) ProtoMessage() {}
 
 func (x *BackupWorkInput) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[341]
+	mi := &file_proto_agent_proto_msgTypes[343]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32146,7 +32274,7 @@ func (x *BackupWorkInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupWorkInput.ProtoReflect.Descriptor instead.
 func (*BackupWorkInput) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{341}
+	return file_proto_agent_proto_rawDescGZIP(), []int{343}
 }
 
 func (x *BackupWorkInput) GetSchema() uint32 {
@@ -32225,7 +32353,7 @@ type BackupWorkAssignment struct {
 
 func (x *BackupWorkAssignment) Reset() {
 	*x = BackupWorkAssignment{}
-	mi := &file_proto_agent_proto_msgTypes[342]
+	mi := &file_proto_agent_proto_msgTypes[344]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32237,7 +32365,7 @@ func (x *BackupWorkAssignment) String() string {
 func (*BackupWorkAssignment) ProtoMessage() {}
 
 func (x *BackupWorkAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[342]
+	mi := &file_proto_agent_proto_msgTypes[344]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32250,7 +32378,7 @@ func (x *BackupWorkAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupWorkAssignment.ProtoReflect.Descriptor instead.
 func (*BackupWorkAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{342}
+	return file_proto_agent_proto_rawDescGZIP(), []int{344}
 }
 
 func (x *BackupWorkAssignment) GetAttempt() *WorkAttemptIdentity {
@@ -32293,7 +32421,7 @@ type BackupConsumerHelperRequest struct {
 
 func (x *BackupConsumerHelperRequest) Reset() {
 	*x = BackupConsumerHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[343]
+	mi := &file_proto_agent_proto_msgTypes[345]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32305,7 +32433,7 @@ func (x *BackupConsumerHelperRequest) String() string {
 func (*BackupConsumerHelperRequest) ProtoMessage() {}
 
 func (x *BackupConsumerHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[343]
+	mi := &file_proto_agent_proto_msgTypes[345]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32318,7 +32446,7 @@ func (x *BackupConsumerHelperRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConsumerHelperRequest.ProtoReflect.Descriptor instead.
 func (*BackupConsumerHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{343}
+	return file_proto_agent_proto_rawDescGZIP(), []int{345}
 }
 
 func (x *BackupConsumerHelperRequest) GetAssignment() *BackupWorkAssignment {
@@ -32399,7 +32527,7 @@ type BackupConsumerHelperResponse struct {
 
 func (x *BackupConsumerHelperResponse) Reset() {
 	*x = BackupConsumerHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[344]
+	mi := &file_proto_agent_proto_msgTypes[346]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32411,7 +32539,7 @@ func (x *BackupConsumerHelperResponse) String() string {
 func (*BackupConsumerHelperResponse) ProtoMessage() {}
 
 func (x *BackupConsumerHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[344]
+	mi := &file_proto_agent_proto_msgTypes[346]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32424,7 +32552,7 @@ func (x *BackupConsumerHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConsumerHelperResponse.ProtoReflect.Descriptor instead.
 func (*BackupConsumerHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{344}
+	return file_proto_agent_proto_rawDescGZIP(), []int{346}
 }
 
 func (x *BackupConsumerHelperResponse) GetAttempt() *WorkAttemptIdentity {
@@ -32489,7 +32617,7 @@ type BackupRecoveryAssignment struct {
 
 func (x *BackupRecoveryAssignment) Reset() {
 	*x = BackupRecoveryAssignment{}
-	mi := &file_proto_agent_proto_msgTypes[345]
+	mi := &file_proto_agent_proto_msgTypes[347]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32501,7 +32629,7 @@ func (x *BackupRecoveryAssignment) String() string {
 func (*BackupRecoveryAssignment) ProtoMessage() {}
 
 func (x *BackupRecoveryAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[345]
+	mi := &file_proto_agent_proto_msgTypes[347]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32514,7 +32642,7 @@ func (x *BackupRecoveryAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRecoveryAssignment.ProtoReflect.Descriptor instead.
 func (*BackupRecoveryAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{345}
+	return file_proto_agent_proto_rawDescGZIP(), []int{347}
 }
 
 func (x *BackupRecoveryAssignment) GetAttempt() *WorkAttemptIdentity {
@@ -32562,7 +32690,7 @@ type BackupRecoveryRequest struct {
 
 func (x *BackupRecoveryRequest) Reset() {
 	*x = BackupRecoveryRequest{}
-	mi := &file_proto_agent_proto_msgTypes[346]
+	mi := &file_proto_agent_proto_msgTypes[348]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32574,7 +32702,7 @@ func (x *BackupRecoveryRequest) String() string {
 func (*BackupRecoveryRequest) ProtoMessage() {}
 
 func (x *BackupRecoveryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[346]
+	mi := &file_proto_agent_proto_msgTypes[348]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32587,7 +32715,7 @@ func (x *BackupRecoveryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRecoveryRequest.ProtoReflect.Descriptor instead.
 func (*BackupRecoveryRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{346}
+	return file_proto_agent_proto_rawDescGZIP(), []int{348}
 }
 
 func (x *BackupRecoveryRequest) GetAttempt() *WorkAttemptIdentity {
@@ -32616,7 +32744,7 @@ type BackupConfigRecoveryPrepareRequest struct {
 
 func (x *BackupConfigRecoveryPrepareRequest) Reset() {
 	*x = BackupConfigRecoveryPrepareRequest{}
-	mi := &file_proto_agent_proto_msgTypes[347]
+	mi := &file_proto_agent_proto_msgTypes[349]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32628,7 +32756,7 @@ func (x *BackupConfigRecoveryPrepareRequest) String() string {
 func (*BackupConfigRecoveryPrepareRequest) ProtoMessage() {}
 
 func (x *BackupConfigRecoveryPrepareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[347]
+	mi := &file_proto_agent_proto_msgTypes[349]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32641,7 +32769,7 @@ func (x *BackupConfigRecoveryPrepareRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use BackupConfigRecoveryPrepareRequest.ProtoReflect.Descriptor instead.
 func (*BackupConfigRecoveryPrepareRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{347}
+	return file_proto_agent_proto_rawDescGZIP(), []int{349}
 }
 
 func (x *BackupConfigRecoveryPrepareRequest) GetAttempt() *WorkAttemptIdentity {
@@ -32669,7 +32797,7 @@ type BackupConfigRecoveryPrepareAck struct {
 
 func (x *BackupConfigRecoveryPrepareAck) Reset() {
 	*x = BackupConfigRecoveryPrepareAck{}
-	mi := &file_proto_agent_proto_msgTypes[348]
+	mi := &file_proto_agent_proto_msgTypes[350]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32681,7 +32809,7 @@ func (x *BackupConfigRecoveryPrepareAck) String() string {
 func (*BackupConfigRecoveryPrepareAck) ProtoMessage() {}
 
 func (x *BackupConfigRecoveryPrepareAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[348]
+	mi := &file_proto_agent_proto_msgTypes[350]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32694,7 +32822,7 @@ func (x *BackupConfigRecoveryPrepareAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigRecoveryPrepareAck.ProtoReflect.Descriptor instead.
 func (*BackupConfigRecoveryPrepareAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{348}
+	return file_proto_agent_proto_rawDescGZIP(), []int{350}
 }
 
 func (x *BackupConfigRecoveryPrepareAck) GetAssignment() *BackupRecoveryAssignment {
@@ -32730,7 +32858,7 @@ type BackupRecoveryAck struct {
 
 func (x *BackupRecoveryAck) Reset() {
 	*x = BackupRecoveryAck{}
-	mi := &file_proto_agent_proto_msgTypes[349]
+	mi := &file_proto_agent_proto_msgTypes[351]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32742,7 +32870,7 @@ func (x *BackupRecoveryAck) String() string {
 func (*BackupRecoveryAck) ProtoMessage() {}
 
 func (x *BackupRecoveryAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[349]
+	mi := &file_proto_agent_proto_msgTypes[351]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32755,7 +32883,7 @@ func (x *BackupRecoveryAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRecoveryAck.ProtoReflect.Descriptor instead.
 func (*BackupRecoveryAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{349}
+	return file_proto_agent_proto_rawDescGZIP(), []int{351}
 }
 
 func (x *BackupRecoveryAck) GetAttempt() *WorkAttemptIdentity {
@@ -32820,7 +32948,7 @@ type BackupWorkCheckpointRequest struct {
 
 func (x *BackupWorkCheckpointRequest) Reset() {
 	*x = BackupWorkCheckpointRequest{}
-	mi := &file_proto_agent_proto_msgTypes[350]
+	mi := &file_proto_agent_proto_msgTypes[352]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -32832,7 +32960,7 @@ func (x *BackupWorkCheckpointRequest) String() string {
 func (*BackupWorkCheckpointRequest) ProtoMessage() {}
 
 func (x *BackupWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[350]
+	mi := &file_proto_agent_proto_msgTypes[352]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -32845,7 +32973,7 @@ func (x *BackupWorkCheckpointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupWorkCheckpointRequest.ProtoReflect.Descriptor instead.
 func (*BackupWorkCheckpointRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{350}
+	return file_proto_agent_proto_rawDescGZIP(), []int{352}
 }
 
 func (x *BackupWorkCheckpointRequest) GetAttempt() *WorkAttemptIdentity {
@@ -33191,7 +33319,7 @@ type BackupWorkCompletionRequest struct {
 
 func (x *BackupWorkCompletionRequest) Reset() {
 	*x = BackupWorkCompletionRequest{}
-	mi := &file_proto_agent_proto_msgTypes[351]
+	mi := &file_proto_agent_proto_msgTypes[353]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -33203,7 +33331,7 @@ func (x *BackupWorkCompletionRequest) String() string {
 func (*BackupWorkCompletionRequest) ProtoMessage() {}
 
 func (x *BackupWorkCompletionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[351]
+	mi := &file_proto_agent_proto_msgTypes[353]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -33216,7 +33344,7 @@ func (x *BackupWorkCompletionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupWorkCompletionRequest.ProtoReflect.Descriptor instead.
 func (*BackupWorkCompletionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{351}
+	return file_proto_agent_proto_rawDescGZIP(), []int{353}
 }
 
 func (x *BackupWorkCompletionRequest) GetAttempt() *WorkAttemptIdentity {
@@ -33245,7 +33373,7 @@ type BackupWorkFailureRequest struct {
 
 func (x *BackupWorkFailureRequest) Reset() {
 	*x = BackupWorkFailureRequest{}
-	mi := &file_proto_agent_proto_msgTypes[352]
+	mi := &file_proto_agent_proto_msgTypes[354]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -33257,7 +33385,7 @@ func (x *BackupWorkFailureRequest) String() string {
 func (*BackupWorkFailureRequest) ProtoMessage() {}
 
 func (x *BackupWorkFailureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[352]
+	mi := &file_proto_agent_proto_msgTypes[354]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -33270,7 +33398,7 @@ func (x *BackupWorkFailureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupWorkFailureRequest.ProtoReflect.Descriptor instead.
 func (*BackupWorkFailureRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{352}
+	return file_proto_agent_proto_rawDescGZIP(), []int{354}
 }
 
 func (x *BackupWorkFailureRequest) GetAttempt() *WorkAttemptIdentity {
@@ -33301,7 +33429,7 @@ type BackupWorkFailureAck struct {
 
 func (x *BackupWorkFailureAck) Reset() {
 	*x = BackupWorkFailureAck{}
-	mi := &file_proto_agent_proto_msgTypes[353]
+	mi := &file_proto_agent_proto_msgTypes[355]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -33313,7 +33441,7 @@ func (x *BackupWorkFailureAck) String() string {
 func (*BackupWorkFailureAck) ProtoMessage() {}
 
 func (x *BackupWorkFailureAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[353]
+	mi := &file_proto_agent_proto_msgTypes[355]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -33326,7 +33454,7 @@ func (x *BackupWorkFailureAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupWorkFailureAck.ProtoReflect.Descriptor instead.
 func (*BackupWorkFailureAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{353}
+	return file_proto_agent_proto_rawDescGZIP(), []int{355}
 }
 
 func (x *BackupWorkFailureAck) GetAttempt() *WorkAttemptIdentity {
@@ -33384,7 +33512,7 @@ type BackupWorkCompletionAck struct {
 
 func (x *BackupWorkCompletionAck) Reset() {
 	*x = BackupWorkCompletionAck{}
-	mi := &file_proto_agent_proto_msgTypes[354]
+	mi := &file_proto_agent_proto_msgTypes[356]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -33396,7 +33524,7 @@ func (x *BackupWorkCompletionAck) String() string {
 func (*BackupWorkCompletionAck) ProtoMessage() {}
 
 func (x *BackupWorkCompletionAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[354]
+	mi := &file_proto_agent_proto_msgTypes[356]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -33409,7 +33537,7 @@ func (x *BackupWorkCompletionAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupWorkCompletionAck.ProtoReflect.Descriptor instead.
 func (*BackupWorkCompletionAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{354}
+	return file_proto_agent_proto_rawDescGZIP(), []int{356}
 }
 
 func (x *BackupWorkCompletionAck) GetAttempt() *WorkAttemptIdentity {
@@ -33461,7 +33589,7 @@ type BackupWorkCheckpointAck struct {
 
 func (x *BackupWorkCheckpointAck) Reset() {
 	*x = BackupWorkCheckpointAck{}
-	mi := &file_proto_agent_proto_msgTypes[355]
+	mi := &file_proto_agent_proto_msgTypes[357]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -33473,7 +33601,7 @@ func (x *BackupWorkCheckpointAck) String() string {
 func (*BackupWorkCheckpointAck) ProtoMessage() {}
 
 func (x *BackupWorkCheckpointAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[355]
+	mi := &file_proto_agent_proto_msgTypes[357]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -33486,7 +33614,7 @@ func (x *BackupWorkCheckpointAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupWorkCheckpointAck.ProtoReflect.Descriptor instead.
 func (*BackupWorkCheckpointAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{355}
+	return file_proto_agent_proto_rawDescGZIP(), []int{357}
 }
 
 func (x *BackupWorkCheckpointAck) GetAttempt() *WorkAttemptIdentity {
@@ -33545,7 +33673,7 @@ type BackupPlanScope struct {
 
 func (x *BackupPlanScope) Reset() {
 	*x = BackupPlanScope{}
-	mi := &file_proto_agent_proto_msgTypes[356]
+	mi := &file_proto_agent_proto_msgTypes[358]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -33557,7 +33685,7 @@ func (x *BackupPlanScope) String() string {
 func (*BackupPlanScope) ProtoMessage() {}
 
 func (x *BackupPlanScope) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[356]
+	mi := &file_proto_agent_proto_msgTypes[358]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -33570,7 +33698,7 @@ func (x *BackupPlanScope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPlanScope.ProtoReflect.Descriptor instead.
 func (*BackupPlanScope) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{356}
+	return file_proto_agent_proto_rawDescGZIP(), []int{358}
 }
 
 func (x *BackupPlanScope) GetProjectId() string {
@@ -33634,7 +33762,7 @@ type BackupStepAuthority struct {
 
 func (x *BackupStepAuthority) Reset() {
 	*x = BackupStepAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[357]
+	mi := &file_proto_agent_proto_msgTypes[359]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -33646,7 +33774,7 @@ func (x *BackupStepAuthority) String() string {
 func (*BackupStepAuthority) ProtoMessage() {}
 
 func (x *BackupStepAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[357]
+	mi := &file_proto_agent_proto_msgTypes[359]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -33659,7 +33787,7 @@ func (x *BackupStepAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupStepAuthority.ProtoReflect.Descriptor instead.
 func (*BackupStepAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{357}
+	return file_proto_agent_proto_rawDescGZIP(), []int{359}
 }
 
 func (x *BackupStepAuthority) GetStepId() string {
@@ -33769,7 +33897,7 @@ type BackupStepResume struct {
 
 func (x *BackupStepResume) Reset() {
 	*x = BackupStepResume{}
-	mi := &file_proto_agent_proto_msgTypes[358]
+	mi := &file_proto_agent_proto_msgTypes[360]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -33781,7 +33909,7 @@ func (x *BackupStepResume) String() string {
 func (*BackupStepResume) ProtoMessage() {}
 
 func (x *BackupStepResume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[358]
+	mi := &file_proto_agent_proto_msgTypes[360]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -33794,7 +33922,7 @@ func (x *BackupStepResume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupStepResume.ProtoReflect.Descriptor instead.
 func (*BackupStepResume) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{358}
+	return file_proto_agent_proto_rawDescGZIP(), []int{360}
 }
 
 func (x *BackupStepResume) GetStepId() string {
@@ -33897,7 +34025,7 @@ type BackupCaptureResume struct {
 
 func (x *BackupCaptureResume) Reset() {
 	*x = BackupCaptureResume{}
-	mi := &file_proto_agent_proto_msgTypes[359]
+	mi := &file_proto_agent_proto_msgTypes[361]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -33909,7 +34037,7 @@ func (x *BackupCaptureResume) String() string {
 func (*BackupCaptureResume) ProtoMessage() {}
 
 func (x *BackupCaptureResume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[359]
+	mi := &file_proto_agent_proto_msgTypes[361]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -33922,7 +34050,7 @@ func (x *BackupCaptureResume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupCaptureResume.ProtoReflect.Descriptor instead.
 func (*BackupCaptureResume) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{359}
+	return file_proto_agent_proto_rawDescGZIP(), []int{361}
 }
 
 func (x *BackupCaptureResume) GetCheckpointSequence() uint64 {
@@ -34150,7 +34278,7 @@ type BackupPruneResume struct {
 
 func (x *BackupPruneResume) Reset() {
 	*x = BackupPruneResume{}
-	mi := &file_proto_agent_proto_msgTypes[360]
+	mi := &file_proto_agent_proto_msgTypes[362]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -34162,7 +34290,7 @@ func (x *BackupPruneResume) String() string {
 func (*BackupPruneResume) ProtoMessage() {}
 
 func (x *BackupPruneResume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[360]
+	mi := &file_proto_agent_proto_msgTypes[362]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -34175,7 +34303,7 @@ func (x *BackupPruneResume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPruneResume.ProtoReflect.Descriptor instead.
 func (*BackupPruneResume) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{360}
+	return file_proto_agent_proto_rawDescGZIP(), []int{362}
 }
 
 func (x *BackupPruneResume) GetCheckpointSequence() uint64 {
@@ -34255,7 +34383,7 @@ type BackupRestoreResume struct {
 
 func (x *BackupRestoreResume) Reset() {
 	*x = BackupRestoreResume{}
-	mi := &file_proto_agent_proto_msgTypes[361]
+	mi := &file_proto_agent_proto_msgTypes[363]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -34267,7 +34395,7 @@ func (x *BackupRestoreResume) String() string {
 func (*BackupRestoreResume) ProtoMessage() {}
 
 func (x *BackupRestoreResume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[361]
+	mi := &file_proto_agent_proto_msgTypes[363]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -34280,7 +34408,7 @@ func (x *BackupRestoreResume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRestoreResume.ProtoReflect.Descriptor instead.
 func (*BackupRestoreResume) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{361}
+	return file_proto_agent_proto_rawDescGZIP(), []int{363}
 }
 
 func (x *BackupRestoreResume) GetCheckpointSequence() uint64 {
@@ -34541,7 +34669,7 @@ type BackupDatabaseRestoreProgress struct {
 
 func (x *BackupDatabaseRestoreProgress) Reset() {
 	*x = BackupDatabaseRestoreProgress{}
-	mi := &file_proto_agent_proto_msgTypes[362]
+	mi := &file_proto_agent_proto_msgTypes[364]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -34553,7 +34681,7 @@ func (x *BackupDatabaseRestoreProgress) String() string {
 func (*BackupDatabaseRestoreProgress) ProtoMessage() {}
 
 func (x *BackupDatabaseRestoreProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[362]
+	mi := &file_proto_agent_proto_msgTypes[364]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -34566,7 +34694,7 @@ func (x *BackupDatabaseRestoreProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupDatabaseRestoreProgress.ProtoReflect.Descriptor instead.
 func (*BackupDatabaseRestoreProgress) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{362}
+	return file_proto_agent_proto_rawDescGZIP(), []int{364}
 }
 
 func (x *BackupDatabaseRestoreProgress) GetStoppedConsumers() uint32 {
@@ -34634,7 +34762,7 @@ type BackupDatabaseConsumerRecovery struct {
 
 func (x *BackupDatabaseConsumerRecovery) Reset() {
 	*x = BackupDatabaseConsumerRecovery{}
-	mi := &file_proto_agent_proto_msgTypes[363]
+	mi := &file_proto_agent_proto_msgTypes[365]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -34646,7 +34774,7 @@ func (x *BackupDatabaseConsumerRecovery) String() string {
 func (*BackupDatabaseConsumerRecovery) ProtoMessage() {}
 
 func (x *BackupDatabaseConsumerRecovery) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[363]
+	mi := &file_proto_agent_proto_msgTypes[365]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -34659,7 +34787,7 @@ func (x *BackupDatabaseConsumerRecovery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupDatabaseConsumerRecovery.ProtoReflect.Descriptor instead.
 func (*BackupDatabaseConsumerRecovery) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{363}
+	return file_proto_agent_proto_rawDescGZIP(), []int{365}
 }
 
 func (x *BackupDatabaseConsumerRecovery) GetPointId() string {
@@ -34682,7 +34810,7 @@ type BackupCaptureCursor struct {
 
 func (x *BackupCaptureCursor) Reset() {
 	*x = BackupCaptureCursor{}
-	mi := &file_proto_agent_proto_msgTypes[364]
+	mi := &file_proto_agent_proto_msgTypes[366]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -34694,7 +34822,7 @@ func (x *BackupCaptureCursor) String() string {
 func (*BackupCaptureCursor) ProtoMessage() {}
 
 func (x *BackupCaptureCursor) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[364]
+	mi := &file_proto_agent_proto_msgTypes[366]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -34707,7 +34835,7 @@ func (x *BackupCaptureCursor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupCaptureCursor.ProtoReflect.Descriptor instead.
 func (*BackupCaptureCursor) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{364}
+	return file_proto_agent_proto_rawDescGZIP(), []int{366}
 }
 
 func (x *BackupCaptureCursor) GetObjectAttempt() uint32 {
@@ -34759,7 +34887,7 @@ type BackupRestoreCursor struct {
 
 func (x *BackupRestoreCursor) Reset() {
 	*x = BackupRestoreCursor{}
-	mi := &file_proto_agent_proto_msgTypes[365]
+	mi := &file_proto_agent_proto_msgTypes[367]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -34771,7 +34899,7 @@ func (x *BackupRestoreCursor) String() string {
 func (*BackupRestoreCursor) ProtoMessage() {}
 
 func (x *BackupRestoreCursor) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[365]
+	mi := &file_proto_agent_proto_msgTypes[367]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -34784,7 +34912,7 @@ func (x *BackupRestoreCursor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRestoreCursor.ProtoReflect.Descriptor instead.
 func (*BackupRestoreCursor) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{365}
+	return file_proto_agent_proto_rawDescGZIP(), []int{367}
 }
 
 func (x *BackupRestoreCursor) GetObjectAttempt() uint32 {
@@ -34848,7 +34976,7 @@ type BackupCaptureAuthority struct {
 
 func (x *BackupCaptureAuthority) Reset() {
 	*x = BackupCaptureAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[366]
+	mi := &file_proto_agent_proto_msgTypes[368]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -34860,7 +34988,7 @@ func (x *BackupCaptureAuthority) String() string {
 func (*BackupCaptureAuthority) ProtoMessage() {}
 
 func (x *BackupCaptureAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[366]
+	mi := &file_proto_agent_proto_msgTypes[368]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -34873,7 +35001,7 @@ func (x *BackupCaptureAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupCaptureAuthority.ProtoReflect.Descriptor instead.
 func (*BackupCaptureAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{366}
+	return file_proto_agent_proto_rawDescGZIP(), []int{368}
 }
 
 func (x *BackupCaptureAuthority) GetPointId() string {
@@ -35000,7 +35128,7 @@ type BackupRestoreAuthority struct {
 
 func (x *BackupRestoreAuthority) Reset() {
 	*x = BackupRestoreAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[367]
+	mi := &file_proto_agent_proto_msgTypes[369]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -35012,7 +35140,7 @@ func (x *BackupRestoreAuthority) String() string {
 func (*BackupRestoreAuthority) ProtoMessage() {}
 
 func (x *BackupRestoreAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[367]
+	mi := &file_proto_agent_proto_msgTypes[369]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -35025,7 +35153,7 @@ func (x *BackupRestoreAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRestoreAuthority.ProtoReflect.Descriptor instead.
 func (*BackupRestoreAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{367}
+	return file_proto_agent_proto_rawDescGZIP(), []int{369}
 }
 
 func (x *BackupRestoreAuthority) GetPointId() string {
@@ -35185,7 +35313,7 @@ type BackupPruneAuthority struct {
 
 func (x *BackupPruneAuthority) Reset() {
 	*x = BackupPruneAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[368]
+	mi := &file_proto_agent_proto_msgTypes[370]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -35197,7 +35325,7 @@ func (x *BackupPruneAuthority) String() string {
 func (*BackupPruneAuthority) ProtoMessage() {}
 
 func (x *BackupPruneAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[368]
+	mi := &file_proto_agent_proto_msgTypes[370]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -35210,7 +35338,7 @@ func (x *BackupPruneAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPruneAuthority.ProtoReflect.Descriptor instead.
 func (*BackupPruneAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{368}
+	return file_proto_agent_proto_rawDescGZIP(), []int{370}
 }
 
 func (x *BackupPruneAuthority) GetRetentionPolicy() *RevisionDigest {
@@ -35238,7 +35366,7 @@ type BackupOriginalIdentity struct {
 
 func (x *BackupOriginalIdentity) Reset() {
 	*x = BackupOriginalIdentity{}
-	mi := &file_proto_agent_proto_msgTypes[369]
+	mi := &file_proto_agent_proto_msgTypes[371]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -35250,7 +35378,7 @@ func (x *BackupOriginalIdentity) String() string {
 func (*BackupOriginalIdentity) ProtoMessage() {}
 
 func (x *BackupOriginalIdentity) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[369]
+	mi := &file_proto_agent_proto_msgTypes[371]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -35263,7 +35391,7 @@ func (x *BackupOriginalIdentity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupOriginalIdentity.ProtoReflect.Descriptor instead.
 func (*BackupOriginalIdentity) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{369}
+	return file_proto_agent_proto_rawDescGZIP(), []int{371}
 }
 
 func (x *BackupOriginalIdentity) GetOriginalExecutionId() string {
@@ -35301,7 +35429,7 @@ type BackupAdoptedIdentity struct {
 
 func (x *BackupAdoptedIdentity) Reset() {
 	*x = BackupAdoptedIdentity{}
-	mi := &file_proto_agent_proto_msgTypes[370]
+	mi := &file_proto_agent_proto_msgTypes[372]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -35313,7 +35441,7 @@ func (x *BackupAdoptedIdentity) String() string {
 func (*BackupAdoptedIdentity) ProtoMessage() {}
 
 func (x *BackupAdoptedIdentity) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[370]
+	mi := &file_proto_agent_proto_msgTypes[372]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -35326,7 +35454,7 @@ func (x *BackupAdoptedIdentity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupAdoptedIdentity.ProtoReflect.Descriptor instead.
 func (*BackupAdoptedIdentity) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{370}
+	return file_proto_agent_proto_rawDescGZIP(), []int{372}
 }
 
 func (x *BackupAdoptedIdentity) GetAdoptionId() string {
@@ -35386,7 +35514,7 @@ type BackupPruneObject struct {
 
 func (x *BackupPruneObject) Reset() {
 	*x = BackupPruneObject{}
-	mi := &file_proto_agent_proto_msgTypes[371]
+	mi := &file_proto_agent_proto_msgTypes[373]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -35398,7 +35526,7 @@ func (x *BackupPruneObject) String() string {
 func (*BackupPruneObject) ProtoMessage() {}
 
 func (x *BackupPruneObject) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[371]
+	mi := &file_proto_agent_proto_msgTypes[373]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -35411,7 +35539,7 @@ func (x *BackupPruneObject) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPruneObject.ProtoReflect.Descriptor instead.
 func (*BackupPruneObject) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{371}
+	return file_proto_agent_proto_rawDescGZIP(), []int{373}
 }
 
 func (x *BackupPruneObject) GetOrdinal() uint32 {
@@ -35474,7 +35602,7 @@ type BackupPruneObjectDeleted struct {
 
 func (x *BackupPruneObjectDeleted) Reset() {
 	*x = BackupPruneObjectDeleted{}
-	mi := &file_proto_agent_proto_msgTypes[372]
+	mi := &file_proto_agent_proto_msgTypes[374]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -35486,7 +35614,7 @@ func (x *BackupPruneObjectDeleted) String() string {
 func (*BackupPruneObjectDeleted) ProtoMessage() {}
 
 func (x *BackupPruneObjectDeleted) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[372]
+	mi := &file_proto_agent_proto_msgTypes[374]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -35499,7 +35627,7 @@ func (x *BackupPruneObjectDeleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPruneObjectDeleted.ProtoReflect.Descriptor instead.
 func (*BackupPruneObjectDeleted) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{372}
+	return file_proto_agent_proto_rawDescGZIP(), []int{374}
 }
 
 func (x *BackupPruneObjectDeleted) GetOrdinal() uint32 {
@@ -35537,7 +35665,7 @@ type BackupStagingInventory struct {
 
 func (x *BackupStagingInventory) Reset() {
 	*x = BackupStagingInventory{}
-	mi := &file_proto_agent_proto_msgTypes[373]
+	mi := &file_proto_agent_proto_msgTypes[375]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -35549,7 +35677,7 @@ func (x *BackupStagingInventory) String() string {
 func (*BackupStagingInventory) ProtoMessage() {}
 
 func (x *BackupStagingInventory) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[373]
+	mi := &file_proto_agent_proto_msgTypes[375]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -35562,7 +35690,7 @@ func (x *BackupStagingInventory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupStagingInventory.ProtoReflect.Descriptor instead.
 func (*BackupStagingInventory) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{373}
+	return file_proto_agent_proto_rawDescGZIP(), []int{375}
 }
 
 func (x *BackupStagingInventory) GetEntries() []*BackupRecoveredStage {
@@ -35619,7 +35747,7 @@ type BackupRecoveredVolumeRestore struct {
 
 func (x *BackupRecoveredVolumeRestore) Reset() {
 	*x = BackupRecoveredVolumeRestore{}
-	mi := &file_proto_agent_proto_msgTypes[374]
+	mi := &file_proto_agent_proto_msgTypes[376]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -35631,7 +35759,7 @@ func (x *BackupRecoveredVolumeRestore) String() string {
 func (*BackupRecoveredVolumeRestore) ProtoMessage() {}
 
 func (x *BackupRecoveredVolumeRestore) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[374]
+	mi := &file_proto_agent_proto_msgTypes[376]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -35644,7 +35772,7 @@ func (x *BackupRecoveredVolumeRestore) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRecoveredVolumeRestore.ProtoReflect.Descriptor instead.
 func (*BackupRecoveredVolumeRestore) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{374}
+	return file_proto_agent_proto_rawDescGZIP(), []int{376}
 }
 
 func (x *BackupRecoveredVolumeRestore) GetRecoveryKeySha256() []byte {
@@ -35870,7 +35998,7 @@ type BackupRecoveredStage struct {
 
 func (x *BackupRecoveredStage) Reset() {
 	*x = BackupRecoveredStage{}
-	mi := &file_proto_agent_proto_msgTypes[375]
+	mi := &file_proto_agent_proto_msgTypes[377]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -35882,7 +36010,7 @@ func (x *BackupRecoveredStage) String() string {
 func (*BackupRecoveredStage) ProtoMessage() {}
 
 func (x *BackupRecoveredStage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[375]
+	mi := &file_proto_agent_proto_msgTypes[377]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -35895,7 +36023,7 @@ func (x *BackupRecoveredStage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRecoveredStage.ProtoReflect.Descriptor instead.
 func (*BackupRecoveredStage) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{375}
+	return file_proto_agent_proto_rawDescGZIP(), []int{377}
 }
 
 func (x *BackupRecoveredStage) GetRecoveryKeySha256() []byte {
@@ -35930,7 +36058,7 @@ type BackupRecoveredFile struct {
 
 func (x *BackupRecoveredFile) Reset() {
 	*x = BackupRecoveredFile{}
-	mi := &file_proto_agent_proto_msgTypes[376]
+	mi := &file_proto_agent_proto_msgTypes[378]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -35942,7 +36070,7 @@ func (x *BackupRecoveredFile) String() string {
 func (*BackupRecoveredFile) ProtoMessage() {}
 
 func (x *BackupRecoveredFile) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[376]
+	mi := &file_proto_agent_proto_msgTypes[378]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -35955,7 +36083,7 @@ func (x *BackupRecoveredFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRecoveredFile.ProtoReflect.Descriptor instead.
 func (*BackupRecoveredFile) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{376}
+	return file_proto_agent_proto_rawDescGZIP(), []int{378}
 }
 
 func (x *BackupRecoveredFile) GetRole() BackupRecoveredFileRole {
@@ -35993,7 +36121,7 @@ type BackupStagingRecoveryPlan struct {
 
 func (x *BackupStagingRecoveryPlan) Reset() {
 	*x = BackupStagingRecoveryPlan{}
-	mi := &file_proto_agent_proto_msgTypes[377]
+	mi := &file_proto_agent_proto_msgTypes[379]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36005,7 +36133,7 @@ func (x *BackupStagingRecoveryPlan) String() string {
 func (*BackupStagingRecoveryPlan) ProtoMessage() {}
 
 func (x *BackupStagingRecoveryPlan) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[377]
+	mi := &file_proto_agent_proto_msgTypes[379]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36018,7 +36146,7 @@ func (x *BackupStagingRecoveryPlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupStagingRecoveryPlan.ProtoReflect.Descriptor instead.
 func (*BackupStagingRecoveryPlan) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{377}
+	return file_proto_agent_proto_rawDescGZIP(), []int{379}
 }
 
 func (x *BackupStagingRecoveryPlan) GetInventorySha256() []byte {
@@ -36064,7 +36192,7 @@ type BackupVolumeRestoreRecoveryDisposition struct {
 
 func (x *BackupVolumeRestoreRecoveryDisposition) Reset() {
 	*x = BackupVolumeRestoreRecoveryDisposition{}
-	mi := &file_proto_agent_proto_msgTypes[378]
+	mi := &file_proto_agent_proto_msgTypes[380]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36076,7 +36204,7 @@ func (x *BackupVolumeRestoreRecoveryDisposition) String() string {
 func (*BackupVolumeRestoreRecoveryDisposition) ProtoMessage() {}
 
 func (x *BackupVolumeRestoreRecoveryDisposition) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[378]
+	mi := &file_proto_agent_proto_msgTypes[380]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36089,7 +36217,7 @@ func (x *BackupVolumeRestoreRecoveryDisposition) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use BackupVolumeRestoreRecoveryDisposition.ProtoReflect.Descriptor instead.
 func (*BackupVolumeRestoreRecoveryDisposition) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{378}
+	return file_proto_agent_proto_rawDescGZIP(), []int{380}
 }
 
 func (x *BackupVolumeRestoreRecoveryDisposition) GetRecoveryKeySha256() []byte {
@@ -36169,7 +36297,7 @@ type BackupVolumeRestoreResume struct {
 
 func (x *BackupVolumeRestoreResume) Reset() {
 	*x = BackupVolumeRestoreResume{}
-	mi := &file_proto_agent_proto_msgTypes[379]
+	mi := &file_proto_agent_proto_msgTypes[381]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36181,7 +36309,7 @@ func (x *BackupVolumeRestoreResume) String() string {
 func (*BackupVolumeRestoreResume) ProtoMessage() {}
 
 func (x *BackupVolumeRestoreResume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[379]
+	mi := &file_proto_agent_proto_msgTypes[381]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36194,7 +36322,7 @@ func (x *BackupVolumeRestoreResume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeRestoreResume.ProtoReflect.Descriptor instead.
 func (*BackupVolumeRestoreResume) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{379}
+	return file_proto_agent_proto_rawDescGZIP(), []int{381}
 }
 
 func (x *BackupVolumeRestoreResume) GetAssignmentResumeSha256() []byte {
@@ -36228,7 +36356,7 @@ type BackupVolumeRestoreHold struct {
 
 func (x *BackupVolumeRestoreHold) Reset() {
 	*x = BackupVolumeRestoreHold{}
-	mi := &file_proto_agent_proto_msgTypes[380]
+	mi := &file_proto_agent_proto_msgTypes[382]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36240,7 +36368,7 @@ func (x *BackupVolumeRestoreHold) String() string {
 func (*BackupVolumeRestoreHold) ProtoMessage() {}
 
 func (x *BackupVolumeRestoreHold) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[380]
+	mi := &file_proto_agent_proto_msgTypes[382]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36253,7 +36381,7 @@ func (x *BackupVolumeRestoreHold) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeRestoreHold.ProtoReflect.Descriptor instead.
 func (*BackupVolumeRestoreHold) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{380}
+	return file_proto_agent_proto_rawDescGZIP(), []int{382}
 }
 
 func (x *BackupVolumeRestoreHold) GetNativeRestoreModRevision() int64 {
@@ -36280,7 +36408,7 @@ type BackupVolumeRestoreCleanup struct {
 
 func (x *BackupVolumeRestoreCleanup) Reset() {
 	*x = BackupVolumeRestoreCleanup{}
-	mi := &file_proto_agent_proto_msgTypes[381]
+	mi := &file_proto_agent_proto_msgTypes[383]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36292,7 +36420,7 @@ func (x *BackupVolumeRestoreCleanup) String() string {
 func (*BackupVolumeRestoreCleanup) ProtoMessage() {}
 
 func (x *BackupVolumeRestoreCleanup) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[381]
+	mi := &file_proto_agent_proto_msgTypes[383]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36305,7 +36433,7 @@ func (x *BackupVolumeRestoreCleanup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeRestoreCleanup.ProtoReflect.Descriptor instead.
 func (*BackupVolumeRestoreCleanup) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{381}
+	return file_proto_agent_proto_rawDescGZIP(), []int{383}
 }
 
 func (x *BackupVolumeRestoreCleanup) GetNativeRestoreModRevision() int64 {
@@ -36338,7 +36466,7 @@ type BackupStagingDisposition struct {
 
 func (x *BackupStagingDisposition) Reset() {
 	*x = BackupStagingDisposition{}
-	mi := &file_proto_agent_proto_msgTypes[382]
+	mi := &file_proto_agent_proto_msgTypes[384]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36350,7 +36478,7 @@ func (x *BackupStagingDisposition) String() string {
 func (*BackupStagingDisposition) ProtoMessage() {}
 
 func (x *BackupStagingDisposition) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[382]
+	mi := &file_proto_agent_proto_msgTypes[384]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36363,7 +36491,7 @@ func (x *BackupStagingDisposition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupStagingDisposition.ProtoReflect.Descriptor instead.
 func (*BackupStagingDisposition) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{382}
+	return file_proto_agent_proto_rawDescGZIP(), []int{384}
 }
 
 func (x *BackupStagingDisposition) GetRecoveryKeySha256() []byte {
@@ -36463,7 +36591,7 @@ type BackupDatabaseStagingGuard struct {
 
 func (x *BackupDatabaseStagingGuard) Reset() {
 	*x = BackupDatabaseStagingGuard{}
-	mi := &file_proto_agent_proto_msgTypes[383]
+	mi := &file_proto_agent_proto_msgTypes[385]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36475,7 +36603,7 @@ func (x *BackupDatabaseStagingGuard) String() string {
 func (*BackupDatabaseStagingGuard) ProtoMessage() {}
 
 func (x *BackupDatabaseStagingGuard) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[383]
+	mi := &file_proto_agent_proto_msgTypes[385]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36488,7 +36616,7 @@ func (x *BackupDatabaseStagingGuard) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupDatabaseStagingGuard.ProtoReflect.Descriptor instead.
 func (*BackupDatabaseStagingGuard) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{383}
+	return file_proto_agent_proto_rawDescGZIP(), []int{385}
 }
 
 func (x *BackupDatabaseStagingGuard) GetTaskId() string {
@@ -36593,7 +36721,7 @@ type BackupResumePrepared struct {
 
 func (x *BackupResumePrepared) Reset() {
 	*x = BackupResumePrepared{}
-	mi := &file_proto_agent_proto_msgTypes[384]
+	mi := &file_proto_agent_proto_msgTypes[386]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36605,7 +36733,7 @@ func (x *BackupResumePrepared) String() string {
 func (*BackupResumePrepared) ProtoMessage() {}
 
 func (x *BackupResumePrepared) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[384]
+	mi := &file_proto_agent_proto_msgTypes[386]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36618,7 +36746,7 @@ func (x *BackupResumePrepared) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupResumePrepared.ProtoReflect.Descriptor instead.
 func (*BackupResumePrepared) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{384}
+	return file_proto_agent_proto_rawDescGZIP(), []int{386}
 }
 
 func (x *BackupResumePrepared) GetAssignmentResumeSha256() []byte {
@@ -36671,7 +36799,7 @@ type BackupRestartConfigEncryption struct {
 
 func (x *BackupRestartConfigEncryption) Reset() {
 	*x = BackupRestartConfigEncryption{}
-	mi := &file_proto_agent_proto_msgTypes[385]
+	mi := &file_proto_agent_proto_msgTypes[387]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36683,7 +36811,7 @@ func (x *BackupRestartConfigEncryption) String() string {
 func (*BackupRestartConfigEncryption) ProtoMessage() {}
 
 func (x *BackupRestartConfigEncryption) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[385]
+	mi := &file_proto_agent_proto_msgTypes[387]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36696,7 +36824,7 @@ func (x *BackupRestartConfigEncryption) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRestartConfigEncryption.ProtoReflect.Descriptor instead.
 func (*BackupRestartConfigEncryption) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{385}
+	return file_proto_agent_proto_rawDescGZIP(), []int{387}
 }
 
 type BackupRestartDatabaseEncryption struct {
@@ -36707,7 +36835,7 @@ type BackupRestartDatabaseEncryption struct {
 
 func (x *BackupRestartDatabaseEncryption) Reset() {
 	*x = BackupRestartDatabaseEncryption{}
-	mi := &file_proto_agent_proto_msgTypes[386]
+	mi := &file_proto_agent_proto_msgTypes[388]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36719,7 +36847,7 @@ func (x *BackupRestartDatabaseEncryption) String() string {
 func (*BackupRestartDatabaseEncryption) ProtoMessage() {}
 
 func (x *BackupRestartDatabaseEncryption) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[386]
+	mi := &file_proto_agent_proto_msgTypes[388]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36732,7 +36860,7 @@ func (x *BackupRestartDatabaseEncryption) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRestartDatabaseEncryption.ProtoReflect.Descriptor instead.
 func (*BackupRestartDatabaseEncryption) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{386}
+	return file_proto_agent_proto_rawDescGZIP(), []int{388}
 }
 
 type BackupDiscardRecovered struct {
@@ -36743,7 +36871,7 @@ type BackupDiscardRecovered struct {
 
 func (x *BackupDiscardRecovered) Reset() {
 	*x = BackupDiscardRecovered{}
-	mi := &file_proto_agent_proto_msgTypes[387]
+	mi := &file_proto_agent_proto_msgTypes[389]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36755,7 +36883,7 @@ func (x *BackupDiscardRecovered) String() string {
 func (*BackupDiscardRecovered) ProtoMessage() {}
 
 func (x *BackupDiscardRecovered) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[387]
+	mi := &file_proto_agent_proto_msgTypes[389]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36768,7 +36896,7 @@ func (x *BackupDiscardRecovered) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupDiscardRecovered.ProtoReflect.Descriptor instead.
 func (*BackupDiscardRecovered) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{387}
+	return file_proto_agent_proto_rawDescGZIP(), []int{389}
 }
 
 // Classified unresolved mutation: preserve the exact files without granting
@@ -36784,7 +36912,7 @@ type BackupRecoveryRequired struct {
 
 func (x *BackupRecoveryRequired) Reset() {
 	*x = BackupRecoveryRequired{}
-	mi := &file_proto_agent_proto_msgTypes[388]
+	mi := &file_proto_agent_proto_msgTypes[390]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36796,7 +36924,7 @@ func (x *BackupRecoveryRequired) String() string {
 func (*BackupRecoveryRequired) ProtoMessage() {}
 
 func (x *BackupRecoveryRequired) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[388]
+	mi := &file_proto_agent_proto_msgTypes[390]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36809,7 +36937,7 @@ func (x *BackupRecoveryRequired) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRecoveryRequired.ProtoReflect.Descriptor instead.
 func (*BackupRecoveryRequired) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{388}
+	return file_proto_agent_proto_rawDescGZIP(), []int{390}
 }
 
 func (x *BackupRecoveryRequired) GetNativeRestoreModRevision() int64 {
@@ -36844,7 +36972,7 @@ type BackupStagingRecoveryAck struct {
 
 func (x *BackupStagingRecoveryAck) Reset() {
 	*x = BackupStagingRecoveryAck{}
-	mi := &file_proto_agent_proto_msgTypes[389]
+	mi := &file_proto_agent_proto_msgTypes[391]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36856,7 +36984,7 @@ func (x *BackupStagingRecoveryAck) String() string {
 func (*BackupStagingRecoveryAck) ProtoMessage() {}
 
 func (x *BackupStagingRecoveryAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[389]
+	mi := &file_proto_agent_proto_msgTypes[391]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36869,7 +36997,7 @@ func (x *BackupStagingRecoveryAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupStagingRecoveryAck.ProtoReflect.Descriptor instead.
 func (*BackupStagingRecoveryAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{389}
+	return file_proto_agent_proto_rawDescGZIP(), []int{391}
 }
 
 func (x *BackupStagingRecoveryAck) GetInventorySha256() []byte {
@@ -36915,7 +37043,7 @@ type BackupConfigTransfer struct {
 
 func (x *BackupConfigTransfer) Reset() {
 	*x = BackupConfigTransfer{}
-	mi := &file_proto_agent_proto_msgTypes[390]
+	mi := &file_proto_agent_proto_msgTypes[392]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -36927,7 +37055,7 @@ func (x *BackupConfigTransfer) String() string {
 func (*BackupConfigTransfer) ProtoMessage() {}
 
 func (x *BackupConfigTransfer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[390]
+	mi := &file_proto_agent_proto_msgTypes[392]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -36940,7 +37068,7 @@ func (x *BackupConfigTransfer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigTransfer.ProtoReflect.Descriptor instead.
 func (*BackupConfigTransfer) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{390}
+	return file_proto_agent_proto_rawDescGZIP(), []int{392}
 }
 
 func (x *BackupConfigTransfer) GetAttempt() *WorkAttemptIdentity {
@@ -37089,7 +37217,7 @@ type BackupConfigTransferStart struct {
 
 func (x *BackupConfigTransferStart) Reset() {
 	*x = BackupConfigTransferStart{}
-	mi := &file_proto_agent_proto_msgTypes[391]
+	mi := &file_proto_agent_proto_msgTypes[393]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -37101,7 +37229,7 @@ func (x *BackupConfigTransferStart) String() string {
 func (*BackupConfigTransferStart) ProtoMessage() {}
 
 func (x *BackupConfigTransferStart) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[391]
+	mi := &file_proto_agent_proto_msgTypes[393]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -37114,7 +37242,7 @@ func (x *BackupConfigTransferStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigTransferStart.ProtoReflect.Descriptor instead.
 func (*BackupConfigTransferStart) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{391}
+	return file_proto_agent_proto_rawDescGZIP(), []int{393}
 }
 
 func (x *BackupConfigTransferStart) GetDirection() BackupConfigDirection {
@@ -37145,7 +37273,7 @@ type BackupConfigEntryHeader struct {
 
 func (x *BackupConfigEntryHeader) Reset() {
 	*x = BackupConfigEntryHeader{}
-	mi := &file_proto_agent_proto_msgTypes[392]
+	mi := &file_proto_agent_proto_msgTypes[394]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -37157,7 +37285,7 @@ func (x *BackupConfigEntryHeader) String() string {
 func (*BackupConfigEntryHeader) ProtoMessage() {}
 
 func (x *BackupConfigEntryHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[392]
+	mi := &file_proto_agent_proto_msgTypes[394]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -37170,7 +37298,7 @@ func (x *BackupConfigEntryHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigEntryHeader.ProtoReflect.Descriptor instead.
 func (*BackupConfigEntryHeader) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{392}
+	return file_proto_agent_proto_rawDescGZIP(), []int{394}
 }
 
 func (x *BackupConfigEntryHeader) GetEntry() isBackupConfigEntryHeader_Entry {
@@ -37232,7 +37360,7 @@ type BackupConfigValueChunk struct {
 
 func (x *BackupConfigValueChunk) Reset() {
 	*x = BackupConfigValueChunk{}
-	mi := &file_proto_agent_proto_msgTypes[393]
+	mi := &file_proto_agent_proto_msgTypes[395]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -37244,7 +37372,7 @@ func (x *BackupConfigValueChunk) String() string {
 func (*BackupConfigValueChunk) ProtoMessage() {}
 
 func (x *BackupConfigValueChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[393]
+	mi := &file_proto_agent_proto_msgTypes[395]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -37257,7 +37385,7 @@ func (x *BackupConfigValueChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigValueChunk.ProtoReflect.Descriptor instead.
 func (*BackupConfigValueChunk) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{393}
+	return file_proto_agent_proto_rawDescGZIP(), []int{395}
 }
 
 func (x *BackupConfigValueChunk) GetOrdinal() uint32 {
@@ -37292,7 +37420,7 @@ type BackupConfigEntryEnd struct {
 
 func (x *BackupConfigEntryEnd) Reset() {
 	*x = BackupConfigEntryEnd{}
-	mi := &file_proto_agent_proto_msgTypes[394]
+	mi := &file_proto_agent_proto_msgTypes[396]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -37304,7 +37432,7 @@ func (x *BackupConfigEntryEnd) String() string {
 func (*BackupConfigEntryEnd) ProtoMessage() {}
 
 func (x *BackupConfigEntryEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[394]
+	mi := &file_proto_agent_proto_msgTypes[396]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -37317,7 +37445,7 @@ func (x *BackupConfigEntryEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigEntryEnd.ProtoReflect.Descriptor instead.
 func (*BackupConfigEntryEnd) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{394}
+	return file_proto_agent_proto_rawDescGZIP(), []int{396}
 }
 
 func (x *BackupConfigEntryEnd) GetOrdinal() uint32 {
@@ -37352,7 +37480,7 @@ type BackupConfigTransferEnd struct {
 
 func (x *BackupConfigTransferEnd) Reset() {
 	*x = BackupConfigTransferEnd{}
-	mi := &file_proto_agent_proto_msgTypes[395]
+	mi := &file_proto_agent_proto_msgTypes[397]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -37364,7 +37492,7 @@ func (x *BackupConfigTransferEnd) String() string {
 func (*BackupConfigTransferEnd) ProtoMessage() {}
 
 func (x *BackupConfigTransferEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[395]
+	mi := &file_proto_agent_proto_msgTypes[397]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -37377,7 +37505,7 @@ func (x *BackupConfigTransferEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigTransferEnd.ProtoReflect.Descriptor instead.
 func (*BackupConfigTransferEnd) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{395}
+	return file_proto_agent_proto_rawDescGZIP(), []int{397}
 }
 
 func (x *BackupConfigTransferEnd) GetDirection() BackupConfigDirection {
@@ -37411,7 +37539,7 @@ type BackupConfigTransferResume struct {
 
 func (x *BackupConfigTransferResume) Reset() {
 	*x = BackupConfigTransferResume{}
-	mi := &file_proto_agent_proto_msgTypes[396]
+	mi := &file_proto_agent_proto_msgTypes[398]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -37423,7 +37551,7 @@ func (x *BackupConfigTransferResume) String() string {
 func (*BackupConfigTransferResume) ProtoMessage() {}
 
 func (x *BackupConfigTransferResume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[396]
+	mi := &file_proto_agent_proto_msgTypes[398]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -37436,7 +37564,7 @@ func (x *BackupConfigTransferResume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigTransferResume.ProtoReflect.Descriptor instead.
 func (*BackupConfigTransferResume) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{396}
+	return file_proto_agent_proto_rawDescGZIP(), []int{398}
 }
 
 func (x *BackupConfigTransferResume) GetNextOrdinal() uint32 {
@@ -37477,7 +37605,7 @@ type BackupConfigCredit struct {
 
 func (x *BackupConfigCredit) Reset() {
 	*x = BackupConfigCredit{}
-	mi := &file_proto_agent_proto_msgTypes[397]
+	mi := &file_proto_agent_proto_msgTypes[399]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -37489,7 +37617,7 @@ func (x *BackupConfigCredit) String() string {
 func (*BackupConfigCredit) ProtoMessage() {}
 
 func (x *BackupConfigCredit) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[397]
+	mi := &file_proto_agent_proto_msgTypes[399]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -37502,7 +37630,7 @@ func (x *BackupConfigCredit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigCredit.ProtoReflect.Descriptor instead.
 func (*BackupConfigCredit) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{397}
+	return file_proto_agent_proto_rawDescGZIP(), []int{399}
 }
 
 func (x *BackupConfigCredit) GetAttempt() *WorkAttemptIdentity {
@@ -37652,7 +37780,7 @@ type BackupVolumeManifestTransfer struct {
 
 func (x *BackupVolumeManifestTransfer) Reset() {
 	*x = BackupVolumeManifestTransfer{}
-	mi := &file_proto_agent_proto_msgTypes[398]
+	mi := &file_proto_agent_proto_msgTypes[400]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -37664,7 +37792,7 @@ func (x *BackupVolumeManifestTransfer) String() string {
 func (*BackupVolumeManifestTransfer) ProtoMessage() {}
 
 func (x *BackupVolumeManifestTransfer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[398]
+	mi := &file_proto_agent_proto_msgTypes[400]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -37677,7 +37805,7 @@ func (x *BackupVolumeManifestTransfer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeManifestTransfer.ProtoReflect.Descriptor instead.
 func (*BackupVolumeManifestTransfer) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{398}
+	return file_proto_agent_proto_rawDescGZIP(), []int{400}
 }
 
 func (x *BackupVolumeManifestTransfer) GetAttempt() *WorkAttemptIdentity {
@@ -37812,7 +37940,7 @@ type BackupVolumeManifestStart struct {
 
 func (x *BackupVolumeManifestStart) Reset() {
 	*x = BackupVolumeManifestStart{}
-	mi := &file_proto_agent_proto_msgTypes[399]
+	mi := &file_proto_agent_proto_msgTypes[401]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -37824,7 +37952,7 @@ func (x *BackupVolumeManifestStart) String() string {
 func (*BackupVolumeManifestStart) ProtoMessage() {}
 
 func (x *BackupVolumeManifestStart) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[399]
+	mi := &file_proto_agent_proto_msgTypes[401]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -37837,7 +37965,7 @@ func (x *BackupVolumeManifestStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeManifestStart.ProtoReflect.Descriptor instead.
 func (*BackupVolumeManifestStart) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{399}
+	return file_proto_agent_proto_rawDescGZIP(), []int{401}
 }
 
 func (x *BackupVolumeManifestStart) GetPointId() string {
@@ -37935,7 +38063,7 @@ type BackupVolumeManifestBatch struct {
 
 func (x *BackupVolumeManifestBatch) Reset() {
 	*x = BackupVolumeManifestBatch{}
-	mi := &file_proto_agent_proto_msgTypes[400]
+	mi := &file_proto_agent_proto_msgTypes[402]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -37947,7 +38075,7 @@ func (x *BackupVolumeManifestBatch) String() string {
 func (*BackupVolumeManifestBatch) ProtoMessage() {}
 
 func (x *BackupVolumeManifestBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[400]
+	mi := &file_proto_agent_proto_msgTypes[402]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -37960,7 +38088,7 @@ func (x *BackupVolumeManifestBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeManifestBatch.ProtoReflect.Descriptor instead.
 func (*BackupVolumeManifestBatch) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{400}
+	return file_proto_agent_proto_rawDescGZIP(), []int{402}
 }
 
 func (x *BackupVolumeManifestBatch) GetFirstOrdinal() uint64 {
@@ -38003,7 +38131,7 @@ type BackupVolumeManifestEnd struct {
 
 func (x *BackupVolumeManifestEnd) Reset() {
 	*x = BackupVolumeManifestEnd{}
-	mi := &file_proto_agent_proto_msgTypes[401]
+	mi := &file_proto_agent_proto_msgTypes[403]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38015,7 +38143,7 @@ func (x *BackupVolumeManifestEnd) String() string {
 func (*BackupVolumeManifestEnd) ProtoMessage() {}
 
 func (x *BackupVolumeManifestEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[401]
+	mi := &file_proto_agent_proto_msgTypes[403]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38028,7 +38156,7 @@ func (x *BackupVolumeManifestEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeManifestEnd.ProtoReflect.Descriptor instead.
 func (*BackupVolumeManifestEnd) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{401}
+	return file_proto_agent_proto_rawDescGZIP(), []int{403}
 }
 
 func (x *BackupVolumeManifestEnd) GetEntryCount() uint64 {
@@ -38072,7 +38200,7 @@ type BackupVolumeManifestResume struct {
 
 func (x *BackupVolumeManifestResume) Reset() {
 	*x = BackupVolumeManifestResume{}
-	mi := &file_proto_agent_proto_msgTypes[402]
+	mi := &file_proto_agent_proto_msgTypes[404]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38084,7 +38212,7 @@ func (x *BackupVolumeManifestResume) String() string {
 func (*BackupVolumeManifestResume) ProtoMessage() {}
 
 func (x *BackupVolumeManifestResume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[402]
+	mi := &file_proto_agent_proto_msgTypes[404]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38097,7 +38225,7 @@ func (x *BackupVolumeManifestResume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeManifestResume.ProtoReflect.Descriptor instead.
 func (*BackupVolumeManifestResume) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{402}
+	return file_proto_agent_proto_rawDescGZIP(), []int{404}
 }
 
 func (x *BackupVolumeManifestResume) GetNextRecordSequence() uint64 {
@@ -38153,7 +38281,7 @@ type BackupVolumeManifestAckCredit struct {
 
 func (x *BackupVolumeManifestAckCredit) Reset() {
 	*x = BackupVolumeManifestAckCredit{}
-	mi := &file_proto_agent_proto_msgTypes[403]
+	mi := &file_proto_agent_proto_msgTypes[405]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38165,7 +38293,7 @@ func (x *BackupVolumeManifestAckCredit) String() string {
 func (*BackupVolumeManifestAckCredit) ProtoMessage() {}
 
 func (x *BackupVolumeManifestAckCredit) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[403]
+	mi := &file_proto_agent_proto_msgTypes[405]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38178,7 +38306,7 @@ func (x *BackupVolumeManifestAckCredit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeManifestAckCredit.ProtoReflect.Descriptor instead.
 func (*BackupVolumeManifestAckCredit) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{403}
+	return file_proto_agent_proto_rawDescGZIP(), []int{405}
 }
 
 func (x *BackupVolumeManifestAckCredit) GetAttempt() *WorkAttemptIdentity {
@@ -38269,7 +38397,7 @@ type BackupArtifactPrepared struct {
 
 func (x *BackupArtifactPrepared) Reset() {
 	*x = BackupArtifactPrepared{}
-	mi := &file_proto_agent_proto_msgTypes[404]
+	mi := &file_proto_agent_proto_msgTypes[406]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38281,7 +38409,7 @@ func (x *BackupArtifactPrepared) String() string {
 func (*BackupArtifactPrepared) ProtoMessage() {}
 
 func (x *BackupArtifactPrepared) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[404]
+	mi := &file_proto_agent_proto_msgTypes[406]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38294,7 +38422,7 @@ func (x *BackupArtifactPrepared) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupArtifactPrepared.ProtoReflect.Descriptor instead.
 func (*BackupArtifactPrepared) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{404}
+	return file_proto_agent_proto_rawDescGZIP(), []int{406}
 }
 
 func (x *BackupArtifactPrepared) GetPointId() string {
@@ -38407,7 +38535,7 @@ type BackupUploadCompleted struct {
 
 func (x *BackupUploadCompleted) Reset() {
 	*x = BackupUploadCompleted{}
-	mi := &file_proto_agent_proto_msgTypes[405]
+	mi := &file_proto_agent_proto_msgTypes[407]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38419,7 +38547,7 @@ func (x *BackupUploadCompleted) String() string {
 func (*BackupUploadCompleted) ProtoMessage() {}
 
 func (x *BackupUploadCompleted) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[405]
+	mi := &file_proto_agent_proto_msgTypes[407]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38432,7 +38560,7 @@ func (x *BackupUploadCompleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupUploadCompleted.ProtoReflect.Descriptor instead.
 func (*BackupUploadCompleted) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{405}
+	return file_proto_agent_proto_rawDescGZIP(), []int{407}
 }
 
 func (x *BackupUploadCompleted) GetPointId() string {
@@ -38519,7 +38647,7 @@ type BackupPutOutcomeUnknown struct {
 
 func (x *BackupPutOutcomeUnknown) Reset() {
 	*x = BackupPutOutcomeUnknown{}
-	mi := &file_proto_agent_proto_msgTypes[406]
+	mi := &file_proto_agent_proto_msgTypes[408]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38531,7 +38659,7 @@ func (x *BackupPutOutcomeUnknown) String() string {
 func (*BackupPutOutcomeUnknown) ProtoMessage() {}
 
 func (x *BackupPutOutcomeUnknown) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[406]
+	mi := &file_proto_agent_proto_msgTypes[408]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38544,7 +38672,7 @@ func (x *BackupPutOutcomeUnknown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPutOutcomeUnknown.ProtoReflect.Descriptor instead.
 func (*BackupPutOutcomeUnknown) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{406}
+	return file_proto_agent_proto_rawDescGZIP(), []int{408}
 }
 
 type BackupUploadVerified struct {
@@ -38560,7 +38688,7 @@ type BackupUploadVerified struct {
 
 func (x *BackupUploadVerified) Reset() {
 	*x = BackupUploadVerified{}
-	mi := &file_proto_agent_proto_msgTypes[407]
+	mi := &file_proto_agent_proto_msgTypes[409]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38572,7 +38700,7 @@ func (x *BackupUploadVerified) String() string {
 func (*BackupUploadVerified) ProtoMessage() {}
 
 func (x *BackupUploadVerified) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[407]
+	mi := &file_proto_agent_proto_msgTypes[409]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38585,7 +38713,7 @@ func (x *BackupUploadVerified) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupUploadVerified.ProtoReflect.Descriptor instead.
 func (*BackupUploadVerified) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{407}
+	return file_proto_agent_proto_rawDescGZIP(), []int{409}
 }
 
 func (x *BackupUploadVerified) GetPointId() string {
@@ -38633,7 +38761,7 @@ type BackupSourceCleanupCompleted struct {
 
 func (x *BackupSourceCleanupCompleted) Reset() {
 	*x = BackupSourceCleanupCompleted{}
-	mi := &file_proto_agent_proto_msgTypes[408]
+	mi := &file_proto_agent_proto_msgTypes[410]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38645,7 +38773,7 @@ func (x *BackupSourceCleanupCompleted) String() string {
 func (*BackupSourceCleanupCompleted) ProtoMessage() {}
 
 func (x *BackupSourceCleanupCompleted) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[408]
+	mi := &file_proto_agent_proto_msgTypes[410]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38658,7 +38786,7 @@ func (x *BackupSourceCleanupCompleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupSourceCleanupCompleted.ProtoReflect.Descriptor instead.
 func (*BackupSourceCleanupCompleted) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{408}
+	return file_proto_agent_proto_rawDescGZIP(), []int{410}
 }
 
 func (x *BackupSourceCleanupCompleted) GetPointId() string {
@@ -38694,7 +38822,7 @@ type BackupRestoreArtifactValidated struct {
 
 func (x *BackupRestoreArtifactValidated) Reset() {
 	*x = BackupRestoreArtifactValidated{}
-	mi := &file_proto_agent_proto_msgTypes[409]
+	mi := &file_proto_agent_proto_msgTypes[411]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38706,7 +38834,7 @@ func (x *BackupRestoreArtifactValidated) String() string {
 func (*BackupRestoreArtifactValidated) ProtoMessage() {}
 
 func (x *BackupRestoreArtifactValidated) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[409]
+	mi := &file_proto_agent_proto_msgTypes[411]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38719,7 +38847,7 @@ func (x *BackupRestoreArtifactValidated) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupRestoreArtifactValidated.ProtoReflect.Descriptor instead.
 func (*BackupRestoreArtifactValidated) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{409}
+	return file_proto_agent_proto_rawDescGZIP(), []int{411}
 }
 
 func (x *BackupRestoreArtifactValidated) GetPointId() string {
@@ -38835,7 +38963,7 @@ type BackupConfigCheckpoint struct {
 
 func (x *BackupConfigCheckpoint) Reset() {
 	*x = BackupConfigCheckpoint{}
-	mi := &file_proto_agent_proto_msgTypes[410]
+	mi := &file_proto_agent_proto_msgTypes[412]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38847,7 +38975,7 @@ func (x *BackupConfigCheckpoint) String() string {
 func (*BackupConfigCheckpoint) ProtoMessage() {}
 
 func (x *BackupConfigCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[410]
+	mi := &file_proto_agent_proto_msgTypes[412]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38860,7 +38988,7 @@ func (x *BackupConfigCheckpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigCheckpoint.ProtoReflect.Descriptor instead.
 func (*BackupConfigCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{410}
+	return file_proto_agent_proto_rawDescGZIP(), []int{412}
 }
 
 func (x *BackupConfigCheckpoint) GetCheckpoint() isBackupConfigCheckpoint_Checkpoint {
@@ -38937,7 +39065,7 @@ type BackupConfigProgress struct {
 
 func (x *BackupConfigProgress) Reset() {
 	*x = BackupConfigProgress{}
-	mi := &file_proto_agent_proto_msgTypes[411]
+	mi := &file_proto_agent_proto_msgTypes[413]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -38949,7 +39077,7 @@ func (x *BackupConfigProgress) String() string {
 func (*BackupConfigProgress) ProtoMessage() {}
 
 func (x *BackupConfigProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[411]
+	mi := &file_proto_agent_proto_msgTypes[413]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -38962,7 +39090,7 @@ func (x *BackupConfigProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigProgress.ProtoReflect.Descriptor instead.
 func (*BackupConfigProgress) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{411}
+	return file_proto_agent_proto_rawDescGZIP(), []int{413}
 }
 
 func (x *BackupConfigProgress) GetMetadataAccepted() bool {
@@ -39051,7 +39179,7 @@ type BackupConfigValueProgress struct {
 
 func (x *BackupConfigValueProgress) Reset() {
 	*x = BackupConfigValueProgress{}
-	mi := &file_proto_agent_proto_msgTypes[412]
+	mi := &file_proto_agent_proto_msgTypes[414]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -39063,7 +39191,7 @@ func (x *BackupConfigValueProgress) String() string {
 func (*BackupConfigValueProgress) ProtoMessage() {}
 
 func (x *BackupConfigValueProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[412]
+	mi := &file_proto_agent_proto_msgTypes[414]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -39076,7 +39204,7 @@ func (x *BackupConfigValueProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigValueProgress.ProtoReflect.Descriptor instead.
 func (*BackupConfigValueProgress) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{412}
+	return file_proto_agent_proto_rawDescGZIP(), []int{414}
 }
 
 func (x *BackupConfigValueProgress) GetNextOrdinal() uint32 {
@@ -39107,7 +39235,7 @@ type BackupConfigTransferCompleted struct {
 
 func (x *BackupConfigTransferCompleted) Reset() {
 	*x = BackupConfigTransferCompleted{}
-	mi := &file_proto_agent_proto_msgTypes[413]
+	mi := &file_proto_agent_proto_msgTypes[415]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -39119,7 +39247,7 @@ func (x *BackupConfigTransferCompleted) String() string {
 func (*BackupConfigTransferCompleted) ProtoMessage() {}
 
 func (x *BackupConfigTransferCompleted) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[413]
+	mi := &file_proto_agent_proto_msgTypes[415]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -39132,7 +39260,7 @@ func (x *BackupConfigTransferCompleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigTransferCompleted.ProtoReflect.Descriptor instead.
 func (*BackupConfigTransferCompleted) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{413}
+	return file_proto_agent_proto_rawDescGZIP(), []int{415}
 }
 
 func (x *BackupConfigTransferCompleted) GetRestoreGenerationId() string {
@@ -39188,7 +39316,7 @@ type BackupConfigMaterializationVerified struct {
 
 func (x *BackupConfigMaterializationVerified) Reset() {
 	*x = BackupConfigMaterializationVerified{}
-	mi := &file_proto_agent_proto_msgTypes[414]
+	mi := &file_proto_agent_proto_msgTypes[416]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -39200,7 +39328,7 @@ func (x *BackupConfigMaterializationVerified) String() string {
 func (*BackupConfigMaterializationVerified) ProtoMessage() {}
 
 func (x *BackupConfigMaterializationVerified) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[414]
+	mi := &file_proto_agent_proto_msgTypes[416]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -39213,7 +39341,7 @@ func (x *BackupConfigMaterializationVerified) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use BackupConfigMaterializationVerified.ProtoReflect.Descriptor instead.
 func (*BackupConfigMaterializationVerified) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{414}
+	return file_proto_agent_proto_rawDescGZIP(), []int{416}
 }
 
 func (x *BackupConfigMaterializationVerified) GetRestoreGenerationId() string {
@@ -39258,7 +39386,7 @@ type BackupVolumeCheckpoint struct {
 
 func (x *BackupVolumeCheckpoint) Reset() {
 	*x = BackupVolumeCheckpoint{}
-	mi := &file_proto_agent_proto_msgTypes[415]
+	mi := &file_proto_agent_proto_msgTypes[417]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -39270,7 +39398,7 @@ func (x *BackupVolumeCheckpoint) String() string {
 func (*BackupVolumeCheckpoint) ProtoMessage() {}
 
 func (x *BackupVolumeCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[415]
+	mi := &file_proto_agent_proto_msgTypes[417]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -39283,7 +39411,7 @@ func (x *BackupVolumeCheckpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeCheckpoint.ProtoReflect.Descriptor instead.
 func (*BackupVolumeCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{415}
+	return file_proto_agent_proto_rawDescGZIP(), []int{417}
 }
 
 func (x *BackupVolumeCheckpoint) GetCheckpoint() isBackupVolumeCheckpoint_Checkpoint {
@@ -39468,7 +39596,7 @@ type BackupVolumeProgress struct {
 
 func (x *BackupVolumeProgress) Reset() {
 	*x = BackupVolumeProgress{}
-	mi := &file_proto_agent_proto_msgTypes[416]
+	mi := &file_proto_agent_proto_msgTypes[418]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -39480,7 +39608,7 @@ func (x *BackupVolumeProgress) String() string {
 func (*BackupVolumeProgress) ProtoMessage() {}
 
 func (x *BackupVolumeProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[416]
+	mi := &file_proto_agent_proto_msgTypes[418]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -39493,7 +39621,7 @@ func (x *BackupVolumeProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeProgress.ProtoReflect.Descriptor instead.
 func (*BackupVolumeProgress) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{416}
+	return file_proto_agent_proto_rawDescGZIP(), []int{418}
 }
 
 func (x *BackupVolumeProgress) GetConstructionCursor() uint64 {
@@ -39598,7 +39726,7 @@ type BackupStagingFinals struct {
 
 func (x *BackupStagingFinals) Reset() {
 	*x = BackupStagingFinals{}
-	mi := &file_proto_agent_proto_msgTypes[417]
+	mi := &file_proto_agent_proto_msgTypes[419]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -39610,7 +39738,7 @@ func (x *BackupStagingFinals) String() string {
 func (*BackupStagingFinals) ProtoMessage() {}
 
 func (x *BackupStagingFinals) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[417]
+	mi := &file_proto_agent_proto_msgTypes[419]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -39623,7 +39751,7 @@ func (x *BackupStagingFinals) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupStagingFinals.ProtoReflect.Descriptor instead.
 func (*BackupStagingFinals) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{417}
+	return file_proto_agent_proto_rawDescGZIP(), []int{419}
 }
 
 func (x *BackupStagingFinals) GetSourceRelativeName() string {
@@ -39679,7 +39807,7 @@ type BackupConfigEntry struct {
 
 func (x *BackupConfigEntry) Reset() {
 	*x = BackupConfigEntry{}
-	mi := &file_proto_agent_proto_msgTypes[418]
+	mi := &file_proto_agent_proto_msgTypes[420]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -39691,7 +39819,7 @@ func (x *BackupConfigEntry) String() string {
 func (*BackupConfigEntry) ProtoMessage() {}
 
 func (x *BackupConfigEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[418]
+	mi := &file_proto_agent_proto_msgTypes[420]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -39704,7 +39832,7 @@ func (x *BackupConfigEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigEntry.ProtoReflect.Descriptor instead.
 func (*BackupConfigEntry) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{418}
+	return file_proto_agent_proto_rawDescGZIP(), []int{420}
 }
 
 func (x *BackupConfigEntry) GetOrdinal() uint32 {
@@ -39918,7 +40046,7 @@ type BackupConfigEnvironment struct {
 
 func (x *BackupConfigEnvironment) Reset() {
 	*x = BackupConfigEnvironment{}
-	mi := &file_proto_agent_proto_msgTypes[419]
+	mi := &file_proto_agent_proto_msgTypes[421]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -39930,7 +40058,7 @@ func (x *BackupConfigEnvironment) String() string {
 func (*BackupConfigEnvironment) ProtoMessage() {}
 
 func (x *BackupConfigEnvironment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[419]
+	mi := &file_proto_agent_proto_msgTypes[421]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -39943,7 +40071,7 @@ func (x *BackupConfigEnvironment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigEnvironment.ProtoReflect.Descriptor instead.
 func (*BackupConfigEnvironment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{419}
+	return file_proto_agent_proto_rawDescGZIP(), []int{421}
 }
 
 func (x *BackupConfigEnvironment) GetName() string {
@@ -39965,7 +40093,7 @@ type BackupConfigFile struct {
 
 func (x *BackupConfigFile) Reset() {
 	*x = BackupConfigFile{}
-	mi := &file_proto_agent_proto_msgTypes[420]
+	mi := &file_proto_agent_proto_msgTypes[422]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -39977,7 +40105,7 @@ func (x *BackupConfigFile) String() string {
 func (*BackupConfigFile) ProtoMessage() {}
 
 func (x *BackupConfigFile) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[420]
+	mi := &file_proto_agent_proto_msgTypes[422]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -39990,7 +40118,7 @@ func (x *BackupConfigFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigFile.ProtoReflect.Descriptor instead.
 func (*BackupConfigFile) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{420}
+	return file_proto_agent_proto_rawDescGZIP(), []int{422}
 }
 
 func (x *BackupConfigFile) GetPath() string {
@@ -40029,7 +40157,7 @@ type BackupConfigExposureAll struct {
 
 func (x *BackupConfigExposureAll) Reset() {
 	*x = BackupConfigExposureAll{}
-	mi := &file_proto_agent_proto_msgTypes[421]
+	mi := &file_proto_agent_proto_msgTypes[423]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40041,7 +40169,7 @@ func (x *BackupConfigExposureAll) String() string {
 func (*BackupConfigExposureAll) ProtoMessage() {}
 
 func (x *BackupConfigExposureAll) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[421]
+	mi := &file_proto_agent_proto_msgTypes[423]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40054,7 +40182,7 @@ func (x *BackupConfigExposureAll) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigExposureAll.ProtoReflect.Descriptor instead.
 func (*BackupConfigExposureAll) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{421}
+	return file_proto_agent_proto_rawDescGZIP(), []int{423}
 }
 
 type BackupConfigExposureEdgeTunnel struct {
@@ -40065,7 +40193,7 @@ type BackupConfigExposureEdgeTunnel struct {
 
 func (x *BackupConfigExposureEdgeTunnel) Reset() {
 	*x = BackupConfigExposureEdgeTunnel{}
-	mi := &file_proto_agent_proto_msgTypes[422]
+	mi := &file_proto_agent_proto_msgTypes[424]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40077,7 +40205,7 @@ func (x *BackupConfigExposureEdgeTunnel) String() string {
 func (*BackupConfigExposureEdgeTunnel) ProtoMessage() {}
 
 func (x *BackupConfigExposureEdgeTunnel) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[422]
+	mi := &file_proto_agent_proto_msgTypes[424]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40090,7 +40218,7 @@ func (x *BackupConfigExposureEdgeTunnel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigExposureEdgeTunnel.ProtoReflect.Descriptor instead.
 func (*BackupConfigExposureEdgeTunnel) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{422}
+	return file_proto_agent_proto_rawDescGZIP(), []int{424}
 }
 
 type BackupConfigExposureServices struct {
@@ -40102,7 +40230,7 @@ type BackupConfigExposureServices struct {
 
 func (x *BackupConfigExposureServices) Reset() {
 	*x = BackupConfigExposureServices{}
-	mi := &file_proto_agent_proto_msgTypes[423]
+	mi := &file_proto_agent_proto_msgTypes[425]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40114,7 +40242,7 @@ func (x *BackupConfigExposureServices) String() string {
 func (*BackupConfigExposureServices) ProtoMessage() {}
 
 func (x *BackupConfigExposureServices) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[423]
+	mi := &file_proto_agent_proto_msgTypes[425]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40127,7 +40255,7 @@ func (x *BackupConfigExposureServices) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigExposureServices.ProtoReflect.Descriptor instead.
 func (*BackupConfigExposureServices) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{423}
+	return file_proto_agent_proto_rawDescGZIP(), []int{425}
 }
 
 func (x *BackupConfigExposureServices) GetServiceIds() []string {
@@ -40145,7 +40273,7 @@ type BackupConfigLiteral struct {
 
 func (x *BackupConfigLiteral) Reset() {
 	*x = BackupConfigLiteral{}
-	mi := &file_proto_agent_proto_msgTypes[424]
+	mi := &file_proto_agent_proto_msgTypes[426]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40157,7 +40285,7 @@ func (x *BackupConfigLiteral) String() string {
 func (*BackupConfigLiteral) ProtoMessage() {}
 
 func (x *BackupConfigLiteral) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[424]
+	mi := &file_proto_agent_proto_msgTypes[426]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40170,7 +40298,7 @@ func (x *BackupConfigLiteral) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigLiteral.ProtoReflect.Descriptor instead.
 func (*BackupConfigLiteral) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{424}
+	return file_proto_agent_proto_rawDescGZIP(), []int{426}
 }
 
 type BackupConfigSecretRef struct {
@@ -40184,7 +40312,7 @@ type BackupConfigSecretRef struct {
 
 func (x *BackupConfigSecretRef) Reset() {
 	*x = BackupConfigSecretRef{}
-	mi := &file_proto_agent_proto_msgTypes[425]
+	mi := &file_proto_agent_proto_msgTypes[427]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40196,7 +40324,7 @@ func (x *BackupConfigSecretRef) String() string {
 func (*BackupConfigSecretRef) ProtoMessage() {}
 
 func (x *BackupConfigSecretRef) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[425]
+	mi := &file_proto_agent_proto_msgTypes[427]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40209,7 +40337,7 @@ func (x *BackupConfigSecretRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigSecretRef.ProtoReflect.Descriptor instead.
 func (*BackupConfigSecretRef) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{425}
+	return file_proto_agent_proto_rawDescGZIP(), []int{427}
 }
 
 func (x *BackupConfigSecretRef) GetSecretId() string {
@@ -40246,7 +40374,7 @@ type BackupConfigFactRef struct {
 
 func (x *BackupConfigFactRef) Reset() {
 	*x = BackupConfigFactRef{}
-	mi := &file_proto_agent_proto_msgTypes[426]
+	mi := &file_proto_agent_proto_msgTypes[428]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40258,7 +40386,7 @@ func (x *BackupConfigFactRef) String() string {
 func (*BackupConfigFactRef) ProtoMessage() {}
 
 func (x *BackupConfigFactRef) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[426]
+	mi := &file_proto_agent_proto_msgTypes[428]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40271,7 +40399,7 @@ func (x *BackupConfigFactRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigFactRef.ProtoReflect.Descriptor instead.
 func (*BackupConfigFactRef) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{426}
+	return file_proto_agent_proto_rawDescGZIP(), []int{428}
 }
 
 func (x *BackupConfigFactRef) GetAttachId() string {
@@ -40324,7 +40452,7 @@ type BackupConfigRestoreEntry struct {
 
 func (x *BackupConfigRestoreEntry) Reset() {
 	*x = BackupConfigRestoreEntry{}
-	mi := &file_proto_agent_proto_msgTypes[427]
+	mi := &file_proto_agent_proto_msgTypes[429]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40336,7 +40464,7 @@ func (x *BackupConfigRestoreEntry) String() string {
 func (*BackupConfigRestoreEntry) ProtoMessage() {}
 
 func (x *BackupConfigRestoreEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[427]
+	mi := &file_proto_agent_proto_msgTypes[429]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40349,7 +40477,7 @@ func (x *BackupConfigRestoreEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigRestoreEntry.ProtoReflect.Descriptor instead.
 func (*BackupConfigRestoreEntry) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{427}
+	return file_proto_agent_proto_rawDescGZIP(), []int{429}
 }
 
 func (x *BackupConfigRestoreEntry) GetEntryId() string {
@@ -40414,7 +40542,7 @@ type BackupConfigEntryMetadata struct {
 
 func (x *BackupConfigEntryMetadata) Reset() {
 	*x = BackupConfigEntryMetadata{}
-	mi := &file_proto_agent_proto_msgTypes[428]
+	mi := &file_proto_agent_proto_msgTypes[430]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40426,7 +40554,7 @@ func (x *BackupConfigEntryMetadata) String() string {
 func (*BackupConfigEntryMetadata) ProtoMessage() {}
 
 func (x *BackupConfigEntryMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[428]
+	mi := &file_proto_agent_proto_msgTypes[430]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40439,7 +40567,7 @@ func (x *BackupConfigEntryMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigEntryMetadata.ProtoReflect.Descriptor instead.
 func (*BackupConfigEntryMetadata) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{428}
+	return file_proto_agent_proto_rawDescGZIP(), []int{430}
 }
 
 func (x *BackupConfigEntryMetadata) GetMetadata() isBackupConfigEntryMetadata_Metadata {
@@ -40497,7 +40625,7 @@ type BackupConfigEntryExposure struct {
 
 func (x *BackupConfigEntryExposure) Reset() {
 	*x = BackupConfigEntryExposure{}
-	mi := &file_proto_agent_proto_msgTypes[429]
+	mi := &file_proto_agent_proto_msgTypes[431]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40509,7 +40637,7 @@ func (x *BackupConfigEntryExposure) String() string {
 func (*BackupConfigEntryExposure) ProtoMessage() {}
 
 func (x *BackupConfigEntryExposure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[429]
+	mi := &file_proto_agent_proto_msgTypes[431]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40522,7 +40650,7 @@ func (x *BackupConfigEntryExposure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigEntryExposure.ProtoReflect.Descriptor instead.
 func (*BackupConfigEntryExposure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{429}
+	return file_proto_agent_proto_rawDescGZIP(), []int{431}
 }
 
 func (x *BackupConfigEntryExposure) GetExposure() isBackupConfigEntryExposure_Exposure {
@@ -40595,7 +40723,7 @@ type BackupConfigArtifactDesiredSource struct {
 
 func (x *BackupConfigArtifactDesiredSource) Reset() {
 	*x = BackupConfigArtifactDesiredSource{}
-	mi := &file_proto_agent_proto_msgTypes[430]
+	mi := &file_proto_agent_proto_msgTypes[432]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40607,7 +40735,7 @@ func (x *BackupConfigArtifactDesiredSource) String() string {
 func (*BackupConfigArtifactDesiredSource) ProtoMessage() {}
 
 func (x *BackupConfigArtifactDesiredSource) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[430]
+	mi := &file_proto_agent_proto_msgTypes[432]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40620,7 +40748,7 @@ func (x *BackupConfigArtifactDesiredSource) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use BackupConfigArtifactDesiredSource.ProtoReflect.Descriptor instead.
 func (*BackupConfigArtifactDesiredSource) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{430}
+	return file_proto_agent_proto_rawDescGZIP(), []int{432}
 }
 
 func (x *BackupConfigArtifactDesiredSource) GetSource() isBackupConfigArtifactDesiredSource_Source {
@@ -40687,7 +40815,7 @@ type BackupConfigLiteralSource struct {
 
 func (x *BackupConfigLiteralSource) Reset() {
 	*x = BackupConfigLiteralSource{}
-	mi := &file_proto_agent_proto_msgTypes[431]
+	mi := &file_proto_agent_proto_msgTypes[433]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40699,7 +40827,7 @@ func (x *BackupConfigLiteralSource) String() string {
 func (*BackupConfigLiteralSource) ProtoMessage() {}
 
 func (x *BackupConfigLiteralSource) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[431]
+	mi := &file_proto_agent_proto_msgTypes[433]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40712,7 +40840,7 @@ func (x *BackupConfigLiteralSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigLiteralSource.ProtoReflect.Descriptor instead.
 func (*BackupConfigLiteralSource) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{431}
+	return file_proto_agent_proto_rawDescGZIP(), []int{433}
 }
 
 type BackupConfigArtifactSecretRefSource struct {
@@ -40724,7 +40852,7 @@ type BackupConfigArtifactSecretRefSource struct {
 
 func (x *BackupConfigArtifactSecretRefSource) Reset() {
 	*x = BackupConfigArtifactSecretRefSource{}
-	mi := &file_proto_agent_proto_msgTypes[432]
+	mi := &file_proto_agent_proto_msgTypes[434]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40736,7 +40864,7 @@ func (x *BackupConfigArtifactSecretRefSource) String() string {
 func (*BackupConfigArtifactSecretRefSource) ProtoMessage() {}
 
 func (x *BackupConfigArtifactSecretRefSource) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[432]
+	mi := &file_proto_agent_proto_msgTypes[434]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40749,7 +40877,7 @@ func (x *BackupConfigArtifactSecretRefSource) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use BackupConfigArtifactSecretRefSource.ProtoReflect.Descriptor instead.
 func (*BackupConfigArtifactSecretRefSource) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{432}
+	return file_proto_agent_proto_rawDescGZIP(), []int{434}
 }
 
 func (x *BackupConfigArtifactSecretRefSource) GetAuthoredKey() string {
@@ -40770,7 +40898,7 @@ type BackupConfigArtifactFactSource struct {
 
 func (x *BackupConfigArtifactFactSource) Reset() {
 	*x = BackupConfigArtifactFactSource{}
-	mi := &file_proto_agent_proto_msgTypes[433]
+	mi := &file_proto_agent_proto_msgTypes[435]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40782,7 +40910,7 @@ func (x *BackupConfigArtifactFactSource) String() string {
 func (*BackupConfigArtifactFactSource) ProtoMessage() {}
 
 func (x *BackupConfigArtifactFactSource) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[433]
+	mi := &file_proto_agent_proto_msgTypes[435]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40795,7 +40923,7 @@ func (x *BackupConfigArtifactFactSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigArtifactFactSource.ProtoReflect.Descriptor instead.
 func (*BackupConfigArtifactFactSource) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{433}
+	return file_proto_agent_proto_rawDescGZIP(), []int{435}
 }
 
 func (x *BackupConfigArtifactFactSource) GetAttachId() string {
@@ -40829,7 +40957,7 @@ type BackupConfigSelectedValue struct {
 
 func (x *BackupConfigSelectedValue) Reset() {
 	*x = BackupConfigSelectedValue{}
-	mi := &file_proto_agent_proto_msgTypes[434]
+	mi := &file_proto_agent_proto_msgTypes[436]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40841,7 +40969,7 @@ func (x *BackupConfigSelectedValue) String() string {
 func (*BackupConfigSelectedValue) ProtoMessage() {}
 
 func (x *BackupConfigSelectedValue) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[434]
+	mi := &file_proto_agent_proto_msgTypes[436]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40854,7 +40982,7 @@ func (x *BackupConfigSelectedValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigSelectedValue.ProtoReflect.Descriptor instead.
 func (*BackupConfigSelectedValue) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{434}
+	return file_proto_agent_proto_rawDescGZIP(), []int{436}
 }
 
 func (x *BackupConfigSelectedValue) GetSizeBytes() uint64 {
@@ -40885,7 +41013,7 @@ type BackupConfigContentAuthority struct {
 
 func (x *BackupConfigContentAuthority) Reset() {
 	*x = BackupConfigContentAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[435]
+	mi := &file_proto_agent_proto_msgTypes[437]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40897,7 +41025,7 @@ func (x *BackupConfigContentAuthority) String() string {
 func (*BackupConfigContentAuthority) ProtoMessage() {}
 
 func (x *BackupConfigContentAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[435]
+	mi := &file_proto_agent_proto_msgTypes[437]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40910,7 +41038,7 @@ func (x *BackupConfigContentAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigContentAuthority.ProtoReflect.Descriptor instead.
 func (*BackupConfigContentAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{435}
+	return file_proto_agent_proto_rawDescGZIP(), []int{437}
 }
 
 func (x *BackupConfigContentAuthority) GetManifestSha256() []byte {
@@ -40965,7 +41093,7 @@ type BackupConfigArchiveEvidence struct {
 
 func (x *BackupConfigArchiveEvidence) Reset() {
 	*x = BackupConfigArchiveEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[436]
+	mi := &file_proto_agent_proto_msgTypes[438]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -40977,7 +41105,7 @@ func (x *BackupConfigArchiveEvidence) String() string {
 func (*BackupConfigArchiveEvidence) ProtoMessage() {}
 
 func (x *BackupConfigArchiveEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[436]
+	mi := &file_proto_agent_proto_msgTypes[438]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -40990,7 +41118,7 @@ func (x *BackupConfigArchiveEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigArchiveEvidence.ProtoReflect.Descriptor instead.
 func (*BackupConfigArchiveEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{436}
+	return file_proto_agent_proto_rawDescGZIP(), []int{438}
 }
 
 func (x *BackupConfigArchiveEvidence) GetContent() *BackupConfigContentAuthority {
@@ -41020,7 +41148,7 @@ type BackupConfigCaptureAuthority struct {
 
 func (x *BackupConfigCaptureAuthority) Reset() {
 	*x = BackupConfigCaptureAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[437]
+	mi := &file_proto_agent_proto_msgTypes[439]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41032,7 +41160,7 @@ func (x *BackupConfigCaptureAuthority) String() string {
 func (*BackupConfigCaptureAuthority) ProtoMessage() {}
 
 func (x *BackupConfigCaptureAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[437]
+	mi := &file_proto_agent_proto_msgTypes[439]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41045,7 +41173,7 @@ func (x *BackupConfigCaptureAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigCaptureAuthority.ProtoReflect.Descriptor instead.
 func (*BackupConfigCaptureAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{437}
+	return file_proto_agent_proto_rawDescGZIP(), []int{439}
 }
 
 func (x *BackupConfigCaptureAuthority) GetEnvironmentId() string {
@@ -41098,7 +41226,7 @@ type BackupConfigRestoreAuthority struct {
 
 func (x *BackupConfigRestoreAuthority) Reset() {
 	*x = BackupConfigRestoreAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[438]
+	mi := &file_proto_agent_proto_msgTypes[440]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41110,7 +41238,7 @@ func (x *BackupConfigRestoreAuthority) String() string {
 func (*BackupConfigRestoreAuthority) ProtoMessage() {}
 
 func (x *BackupConfigRestoreAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[438]
+	mi := &file_proto_agent_proto_msgTypes[440]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41123,7 +41251,7 @@ func (x *BackupConfigRestoreAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigRestoreAuthority.ProtoReflect.Descriptor instead.
 func (*BackupConfigRestoreAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{438}
+	return file_proto_agent_proto_rawDescGZIP(), []int{440}
 }
 
 func (x *BackupConfigRestoreAuthority) GetDestinationEnvironmentId() string {
@@ -41189,7 +41317,7 @@ type BackupConfigFileContext struct {
 
 func (x *BackupConfigFileContext) Reset() {
 	*x = BackupConfigFileContext{}
-	mi := &file_proto_agent_proto_msgTypes[439]
+	mi := &file_proto_agent_proto_msgTypes[441]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41201,7 +41329,7 @@ func (x *BackupConfigFileContext) String() string {
 func (*BackupConfigFileContext) ProtoMessage() {}
 
 func (x *BackupConfigFileContext) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[439]
+	mi := &file_proto_agent_proto_msgTypes[441]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41214,7 +41342,7 @@ func (x *BackupConfigFileContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigFileContext.ProtoReflect.Descriptor instead.
 func (*BackupConfigFileContext) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{439}
+	return file_proto_agent_proto_rawDescGZIP(), []int{441}
 }
 
 func (x *BackupConfigFileContext) GetVolumeRoot() string {
@@ -41256,7 +41384,7 @@ type BackupConfigFileService struct {
 
 func (x *BackupConfigFileService) Reset() {
 	*x = BackupConfigFileService{}
-	mi := &file_proto_agent_proto_msgTypes[440]
+	mi := &file_proto_agent_proto_msgTypes[442]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41268,7 +41396,7 @@ func (x *BackupConfigFileService) String() string {
 func (*BackupConfigFileService) ProtoMessage() {}
 
 func (x *BackupConfigFileService) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[440]
+	mi := &file_proto_agent_proto_msgTypes[442]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41281,7 +41409,7 @@ func (x *BackupConfigFileService) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigFileService.ProtoReflect.Descriptor instead.
 func (*BackupConfigFileService) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{440}
+	return file_proto_agent_proto_rawDescGZIP(), []int{442}
 }
 
 func (x *BackupConfigFileService) GetServiceId() string {
@@ -41318,7 +41446,7 @@ type BackupConfigPriorFile struct {
 
 func (x *BackupConfigPriorFile) Reset() {
 	*x = BackupConfigPriorFile{}
-	mi := &file_proto_agent_proto_msgTypes[441]
+	mi := &file_proto_agent_proto_msgTypes[443]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41330,7 +41458,7 @@ func (x *BackupConfigPriorFile) String() string {
 func (*BackupConfigPriorFile) ProtoMessage() {}
 
 func (x *BackupConfigPriorFile) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[441]
+	mi := &file_proto_agent_proto_msgTypes[443]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41343,7 +41471,7 @@ func (x *BackupConfigPriorFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigPriorFile.ProtoReflect.Descriptor instead.
 func (*BackupConfigPriorFile) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{441}
+	return file_proto_agent_proto_rawDescGZIP(), []int{443}
 }
 
 func (x *BackupConfigPriorFile) GetEntryId() string {
@@ -41394,7 +41522,7 @@ type BackupConfigMetadataAccepted struct {
 
 func (x *BackupConfigMetadataAccepted) Reset() {
 	*x = BackupConfigMetadataAccepted{}
-	mi := &file_proto_agent_proto_msgTypes[442]
+	mi := &file_proto_agent_proto_msgTypes[444]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41406,7 +41534,7 @@ func (x *BackupConfigMetadataAccepted) String() string {
 func (*BackupConfigMetadataAccepted) ProtoMessage() {}
 
 func (x *BackupConfigMetadataAccepted) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[442]
+	mi := &file_proto_agent_proto_msgTypes[444]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41419,7 +41547,7 @@ func (x *BackupConfigMetadataAccepted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigMetadataAccepted.ProtoReflect.Descriptor instead.
 func (*BackupConfigMetadataAccepted) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{442}
+	return file_proto_agent_proto_rawDescGZIP(), []int{444}
 }
 
 func (x *BackupConfigMetadataAccepted) GetMetadataTranscriptSha256() []byte {
@@ -41453,7 +41581,7 @@ type BackupConfigValueCredit struct {
 
 func (x *BackupConfigValueCredit) Reset() {
 	*x = BackupConfigValueCredit{}
-	mi := &file_proto_agent_proto_msgTypes[443]
+	mi := &file_proto_agent_proto_msgTypes[445]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41465,7 +41593,7 @@ func (x *BackupConfigValueCredit) String() string {
 func (*BackupConfigValueCredit) ProtoMessage() {}
 
 func (x *BackupConfigValueCredit) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[443]
+	mi := &file_proto_agent_proto_msgTypes[445]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41478,7 +41606,7 @@ func (x *BackupConfigValueCredit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigValueCredit.ProtoReflect.Descriptor instead.
 func (*BackupConfigValueCredit) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{443}
+	return file_proto_agent_proto_rawDescGZIP(), []int{445}
 }
 
 func (x *BackupConfigValueCredit) GetValueCreditBytes() uint64 {
@@ -41505,7 +41633,7 @@ type BackupConfigMetadataCredit struct {
 
 func (x *BackupConfigMetadataCredit) Reset() {
 	*x = BackupConfigMetadataCredit{}
-	mi := &file_proto_agent_proto_msgTypes[444]
+	mi := &file_proto_agent_proto_msgTypes[446]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41517,7 +41645,7 @@ func (x *BackupConfigMetadataCredit) String() string {
 func (*BackupConfigMetadataCredit) ProtoMessage() {}
 
 func (x *BackupConfigMetadataCredit) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[444]
+	mi := &file_proto_agent_proto_msgTypes[446]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41530,7 +41658,7 @@ func (x *BackupConfigMetadataCredit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConfigMetadataCredit.ProtoReflect.Descriptor instead.
 func (*BackupConfigMetadataCredit) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{444}
+	return file_proto_agent_proto_rawDescGZIP(), []int{446}
 }
 
 func (x *BackupConfigMetadataCredit) GetRecordCredit() uint32 {
@@ -41561,7 +41689,7 @@ type BackupPostgresCaptureAuthority struct {
 
 func (x *BackupPostgresCaptureAuthority) Reset() {
 	*x = BackupPostgresCaptureAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[445]
+	mi := &file_proto_agent_proto_msgTypes[447]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41573,7 +41701,7 @@ func (x *BackupPostgresCaptureAuthority) String() string {
 func (*BackupPostgresCaptureAuthority) ProtoMessage() {}
 
 func (x *BackupPostgresCaptureAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[445]
+	mi := &file_proto_agent_proto_msgTypes[447]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41586,7 +41714,7 @@ func (x *BackupPostgresCaptureAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPostgresCaptureAuthority.ProtoReflect.Descriptor instead.
 func (*BackupPostgresCaptureAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{445}
+	return file_proto_agent_proto_rawDescGZIP(), []int{447}
 }
 
 func (x *BackupPostgresCaptureAuthority) GetAdapterContractVersion() uint32 {
@@ -41646,7 +41774,7 @@ type BackupPostgresRestoreAuthority struct {
 
 func (x *BackupPostgresRestoreAuthority) Reset() {
 	*x = BackupPostgresRestoreAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[446]
+	mi := &file_proto_agent_proto_msgTypes[448]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41658,7 +41786,7 @@ func (x *BackupPostgresRestoreAuthority) String() string {
 func (*BackupPostgresRestoreAuthority) ProtoMessage() {}
 
 func (x *BackupPostgresRestoreAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[446]
+	mi := &file_proto_agent_proto_msgTypes[448]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41671,7 +41799,7 @@ func (x *BackupPostgresRestoreAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPostgresRestoreAuthority.ProtoReflect.Descriptor instead.
 func (*BackupPostgresRestoreAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{446}
+	return file_proto_agent_proto_rawDescGZIP(), []int{448}
 }
 
 func (x *BackupPostgresRestoreAuthority) GetAdapterContractVersion() uint32 {
@@ -41738,7 +41866,7 @@ type BackupPostgresContainerObserved struct {
 
 func (x *BackupPostgresContainerObserved) Reset() {
 	*x = BackupPostgresContainerObserved{}
-	mi := &file_proto_agent_proto_msgTypes[447]
+	mi := &file_proto_agent_proto_msgTypes[449]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41750,7 +41878,7 @@ func (x *BackupPostgresContainerObserved) String() string {
 func (*BackupPostgresContainerObserved) ProtoMessage() {}
 
 func (x *BackupPostgresContainerObserved) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[447]
+	mi := &file_proto_agent_proto_msgTypes[449]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41763,7 +41891,7 @@ func (x *BackupPostgresContainerObserved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPostgresContainerObserved.ProtoReflect.Descriptor instead.
 func (*BackupPostgresContainerObserved) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{447}
+	return file_proto_agent_proto_rawDescGZIP(), []int{449}
 }
 
 func (x *BackupPostgresContainerObserved) GetServiceId() string {
@@ -41834,7 +41962,7 @@ type BackupPostgresDumpStart struct {
 
 func (x *BackupPostgresDumpStart) Reset() {
 	*x = BackupPostgresDumpStart{}
-	mi := &file_proto_agent_proto_msgTypes[448]
+	mi := &file_proto_agent_proto_msgTypes[450]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41846,7 +41974,7 @@ func (x *BackupPostgresDumpStart) String() string {
 func (*BackupPostgresDumpStart) ProtoMessage() {}
 
 func (x *BackupPostgresDumpStart) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[448]
+	mi := &file_proto_agent_proto_msgTypes[450]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41859,7 +41987,7 @@ func (x *BackupPostgresDumpStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPostgresDumpStart.ProtoReflect.Descriptor instead.
 func (*BackupPostgresDumpStart) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{448}
+	return file_proto_agent_proto_rawDescGZIP(), []int{450}
 }
 
 func (x *BackupPostgresDumpStart) GetPointId() string {
@@ -41955,7 +42083,7 @@ type BackupPostgresRestoreApplyStartCheckpoint struct {
 
 func (x *BackupPostgresRestoreApplyStartCheckpoint) Reset() {
 	*x = BackupPostgresRestoreApplyStartCheckpoint{}
-	mi := &file_proto_agent_proto_msgTypes[449]
+	mi := &file_proto_agent_proto_msgTypes[451]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41967,7 +42095,7 @@ func (x *BackupPostgresRestoreApplyStartCheckpoint) String() string {
 func (*BackupPostgresRestoreApplyStartCheckpoint) ProtoMessage() {}
 
 func (x *BackupPostgresRestoreApplyStartCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[449]
+	mi := &file_proto_agent_proto_msgTypes[451]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -41980,7 +42108,7 @@ func (x *BackupPostgresRestoreApplyStartCheckpoint) ProtoReflect() protoreflect.
 
 // Deprecated: Use BackupPostgresRestoreApplyStartCheckpoint.ProtoReflect.Descriptor instead.
 func (*BackupPostgresRestoreApplyStartCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{449}
+	return file_proto_agent_proto_rawDescGZIP(), []int{451}
 }
 
 func (x *BackupPostgresRestoreApplyStartCheckpoint) GetPointId() string {
@@ -42051,7 +42179,7 @@ type BackupPostgresRestoreVerified struct {
 
 func (x *BackupPostgresRestoreVerified) Reset() {
 	*x = BackupPostgresRestoreVerified{}
-	mi := &file_proto_agent_proto_msgTypes[450]
+	mi := &file_proto_agent_proto_msgTypes[452]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42063,7 +42191,7 @@ func (x *BackupPostgresRestoreVerified) String() string {
 func (*BackupPostgresRestoreVerified) ProtoMessage() {}
 
 func (x *BackupPostgresRestoreVerified) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[450]
+	mi := &file_proto_agent_proto_msgTypes[452]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42076,7 +42204,7 @@ func (x *BackupPostgresRestoreVerified) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPostgresRestoreVerified.ProtoReflect.Descriptor instead.
 func (*BackupPostgresRestoreVerified) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{450}
+	return file_proto_agent_proto_rawDescGZIP(), []int{452}
 }
 
 func (x *BackupPostgresRestoreVerified) GetPointId() string {
@@ -42119,7 +42247,7 @@ type BackupPostgresServiceProgress struct {
 
 func (x *BackupPostgresServiceProgress) Reset() {
 	*x = BackupPostgresServiceProgress{}
-	mi := &file_proto_agent_proto_msgTypes[451]
+	mi := &file_proto_agent_proto_msgTypes[453]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42131,7 +42259,7 @@ func (x *BackupPostgresServiceProgress) String() string {
 func (*BackupPostgresServiceProgress) ProtoMessage() {}
 
 func (x *BackupPostgresServiceProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[451]
+	mi := &file_proto_agent_proto_msgTypes[453]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42144,7 +42272,7 @@ func (x *BackupPostgresServiceProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPostgresServiceProgress.ProtoReflect.Descriptor instead.
 func (*BackupPostgresServiceProgress) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{451}
+	return file_proto_agent_proto_rawDescGZIP(), []int{453}
 }
 
 func (x *BackupPostgresServiceProgress) GetServiceCursor() uint32 {
@@ -42187,7 +42315,7 @@ type BackupPostgresArchiveEvidence struct {
 
 func (x *BackupPostgresArchiveEvidence) Reset() {
 	*x = BackupPostgresArchiveEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[452]
+	mi := &file_proto_agent_proto_msgTypes[454]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42199,7 +42327,7 @@ func (x *BackupPostgresArchiveEvidence) String() string {
 func (*BackupPostgresArchiveEvidence) ProtoMessage() {}
 
 func (x *BackupPostgresArchiveEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[452]
+	mi := &file_proto_agent_proto_msgTypes[454]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42212,7 +42340,7 @@ func (x *BackupPostgresArchiveEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupPostgresArchiveEvidence.ProtoReflect.Descriptor instead.
 func (*BackupPostgresArchiveEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{452}
+	return file_proto_agent_proto_rawDescGZIP(), []int{454}
 }
 
 func (x *BackupPostgresArchiveEvidence) GetPgDumpMajor() uint32 {
@@ -42262,7 +42390,7 @@ type BackupMySQLCaptureAuthority struct {
 
 func (x *BackupMySQLCaptureAuthority) Reset() {
 	*x = BackupMySQLCaptureAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[453]
+	mi := &file_proto_agent_proto_msgTypes[455]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42274,7 +42402,7 @@ func (x *BackupMySQLCaptureAuthority) String() string {
 func (*BackupMySQLCaptureAuthority) ProtoMessage() {}
 
 func (x *BackupMySQLCaptureAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[453]
+	mi := &file_proto_agent_proto_msgTypes[455]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42287,7 +42415,7 @@ func (x *BackupMySQLCaptureAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupMySQLCaptureAuthority.ProtoReflect.Descriptor instead.
 func (*BackupMySQLCaptureAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{453}
+	return file_proto_agent_proto_rawDescGZIP(), []int{455}
 }
 
 func (x *BackupMySQLCaptureAuthority) GetAdapterContractVersion() uint32 {
@@ -42363,7 +42491,7 @@ type BackupMySQLRestoreAuthority struct {
 
 func (x *BackupMySQLRestoreAuthority) Reset() {
 	*x = BackupMySQLRestoreAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[454]
+	mi := &file_proto_agent_proto_msgTypes[456]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42375,7 +42503,7 @@ func (x *BackupMySQLRestoreAuthority) String() string {
 func (*BackupMySQLRestoreAuthority) ProtoMessage() {}
 
 func (x *BackupMySQLRestoreAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[454]
+	mi := &file_proto_agent_proto_msgTypes[456]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42388,7 +42516,7 @@ func (x *BackupMySQLRestoreAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupMySQLRestoreAuthority.ProtoReflect.Descriptor instead.
 func (*BackupMySQLRestoreAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{454}
+	return file_proto_agent_proto_rawDescGZIP(), []int{456}
 }
 
 func (x *BackupMySQLRestoreAuthority) GetAdapterContractVersion() uint32 {
@@ -42469,7 +42597,7 @@ type BackupMySQLContainerObserved struct {
 
 func (x *BackupMySQLContainerObserved) Reset() {
 	*x = BackupMySQLContainerObserved{}
-	mi := &file_proto_agent_proto_msgTypes[455]
+	mi := &file_proto_agent_proto_msgTypes[457]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42481,7 +42609,7 @@ func (x *BackupMySQLContainerObserved) String() string {
 func (*BackupMySQLContainerObserved) ProtoMessage() {}
 
 func (x *BackupMySQLContainerObserved) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[455]
+	mi := &file_proto_agent_proto_msgTypes[457]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42494,7 +42622,7 @@ func (x *BackupMySQLContainerObserved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupMySQLContainerObserved.ProtoReflect.Descriptor instead.
 func (*BackupMySQLContainerObserved) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{455}
+	return file_proto_agent_proto_rawDescGZIP(), []int{457}
 }
 
 func (x *BackupMySQLContainerObserved) GetServiceId() string {
@@ -42565,7 +42693,7 @@ type BackupMySQLDumpStart struct {
 
 func (x *BackupMySQLDumpStart) Reset() {
 	*x = BackupMySQLDumpStart{}
-	mi := &file_proto_agent_proto_msgTypes[456]
+	mi := &file_proto_agent_proto_msgTypes[458]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42577,7 +42705,7 @@ func (x *BackupMySQLDumpStart) String() string {
 func (*BackupMySQLDumpStart) ProtoMessage() {}
 
 func (x *BackupMySQLDumpStart) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[456]
+	mi := &file_proto_agent_proto_msgTypes[458]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42590,7 +42718,7 @@ func (x *BackupMySQLDumpStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupMySQLDumpStart.ProtoReflect.Descriptor instead.
 func (*BackupMySQLDumpStart) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{456}
+	return file_proto_agent_proto_rawDescGZIP(), []int{458}
 }
 
 func (x *BackupMySQLDumpStart) GetPointId() string {
@@ -42686,7 +42814,7 @@ type BackupMySQLRestoreApplyStartCheckpoint struct {
 
 func (x *BackupMySQLRestoreApplyStartCheckpoint) Reset() {
 	*x = BackupMySQLRestoreApplyStartCheckpoint{}
-	mi := &file_proto_agent_proto_msgTypes[457]
+	mi := &file_proto_agent_proto_msgTypes[459]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42698,7 +42826,7 @@ func (x *BackupMySQLRestoreApplyStartCheckpoint) String() string {
 func (*BackupMySQLRestoreApplyStartCheckpoint) ProtoMessage() {}
 
 func (x *BackupMySQLRestoreApplyStartCheckpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[457]
+	mi := &file_proto_agent_proto_msgTypes[459]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42711,7 +42839,7 @@ func (x *BackupMySQLRestoreApplyStartCheckpoint) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use BackupMySQLRestoreApplyStartCheckpoint.ProtoReflect.Descriptor instead.
 func (*BackupMySQLRestoreApplyStartCheckpoint) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{457}
+	return file_proto_agent_proto_rawDescGZIP(), []int{459}
 }
 
 func (x *BackupMySQLRestoreApplyStartCheckpoint) GetPointId() string {
@@ -42782,7 +42910,7 @@ type BackupMySQLRestoreVerified struct {
 
 func (x *BackupMySQLRestoreVerified) Reset() {
 	*x = BackupMySQLRestoreVerified{}
-	mi := &file_proto_agent_proto_msgTypes[458]
+	mi := &file_proto_agent_proto_msgTypes[460]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42794,7 +42922,7 @@ func (x *BackupMySQLRestoreVerified) String() string {
 func (*BackupMySQLRestoreVerified) ProtoMessage() {}
 
 func (x *BackupMySQLRestoreVerified) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[458]
+	mi := &file_proto_agent_proto_msgTypes[460]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42807,7 +42935,7 @@ func (x *BackupMySQLRestoreVerified) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupMySQLRestoreVerified.ProtoReflect.Descriptor instead.
 func (*BackupMySQLRestoreVerified) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{458}
+	return file_proto_agent_proto_rawDescGZIP(), []int{460}
 }
 
 func (x *BackupMySQLRestoreVerified) GetPointId() string {
@@ -42850,7 +42978,7 @@ type BackupMySQLServiceProgress struct {
 
 func (x *BackupMySQLServiceProgress) Reset() {
 	*x = BackupMySQLServiceProgress{}
-	mi := &file_proto_agent_proto_msgTypes[459]
+	mi := &file_proto_agent_proto_msgTypes[461]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42862,7 +42990,7 @@ func (x *BackupMySQLServiceProgress) String() string {
 func (*BackupMySQLServiceProgress) ProtoMessage() {}
 
 func (x *BackupMySQLServiceProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[459]
+	mi := &file_proto_agent_proto_msgTypes[461]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42875,7 +43003,7 @@ func (x *BackupMySQLServiceProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupMySQLServiceProgress.ProtoReflect.Descriptor instead.
 func (*BackupMySQLServiceProgress) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{459}
+	return file_proto_agent_proto_rawDescGZIP(), []int{461}
 }
 
 func (x *BackupMySQLServiceProgress) GetServiceCursor() uint32 {
@@ -42920,7 +43048,7 @@ type BackupMySQLArchiveEvidence struct {
 
 func (x *BackupMySQLArchiveEvidence) Reset() {
 	*x = BackupMySQLArchiveEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[460]
+	mi := &file_proto_agent_proto_msgTypes[462]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42932,7 +43060,7 @@ func (x *BackupMySQLArchiveEvidence) String() string {
 func (*BackupMySQLArchiveEvidence) ProtoMessage() {}
 
 func (x *BackupMySQLArchiveEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[460]
+	mi := &file_proto_agent_proto_msgTypes[462]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -42945,7 +43073,7 @@ func (x *BackupMySQLArchiveEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupMySQLArchiveEvidence.ProtoReflect.Descriptor instead.
 func (*BackupMySQLArchiveEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{460}
+	return file_proto_agent_proto_rawDescGZIP(), []int{462}
 }
 
 func (x *BackupMySQLArchiveEvidence) GetSourceServerVersion() string {
@@ -42992,7 +43120,7 @@ type BackupVolumeManifestEntry struct {
 
 func (x *BackupVolumeManifestEntry) Reset() {
 	*x = BackupVolumeManifestEntry{}
-	mi := &file_proto_agent_proto_msgTypes[461]
+	mi := &file_proto_agent_proto_msgTypes[463]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43004,7 +43132,7 @@ func (x *BackupVolumeManifestEntry) String() string {
 func (*BackupVolumeManifestEntry) ProtoMessage() {}
 
 func (x *BackupVolumeManifestEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[461]
+	mi := &file_proto_agent_proto_msgTypes[463]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43017,7 +43145,7 @@ func (x *BackupVolumeManifestEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeManifestEntry.ProtoReflect.Descriptor instead.
 func (*BackupVolumeManifestEntry) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{461}
+	return file_proto_agent_proto_rawDescGZIP(), []int{463}
 }
 
 func (x *BackupVolumeManifestEntry) GetOrdinal() uint64 {
@@ -43088,7 +43216,7 @@ type BackupVolumeArchiveEvidence struct {
 
 func (x *BackupVolumeArchiveEvidence) Reset() {
 	*x = BackupVolumeArchiveEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[462]
+	mi := &file_proto_agent_proto_msgTypes[464]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43100,7 +43228,7 @@ func (x *BackupVolumeArchiveEvidence) String() string {
 func (*BackupVolumeArchiveEvidence) ProtoMessage() {}
 
 func (x *BackupVolumeArchiveEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[462]
+	mi := &file_proto_agent_proto_msgTypes[464]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43113,7 +43241,7 @@ func (x *BackupVolumeArchiveEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeArchiveEvidence.ProtoReflect.Descriptor instead.
 func (*BackupVolumeArchiveEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{462}
+	return file_proto_agent_proto_rawDescGZIP(), []int{464}
 }
 
 func (x *BackupVolumeArchiveEvidence) GetEntryCount() uint64 {
@@ -43160,7 +43288,7 @@ type BackupVolumeProjectionAuthority struct {
 
 func (x *BackupVolumeProjectionAuthority) Reset() {
 	*x = BackupVolumeProjectionAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[463]
+	mi := &file_proto_agent_proto_msgTypes[465]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43172,7 +43300,7 @@ func (x *BackupVolumeProjectionAuthority) String() string {
 func (*BackupVolumeProjectionAuthority) ProtoMessage() {}
 
 func (x *BackupVolumeProjectionAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[463]
+	mi := &file_proto_agent_proto_msgTypes[465]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43185,7 +43313,7 @@ func (x *BackupVolumeProjectionAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeProjectionAuthority.ProtoReflect.Descriptor instead.
 func (*BackupVolumeProjectionAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{463}
+	return file_proto_agent_proto_rawDescGZIP(), []int{465}
 }
 
 func (x *BackupVolumeProjectionAuthority) GetArtifactId() string {
@@ -43256,7 +43384,7 @@ type BackupVolumeCaptureAuthority struct {
 
 func (x *BackupVolumeCaptureAuthority) Reset() {
 	*x = BackupVolumeCaptureAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[464]
+	mi := &file_proto_agent_proto_msgTypes[466]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43268,7 +43396,7 @@ func (x *BackupVolumeCaptureAuthority) String() string {
 func (*BackupVolumeCaptureAuthority) ProtoMessage() {}
 
 func (x *BackupVolumeCaptureAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[464]
+	mi := &file_proto_agent_proto_msgTypes[466]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43281,7 +43409,7 @@ func (x *BackupVolumeCaptureAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeCaptureAuthority.ProtoReflect.Descriptor instead.
 func (*BackupVolumeCaptureAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{464}
+	return file_proto_agent_proto_rawDescGZIP(), []int{466}
 }
 
 func (x *BackupVolumeCaptureAuthority) GetVolumeId() string {
@@ -43324,7 +43452,7 @@ type BackupVolumeRestoreAuthority struct {
 
 func (x *BackupVolumeRestoreAuthority) Reset() {
 	*x = BackupVolumeRestoreAuthority{}
-	mi := &file_proto_agent_proto_msgTypes[465]
+	mi := &file_proto_agent_proto_msgTypes[467]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43336,7 +43464,7 @@ func (x *BackupVolumeRestoreAuthority) String() string {
 func (*BackupVolumeRestoreAuthority) ProtoMessage() {}
 
 func (x *BackupVolumeRestoreAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[465]
+	mi := &file_proto_agent_proto_msgTypes[467]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43349,7 +43477,7 @@ func (x *BackupVolumeRestoreAuthority) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeRestoreAuthority.ProtoReflect.Descriptor instead.
 func (*BackupVolumeRestoreAuthority) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{465}
+	return file_proto_agent_proto_rawDescGZIP(), []int{467}
 }
 
 func (x *BackupVolumeRestoreAuthority) GetVolumeId() string {
@@ -43390,7 +43518,7 @@ type BackupVolumeSourceArchiveEvidence struct {
 
 func (x *BackupVolumeSourceArchiveEvidence) Reset() {
 	*x = BackupVolumeSourceArchiveEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[466]
+	mi := &file_proto_agent_proto_msgTypes[468]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43402,7 +43530,7 @@ func (x *BackupVolumeSourceArchiveEvidence) String() string {
 func (*BackupVolumeSourceArchiveEvidence) ProtoMessage() {}
 
 func (x *BackupVolumeSourceArchiveEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[466]
+	mi := &file_proto_agent_proto_msgTypes[468]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43415,7 +43543,7 @@ func (x *BackupVolumeSourceArchiveEvidence) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use BackupVolumeSourceArchiveEvidence.ProtoReflect.Descriptor instead.
 func (*BackupVolumeSourceArchiveEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{466}
+	return file_proto_agent_proto_rawDescGZIP(), []int{468}
 }
 
 func (x *BackupVolumeSourceArchiveEvidence) GetSourceSizeBytes() uint64 {
@@ -43440,7 +43568,7 @@ type BackupVolumeNoSourceArchiveEvidence struct {
 
 func (x *BackupVolumeNoSourceArchiveEvidence) Reset() {
 	*x = BackupVolumeNoSourceArchiveEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[467]
+	mi := &file_proto_agent_proto_msgTypes[469]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43452,7 +43580,7 @@ func (x *BackupVolumeNoSourceArchiveEvidence) String() string {
 func (*BackupVolumeNoSourceArchiveEvidence) ProtoMessage() {}
 
 func (x *BackupVolumeNoSourceArchiveEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[467]
+	mi := &file_proto_agent_proto_msgTypes[469]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43465,7 +43593,7 @@ func (x *BackupVolumeNoSourceArchiveEvidence) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use BackupVolumeNoSourceArchiveEvidence.ProtoReflect.Descriptor instead.
 func (*BackupVolumeNoSourceArchiveEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{467}
+	return file_proto_agent_proto_rawDescGZIP(), []int{469}
 }
 
 type BackupConsumersStopped struct {
@@ -43478,7 +43606,7 @@ type BackupConsumersStopped struct {
 
 func (x *BackupConsumersStopped) Reset() {
 	*x = BackupConsumersStopped{}
-	mi := &file_proto_agent_proto_msgTypes[468]
+	mi := &file_proto_agent_proto_msgTypes[470]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43490,7 +43618,7 @@ func (x *BackupConsumersStopped) String() string {
 func (*BackupConsumersStopped) ProtoMessage() {}
 
 func (x *BackupConsumersStopped) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[468]
+	mi := &file_proto_agent_proto_msgTypes[470]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43503,7 +43631,7 @@ func (x *BackupConsumersStopped) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupConsumersStopped.ProtoReflect.Descriptor instead.
 func (*BackupConsumersStopped) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{468}
+	return file_proto_agent_proto_rawDescGZIP(), []int{470}
 }
 
 func (x *BackupConsumersStopped) GetStoppedCount() uint32 {
@@ -43540,7 +43668,7 @@ type BackupVolumeConstructionIntent struct {
 
 func (x *BackupVolumeConstructionIntent) Reset() {
 	*x = BackupVolumeConstructionIntent{}
-	mi := &file_proto_agent_proto_msgTypes[469]
+	mi := &file_proto_agent_proto_msgTypes[471]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43552,7 +43680,7 @@ func (x *BackupVolumeConstructionIntent) String() string {
 func (*BackupVolumeConstructionIntent) ProtoMessage() {}
 
 func (x *BackupVolumeConstructionIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[469]
+	mi := &file_proto_agent_proto_msgTypes[471]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43565,7 +43693,7 @@ func (x *BackupVolumeConstructionIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeConstructionIntent.ProtoReflect.Descriptor instead.
 func (*BackupVolumeConstructionIntent) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{469}
+	return file_proto_agent_proto_rawDescGZIP(), []int{471}
 }
 
 func (x *BackupVolumeConstructionIntent) GetPointId() string {
@@ -43662,7 +43790,7 @@ type BackupVolumeConstructionCompleted struct {
 
 func (x *BackupVolumeConstructionCompleted) Reset() {
 	*x = BackupVolumeConstructionCompleted{}
-	mi := &file_proto_agent_proto_msgTypes[470]
+	mi := &file_proto_agent_proto_msgTypes[472]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43674,7 +43802,7 @@ func (x *BackupVolumeConstructionCompleted) String() string {
 func (*BackupVolumeConstructionCompleted) ProtoMessage() {}
 
 func (x *BackupVolumeConstructionCompleted) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[470]
+	mi := &file_proto_agent_proto_msgTypes[472]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43687,7 +43815,7 @@ func (x *BackupVolumeConstructionCompleted) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use BackupVolumeConstructionCompleted.ProtoReflect.Descriptor instead.
 func (*BackupVolumeConstructionCompleted) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{470}
+	return file_proto_agent_proto_rawDescGZIP(), []int{472}
 }
 
 func (x *BackupVolumeConstructionCompleted) GetIntent() *BackupVolumeConstructionIntent {
@@ -43721,7 +43849,7 @@ type BackupVolumeFinalizationIntent struct {
 
 func (x *BackupVolumeFinalizationIntent) Reset() {
 	*x = BackupVolumeFinalizationIntent{}
-	mi := &file_proto_agent_proto_msgTypes[471]
+	mi := &file_proto_agent_proto_msgTypes[473]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43733,7 +43861,7 @@ func (x *BackupVolumeFinalizationIntent) String() string {
 func (*BackupVolumeFinalizationIntent) ProtoMessage() {}
 
 func (x *BackupVolumeFinalizationIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[471]
+	mi := &file_proto_agent_proto_msgTypes[473]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43746,7 +43874,7 @@ func (x *BackupVolumeFinalizationIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeFinalizationIntent.ProtoReflect.Descriptor instead.
 func (*BackupVolumeFinalizationIntent) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{471}
+	return file_proto_agent_proto_rawDescGZIP(), []int{473}
 }
 
 func (x *BackupVolumeFinalizationIntent) GetPointId() string {
@@ -43822,7 +43950,7 @@ type BackupVolumeFinalizationCompleted struct {
 
 func (x *BackupVolumeFinalizationCompleted) Reset() {
 	*x = BackupVolumeFinalizationCompleted{}
-	mi := &file_proto_agent_proto_msgTypes[472]
+	mi := &file_proto_agent_proto_msgTypes[474]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43834,7 +43962,7 @@ func (x *BackupVolumeFinalizationCompleted) String() string {
 func (*BackupVolumeFinalizationCompleted) ProtoMessage() {}
 
 func (x *BackupVolumeFinalizationCompleted) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[472]
+	mi := &file_proto_agent_proto_msgTypes[474]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43847,7 +43975,7 @@ func (x *BackupVolumeFinalizationCompleted) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use BackupVolumeFinalizationCompleted.ProtoReflect.Descriptor instead.
 func (*BackupVolumeFinalizationCompleted) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{472}
+	return file_proto_agent_proto_rawDescGZIP(), []int{474}
 }
 
 func (x *BackupVolumeFinalizationCompleted) GetIntent() *BackupVolumeFinalizationIntent {
@@ -43876,7 +44004,7 @@ type BackupVolumeExchangeIntent struct {
 
 func (x *BackupVolumeExchangeIntent) Reset() {
 	*x = BackupVolumeExchangeIntent{}
-	mi := &file_proto_agent_proto_msgTypes[473]
+	mi := &file_proto_agent_proto_msgTypes[475]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43888,7 +44016,7 @@ func (x *BackupVolumeExchangeIntent) String() string {
 func (*BackupVolumeExchangeIntent) ProtoMessage() {}
 
 func (x *BackupVolumeExchangeIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[473]
+	mi := &file_proto_agent_proto_msgTypes[475]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43901,7 +44029,7 @@ func (x *BackupVolumeExchangeIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeExchangeIntent.ProtoReflect.Descriptor instead.
 func (*BackupVolumeExchangeIntent) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{473}
+	return file_proto_agent_proto_rawDescGZIP(), []int{475}
 }
 
 func (x *BackupVolumeExchangeIntent) GetPointId() string {
@@ -43944,7 +44072,7 @@ type BackupVolumeTreeExchanged struct {
 
 func (x *BackupVolumeTreeExchanged) Reset() {
 	*x = BackupVolumeTreeExchanged{}
-	mi := &file_proto_agent_proto_msgTypes[474]
+	mi := &file_proto_agent_proto_msgTypes[476]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43956,7 +44084,7 @@ func (x *BackupVolumeTreeExchanged) String() string {
 func (*BackupVolumeTreeExchanged) ProtoMessage() {}
 
 func (x *BackupVolumeTreeExchanged) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[474]
+	mi := &file_proto_agent_proto_msgTypes[476]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -43969,7 +44097,7 @@ func (x *BackupVolumeTreeExchanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeTreeExchanged.ProtoReflect.Descriptor instead.
 func (*BackupVolumeTreeExchanged) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{474}
+	return file_proto_agent_proto_rawDescGZIP(), []int{476}
 }
 
 func (x *BackupVolumeTreeExchanged) GetPointId() string {
@@ -44017,7 +44145,7 @@ type BackupVolumeDeleteIntent struct {
 
 func (x *BackupVolumeDeleteIntent) Reset() {
 	*x = BackupVolumeDeleteIntent{}
-	mi := &file_proto_agent_proto_msgTypes[475]
+	mi := &file_proto_agent_proto_msgTypes[477]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44029,7 +44157,7 @@ func (x *BackupVolumeDeleteIntent) String() string {
 func (*BackupVolumeDeleteIntent) ProtoMessage() {}
 
 func (x *BackupVolumeDeleteIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[475]
+	mi := &file_proto_agent_proto_msgTypes[477]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44042,7 +44170,7 @@ func (x *BackupVolumeDeleteIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeDeleteIntent.ProtoReflect.Descriptor instead.
 func (*BackupVolumeDeleteIntent) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{475}
+	return file_proto_agent_proto_rawDescGZIP(), []int{477}
 }
 
 func (x *BackupVolumeDeleteIntent) GetPointId() string {
@@ -44125,7 +44253,7 @@ type BackupVolumeReplacedPathCleaned struct {
 
 func (x *BackupVolumeReplacedPathCleaned) Reset() {
 	*x = BackupVolumeReplacedPathCleaned{}
-	mi := &file_proto_agent_proto_msgTypes[476]
+	mi := &file_proto_agent_proto_msgTypes[478]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44137,7 +44265,7 @@ func (x *BackupVolumeReplacedPathCleaned) String() string {
 func (*BackupVolumeReplacedPathCleaned) ProtoMessage() {}
 
 func (x *BackupVolumeReplacedPathCleaned) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[476]
+	mi := &file_proto_agent_proto_msgTypes[478]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44150,7 +44278,7 @@ func (x *BackupVolumeReplacedPathCleaned) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeReplacedPathCleaned.ProtoReflect.Descriptor instead.
 func (*BackupVolumeReplacedPathCleaned) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{476}
+	return file_proto_agent_proto_rawDescGZIP(), []int{478}
 }
 
 func (x *BackupVolumeReplacedPathCleaned) GetPointId() string {
@@ -44228,7 +44356,7 @@ type BackupVolumeServiceProgress struct {
 
 func (x *BackupVolumeServiceProgress) Reset() {
 	*x = BackupVolumeServiceProgress{}
-	mi := &file_proto_agent_proto_msgTypes[477]
+	mi := &file_proto_agent_proto_msgTypes[479]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44240,7 +44368,7 @@ func (x *BackupVolumeServiceProgress) String() string {
 func (*BackupVolumeServiceProgress) ProtoMessage() {}
 
 func (x *BackupVolumeServiceProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[477]
+	mi := &file_proto_agent_proto_msgTypes[479]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44253,7 +44381,7 @@ func (x *BackupVolumeServiceProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupVolumeServiceProgress.ProtoReflect.Descriptor instead.
 func (*BackupVolumeServiceProgress) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{477}
+	return file_proto_agent_proto_rawDescGZIP(), []int{479}
 }
 
 func (x *BackupVolumeServiceProgress) GetServiceCursor() uint32 {
@@ -44296,7 +44424,7 @@ type BackupWorkSecretRequest struct {
 
 func (x *BackupWorkSecretRequest) Reset() {
 	*x = BackupWorkSecretRequest{}
-	mi := &file_proto_agent_proto_msgTypes[478]
+	mi := &file_proto_agent_proto_msgTypes[480]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44308,7 +44436,7 @@ func (x *BackupWorkSecretRequest) String() string {
 func (*BackupWorkSecretRequest) ProtoMessage() {}
 
 func (x *BackupWorkSecretRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[478]
+	mi := &file_proto_agent_proto_msgTypes[480]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44321,7 +44449,7 @@ func (x *BackupWorkSecretRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupWorkSecretRequest.ProtoReflect.Descriptor instead.
 func (*BackupWorkSecretRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{478}
+	return file_proto_agent_proto_rawDescGZIP(), []int{480}
 }
 
 func (x *BackupWorkSecretRequest) GetAttempt() *WorkAttemptIdentity {
@@ -44355,7 +44483,7 @@ type BackupWorkSecretTransfer struct {
 
 func (x *BackupWorkSecretTransfer) Reset() {
 	*x = BackupWorkSecretTransfer{}
-	mi := &file_proto_agent_proto_msgTypes[479]
+	mi := &file_proto_agent_proto_msgTypes[481]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44367,7 +44495,7 @@ func (x *BackupWorkSecretTransfer) String() string {
 func (*BackupWorkSecretTransfer) ProtoMessage() {}
 
 func (x *BackupWorkSecretTransfer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[479]
+	mi := &file_proto_agent_proto_msgTypes[481]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44380,7 +44508,7 @@ func (x *BackupWorkSecretTransfer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupWorkSecretTransfer.ProtoReflect.Descriptor instead.
 func (*BackupWorkSecretTransfer) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{479}
+	return file_proto_agent_proto_rawDescGZIP(), []int{481}
 }
 
 func (x *BackupWorkSecretTransfer) GetAttempt() *WorkAttemptIdentity {
@@ -44470,7 +44598,7 @@ type BackupSecretSlotHeader struct {
 
 func (x *BackupSecretSlotHeader) Reset() {
 	*x = BackupSecretSlotHeader{}
-	mi := &file_proto_agent_proto_msgTypes[480]
+	mi := &file_proto_agent_proto_msgTypes[482]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44482,7 +44610,7 @@ func (x *BackupSecretSlotHeader) String() string {
 func (*BackupSecretSlotHeader) ProtoMessage() {}
 
 func (x *BackupSecretSlotHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[480]
+	mi := &file_proto_agent_proto_msgTypes[482]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44495,7 +44623,7 @@ func (x *BackupSecretSlotHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupSecretSlotHeader.ProtoReflect.Descriptor instead.
 func (*BackupSecretSlotHeader) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{480}
+	return file_proto_agent_proto_rawDescGZIP(), []int{482}
 }
 
 func (x *BackupSecretSlotHeader) GetTotalBytes() uint64 {
@@ -44522,7 +44650,7 @@ type BackupSecretSlotChunk struct {
 
 func (x *BackupSecretSlotChunk) Reset() {
 	*x = BackupSecretSlotChunk{}
-	mi := &file_proto_agent_proto_msgTypes[481]
+	mi := &file_proto_agent_proto_msgTypes[483]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44534,7 +44662,7 @@ func (x *BackupSecretSlotChunk) String() string {
 func (*BackupSecretSlotChunk) ProtoMessage() {}
 
 func (x *BackupSecretSlotChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[481]
+	mi := &file_proto_agent_proto_msgTypes[483]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44547,7 +44675,7 @@ func (x *BackupSecretSlotChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupSecretSlotChunk.ProtoReflect.Descriptor instead.
 func (*BackupSecretSlotChunk) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{481}
+	return file_proto_agent_proto_rawDescGZIP(), []int{483}
 }
 
 func (x *BackupSecretSlotChunk) GetSequence() uint32 {
@@ -44573,7 +44701,7 @@ type BackupSecretSlotEnd struct {
 
 func (x *BackupSecretSlotEnd) Reset() {
 	*x = BackupSecretSlotEnd{}
-	mi := &file_proto_agent_proto_msgTypes[482]
+	mi := &file_proto_agent_proto_msgTypes[484]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44585,7 +44713,7 @@ func (x *BackupSecretSlotEnd) String() string {
 func (*BackupSecretSlotEnd) ProtoMessage() {}
 
 func (x *BackupSecretSlotEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[482]
+	mi := &file_proto_agent_proto_msgTypes[484]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44598,7 +44726,7 @@ func (x *BackupSecretSlotEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupSecretSlotEnd.ProtoReflect.Descriptor instead.
 func (*BackupSecretSlotEnd) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{482}
+	return file_proto_agent_proto_rawDescGZIP(), []int{484}
 }
 
 func (x *BackupSecretSlotEnd) GetChunkCount() uint32 {
@@ -44620,7 +44748,7 @@ type BackupStagingRecoveryAckReceipt struct {
 
 func (x *BackupStagingRecoveryAckReceipt) Reset() {
 	*x = BackupStagingRecoveryAckReceipt{}
-	mi := &file_proto_agent_proto_msgTypes[483]
+	mi := &file_proto_agent_proto_msgTypes[485]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44632,7 +44760,7 @@ func (x *BackupStagingRecoveryAckReceipt) String() string {
 func (*BackupStagingRecoveryAckReceipt) ProtoMessage() {}
 
 func (x *BackupStagingRecoveryAckReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[483]
+	mi := &file_proto_agent_proto_msgTypes[485]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44645,7 +44773,7 @@ func (x *BackupStagingRecoveryAckReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupStagingRecoveryAckReceipt.ProtoReflect.Descriptor instead.
 func (*BackupStagingRecoveryAckReceipt) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{483}
+	return file_proto_agent_proto_rawDescGZIP(), []int{485}
 }
 
 func (x *BackupStagingRecoveryAckReceipt) GetProcessGeneration() []byte {
@@ -44695,7 +44823,7 @@ type AdapterProcedure struct {
 
 func (x *AdapterProcedure) Reset() {
 	*x = AdapterProcedure{}
-	mi := &file_proto_agent_proto_msgTypes[484]
+	mi := &file_proto_agent_proto_msgTypes[486]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44707,7 +44835,7 @@ func (x *AdapterProcedure) String() string {
 func (*AdapterProcedure) ProtoMessage() {}
 
 func (x *AdapterProcedure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[484]
+	mi := &file_proto_agent_proto_msgTypes[486]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44720,7 +44848,7 @@ func (x *AdapterProcedure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterProcedure.ProtoReflect.Descriptor instead.
 func (*AdapterProcedure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{484}
+	return file_proto_agent_proto_rawDescGZIP(), []int{486}
 }
 
 func (x *AdapterProcedure) GetAdapterKey() string {
@@ -44808,7 +44936,7 @@ type MaterializeFile struct {
 
 func (x *MaterializeFile) Reset() {
 	*x = MaterializeFile{}
-	mi := &file_proto_agent_proto_msgTypes[485]
+	mi := &file_proto_agent_proto_msgTypes[487]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44820,7 +44948,7 @@ func (x *MaterializeFile) String() string {
 func (*MaterializeFile) ProtoMessage() {}
 
 func (x *MaterializeFile) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[485]
+	mi := &file_proto_agent_proto_msgTypes[487]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44833,7 +44961,7 @@ func (x *MaterializeFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MaterializeFile.ProtoReflect.Descriptor instead.
 func (*MaterializeFile) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{485}
+	return file_proto_agent_proto_rawDescGZIP(), []int{487}
 }
 
 func (x *MaterializeFile) GetArtifactId() string {
@@ -44933,7 +45061,7 @@ type ComposeApply struct {
 
 func (x *ComposeApply) Reset() {
 	*x = ComposeApply{}
-	mi := &file_proto_agent_proto_msgTypes[486]
+	mi := &file_proto_agent_proto_msgTypes[488]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44945,7 +45073,7 @@ func (x *ComposeApply) String() string {
 func (*ComposeApply) ProtoMessage() {}
 
 func (x *ComposeApply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[486]
+	mi := &file_proto_agent_proto_msgTypes[488]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -44958,7 +45086,7 @@ func (x *ComposeApply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeApply.ProtoReflect.Descriptor instead.
 func (*ComposeApply) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{486}
+	return file_proto_agent_proto_rawDescGZIP(), []int{488}
 }
 
 func (x *ComposeApply) GetArtifactId() string {
@@ -45007,7 +45135,7 @@ type ComposeStop struct {
 
 func (x *ComposeStop) Reset() {
 	*x = ComposeStop{}
-	mi := &file_proto_agent_proto_msgTypes[487]
+	mi := &file_proto_agent_proto_msgTypes[489]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45019,7 +45147,7 @@ func (x *ComposeStop) String() string {
 func (*ComposeStop) ProtoMessage() {}
 
 func (x *ComposeStop) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[487]
+	mi := &file_proto_agent_proto_msgTypes[489]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45032,7 +45160,7 @@ func (x *ComposeStop) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeStop.ProtoReflect.Descriptor instead.
 func (*ComposeStop) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{487}
+	return file_proto_agent_proto_rawDescGZIP(), []int{489}
 }
 
 func (x *ComposeStop) GetArtifactId() string {
@@ -45067,7 +45195,7 @@ type ComposeRemove struct {
 
 func (x *ComposeRemove) Reset() {
 	*x = ComposeRemove{}
-	mi := &file_proto_agent_proto_msgTypes[488]
+	mi := &file_proto_agent_proto_msgTypes[490]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45079,7 +45207,7 @@ func (x *ComposeRemove) String() string {
 func (*ComposeRemove) ProtoMessage() {}
 
 func (x *ComposeRemove) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[488]
+	mi := &file_proto_agent_proto_msgTypes[490]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45092,7 +45220,7 @@ func (x *ComposeRemove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeRemove.ProtoReflect.Descriptor instead.
 func (*ComposeRemove) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{488}
+	return file_proto_agent_proto_rawDescGZIP(), []int{490}
 }
 
 func (x *ComposeRemove) GetArtifactId() string {
@@ -45126,7 +45254,7 @@ type WaitHealthy struct {
 
 func (x *WaitHealthy) Reset() {
 	*x = WaitHealthy{}
-	mi := &file_proto_agent_proto_msgTypes[489]
+	mi := &file_proto_agent_proto_msgTypes[491]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45138,7 +45266,7 @@ func (x *WaitHealthy) String() string {
 func (*WaitHealthy) ProtoMessage() {}
 
 func (x *WaitHealthy) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[489]
+	mi := &file_proto_agent_proto_msgTypes[491]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45151,7 +45279,7 @@ func (x *WaitHealthy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitHealthy.ProtoReflect.Descriptor instead.
 func (*WaitHealthy) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{489}
+	return file_proto_agent_proto_rawDescGZIP(), []int{491}
 }
 
 func (x *WaitHealthy) GetArtifactId() string {
@@ -45181,7 +45309,7 @@ type ComposeWorkloadApply struct {
 
 func (x *ComposeWorkloadApply) Reset() {
 	*x = ComposeWorkloadApply{}
-	mi := &file_proto_agent_proto_msgTypes[490]
+	mi := &file_proto_agent_proto_msgTypes[492]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45193,7 +45321,7 @@ func (x *ComposeWorkloadApply) String() string {
 func (*ComposeWorkloadApply) ProtoMessage() {}
 
 func (x *ComposeWorkloadApply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[490]
+	mi := &file_proto_agent_proto_msgTypes[492]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45206,7 +45334,7 @@ func (x *ComposeWorkloadApply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeWorkloadApply.ProtoReflect.Descriptor instead.
 func (*ComposeWorkloadApply) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{490}
+	return file_proto_agent_proto_rawDescGZIP(), []int{492}
 }
 
 func (x *ComposeWorkloadApply) GetArtifactId() string {
@@ -45256,7 +45384,7 @@ type WaitWorkloadHealthy struct {
 
 func (x *WaitWorkloadHealthy) Reset() {
 	*x = WaitWorkloadHealthy{}
-	mi := &file_proto_agent_proto_msgTypes[491]
+	mi := &file_proto_agent_proto_msgTypes[493]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45268,7 +45396,7 @@ func (x *WaitWorkloadHealthy) String() string {
 func (*WaitWorkloadHealthy) ProtoMessage() {}
 
 func (x *WaitWorkloadHealthy) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[491]
+	mi := &file_proto_agent_proto_msgTypes[493]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45281,7 +45409,7 @@ func (x *WaitWorkloadHealthy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitWorkloadHealthy.ProtoReflect.Descriptor instead.
 func (*WaitWorkloadHealthy) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{491}
+	return file_proto_agent_proto_rawDescGZIP(), []int{493}
 }
 
 func (x *WaitWorkloadHealthy) GetArtifactId() string {
@@ -45325,7 +45453,7 @@ type ComposeWorkloadRemove struct {
 
 func (x *ComposeWorkloadRemove) Reset() {
 	*x = ComposeWorkloadRemove{}
-	mi := &file_proto_agent_proto_msgTypes[492]
+	mi := &file_proto_agent_proto_msgTypes[494]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45337,7 +45465,7 @@ func (x *ComposeWorkloadRemove) String() string {
 func (*ComposeWorkloadRemove) ProtoMessage() {}
 
 func (x *ComposeWorkloadRemove) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[492]
+	mi := &file_proto_agent_proto_msgTypes[494]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45350,7 +45478,7 @@ func (x *ComposeWorkloadRemove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeWorkloadRemove.ProtoReflect.Descriptor instead.
 func (*ComposeWorkloadRemove) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{492}
+	return file_proto_agent_proto_rawDescGZIP(), []int{494}
 }
 
 func (x *ComposeWorkloadRemove) GetArtifactId() string {
@@ -45392,7 +45520,7 @@ type RollingTrafficSwitch struct {
 
 func (x *RollingTrafficSwitch) Reset() {
 	*x = RollingTrafficSwitch{}
-	mi := &file_proto_agent_proto_msgTypes[493]
+	mi := &file_proto_agent_proto_msgTypes[495]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45404,7 +45532,7 @@ func (x *RollingTrafficSwitch) String() string {
 func (*RollingTrafficSwitch) ProtoMessage() {}
 
 func (x *RollingTrafficSwitch) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[493]
+	mi := &file_proto_agent_proto_msgTypes[495]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45417,7 +45545,7 @@ func (x *RollingTrafficSwitch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollingTrafficSwitch.ProtoReflect.Descriptor instead.
 func (*RollingTrafficSwitch) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{493}
+	return file_proto_agent_proto_rawDescGZIP(), []int{495}
 }
 
 func (x *RollingTrafficSwitch) GetServiceId() string {
@@ -45444,7 +45572,7 @@ type RollingReplicaDrain struct {
 
 func (x *RollingReplicaDrain) Reset() {
 	*x = RollingReplicaDrain{}
-	mi := &file_proto_agent_proto_msgTypes[494]
+	mi := &file_proto_agent_proto_msgTypes[496]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45456,7 +45584,7 @@ func (x *RollingReplicaDrain) String() string {
 func (*RollingReplicaDrain) ProtoMessage() {}
 
 func (x *RollingReplicaDrain) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[494]
+	mi := &file_proto_agent_proto_msgTypes[496]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45469,7 +45597,7 @@ func (x *RollingReplicaDrain) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollingReplicaDrain.ProtoReflect.Descriptor instead.
 func (*RollingReplicaDrain) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{494}
+	return file_proto_agent_proto_rawDescGZIP(), []int{496}
 }
 
 func (x *RollingReplicaDrain) GetServiceId() string {
@@ -45495,7 +45623,7 @@ type RollingReleaseAcknowledge struct {
 
 func (x *RollingReleaseAcknowledge) Reset() {
 	*x = RollingReleaseAcknowledge{}
-	mi := &file_proto_agent_proto_msgTypes[495]
+	mi := &file_proto_agent_proto_msgTypes[497]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45507,7 +45635,7 @@ func (x *RollingReleaseAcknowledge) String() string {
 func (*RollingReleaseAcknowledge) ProtoMessage() {}
 
 func (x *RollingReleaseAcknowledge) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[495]
+	mi := &file_proto_agent_proto_msgTypes[497]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45520,7 +45648,7 @@ func (x *RollingReleaseAcknowledge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollingReleaseAcknowledge.ProtoReflect.Descriptor instead.
 func (*RollingReleaseAcknowledge) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{495}
+	return file_proto_agent_proto_rawDescGZIP(), []int{497}
 }
 
 func (x *RollingReleaseAcknowledge) GetServiceId() string {
@@ -45547,7 +45675,7 @@ type ServiceProxySwitch struct {
 
 func (x *ServiceProxySwitch) Reset() {
 	*x = ServiceProxySwitch{}
-	mi := &file_proto_agent_proto_msgTypes[496]
+	mi := &file_proto_agent_proto_msgTypes[498]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45559,7 +45687,7 @@ func (x *ServiceProxySwitch) String() string {
 func (*ServiceProxySwitch) ProtoMessage() {}
 
 func (x *ServiceProxySwitch) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[496]
+	mi := &file_proto_agent_proto_msgTypes[498]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45572,7 +45700,7 @@ func (x *ServiceProxySwitch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceProxySwitch.ProtoReflect.Descriptor instead.
 func (*ServiceProxySwitch) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{496}
+	return file_proto_agent_proto_rawDescGZIP(), []int{498}
 }
 
 func (x *ServiceProxySwitch) GetCandidateArtifactId() string {
@@ -45659,7 +45787,7 @@ type ServiceProxyProbe struct {
 
 func (x *ServiceProxyProbe) Reset() {
 	*x = ServiceProxyProbe{}
-	mi := &file_proto_agent_proto_msgTypes[497]
+	mi := &file_proto_agent_proto_msgTypes[499]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45671,7 +45799,7 @@ func (x *ServiceProxyProbe) String() string {
 func (*ServiceProxyProbe) ProtoMessage() {}
 
 func (x *ServiceProxyProbe) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[497]
+	mi := &file_proto_agent_proto_msgTypes[499]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45684,7 +45812,7 @@ func (x *ServiceProxyProbe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceProxyProbe.ProtoReflect.Descriptor instead.
 func (*ServiceProxyProbe) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{497}
+	return file_proto_agent_proto_rawDescGZIP(), []int{499}
 }
 
 func (x *ServiceProxyProbe) GetCandidateArtifactId() string {
@@ -45796,7 +45924,7 @@ type ServiceProxyCompensate struct {
 
 func (x *ServiceProxyCompensate) Reset() {
 	*x = ServiceProxyCompensate{}
-	mi := &file_proto_agent_proto_msgTypes[498]
+	mi := &file_proto_agent_proto_msgTypes[500]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45808,7 +45936,7 @@ func (x *ServiceProxyCompensate) String() string {
 func (*ServiceProxyCompensate) ProtoMessage() {}
 
 func (x *ServiceProxyCompensate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[498]
+	mi := &file_proto_agent_proto_msgTypes[500]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45821,7 +45949,7 @@ func (x *ServiceProxyCompensate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceProxyCompensate.ProtoReflect.Descriptor instead.
 func (*ServiceProxyCompensate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{498}
+	return file_proto_agent_proto_rawDescGZIP(), []int{500}
 }
 
 func (x *ServiceProxyCompensate) GetCandidateArtifactId() string {
@@ -45908,7 +46036,7 @@ type ServiceProxyEvidence struct {
 
 func (x *ServiceProxyEvidence) Reset() {
 	*x = ServiceProxyEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[499]
+	mi := &file_proto_agent_proto_msgTypes[501]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45920,7 +46048,7 @@ func (x *ServiceProxyEvidence) String() string {
 func (*ServiceProxyEvidence) ProtoMessage() {}
 
 func (x *ServiceProxyEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[499]
+	mi := &file_proto_agent_proto_msgTypes[501]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -45933,7 +46061,7 @@ func (x *ServiceProxyEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceProxyEvidence.ProtoReflect.Descriptor instead.
 func (*ServiceProxyEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{499}
+	return file_proto_agent_proto_rawDescGZIP(), []int{501}
 }
 
 func (x *ServiceProxyEvidence) GetServiceId() string {
@@ -45989,7 +46117,7 @@ type ServiceRecreateAcknowledge struct {
 
 func (x *ServiceRecreateAcknowledge) Reset() {
 	*x = ServiceRecreateAcknowledge{}
-	mi := &file_proto_agent_proto_msgTypes[500]
+	mi := &file_proto_agent_proto_msgTypes[502]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46001,7 +46129,7 @@ func (x *ServiceRecreateAcknowledge) String() string {
 func (*ServiceRecreateAcknowledge) ProtoMessage() {}
 
 func (x *ServiceRecreateAcknowledge) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[500]
+	mi := &file_proto_agent_proto_msgTypes[502]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46014,7 +46142,7 @@ func (x *ServiceRecreateAcknowledge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceRecreateAcknowledge.ProtoReflect.Descriptor instead.
 func (*ServiceRecreateAcknowledge) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{500}
+	return file_proto_agent_proto_rawDescGZIP(), []int{502}
 }
 
 func (x *ServiceRecreateAcknowledge) GetArtifactId() string {
@@ -46051,7 +46179,7 @@ type ServiceRecreateProbe struct {
 
 func (x *ServiceRecreateProbe) Reset() {
 	*x = ServiceRecreateProbe{}
-	mi := &file_proto_agent_proto_msgTypes[501]
+	mi := &file_proto_agent_proto_msgTypes[503]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46063,7 +46191,7 @@ func (x *ServiceRecreateProbe) String() string {
 func (*ServiceRecreateProbe) ProtoMessage() {}
 
 func (x *ServiceRecreateProbe) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[501]
+	mi := &file_proto_agent_proto_msgTypes[503]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46076,7 +46204,7 @@ func (x *ServiceRecreateProbe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceRecreateProbe.ProtoReflect.Descriptor instead.
 func (*ServiceRecreateProbe) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{501}
+	return file_proto_agent_proto_rawDescGZIP(), []int{503}
 }
 
 func (x *ServiceRecreateProbe) GetCandidateArtifactId() string {
@@ -46129,7 +46257,7 @@ type ServiceRecreateCompensate struct {
 
 func (x *ServiceRecreateCompensate) Reset() {
 	*x = ServiceRecreateCompensate{}
-	mi := &file_proto_agent_proto_msgTypes[502]
+	mi := &file_proto_agent_proto_msgTypes[504]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46141,7 +46269,7 @@ func (x *ServiceRecreateCompensate) String() string {
 func (*ServiceRecreateCompensate) ProtoMessage() {}
 
 func (x *ServiceRecreateCompensate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[502]
+	mi := &file_proto_agent_proto_msgTypes[504]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46154,7 +46282,7 @@ func (x *ServiceRecreateCompensate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceRecreateCompensate.ProtoReflect.Descriptor instead.
 func (*ServiceRecreateCompensate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{502}
+	return file_proto_agent_proto_rawDescGZIP(), []int{504}
 }
 
 func (x *ServiceRecreateCompensate) GetArtifactId() string {
@@ -46219,7 +46347,7 @@ type ServiceRecreateEvidence struct {
 
 func (x *ServiceRecreateEvidence) Reset() {
 	*x = ServiceRecreateEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[503]
+	mi := &file_proto_agent_proto_msgTypes[505]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46231,7 +46359,7 @@ func (x *ServiceRecreateEvidence) String() string {
 func (*ServiceRecreateEvidence) ProtoMessage() {}
 
 func (x *ServiceRecreateEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[503]
+	mi := &file_proto_agent_proto_msgTypes[505]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46244,7 +46372,7 @@ func (x *ServiceRecreateEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceRecreateEvidence.ProtoReflect.Descriptor instead.
 func (*ServiceRecreateEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{503}
+	return file_proto_agent_proto_rawDescGZIP(), []int{505}
 }
 
 func (x *ServiceRecreateEvidence) GetServiceId() string {
@@ -46292,7 +46420,7 @@ type EnvironmentDirectoryCreate struct {
 
 func (x *EnvironmentDirectoryCreate) Reset() {
 	*x = EnvironmentDirectoryCreate{}
-	mi := &file_proto_agent_proto_msgTypes[504]
+	mi := &file_proto_agent_proto_msgTypes[506]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46304,7 +46432,7 @@ func (x *EnvironmentDirectoryCreate) String() string {
 func (*EnvironmentDirectoryCreate) ProtoMessage() {}
 
 func (x *EnvironmentDirectoryCreate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[504]
+	mi := &file_proto_agent_proto_msgTypes[506]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46317,7 +46445,7 @@ func (x *EnvironmentDirectoryCreate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvironmentDirectoryCreate.ProtoReflect.Descriptor instead.
 func (*EnvironmentDirectoryCreate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{504}
+	return file_proto_agent_proto_rawDescGZIP(), []int{506}
 }
 
 func (x *EnvironmentDirectoryCreate) GetEnvironmentId() string {
@@ -46347,7 +46475,7 @@ type EnvironmentDirectoryRemove struct {
 
 func (x *EnvironmentDirectoryRemove) Reset() {
 	*x = EnvironmentDirectoryRemove{}
-	mi := &file_proto_agent_proto_msgTypes[505]
+	mi := &file_proto_agent_proto_msgTypes[507]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46359,7 +46487,7 @@ func (x *EnvironmentDirectoryRemove) String() string {
 func (*EnvironmentDirectoryRemove) ProtoMessage() {}
 
 func (x *EnvironmentDirectoryRemove) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[505]
+	mi := &file_proto_agent_proto_msgTypes[507]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46372,7 +46500,7 @@ func (x *EnvironmentDirectoryRemove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvironmentDirectoryRemove.ProtoReflect.Descriptor instead.
 func (*EnvironmentDirectoryRemove) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{505}
+	return file_proto_agent_proto_rawDescGZIP(), []int{507}
 }
 
 func (x *EnvironmentDirectoryRemove) GetEnvironmentId() string {
@@ -46402,7 +46530,7 @@ type ManagedVolumeDirectoriesEnsure struct {
 
 func (x *ManagedVolumeDirectoriesEnsure) Reset() {
 	*x = ManagedVolumeDirectoriesEnsure{}
-	mi := &file_proto_agent_proto_msgTypes[506]
+	mi := &file_proto_agent_proto_msgTypes[508]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46414,7 +46542,7 @@ func (x *ManagedVolumeDirectoriesEnsure) String() string {
 func (*ManagedVolumeDirectoriesEnsure) ProtoMessage() {}
 
 func (x *ManagedVolumeDirectoriesEnsure) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[506]
+	mi := &file_proto_agent_proto_msgTypes[508]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46427,7 +46555,7 @@ func (x *ManagedVolumeDirectoriesEnsure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedVolumeDirectoriesEnsure.ProtoReflect.Descriptor instead.
 func (*ManagedVolumeDirectoriesEnsure) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{506}
+	return file_proto_agent_proto_rawDescGZIP(), []int{508}
 }
 
 func (x *ManagedVolumeDirectoriesEnsure) GetArtifactId() string {
@@ -46463,7 +46591,7 @@ type ManagedVolumeRemove struct {
 
 func (x *ManagedVolumeRemove) Reset() {
 	*x = ManagedVolumeRemove{}
-	mi := &file_proto_agent_proto_msgTypes[507]
+	mi := &file_proto_agent_proto_msgTypes[509]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46475,7 +46603,7 @@ func (x *ManagedVolumeRemove) String() string {
 func (*ManagedVolumeRemove) ProtoMessage() {}
 
 func (x *ManagedVolumeRemove) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[507]
+	mi := &file_proto_agent_proto_msgTypes[509]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46488,7 +46616,7 @@ func (x *ManagedVolumeRemove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedVolumeRemove.ProtoReflect.Descriptor instead.
 func (*ManagedVolumeRemove) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{507}
+	return file_proto_agent_proto_rawDescGZIP(), []int{509}
 }
 
 func (x *ManagedVolumeRemove) GetVolumeId() string {
@@ -46520,7 +46648,7 @@ type ManagedVolumeDirectoryRemove struct {
 
 func (x *ManagedVolumeDirectoryRemove) Reset() {
 	*x = ManagedVolumeDirectoryRemove{}
-	mi := &file_proto_agent_proto_msgTypes[508]
+	mi := &file_proto_agent_proto_msgTypes[510]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46532,7 +46660,7 @@ func (x *ManagedVolumeDirectoryRemove) String() string {
 func (*ManagedVolumeDirectoryRemove) ProtoMessage() {}
 
 func (x *ManagedVolumeDirectoryRemove) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[508]
+	mi := &file_proto_agent_proto_msgTypes[510]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46545,7 +46673,7 @@ func (x *ManagedVolumeDirectoryRemove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedVolumeDirectoryRemove.ProtoReflect.Descriptor instead.
 func (*ManagedVolumeDirectoryRemove) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{508}
+	return file_proto_agent_proto_rawDescGZIP(), []int{510}
 }
 
 func (x *ManagedVolumeDirectoryRemove) GetArtifactId() string {
@@ -46590,7 +46718,7 @@ type ManagedNetworkRemove struct {
 
 func (x *ManagedNetworkRemove) Reset() {
 	*x = ManagedNetworkRemove{}
-	mi := &file_proto_agent_proto_msgTypes[509]
+	mi := &file_proto_agent_proto_msgTypes[511]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46602,7 +46730,7 @@ func (x *ManagedNetworkRemove) String() string {
 func (*ManagedNetworkRemove) ProtoMessage() {}
 
 func (x *ManagedNetworkRemove) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[509]
+	mi := &file_proto_agent_proto_msgTypes[511]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46615,7 +46743,7 @@ func (x *ManagedNetworkRemove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedNetworkRemove.ProtoReflect.Descriptor instead.
 func (*ManagedNetworkRemove) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{509}
+	return file_proto_agent_proto_rawDescGZIP(), []int{511}
 }
 
 func (x *ManagedNetworkRemove) GetNetworkId() string {
@@ -46657,7 +46785,7 @@ type CheckDNSConnections struct {
 
 func (x *CheckDNSConnections) Reset() {
 	*x = CheckDNSConnections{}
-	mi := &file_proto_agent_proto_msgTypes[510]
+	mi := &file_proto_agent_proto_msgTypes[512]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46669,7 +46797,7 @@ func (x *CheckDNSConnections) String() string {
 func (*CheckDNSConnections) ProtoMessage() {}
 
 func (x *CheckDNSConnections) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[510]
+	mi := &file_proto_agent_proto_msgTypes[512]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46682,7 +46810,7 @@ func (x *CheckDNSConnections) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckDNSConnections.ProtoReflect.Descriptor instead.
 func (*CheckDNSConnections) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{510}
+	return file_proto_agent_proto_rawDescGZIP(), []int{512}
 }
 
 func (x *CheckDNSConnections) GetRequestId() string {
@@ -46731,7 +46859,7 @@ type DNSConnectionQuery struct {
 
 func (x *DNSConnectionQuery) Reset() {
 	*x = DNSConnectionQuery{}
-	mi := &file_proto_agent_proto_msgTypes[511]
+	mi := &file_proto_agent_proto_msgTypes[513]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46743,7 +46871,7 @@ func (x *DNSConnectionQuery) String() string {
 func (*DNSConnectionQuery) ProtoMessage() {}
 
 func (x *DNSConnectionQuery) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[511]
+	mi := &file_proto_agent_proto_msgTypes[513]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46756,7 +46884,7 @@ func (x *DNSConnectionQuery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNSConnectionQuery.ProtoReflect.Descriptor instead.
 func (*DNSConnectionQuery) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{511}
+	return file_proto_agent_proto_rawDescGZIP(), []int{513}
 }
 
 func (x *DNSConnectionQuery) GetDomain() string {
@@ -46789,7 +46917,7 @@ type CancelDNSConnections struct {
 
 func (x *CancelDNSConnections) Reset() {
 	*x = CancelDNSConnections{}
-	mi := &file_proto_agent_proto_msgTypes[512]
+	mi := &file_proto_agent_proto_msgTypes[514]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46801,7 +46929,7 @@ func (x *CancelDNSConnections) String() string {
 func (*CancelDNSConnections) ProtoMessage() {}
 
 func (x *CancelDNSConnections) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[512]
+	mi := &file_proto_agent_proto_msgTypes[514]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46814,7 +46942,7 @@ func (x *CancelDNSConnections) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelDNSConnections.ProtoReflect.Descriptor instead.
 func (*CancelDNSConnections) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{512}
+	return file_proto_agent_proto_rawDescGZIP(), []int{514}
 }
 
 func (x *CancelDNSConnections) GetRequestId() string {
@@ -46843,7 +46971,7 @@ type DNSConnectionAnswer struct {
 
 func (x *DNSConnectionAnswer) Reset() {
 	*x = DNSConnectionAnswer{}
-	mi := &file_proto_agent_proto_msgTypes[513]
+	mi := &file_proto_agent_proto_msgTypes[515]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46855,7 +46983,7 @@ func (x *DNSConnectionAnswer) String() string {
 func (*DNSConnectionAnswer) ProtoMessage() {}
 
 func (x *DNSConnectionAnswer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[513]
+	mi := &file_proto_agent_proto_msgTypes[515]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46868,7 +46996,7 @@ func (x *DNSConnectionAnswer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNSConnectionAnswer.ProtoReflect.Descriptor instead.
 func (*DNSConnectionAnswer) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{513}
+	return file_proto_agent_proto_rawDescGZIP(), []int{515}
 }
 
 func (x *DNSConnectionAnswer) GetDomain() string {
@@ -46963,7 +47091,7 @@ type DNSConnectionResult struct {
 
 func (x *DNSConnectionResult) Reset() {
 	*x = DNSConnectionResult{}
-	mi := &file_proto_agent_proto_msgTypes[514]
+	mi := &file_proto_agent_proto_msgTypes[516]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46975,7 +47103,7 @@ func (x *DNSConnectionResult) String() string {
 func (*DNSConnectionResult) ProtoMessage() {}
 
 func (x *DNSConnectionResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[514]
+	mi := &file_proto_agent_proto_msgTypes[516]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -46988,7 +47116,7 @@ func (x *DNSConnectionResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNSConnectionResult.ProtoReflect.Descriptor instead.
 func (*DNSConnectionResult) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{514}
+	return file_proto_agent_proto_rawDescGZIP(), []int{516}
 }
 
 func (x *DNSConnectionResult) GetRequestId() string {
@@ -47059,7 +47187,7 @@ type CheckEdgeConnections struct {
 
 func (x *CheckEdgeConnections) Reset() {
 	*x = CheckEdgeConnections{}
-	mi := &file_proto_agent_proto_msgTypes[515]
+	mi := &file_proto_agent_proto_msgTypes[517]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47071,7 +47199,7 @@ func (x *CheckEdgeConnections) String() string {
 func (*CheckEdgeConnections) ProtoMessage() {}
 
 func (x *CheckEdgeConnections) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[515]
+	mi := &file_proto_agent_proto_msgTypes[517]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47084,7 +47212,7 @@ func (x *CheckEdgeConnections) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckEdgeConnections.ProtoReflect.Descriptor instead.
 func (*CheckEdgeConnections) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{515}
+	return file_proto_agent_proto_rawDescGZIP(), []int{517}
 }
 
 func (x *CheckEdgeConnections) GetRequestId() string {
@@ -47152,7 +47280,7 @@ type CancelEdgeConnections struct {
 
 func (x *CancelEdgeConnections) Reset() {
 	*x = CancelEdgeConnections{}
-	mi := &file_proto_agent_proto_msgTypes[516]
+	mi := &file_proto_agent_proto_msgTypes[518]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47164,7 +47292,7 @@ func (x *CancelEdgeConnections) String() string {
 func (*CancelEdgeConnections) ProtoMessage() {}
 
 func (x *CancelEdgeConnections) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[516]
+	mi := &file_proto_agent_proto_msgTypes[518]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47177,7 +47305,7 @@ func (x *CancelEdgeConnections) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelEdgeConnections.ProtoReflect.Descriptor instead.
 func (*CancelEdgeConnections) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{516}
+	return file_proto_agent_proto_rawDescGZIP(), []int{518}
 }
 
 func (x *CancelEdgeConnections) GetRequestId() string {
@@ -47203,7 +47331,7 @@ type EdgeConnectionResult struct {
 
 func (x *EdgeConnectionResult) Reset() {
 	*x = EdgeConnectionResult{}
-	mi := &file_proto_agent_proto_msgTypes[517]
+	mi := &file_proto_agent_proto_msgTypes[519]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47215,7 +47343,7 @@ func (x *EdgeConnectionResult) String() string {
 func (*EdgeConnectionResult) ProtoMessage() {}
 
 func (x *EdgeConnectionResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[517]
+	mi := &file_proto_agent_proto_msgTypes[519]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47228,7 +47356,7 @@ func (x *EdgeConnectionResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EdgeConnectionResult.ProtoReflect.Descriptor instead.
 func (*EdgeConnectionResult) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{517}
+	return file_proto_agent_proto_rawDescGZIP(), []int{519}
 }
 
 func (x *EdgeConnectionResult) GetRequestId() string {
@@ -47307,7 +47435,7 @@ type ComponentApply struct {
 
 func (x *ComponentApply) Reset() {
 	*x = ComponentApply{}
-	mi := &file_proto_agent_proto_msgTypes[518]
+	mi := &file_proto_agent_proto_msgTypes[520]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47319,7 +47447,7 @@ func (x *ComponentApply) String() string {
 func (*ComponentApply) ProtoMessage() {}
 
 func (x *ComponentApply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[518]
+	mi := &file_proto_agent_proto_msgTypes[520]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47332,7 +47460,7 @@ func (x *ComponentApply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentApply.ProtoReflect.Descriptor instead.
 func (*ComponentApply) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{518}
+	return file_proto_agent_proto_rawDescGZIP(), []int{520}
 }
 
 func (x *ComponentApply) GetComponentId() string {
@@ -47433,7 +47561,7 @@ type ContainerConfigTransition struct {
 
 func (x *ContainerConfigTransition) Reset() {
 	*x = ContainerConfigTransition{}
-	mi := &file_proto_agent_proto_msgTypes[519]
+	mi := &file_proto_agent_proto_msgTypes[521]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47445,7 +47573,7 @@ func (x *ContainerConfigTransition) String() string {
 func (*ContainerConfigTransition) ProtoMessage() {}
 
 func (x *ContainerConfigTransition) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[519]
+	mi := &file_proto_agent_proto_msgTypes[521]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47458,7 +47586,7 @@ func (x *ContainerConfigTransition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerConfigTransition.ProtoReflect.Descriptor instead.
 func (*ContainerConfigTransition) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{519}
+	return file_proto_agent_proto_rawDescGZIP(), []int{521}
 }
 
 func (x *ContainerConfigTransition) GetPreviousSource() []byte {
@@ -47494,7 +47622,7 @@ type HostResolutionApply struct {
 
 func (x *HostResolutionApply) Reset() {
 	*x = HostResolutionApply{}
-	mi := &file_proto_agent_proto_msgTypes[520]
+	mi := &file_proto_agent_proto_msgTypes[522]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47506,7 +47634,7 @@ func (x *HostResolutionApply) String() string {
 func (*HostResolutionApply) ProtoMessage() {}
 
 func (x *HostResolutionApply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[520]
+	mi := &file_proto_agent_proto_msgTypes[522]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47519,7 +47647,7 @@ func (x *HostResolutionApply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostResolutionApply.ProtoReflect.Descriptor instead.
 func (*HostResolutionApply) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{520}
+	return file_proto_agent_proto_rawDescGZIP(), []int{522}
 }
 
 func (x *HostResolutionApply) GetComponentId() string {
@@ -47546,7 +47674,7 @@ type HostResolutionRestore struct {
 
 func (x *HostResolutionRestore) Reset() {
 	*x = HostResolutionRestore{}
-	mi := &file_proto_agent_proto_msgTypes[521]
+	mi := &file_proto_agent_proto_msgTypes[523]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47558,7 +47686,7 @@ func (x *HostResolutionRestore) String() string {
 func (*HostResolutionRestore) ProtoMessage() {}
 
 func (x *HostResolutionRestore) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[521]
+	mi := &file_proto_agent_proto_msgTypes[523]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47571,7 +47699,7 @@ func (x *HostResolutionRestore) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostResolutionRestore.ProtoReflect.Descriptor instead.
 func (*HostResolutionRestore) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{521}
+	return file_proto_agent_proto_rawDescGZIP(), []int{523}
 }
 
 func (x *HostResolutionRestore) GetComponentId() string {
@@ -47609,7 +47737,7 @@ type ManagedConfigHelperRequest struct {
 
 func (x *ManagedConfigHelperRequest) Reset() {
 	*x = ManagedConfigHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[522]
+	mi := &file_proto_agent_proto_msgTypes[524]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47621,7 +47749,7 @@ func (x *ManagedConfigHelperRequest) String() string {
 func (*ManagedConfigHelperRequest) ProtoMessage() {}
 
 func (x *ManagedConfigHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[522]
+	mi := &file_proto_agent_proto_msgTypes[524]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47634,7 +47762,7 @@ func (x *ManagedConfigHelperRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedConfigHelperRequest.ProtoReflect.Descriptor instead.
 func (*ManagedConfigHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{522}
+	return file_proto_agent_proto_rawDescGZIP(), []int{524}
 }
 
 func (x *ManagedConfigHelperRequest) GetSchema() uint32 {
@@ -47723,7 +47851,7 @@ type ManagedConfigHelperResponse struct {
 
 func (x *ManagedConfigHelperResponse) Reset() {
 	*x = ManagedConfigHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[523]
+	mi := &file_proto_agent_proto_msgTypes[525]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47735,7 +47863,7 @@ func (x *ManagedConfigHelperResponse) String() string {
 func (*ManagedConfigHelperResponse) ProtoMessage() {}
 
 func (x *ManagedConfigHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[523]
+	mi := &file_proto_agent_proto_msgTypes[525]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47748,7 +47876,7 @@ func (x *ManagedConfigHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedConfigHelperResponse.ProtoReflect.Descriptor instead.
 func (*ManagedConfigHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{523}
+	return file_proto_agent_proto_rawDescGZIP(), []int{525}
 }
 
 func (x *ManagedConfigHelperResponse) GetSchema() uint32 {
@@ -47824,7 +47952,7 @@ type ComposeHelperResponse struct {
 
 func (x *ComposeHelperResponse) Reset() {
 	*x = ComposeHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[524]
+	mi := &file_proto_agent_proto_msgTypes[526]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47836,7 +47964,7 @@ func (x *ComposeHelperResponse) String() string {
 func (*ComposeHelperResponse) ProtoMessage() {}
 
 func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[524]
+	mi := &file_proto_agent_proto_msgTypes[526]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47849,7 +47977,7 @@ func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeHelperResponse.ProtoReflect.Descriptor instead.
 func (*ComposeHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{524}
+	return file_proto_agent_proto_rawDescGZIP(), []int{526}
 }
 
 func (x *ComposeHelperResponse) GetSchema() uint32 {
@@ -47927,7 +48055,7 @@ type RollingProxyEvidence struct {
 
 func (x *RollingProxyEvidence) Reset() {
 	*x = RollingProxyEvidence{}
-	mi := &file_proto_agent_proto_msgTypes[525]
+	mi := &file_proto_agent_proto_msgTypes[527]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47939,7 +48067,7 @@ func (x *RollingProxyEvidence) String() string {
 func (*RollingProxyEvidence) ProtoMessage() {}
 
 func (x *RollingProxyEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[525]
+	mi := &file_proto_agent_proto_msgTypes[527]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -47952,7 +48080,7 @@ func (x *RollingProxyEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollingProxyEvidence.ProtoReflect.Descriptor instead.
 func (*RollingProxyEvidence) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{525}
+	return file_proto_agent_proto_rawDescGZIP(), []int{527}
 }
 
 func (x *RollingProxyEvidence) GetServiceId() string {
@@ -47992,7 +48120,7 @@ type ConfigUpdate struct {
 
 func (x *ConfigUpdate) Reset() {
 	*x = ConfigUpdate{}
-	mi := &file_proto_agent_proto_msgTypes[526]
+	mi := &file_proto_agent_proto_msgTypes[528]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48004,7 +48132,7 @@ func (x *ConfigUpdate) String() string {
 func (*ConfigUpdate) ProtoMessage() {}
 
 func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[526]
+	mi := &file_proto_agent_proto_msgTypes[528]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48017,7 +48145,7 @@ func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigUpdate.ProtoReflect.Descriptor instead.
 func (*ConfigUpdate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{526}
+	return file_proto_agent_proto_rawDescGZIP(), []int{528}
 }
 
 func (x *ConfigUpdate) GetAgentConfig() *AgentConfig {
@@ -48035,7 +48163,7 @@ type Shutdown struct {
 
 func (x *Shutdown) Reset() {
 	*x = Shutdown{}
-	mi := &file_proto_agent_proto_msgTypes[527]
+	mi := &file_proto_agent_proto_msgTypes[529]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48047,7 +48175,7 @@ func (x *Shutdown) String() string {
 func (*Shutdown) ProtoMessage() {}
 
 func (x *Shutdown) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[527]
+	mi := &file_proto_agent_proto_msgTypes[529]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48060,7 +48188,7 @@ func (x *Shutdown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Shutdown.ProtoReflect.Descriptor instead.
 func (*Shutdown) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{527}
+	return file_proto_agent_proto_rawDescGZIP(), []int{529}
 }
 
 // A captured consumer access check owned by a native Controller Task. This is
@@ -48081,7 +48209,7 @@ type CheckBackingAccess struct {
 
 func (x *CheckBackingAccess) Reset() {
 	*x = CheckBackingAccess{}
-	mi := &file_proto_agent_proto_msgTypes[528]
+	mi := &file_proto_agent_proto_msgTypes[530]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48093,7 +48221,7 @@ func (x *CheckBackingAccess) String() string {
 func (*CheckBackingAccess) ProtoMessage() {}
 
 func (x *CheckBackingAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[528]
+	mi := &file_proto_agent_proto_msgTypes[530]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48106,7 +48234,7 @@ func (x *CheckBackingAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckBackingAccess.ProtoReflect.Descriptor instead.
 func (*CheckBackingAccess) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{528}
+	return file_proto_agent_proto_rawDescGZIP(), []int{530}
 }
 
 func (x *CheckBackingAccess) GetRequestId() string {
@@ -48178,7 +48306,7 @@ type BackingAccessParameters struct {
 
 func (x *BackingAccessParameters) Reset() {
 	*x = BackingAccessParameters{}
-	mi := &file_proto_agent_proto_msgTypes[529]
+	mi := &file_proto_agent_proto_msgTypes[531]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48190,7 +48318,7 @@ func (x *BackingAccessParameters) String() string {
 func (*BackingAccessParameters) ProtoMessage() {}
 
 func (x *BackingAccessParameters) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[529]
+	mi := &file_proto_agent_proto_msgTypes[531]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48203,7 +48331,7 @@ func (x *BackingAccessParameters) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingAccessParameters.ProtoReflect.Descriptor instead.
 func (*BackingAccessParameters) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{529}
+	return file_proto_agent_proto_rawDescGZIP(), []int{531}
 }
 
 func (x *BackingAccessParameters) GetAttachId() string {
@@ -48299,7 +48427,7 @@ type CancelBackingAccess struct {
 
 func (x *CancelBackingAccess) Reset() {
 	*x = CancelBackingAccess{}
-	mi := &file_proto_agent_proto_msgTypes[530]
+	mi := &file_proto_agent_proto_msgTypes[532]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48311,7 +48439,7 @@ func (x *CancelBackingAccess) String() string {
 func (*CancelBackingAccess) ProtoMessage() {}
 
 func (x *CancelBackingAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[530]
+	mi := &file_proto_agent_proto_msgTypes[532]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48324,7 +48452,7 @@ func (x *CancelBackingAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelBackingAccess.ProtoReflect.Descriptor instead.
 func (*CancelBackingAccess) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{530}
+	return file_proto_agent_proto_rawDescGZIP(), []int{532}
 }
 
 func (x *CancelBackingAccess) GetRequestId() string {
@@ -48348,7 +48476,7 @@ type BackingAccessResult struct {
 
 func (x *BackingAccessResult) Reset() {
 	*x = BackingAccessResult{}
-	mi := &file_proto_agent_proto_msgTypes[531]
+	mi := &file_proto_agent_proto_msgTypes[533]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48360,7 +48488,7 @@ func (x *BackingAccessResult) String() string {
 func (*BackingAccessResult) ProtoMessage() {}
 
 func (x *BackingAccessResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[531]
+	mi := &file_proto_agent_proto_msgTypes[533]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48373,7 +48501,7 @@ func (x *BackingAccessResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingAccessResult.ProtoReflect.Descriptor instead.
 func (*BackingAccessResult) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{531}
+	return file_proto_agent_proto_rawDescGZIP(), []int{533}
 }
 
 func (x *BackingAccessResult) GetRequestId() string {
@@ -48429,7 +48557,7 @@ type BackingAccessObservation struct {
 
 func (x *BackingAccessObservation) Reset() {
 	*x = BackingAccessObservation{}
-	mi := &file_proto_agent_proto_msgTypes[532]
+	mi := &file_proto_agent_proto_msgTypes[534]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48441,7 +48569,7 @@ func (x *BackingAccessObservation) String() string {
 func (*BackingAccessObservation) ProtoMessage() {}
 
 func (x *BackingAccessObservation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[532]
+	mi := &file_proto_agent_proto_msgTypes[534]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48454,7 +48582,7 @@ func (x *BackingAccessObservation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingAccessObservation.ProtoReflect.Descriptor instead.
 func (*BackingAccessObservation) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{532}
+	return file_proto_agent_proto_rawDescGZIP(), []int{534}
 }
 
 func (x *BackingAccessObservation) GetStartedAt() *timestamppb.Timestamp {
@@ -48490,7 +48618,7 @@ type BackingAccessStage struct {
 
 func (x *BackingAccessStage) Reset() {
 	*x = BackingAccessStage{}
-	mi := &file_proto_agent_proto_msgTypes[533]
+	mi := &file_proto_agent_proto_msgTypes[535]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48502,7 +48630,7 @@ func (x *BackingAccessStage) String() string {
 func (*BackingAccessStage) ProtoMessage() {}
 
 func (x *BackingAccessStage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[533]
+	mi := &file_proto_agent_proto_msgTypes[535]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -48515,7 +48643,7 @@ func (x *BackingAccessStage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackingAccessStage.ProtoReflect.Descriptor instead.
 func (*BackingAccessStage) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{533}
+	return file_proto_agent_proto_rawDescGZIP(), []int{535}
 }
 
 func (x *BackingAccessStage) GetName() string {
@@ -49311,7 +49439,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\n" +
 	"AgentLabel\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\xf8Y\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\xebZ\n" +
 	"\fAgentMessage\x12H\n" +
 	"\fauthenticate\x18\x01 \x01(\v2\".groundplane.agent.v1.AuthenticateH\x00R\fauthenticate\x123\n" +
 	"\x05ready\x18\x02 \x01(\v2\x1b.groundplane.agent.v1.ReadyH\x00R\x05ready\x12L\n" +
@@ -49404,9 +49532,14 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x1dresolver_work_failure_request\x18o \x01(\v20.groundplane.agent.v1.ResolverWorkFailureRequestH\x00R\x1aresolverWorkFailureRequest\x12x\n" +
 	"\x1eresolver_work_recovery_request\x18p \x01(\v21.groundplane.agent.v1.ResolverWorkRecoveryRequestH\x00R\x1bresolverWorkRecoveryRequest\x12o\n" +
 	"\x1bwork_journal_replay_request\x18q \x01(\v2..groundplane.agent.v1.WorkJournalReplayRequestH\x00R\x18workJournalReplayRequest\x12h\n" +
-	"\x18container_terminal_event\x18r \x01(\v2,.groundplane.agent.v1.ContainerTerminalEventH\x00R\x16containerTerminalEventB\t\n" +
+	"\x18container_terminal_event\x18r \x01(\v2,.groundplane.agent.v1.ContainerTerminalEventH\x00R\x16containerTerminalEvent\x12q\n" +
+	"\x1bexecution_quiescence_result\x18s \x01(\v2/.groundplane.agent.v1.ExecutionQuiescenceResultH\x00R\x19executionQuiescenceResultB\t\n" +
 	"\apayloadJ\x04\b\x03\x10\x04J\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\n" +
-	"\x10\vJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b&\x10'J\x04\b'\x10(\"\xba\x02\n" +
+	"\x10\vJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b&\x10'J\x04\b'\x10(\"X\n" +
+	"\x19ExecutionQuiescenceResult\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1c\n" +
+	"\tquiescent\x18\x02 \x01(\bR\tquiescent\"\xba\x02\n" +
 	"\x05Ready\x12\x1a\n" +
 	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12)\n" +
@@ -49642,7 +49775,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x0elocal_used_tcp\x18\t \x01(\bR\flocalUsedTcp\x12&\n" +
 	"\x0fdirect_used_tcp\x18\n" +
 	" \x01(\bR\rdirectUsedTcp\x12\x1a\n" +
-	"\battempts\x18\v \x01(\rR\battempts\"\xe4j\n" +
+	"\battempts\x18\v \x01(\rR\battempts\"\xd5k\n" +
 	"\x11ControllerMessage\x12I\n" +
 	"\rconfig_update\x18\x03 \x01(\v2\".groundplane.agent.v1.ConfigUpdateH\x00R\fconfigUpdate\x12<\n" +
 	"\bshutdown\x18\x04 \x01(\v2\x1e.groundplane.agent.v1.ShutdownH\x00R\bshutdown\x12I\n" +
@@ -49763,9 +49896,13 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x17work_journal_replay_ack\x18\x86\x01 \x01(\v2*.groundplane.agent.v1.WorkJournalReplayAckH\x00R\x14workJournalReplayAck\x12`\n" +
 	"\x15work_report_rejection\x18\x87\x01 \x01(\v2).groundplane.agent.v1.WorkReportRejectionH\x00R\x13workReportRejection\x12f\n" +
 	"\x17container_terminal_open\x18\x88\x01 \x01(\v2+.groundplane.agent.v1.ContainerTerminalOpenH\x00R\x15containerTerminalOpen\x12o\n" +
-	"\x1acontainer_terminal_control\x18\x89\x01 \x01(\v2..groundplane.agent.v1.ContainerTerminalControlH\x00R\x18containerTerminalControlB\t\n" +
+	"\x1acontainer_terminal_control\x18\x89\x01 \x01(\v2..groundplane.agent.v1.ContainerTerminalControlH\x00R\x18containerTerminalControl\x12o\n" +
+	"\x1acheck_execution_quiescence\x18\x8a\x01 \x01(\v2..groundplane.agent.v1.CheckExecutionQuiescenceH\x00R\x18checkExecutionQuiescenceB\t\n" +
 	"\apayloadJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\r\x10\x0eJ\x04\b\x10\x10\x11J\x04\b\x16\x10\x17J\x04\b%\x10&J\x04\b&\x10'J\x04\b(\x10)\"x\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\r\x10\x0eJ\x04\b\x10\x10\x11J\x04\b\x16\x10\x17J\x04\b%\x10&J\x04\b&\x10'J\x04\b(\x10)\"9\n" +
+	"\x18CheckExecutionQuiescence\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"x\n" +
 	"\tLogTarget\x12H\n" +
 	"\aruntime\x18\x01 \x01(\v2..groundplane.agent.v1.ServiceObservationTargetR\aruntime\x12!\n" +
 	"\fservice_name\x18\x02 \x01(\tR\vserviceName\"\x8d\x03\n" +
@@ -52817,7 +52954,7 @@ func file_proto_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 51)
-var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 534)
+var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 536)
 var file_proto_agent_proto_goTypes = []any{
 	(WorkDirection)(0),                                  // 0: groundplane.agent.v1.WorkDirection
 	(AttachNetworkAction)(0),                            // 1: groundplane.agent.v1.AttachNetworkAction
@@ -52994,440 +53131,442 @@ var file_proto_agent_proto_goTypes = []any{
 	(*AgentConfig)(nil),                                 // 172: groundplane.agent.v1.AgentConfig
 	(*AgentLabel)(nil),                                  // 173: groundplane.agent.v1.AgentLabel
 	(*AgentMessage)(nil),                                // 174: groundplane.agent.v1.AgentMessage
-	(*Ready)(nil),                                       // 175: groundplane.agent.v1.Ready
-	(*BuildProvenance)(nil),                             // 176: groundplane.agent.v1.BuildProvenance
-	(*WorkloadImageSelector)(nil),                       // 177: groundplane.agent.v1.WorkloadImageSelector
-	(*ResolveWorkloadImages)(nil),                       // 178: groundplane.agent.v1.ResolveWorkloadImages
-	(*WorkloadImageResolution)(nil),                     // 179: groundplane.agent.v1.WorkloadImageResolution
-	(*WorkloadImageResolutions)(nil),                    // 180: groundplane.agent.v1.WorkloadImageResolutions
-	(*WorkloadImageResolutionFailure)(nil),              // 181: groundplane.agent.v1.WorkloadImageResolutionFailure
-	(*WorkloadImageResolutionResult)(nil),               // 182: groundplane.agent.v1.WorkloadImageResolutionResult
-	(*ServiceObservationTarget)(nil),                    // 183: groundplane.agent.v1.ServiceObservationTarget
-	(*ServiceWorkloadObservation)(nil),                  // 184: groundplane.agent.v1.ServiceWorkloadObservation
-	(*DatabaseVersionProbe)(nil),                        // 185: groundplane.agent.v1.DatabaseVersionProbe
-	(*DatabaseVersionObservation)(nil),                  // 186: groundplane.agent.v1.DatabaseVersionObservation
-	(*ObserveServices)(nil),                             // 187: groundplane.agent.v1.ObserveServices
-	(*CancelServiceObservation)(nil),                    // 188: groundplane.agent.v1.CancelServiceObservation
-	(*ServiceReplicaCounts)(nil),                        // 189: groundplane.agent.v1.ServiceReplicaCounts
-	(*ServiceObservationRow)(nil),                       // 190: groundplane.agent.v1.ServiceObservationRow
-	(*ServiceContainerObservation)(nil),                 // 191: groundplane.agent.v1.ServiceContainerObservation
-	(*ServiceObservationResult)(nil),                    // 192: groundplane.agent.v1.ServiceObservationResult
-	(*StepFailure)(nil),                                 // 193: groundplane.agent.v1.StepFailure
-	(*ObservedState)(nil),                               // 194: groundplane.agent.v1.ObservedState
-	(*ObservedProject)(nil),                             // 195: groundplane.agent.v1.ObservedProject
-	(*ObservedContainer)(nil),                           // 196: groundplane.agent.v1.ObservedContainer
-	(*ObservedNetwork)(nil),                             // 197: groundplane.agent.v1.ObservedNetwork
-	(*ObservedVolume)(nil),                              // 198: groundplane.agent.v1.ObservedVolume
-	(*ObservedCollision)(nil),                           // 199: groundplane.agent.v1.ObservedCollision
-	(*RollingReleaseEvidence)(nil),                      // 200: groundplane.agent.v1.RollingReleaseEvidence
-	(*CandidateAbsenceEvidence)(nil),                    // 201: groundplane.agent.v1.CandidateAbsenceEvidence
-	(*DNSResolverObservationEvidence)(nil),              // 202: groundplane.agent.v1.DNSResolverObservationEvidence
-	(*DNSAnswerRecord)(nil),                             // 203: groundplane.agent.v1.DNSAnswerRecord
-	(*DNSForwardCounter)(nil),                           // 204: groundplane.agent.v1.DNSForwardCounter
-	(*DNSQueryProof)(nil),                               // 205: groundplane.agent.v1.DNSQueryProof
-	(*ControllerMessage)(nil),                           // 206: groundplane.agent.v1.ControllerMessage
-	(*LogTarget)(nil),                                   // 207: groundplane.agent.v1.LogTarget
-	(*ContainerTerminalOpen)(nil),                       // 208: groundplane.agent.v1.ContainerTerminalOpen
-	(*ContainerTerminalSize)(nil),                       // 209: groundplane.agent.v1.ContainerTerminalSize
-	(*ContainerTerminalControl)(nil),                    // 210: groundplane.agent.v1.ContainerTerminalControl
-	(*ContainerTerminalClosed)(nil),                     // 211: groundplane.agent.v1.ContainerTerminalClosed
-	(*ContainerTerminalEvent)(nil),                      // 212: groundplane.agent.v1.ContainerTerminalEvent
-	(*LogSubscribe)(nil),                                // 213: groundplane.agent.v1.LogSubscribe
-	(*LogCancel)(nil),                                   // 214: groundplane.agent.v1.LogCancel
-	(*LogCredit)(nil),                                   // 215: groundplane.agent.v1.LogCredit
-	(*LogReady)(nil),                                    // 216: groundplane.agent.v1.LogReady
-	(*LogEvent)(nil),                                    // 217: groundplane.agent.v1.LogEvent
-	(*LogEnd)(nil),                                      // 218: groundplane.agent.v1.LogEnd
-	(*ScriptStartAuthorizedCheckpoint)(nil),             // 219: groundplane.agent.v1.ScriptStartAuthorizedCheckpoint
-	(*ScriptBodyPreparedCheckpoint)(nil),                // 220: groundplane.agent.v1.ScriptBodyPreparedCheckpoint
-	(*ScriptContainerCreatedCheckpoint)(nil),            // 221: groundplane.agent.v1.ScriptContainerCreatedCheckpoint
-	(*ScriptOutcomeCheckpoint)(nil),                     // 222: groundplane.agent.v1.ScriptOutcomeCheckpoint
-	(*ScriptCleanupCheckpoint)(nil),                     // 223: groundplane.agent.v1.ScriptCleanupCheckpoint
-	(*ScriptExecutionCheckpoint)(nil),                   // 224: groundplane.agent.v1.ScriptExecutionCheckpoint
-	(*ScriptCheckpointRequest)(nil),                     // 225: groundplane.agent.v1.ScriptCheckpointRequest
-	(*ScriptCheckpointAck)(nil),                         // 226: groundplane.agent.v1.ScriptCheckpointAck
-	(*BackingHookValue)(nil),                            // 227: groundplane.agent.v1.BackingHookValue
-	(*BackingHookFactDefinition)(nil),                   // 228: groundplane.agent.v1.BackingHookFactDefinition
-	(*BackingHookProcedure)(nil),                        // 229: groundplane.agent.v1.BackingHookProcedure
-	(*ExecutionPlan)(nil),                               // 230: groundplane.agent.v1.ExecutionPlan
-	(*ManagedNetworkRecoveryProcedure)(nil),             // 231: groundplane.agent.v1.ManagedNetworkRecoveryProcedure
-	(*ManagedNetworkRemovalRecovery)(nil),               // 232: groundplane.agent.v1.ManagedNetworkRemovalRecovery
-	(*ManagedNetworkPreparationRecovery)(nil),           // 233: groundplane.agent.v1.ManagedNetworkPreparationRecovery
-	(*ManagedNetworkPreparationMember)(nil),             // 234: groundplane.agent.v1.ManagedNetworkPreparationMember
-	(*ServiceAbsenceRecoveryProcedure)(nil),             // 235: groundplane.agent.v1.ServiceAbsenceRecoveryProcedure
-	(*ServiceLifecycleProcedure)(nil),                   // 236: groundplane.agent.v1.ServiceLifecycleProcedure
-	(*ServiceLifecycleSource)(nil),                      // 237: groundplane.agent.v1.ServiceLifecycleSource
-	(*ManagedComponentProcedure)(nil),                   // 238: groundplane.agent.v1.ManagedComponentProcedure
-	(*ManagedComponentService)(nil),                     // 239: groundplane.agent.v1.ManagedComponentService
-	(*CandidateReleaseProcedure)(nil),                   // 240: groundplane.agent.v1.CandidateReleaseProcedure
-	(*ConfigurationRestoration)(nil),                    // 241: groundplane.agent.v1.ConfigurationRestoration
-	(*ConfigurationFileRestoration)(nil),                // 242: groundplane.agent.v1.ConfigurationFileRestoration
-	(*CandidateReleaseMember)(nil),                      // 243: groundplane.agent.v1.CandidateReleaseMember
-	(*RollingReleaseProcedure)(nil),                     // 244: groundplane.agent.v1.RollingReleaseProcedure
-	(*RollingReplica)(nil),                              // 245: groundplane.agent.v1.RollingReplica
-	(*RollingReplicaChange)(nil),                        // 246: groundplane.agent.v1.RollingReplicaChange
-	(*ServingPredecessorRestoration)(nil),               // 247: groundplane.agent.v1.ServingPredecessorRestoration
-	(*CandidateAbsenceRestoration)(nil),                 // 248: groundplane.agent.v1.CandidateAbsenceRestoration
-	(*CandidateReleaseService)(nil),                     // 249: groundplane.agent.v1.CandidateReleaseService
-	(*CandidateRestorationProbe)(nil),                   // 250: groundplane.agent.v1.CandidateRestorationProbe
-	(*CandidateRestorationCompensate)(nil),              // 251: groundplane.agent.v1.CandidateRestorationCompensate
-	(*EntryConfigurationWorkInput)(nil),                 // 252: groundplane.agent.v1.EntryConfigurationWorkInput
-	(*ResolverWorkAssignment)(nil),                      // 253: groundplane.agent.v1.ResolverWorkAssignment
-	(*ResolverWorkCheckpointRequest)(nil),               // 254: groundplane.agent.v1.ResolverWorkCheckpointRequest
-	(*ResolverWorkCheckpointAck)(nil),                   // 255: groundplane.agent.v1.ResolverWorkCheckpointAck
-	(*ResolverWorkCompletionRequest)(nil),               // 256: groundplane.agent.v1.ResolverWorkCompletionRequest
-	(*ResolverWorkFailureRequest)(nil),                  // 257: groundplane.agent.v1.ResolverWorkFailureRequest
-	(*ResolverWorkRecoveryRequest)(nil),                 // 258: groundplane.agent.v1.ResolverWorkRecoveryRequest
-	(*ResolverWorkResultAck)(nil),                       // 259: groundplane.agent.v1.ResolverWorkResultAck
-	(*ResolverWorkHelperRequest)(nil),                   // 260: groundplane.agent.v1.ResolverWorkHelperRequest
-	(*ResolverWorkHelperResponse)(nil),                  // 261: groundplane.agent.v1.ResolverWorkHelperResponse
-	(*ComponentWorkInput)(nil),                          // 262: groundplane.agent.v1.ComponentWorkInput
-	(*ComponentWorkPredecessor)(nil),                    // 263: groundplane.agent.v1.ComponentWorkPredecessor
-	(*ComponentWorkRetainedConfiguration)(nil),          // 264: groundplane.agent.v1.ComponentWorkRetainedConfiguration
-	(*EntryConfigurationRequest)(nil),                   // 265: groundplane.agent.v1.EntryConfigurationRequest
-	(*EntryConfigurationFile)(nil),                      // 266: groundplane.agent.v1.EntryConfigurationFile
-	(*EntryConfigurationManifest)(nil),                  // 267: groundplane.agent.v1.EntryConfigurationManifest
-	(*EntryConfigurationFileRequest)(nil),               // 268: groundplane.agent.v1.EntryConfigurationFileRequest
-	(*EntryConfigurationFileDelivery)(nil),              // 269: groundplane.agent.v1.EntryConfigurationFileDelivery
-	(*EntryConfigurationWorkCheckpointRequest)(nil),     // 270: groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
-	(*EntryConfigurationWorkCheckpointAck)(nil),         // 271: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
-	(*EntryConfigurationWorkCompletionRequest)(nil),     // 272: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest
-	(*EntryConfigurationWorkCompletionAck)(nil),         // 273: groundplane.agent.v1.EntryConfigurationWorkCompletionAck
-	(*EntryConfigurationWorkFailureRequest)(nil),        // 274: groundplane.agent.v1.EntryConfigurationWorkFailureRequest
-	(*EntryConfigurationWorkFailureAck)(nil),            // 275: groundplane.agent.v1.EntryConfigurationWorkFailureAck
-	(*EntryConfigurationWorkAssignment)(nil),            // 276: groundplane.agent.v1.EntryConfigurationWorkAssignment
-	(*EntryConfigurationWorkRecoveryReportRequest)(nil), // 277: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest
-	(*EntryConfigurationWorkRecoveryReportAck)(nil),     // 278: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck
-	(*ComponentWorkAssignment)(nil),                     // 279: groundplane.agent.v1.ComponentWorkAssignment
-	(*ComponentWorkCheckpointRequest)(nil),              // 280: groundplane.agent.v1.ComponentWorkCheckpointRequest
-	(*ComponentWorkCheckpointAck)(nil),                  // 281: groundplane.agent.v1.ComponentWorkCheckpointAck
-	(*ComponentWorkCompletionRequest)(nil),              // 282: groundplane.agent.v1.ComponentWorkCompletionRequest
-	(*ComponentWorkCompletionAck)(nil),                  // 283: groundplane.agent.v1.ComponentWorkCompletionAck
-	(*ComponentWorkFailureRequest)(nil),                 // 284: groundplane.agent.v1.ComponentWorkFailureRequest
-	(*ComponentWorkFailureAck)(nil),                     // 285: groundplane.agent.v1.ComponentWorkFailureAck
-	(*ComponentWorkRecoveryReportRequest)(nil),          // 286: groundplane.agent.v1.ComponentWorkRecoveryReportRequest
-	(*ComponentWorkRecoveryReportAck)(nil),              // 287: groundplane.agent.v1.ComponentWorkRecoveryReportAck
-	(*NetworkWorkInput)(nil),                            // 288: groundplane.agent.v1.NetworkWorkInput
-	(*NetworkWorkAssignment)(nil),                       // 289: groundplane.agent.v1.NetworkWorkAssignment
-	(*NetworkWorkCheckpointRequest)(nil),                // 290: groundplane.agent.v1.NetworkWorkCheckpointRequest
-	(*NetworkWorkCheckpointAck)(nil),                    // 291: groundplane.agent.v1.NetworkWorkCheckpointAck
-	(*NetworkWorkCompletionRequest)(nil),                // 292: groundplane.agent.v1.NetworkWorkCompletionRequest
-	(*NetworkWorkCompletionAck)(nil),                    // 293: groundplane.agent.v1.NetworkWorkCompletionAck
-	(*NetworkWorkFailureRequest)(nil),                   // 294: groundplane.agent.v1.NetworkWorkFailureRequest
-	(*NetworkWorkFailureAck)(nil),                       // 295: groundplane.agent.v1.NetworkWorkFailureAck
-	(*NetworkWorkRecoveryReportRequest)(nil),            // 296: groundplane.agent.v1.NetworkWorkRecoveryReportRequest
-	(*NetworkWorkRecoveryReportAck)(nil),                // 297: groundplane.agent.v1.NetworkWorkRecoveryReportAck
-	(*ComponentWorkHelperRequest)(nil),                  // 298: groundplane.agent.v1.ComponentWorkHelperRequest
-	(*EntryConfigurationWorkHelperRequest)(nil),         // 299: groundplane.agent.v1.EntryConfigurationWorkHelperRequest
-	(*EntryConfigurationWorkHelperResponse)(nil),        // 300: groundplane.agent.v1.EntryConfigurationWorkHelperResponse
-	(*ComponentWorkHelperResponse)(nil),                 // 301: groundplane.agent.v1.ComponentWorkHelperResponse
-	(*NetworkWorkHelperRequest)(nil),                    // 302: groundplane.agent.v1.NetworkWorkHelperRequest
-	(*NetworkWorkHelperResponse)(nil),                   // 303: groundplane.agent.v1.NetworkWorkHelperResponse
-	(*ServiceRemovalRecoveryAssignment)(nil),            // 304: groundplane.agent.v1.ServiceRemovalRecoveryAssignment
-	(*ServiceRemovalConfigurationRequest)(nil),          // 305: groundplane.agent.v1.ServiceRemovalConfigurationRequest
-	(*ServiceRemovalConfigurationFile)(nil),             // 306: groundplane.agent.v1.ServiceRemovalConfigurationFile
-	(*ServiceRemovalConfigurationManifest)(nil),         // 307: groundplane.agent.v1.ServiceRemovalConfigurationManifest
-	(*ServiceRemovalConfigurationFileRequest)(nil),      // 308: groundplane.agent.v1.ServiceRemovalConfigurationFileRequest
-	(*ServiceRemovalConfigurationFileDelivery)(nil),     // 309: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery
-	(*ServiceRemovalRecoveryCheckpointRequest)(nil),     // 310: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
-	(*ServiceRemovalRecoveryCheckpointAck)(nil),         // 311: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
-	(*ServiceRemovalRecoveryCompletionRequest)(nil),     // 312: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest
-	(*ServiceRemovalRecoveryCompletionAck)(nil),         // 313: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck
-	(*ServiceRemovalRecoveryFailureRequest)(nil),        // 314: groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest
-	(*ServiceRemovalRecoveryFailureAck)(nil),            // 315: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck
-	(*ServiceRemovalRecoveryHelperRequest)(nil),         // 316: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest
-	(*ServiceRemovalRecoveryHelperResponse)(nil),        // 317: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse
-	(*ServiceLifecycleAssignment)(nil),                  // 318: groundplane.agent.v1.ServiceLifecycleAssignment
-	(*ServiceLifecycleWorkInput)(nil),                   // 319: groundplane.agent.v1.ServiceLifecycleWorkInput
-	(*ServiceLifecycleMember)(nil),                      // 320: groundplane.agent.v1.ServiceLifecycleMember
-	(*ServiceLifecycleHook)(nil),                        // 321: groundplane.agent.v1.ServiceLifecycleHook
-	(*ServiceLifecycleHookRequest)(nil),                 // 322: groundplane.agent.v1.ServiceLifecycleHookRequest
-	(*ServiceLifecycleHookDelivery)(nil),                // 323: groundplane.agent.v1.ServiceLifecycleHookDelivery
-	(*ServiceLifecycleRecoveryReportRequest)(nil),       // 324: groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest
-	(*ServiceLifecycleRecoveryReportAck)(nil),           // 325: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck
-	(*ServiceLifecycleCheckpointRequest)(nil),           // 326: groundplane.agent.v1.ServiceLifecycleCheckpointRequest
-	(*ServiceLifecycleCheckpointAck)(nil),               // 327: groundplane.agent.v1.ServiceLifecycleCheckpointAck
-	(*ServiceLifecycleCompletionRequest)(nil),           // 328: groundplane.agent.v1.ServiceLifecycleCompletionRequest
-	(*ServiceLifecycleCompletionAck)(nil),               // 329: groundplane.agent.v1.ServiceLifecycleCompletionAck
-	(*ServiceLifecycleFailureRequest)(nil),              // 330: groundplane.agent.v1.ServiceLifecycleFailureRequest
-	(*ServiceLifecycleFailureAck)(nil),                  // 331: groundplane.agent.v1.ServiceLifecycleFailureAck
-	(*ServiceLifecycleHelperRequest)(nil),               // 332: groundplane.agent.v1.ServiceLifecycleHelperRequest
-	(*ServiceLifecycleHelperResponse)(nil),              // 333: groundplane.agent.v1.ServiceLifecycleHelperResponse
-	(*VolumeWorkInput)(nil),                             // 334: groundplane.agent.v1.VolumeWorkInput
-	(*VolumeWorkAssignment)(nil),                        // 335: groundplane.agent.v1.VolumeWorkAssignment
-	(*VolumeWorkCheckpointRequest)(nil),                 // 336: groundplane.agent.v1.VolumeWorkCheckpointRequest
-	(*VolumeWorkCheckpointAck)(nil),                     // 337: groundplane.agent.v1.VolumeWorkCheckpointAck
-	(*VolumeWorkCompletionRequest)(nil),                 // 338: groundplane.agent.v1.VolumeWorkCompletionRequest
-	(*VolumeWorkCompletionAck)(nil),                     // 339: groundplane.agent.v1.VolumeWorkCompletionAck
-	(*VolumeWorkFailureRequest)(nil),                    // 340: groundplane.agent.v1.VolumeWorkFailureRequest
-	(*VolumeWorkFailureAck)(nil),                        // 341: groundplane.agent.v1.VolumeWorkFailureAck
-	(*VolumeWorkRecoveryReportRequest)(nil),             // 342: groundplane.agent.v1.VolumeWorkRecoveryReportRequest
-	(*VolumeWorkRecoveryReportAck)(nil),                 // 343: groundplane.agent.v1.VolumeWorkRecoveryReportAck
-	(*VolumeWorkHelperRequest)(nil),                     // 344: groundplane.agent.v1.VolumeWorkHelperRequest
-	(*VolumeWorkHelperResponse)(nil),                    // 345: groundplane.agent.v1.VolumeWorkHelperResponse
-	(*ComposeArtifact)(nil),                             // 346: groundplane.agent.v1.ComposeArtifact
-	(*ComposeService)(nil),                              // 347: groundplane.agent.v1.ComposeService
-	(*ComposeNetwork)(nil),                              // 348: groundplane.agent.v1.ComposeNetwork
-	(*ComposeVolume)(nil),                               // 349: groundplane.agent.v1.ComposeVolume
-	(*LabelPair)(nil),                                   // 350: groundplane.agent.v1.LabelPair
-	(*ExecutionStep)(nil),                               // 351: groundplane.agent.v1.ExecutionStep
-	(*ServiceAbsenceProbe)(nil),                         // 352: groundplane.agent.v1.ServiceAbsenceProbe
-	(*ManagedNetworkEnsure)(nil),                        // 353: groundplane.agent.v1.ManagedNetworkEnsure
-	(*ManagedNetworkPreparationProbe)(nil),              // 354: groundplane.agent.v1.ManagedNetworkPreparationProbe
-	(*ManagedVolumeEnsure)(nil),                         // 355: groundplane.agent.v1.ManagedVolumeEnsure
-	(*RunScript)(nil),                                   // 356: groundplane.agent.v1.RunScript
-	(*ResolvedRunnerSnapshot)(nil),                      // 357: groundplane.agent.v1.ResolvedRunnerSnapshot
-	(*ScriptExplicitExecutionAuthority)(nil),            // 358: groundplane.agent.v1.ScriptExplicitExecutionAuthority
-	(*ScriptExplicitExecutionContext)(nil),              // 359: groundplane.agent.v1.ScriptExplicitExecutionContext
-	(*ScriptExplicitVolumeGrant)(nil),                   // 360: groundplane.agent.v1.ScriptExplicitVolumeGrant
-	(*ScriptRunnerNetwork)(nil),                         // 361: groundplane.agent.v1.ScriptRunnerNetwork
-	(*ScriptNetworkAttachment)(nil),                     // 362: groundplane.agent.v1.ScriptNetworkAttachment
-	(*ScriptRunnerMount)(nil),                           // 363: groundplane.agent.v1.ScriptRunnerMount
-	(*ScriptSourceAuthority)(nil),                       // 364: groundplane.agent.v1.ScriptSourceAuthority
-	(*ScriptExistingSourceAuthority)(nil),               // 365: groundplane.agent.v1.ScriptExistingSourceAuthority
-	(*ScriptStagedSourceAuthority)(nil),                 // 366: groundplane.agent.v1.ScriptStagedSourceAuthority
-	(*ScriptMount)(nil),                                 // 367: groundplane.agent.v1.ScriptMount
-	(*ScriptRunnerEntryBinding)(nil),                    // 368: groundplane.agent.v1.ScriptRunnerEntryBinding
-	(*ScriptRunnerSecretValue)(nil),                     // 369: groundplane.agent.v1.ScriptRunnerSecretValue
-	(*ScriptRunnerProjection)(nil),                      // 370: groundplane.agent.v1.ScriptRunnerProjection
-	(*ScriptStringPair)(nil),                            // 371: groundplane.agent.v1.ScriptStringPair
-	(*ScriptUlimit)(nil),                                // 372: groundplane.agent.v1.ScriptUlimit
-	(*ScriptBlkio)(nil),                                 // 373: groundplane.agent.v1.ScriptBlkio
-	(*ScriptWeightDevice)(nil),                          // 374: groundplane.agent.v1.ScriptWeightDevice
-	(*ScriptThrottleDevice)(nil),                        // 375: groundplane.agent.v1.ScriptThrottleDevice
-	(*ScriptResource)(nil),                              // 376: groundplane.agent.v1.ScriptResource
-	(*ScriptBodyArtifactMetadata)(nil),                  // 377: groundplane.agent.v1.ScriptBodyArtifactMetadata
-	(*ScriptBodyArtifact)(nil),                          // 378: groundplane.agent.v1.ScriptBodyArtifact
-	(*ScriptEntryArtifact)(nil),                         // 379: groundplane.agent.v1.ScriptEntryArtifact
-	(*RevisionDigest)(nil),                              // 380: groundplane.agent.v1.RevisionDigest
-	(*CheckpointFence)(nil),                             // 381: groundplane.agent.v1.CheckpointFence
-	(*BackupResourceIdentity)(nil),                      // 382: groundplane.agent.v1.BackupResourceIdentity
-	(*BackupEncryptionAuthority)(nil),                   // 383: groundplane.agent.v1.BackupEncryptionAuthority
-	(*BackupPriorRuntimeIntent)(nil),                    // 384: groundplane.agent.v1.BackupPriorRuntimeIntent
-	(*BackupServiceFact)(nil),                           // 385: groundplane.agent.v1.BackupServiceFact
-	(*BackupConnectorAuthority)(nil),                    // 386: groundplane.agent.v1.BackupConnectorAuthority
-	(*BackupObjectTarget)(nil),                          // 387: groundplane.agent.v1.BackupObjectTarget
-	(*BackupS3VersionId)(nil),                           // 388: groundplane.agent.v1.BackupS3VersionId
-	(*BackupS3ETag)(nil),                                // 389: groundplane.agent.v1.BackupS3ETag
-	(*BackupObjectIdentity)(nil),                        // 390: groundplane.agent.v1.BackupObjectIdentity
-	(*BackupArtifactEvidence)(nil),                      // 391: groundplane.agent.v1.BackupArtifactEvidence
-	(*BackupWorkInput)(nil),                             // 392: groundplane.agent.v1.BackupWorkInput
-	(*BackupWorkAssignment)(nil),                        // 393: groundplane.agent.v1.BackupWorkAssignment
-	(*BackupConsumerHelperRequest)(nil),                 // 394: groundplane.agent.v1.BackupConsumerHelperRequest
-	(*BackupConsumerHelperResponse)(nil),                // 395: groundplane.agent.v1.BackupConsumerHelperResponse
-	(*BackupRecoveryAssignment)(nil),                    // 396: groundplane.agent.v1.BackupRecoveryAssignment
-	(*BackupRecoveryRequest)(nil),                       // 397: groundplane.agent.v1.BackupRecoveryRequest
-	(*BackupConfigRecoveryPrepareRequest)(nil),          // 398: groundplane.agent.v1.BackupConfigRecoveryPrepareRequest
-	(*BackupConfigRecoveryPrepareAck)(nil),              // 399: groundplane.agent.v1.BackupConfigRecoveryPrepareAck
-	(*BackupRecoveryAck)(nil),                           // 400: groundplane.agent.v1.BackupRecoveryAck
-	(*BackupWorkCheckpointRequest)(nil),                 // 401: groundplane.agent.v1.BackupWorkCheckpointRequest
-	(*BackupWorkCompletionRequest)(nil),                 // 402: groundplane.agent.v1.BackupWorkCompletionRequest
-	(*BackupWorkFailureRequest)(nil),                    // 403: groundplane.agent.v1.BackupWorkFailureRequest
-	(*BackupWorkFailureAck)(nil),                        // 404: groundplane.agent.v1.BackupWorkFailureAck
-	(*BackupWorkCompletionAck)(nil),                     // 405: groundplane.agent.v1.BackupWorkCompletionAck
-	(*BackupWorkCheckpointAck)(nil),                     // 406: groundplane.agent.v1.BackupWorkCheckpointAck
-	(*BackupPlanScope)(nil),                             // 407: groundplane.agent.v1.BackupPlanScope
-	(*BackupStepAuthority)(nil),                         // 408: groundplane.agent.v1.BackupStepAuthority
-	(*BackupStepResume)(nil),                            // 409: groundplane.agent.v1.BackupStepResume
-	(*BackupCaptureResume)(nil),                         // 410: groundplane.agent.v1.BackupCaptureResume
-	(*BackupPruneResume)(nil),                           // 411: groundplane.agent.v1.BackupPruneResume
-	(*BackupRestoreResume)(nil),                         // 412: groundplane.agent.v1.BackupRestoreResume
-	(*BackupDatabaseRestoreProgress)(nil),               // 413: groundplane.agent.v1.BackupDatabaseRestoreProgress
-	(*BackupDatabaseConsumerRecovery)(nil),              // 414: groundplane.agent.v1.BackupDatabaseConsumerRecovery
-	(*BackupCaptureCursor)(nil),                         // 415: groundplane.agent.v1.BackupCaptureCursor
-	(*BackupRestoreCursor)(nil),                         // 416: groundplane.agent.v1.BackupRestoreCursor
-	(*BackupCaptureAuthority)(nil),                      // 417: groundplane.agent.v1.BackupCaptureAuthority
-	(*BackupRestoreAuthority)(nil),                      // 418: groundplane.agent.v1.BackupRestoreAuthority
-	(*BackupPruneAuthority)(nil),                        // 419: groundplane.agent.v1.BackupPruneAuthority
-	(*BackupOriginalIdentity)(nil),                      // 420: groundplane.agent.v1.BackupOriginalIdentity
-	(*BackupAdoptedIdentity)(nil),                       // 421: groundplane.agent.v1.BackupAdoptedIdentity
-	(*BackupPruneObject)(nil),                           // 422: groundplane.agent.v1.BackupPruneObject
-	(*BackupPruneObjectDeleted)(nil),                    // 423: groundplane.agent.v1.BackupPruneObjectDeleted
-	(*BackupStagingInventory)(nil),                      // 424: groundplane.agent.v1.BackupStagingInventory
-	(*BackupRecoveredVolumeRestore)(nil),                // 425: groundplane.agent.v1.BackupRecoveredVolumeRestore
-	(*BackupRecoveredStage)(nil),                        // 426: groundplane.agent.v1.BackupRecoveredStage
-	(*BackupRecoveredFile)(nil),                         // 427: groundplane.agent.v1.BackupRecoveredFile
-	(*BackupStagingRecoveryPlan)(nil),                   // 428: groundplane.agent.v1.BackupStagingRecoveryPlan
-	(*BackupVolumeRestoreRecoveryDisposition)(nil),      // 429: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition
-	(*BackupVolumeRestoreResume)(nil),                   // 430: groundplane.agent.v1.BackupVolumeRestoreResume
-	(*BackupVolumeRestoreHold)(nil),                     // 431: groundplane.agent.v1.BackupVolumeRestoreHold
-	(*BackupVolumeRestoreCleanup)(nil),                  // 432: groundplane.agent.v1.BackupVolumeRestoreCleanup
-	(*BackupStagingDisposition)(nil),                    // 433: groundplane.agent.v1.BackupStagingDisposition
-	(*BackupDatabaseStagingGuard)(nil),                  // 434: groundplane.agent.v1.BackupDatabaseStagingGuard
-	(*BackupResumePrepared)(nil),                        // 435: groundplane.agent.v1.BackupResumePrepared
-	(*BackupRestartConfigEncryption)(nil),               // 436: groundplane.agent.v1.BackupRestartConfigEncryption
-	(*BackupRestartDatabaseEncryption)(nil),             // 437: groundplane.agent.v1.BackupRestartDatabaseEncryption
-	(*BackupDiscardRecovered)(nil),                      // 438: groundplane.agent.v1.BackupDiscardRecovered
-	(*BackupRecoveryRequired)(nil),                      // 439: groundplane.agent.v1.BackupRecoveryRequired
-	(*BackupStagingRecoveryAck)(nil),                    // 440: groundplane.agent.v1.BackupStagingRecoveryAck
-	(*BackupConfigTransfer)(nil),                        // 441: groundplane.agent.v1.BackupConfigTransfer
-	(*BackupConfigTransferStart)(nil),                   // 442: groundplane.agent.v1.BackupConfigTransferStart
-	(*BackupConfigEntryHeader)(nil),                     // 443: groundplane.agent.v1.BackupConfigEntryHeader
-	(*BackupConfigValueChunk)(nil),                      // 444: groundplane.agent.v1.BackupConfigValueChunk
-	(*BackupConfigEntryEnd)(nil),                        // 445: groundplane.agent.v1.BackupConfigEntryEnd
-	(*BackupConfigTransferEnd)(nil),                     // 446: groundplane.agent.v1.BackupConfigTransferEnd
-	(*BackupConfigTransferResume)(nil),                  // 447: groundplane.agent.v1.BackupConfigTransferResume
-	(*BackupConfigCredit)(nil),                          // 448: groundplane.agent.v1.BackupConfigCredit
-	(*BackupVolumeManifestTransfer)(nil),                // 449: groundplane.agent.v1.BackupVolumeManifestTransfer
-	(*BackupVolumeManifestStart)(nil),                   // 450: groundplane.agent.v1.BackupVolumeManifestStart
-	(*BackupVolumeManifestBatch)(nil),                   // 451: groundplane.agent.v1.BackupVolumeManifestBatch
-	(*BackupVolumeManifestEnd)(nil),                     // 452: groundplane.agent.v1.BackupVolumeManifestEnd
-	(*BackupVolumeManifestResume)(nil),                  // 453: groundplane.agent.v1.BackupVolumeManifestResume
-	(*BackupVolumeManifestAckCredit)(nil),               // 454: groundplane.agent.v1.BackupVolumeManifestAckCredit
-	(*BackupArtifactPrepared)(nil),                      // 455: groundplane.agent.v1.BackupArtifactPrepared
-	(*BackupUploadCompleted)(nil),                       // 456: groundplane.agent.v1.BackupUploadCompleted
-	(*BackupPutOutcomeUnknown)(nil),                     // 457: groundplane.agent.v1.BackupPutOutcomeUnknown
-	(*BackupUploadVerified)(nil),                        // 458: groundplane.agent.v1.BackupUploadVerified
-	(*BackupSourceCleanupCompleted)(nil),                // 459: groundplane.agent.v1.BackupSourceCleanupCompleted
-	(*BackupRestoreArtifactValidated)(nil),              // 460: groundplane.agent.v1.BackupRestoreArtifactValidated
-	(*BackupConfigCheckpoint)(nil),                      // 461: groundplane.agent.v1.BackupConfigCheckpoint
-	(*BackupConfigProgress)(nil),                        // 462: groundplane.agent.v1.BackupConfigProgress
-	(*BackupConfigValueProgress)(nil),                   // 463: groundplane.agent.v1.BackupConfigValueProgress
-	(*BackupConfigTransferCompleted)(nil),               // 464: groundplane.agent.v1.BackupConfigTransferCompleted
-	(*BackupConfigMaterializationVerified)(nil),         // 465: groundplane.agent.v1.BackupConfigMaterializationVerified
-	(*BackupVolumeCheckpoint)(nil),                      // 466: groundplane.agent.v1.BackupVolumeCheckpoint
-	(*BackupVolumeProgress)(nil),                        // 467: groundplane.agent.v1.BackupVolumeProgress
-	(*BackupStagingFinals)(nil),                         // 468: groundplane.agent.v1.BackupStagingFinals
-	(*BackupConfigEntry)(nil),                           // 469: groundplane.agent.v1.BackupConfigEntry
-	(*BackupConfigEnvironment)(nil),                     // 470: groundplane.agent.v1.BackupConfigEnvironment
-	(*BackupConfigFile)(nil),                            // 471: groundplane.agent.v1.BackupConfigFile
-	(*BackupConfigExposureAll)(nil),                     // 472: groundplane.agent.v1.BackupConfigExposureAll
-	(*BackupConfigExposureEdgeTunnel)(nil),              // 473: groundplane.agent.v1.BackupConfigExposureEdgeTunnel
-	(*BackupConfigExposureServices)(nil),                // 474: groundplane.agent.v1.BackupConfigExposureServices
-	(*BackupConfigLiteral)(nil),                         // 475: groundplane.agent.v1.BackupConfigLiteral
-	(*BackupConfigSecretRef)(nil),                       // 476: groundplane.agent.v1.BackupConfigSecretRef
-	(*BackupConfigFactRef)(nil),                         // 477: groundplane.agent.v1.BackupConfigFactRef
-	(*BackupConfigRestoreEntry)(nil),                    // 478: groundplane.agent.v1.BackupConfigRestoreEntry
-	(*BackupConfigEntryMetadata)(nil),                   // 479: groundplane.agent.v1.BackupConfigEntryMetadata
-	(*BackupConfigEntryExposure)(nil),                   // 480: groundplane.agent.v1.BackupConfigEntryExposure
-	(*BackupConfigArtifactDesiredSource)(nil),           // 481: groundplane.agent.v1.BackupConfigArtifactDesiredSource
-	(*BackupConfigLiteralSource)(nil),                   // 482: groundplane.agent.v1.BackupConfigLiteralSource
-	(*BackupConfigArtifactSecretRefSource)(nil),         // 483: groundplane.agent.v1.BackupConfigArtifactSecretRefSource
-	(*BackupConfigArtifactFactSource)(nil),              // 484: groundplane.agent.v1.BackupConfigArtifactFactSource
-	(*BackupConfigSelectedValue)(nil),                   // 485: groundplane.agent.v1.BackupConfigSelectedValue
-	(*BackupConfigContentAuthority)(nil),                // 486: groundplane.agent.v1.BackupConfigContentAuthority
-	(*BackupConfigArchiveEvidence)(nil),                 // 487: groundplane.agent.v1.BackupConfigArchiveEvidence
-	(*BackupConfigCaptureAuthority)(nil),                // 488: groundplane.agent.v1.BackupConfigCaptureAuthority
-	(*BackupConfigRestoreAuthority)(nil),                // 489: groundplane.agent.v1.BackupConfigRestoreAuthority
-	(*BackupConfigFileContext)(nil),                     // 490: groundplane.agent.v1.BackupConfigFileContext
-	(*BackupConfigFileService)(nil),                     // 491: groundplane.agent.v1.BackupConfigFileService
-	(*BackupConfigPriorFile)(nil),                       // 492: groundplane.agent.v1.BackupConfigPriorFile
-	(*BackupConfigMetadataAccepted)(nil),                // 493: groundplane.agent.v1.BackupConfigMetadataAccepted
-	(*BackupConfigValueCredit)(nil),                     // 494: groundplane.agent.v1.BackupConfigValueCredit
-	(*BackupConfigMetadataCredit)(nil),                  // 495: groundplane.agent.v1.BackupConfigMetadataCredit
-	(*BackupPostgresCaptureAuthority)(nil),              // 496: groundplane.agent.v1.BackupPostgresCaptureAuthority
-	(*BackupPostgresRestoreAuthority)(nil),              // 497: groundplane.agent.v1.BackupPostgresRestoreAuthority
-	(*BackupPostgresContainerObserved)(nil),             // 498: groundplane.agent.v1.BackupPostgresContainerObserved
-	(*BackupPostgresDumpStart)(nil),                     // 499: groundplane.agent.v1.BackupPostgresDumpStart
-	(*BackupPostgresRestoreApplyStartCheckpoint)(nil),   // 500: groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
-	(*BackupPostgresRestoreVerified)(nil),               // 501: groundplane.agent.v1.BackupPostgresRestoreVerified
-	(*BackupPostgresServiceProgress)(nil),               // 502: groundplane.agent.v1.BackupPostgresServiceProgress
-	(*BackupPostgresArchiveEvidence)(nil),               // 503: groundplane.agent.v1.BackupPostgresArchiveEvidence
-	(*BackupMySQLCaptureAuthority)(nil),                 // 504: groundplane.agent.v1.BackupMySQLCaptureAuthority
-	(*BackupMySQLRestoreAuthority)(nil),                 // 505: groundplane.agent.v1.BackupMySQLRestoreAuthority
-	(*BackupMySQLContainerObserved)(nil),                // 506: groundplane.agent.v1.BackupMySQLContainerObserved
-	(*BackupMySQLDumpStart)(nil),                        // 507: groundplane.agent.v1.BackupMySQLDumpStart
-	(*BackupMySQLRestoreApplyStartCheckpoint)(nil),      // 508: groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
-	(*BackupMySQLRestoreVerified)(nil),                  // 509: groundplane.agent.v1.BackupMySQLRestoreVerified
-	(*BackupMySQLServiceProgress)(nil),                  // 510: groundplane.agent.v1.BackupMySQLServiceProgress
-	(*BackupMySQLArchiveEvidence)(nil),                  // 511: groundplane.agent.v1.BackupMySQLArchiveEvidence
-	(*BackupVolumeManifestEntry)(nil),                   // 512: groundplane.agent.v1.BackupVolumeManifestEntry
-	(*BackupVolumeArchiveEvidence)(nil),                 // 513: groundplane.agent.v1.BackupVolumeArchiveEvidence
-	(*BackupVolumeProjectionAuthority)(nil),             // 514: groundplane.agent.v1.BackupVolumeProjectionAuthority
-	(*BackupVolumeCaptureAuthority)(nil),                // 515: groundplane.agent.v1.BackupVolumeCaptureAuthority
-	(*BackupVolumeRestoreAuthority)(nil),                // 516: groundplane.agent.v1.BackupVolumeRestoreAuthority
-	(*BackupVolumeSourceArchiveEvidence)(nil),           // 517: groundplane.agent.v1.BackupVolumeSourceArchiveEvidence
-	(*BackupVolumeNoSourceArchiveEvidence)(nil),         // 518: groundplane.agent.v1.BackupVolumeNoSourceArchiveEvidence
-	(*BackupConsumersStopped)(nil),                      // 519: groundplane.agent.v1.BackupConsumersStopped
-	(*BackupVolumeConstructionIntent)(nil),              // 520: groundplane.agent.v1.BackupVolumeConstructionIntent
-	(*BackupVolumeConstructionCompleted)(nil),           // 521: groundplane.agent.v1.BackupVolumeConstructionCompleted
-	(*BackupVolumeFinalizationIntent)(nil),              // 522: groundplane.agent.v1.BackupVolumeFinalizationIntent
-	(*BackupVolumeFinalizationCompleted)(nil),           // 523: groundplane.agent.v1.BackupVolumeFinalizationCompleted
-	(*BackupVolumeExchangeIntent)(nil),                  // 524: groundplane.agent.v1.BackupVolumeExchangeIntent
-	(*BackupVolumeTreeExchanged)(nil),                   // 525: groundplane.agent.v1.BackupVolumeTreeExchanged
-	(*BackupVolumeDeleteIntent)(nil),                    // 526: groundplane.agent.v1.BackupVolumeDeleteIntent
-	(*BackupVolumeReplacedPathCleaned)(nil),             // 527: groundplane.agent.v1.BackupVolumeReplacedPathCleaned
-	(*BackupVolumeServiceProgress)(nil),                 // 528: groundplane.agent.v1.BackupVolumeServiceProgress
-	(*BackupWorkSecretRequest)(nil),                     // 529: groundplane.agent.v1.BackupWorkSecretRequest
-	(*BackupWorkSecretTransfer)(nil),                    // 530: groundplane.agent.v1.BackupWorkSecretTransfer
-	(*BackupSecretSlotHeader)(nil),                      // 531: groundplane.agent.v1.BackupSecretSlotHeader
-	(*BackupSecretSlotChunk)(nil),                       // 532: groundplane.agent.v1.BackupSecretSlotChunk
-	(*BackupSecretSlotEnd)(nil),                         // 533: groundplane.agent.v1.BackupSecretSlotEnd
-	(*BackupStagingRecoveryAckReceipt)(nil),             // 534: groundplane.agent.v1.BackupStagingRecoveryAckReceipt
-	(*AdapterProcedure)(nil),                            // 535: groundplane.agent.v1.AdapterProcedure
-	(*MaterializeFile)(nil),                             // 536: groundplane.agent.v1.MaterializeFile
-	(*ComposeApply)(nil),                                // 537: groundplane.agent.v1.ComposeApply
-	(*ComposeStop)(nil),                                 // 538: groundplane.agent.v1.ComposeStop
-	(*ComposeRemove)(nil),                               // 539: groundplane.agent.v1.ComposeRemove
-	(*WaitHealthy)(nil),                                 // 540: groundplane.agent.v1.WaitHealthy
-	(*ComposeWorkloadApply)(nil),                        // 541: groundplane.agent.v1.ComposeWorkloadApply
-	(*WaitWorkloadHealthy)(nil),                         // 542: groundplane.agent.v1.WaitWorkloadHealthy
-	(*ComposeWorkloadRemove)(nil),                       // 543: groundplane.agent.v1.ComposeWorkloadRemove
-	(*RollingTrafficSwitch)(nil),                        // 544: groundplane.agent.v1.RollingTrafficSwitch
-	(*RollingReplicaDrain)(nil),                         // 545: groundplane.agent.v1.RollingReplicaDrain
-	(*RollingReleaseAcknowledge)(nil),                   // 546: groundplane.agent.v1.RollingReleaseAcknowledge
-	(*ServiceProxySwitch)(nil),                          // 547: groundplane.agent.v1.ServiceProxySwitch
-	(*ServiceProxyProbe)(nil),                           // 548: groundplane.agent.v1.ServiceProxyProbe
-	(*ServiceProxyCompensate)(nil),                      // 549: groundplane.agent.v1.ServiceProxyCompensate
-	(*ServiceProxyEvidence)(nil),                        // 550: groundplane.agent.v1.ServiceProxyEvidence
-	(*ServiceRecreateAcknowledge)(nil),                  // 551: groundplane.agent.v1.ServiceRecreateAcknowledge
-	(*ServiceRecreateProbe)(nil),                        // 552: groundplane.agent.v1.ServiceRecreateProbe
-	(*ServiceRecreateCompensate)(nil),                   // 553: groundplane.agent.v1.ServiceRecreateCompensate
-	(*ServiceRecreateEvidence)(nil),                     // 554: groundplane.agent.v1.ServiceRecreateEvidence
-	(*EnvironmentDirectoryCreate)(nil),                  // 555: groundplane.agent.v1.EnvironmentDirectoryCreate
-	(*EnvironmentDirectoryRemove)(nil),                  // 556: groundplane.agent.v1.EnvironmentDirectoryRemove
-	(*ManagedVolumeDirectoriesEnsure)(nil),              // 557: groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
-	(*ManagedVolumeRemove)(nil),                         // 558: groundplane.agent.v1.ManagedVolumeRemove
-	(*ManagedVolumeDirectoryRemove)(nil),                // 559: groundplane.agent.v1.ManagedVolumeDirectoryRemove
-	(*ManagedNetworkRemove)(nil),                        // 560: groundplane.agent.v1.ManagedNetworkRemove
-	(*CheckDNSConnections)(nil),                         // 561: groundplane.agent.v1.CheckDNSConnections
-	(*DNSConnectionQuery)(nil),                          // 562: groundplane.agent.v1.DNSConnectionQuery
-	(*CancelDNSConnections)(nil),                        // 563: groundplane.agent.v1.CancelDNSConnections
-	(*DNSConnectionAnswer)(nil),                         // 564: groundplane.agent.v1.DNSConnectionAnswer
-	(*DNSConnectionResult)(nil),                         // 565: groundplane.agent.v1.DNSConnectionResult
-	(*CheckEdgeConnections)(nil),                        // 566: groundplane.agent.v1.CheckEdgeConnections
-	(*CancelEdgeConnections)(nil),                       // 567: groundplane.agent.v1.CancelEdgeConnections
-	(*EdgeConnectionResult)(nil),                        // 568: groundplane.agent.v1.EdgeConnectionResult
-	(*ComponentApply)(nil),                              // 569: groundplane.agent.v1.ComponentApply
-	(*ContainerConfigTransition)(nil),                   // 570: groundplane.agent.v1.ContainerConfigTransition
-	(*HostResolutionApply)(nil),                         // 571: groundplane.agent.v1.HostResolutionApply
-	(*HostResolutionRestore)(nil),                       // 572: groundplane.agent.v1.HostResolutionRestore
-	(*ManagedConfigHelperRequest)(nil),                  // 573: groundplane.agent.v1.ManagedConfigHelperRequest
-	(*ManagedConfigHelperResponse)(nil),                 // 574: groundplane.agent.v1.ManagedConfigHelperResponse
-	(*ComposeHelperResponse)(nil),                       // 575: groundplane.agent.v1.ComposeHelperResponse
-	(*RollingProxyEvidence)(nil),                        // 576: groundplane.agent.v1.RollingProxyEvidence
-	(*ConfigUpdate)(nil),                                // 577: groundplane.agent.v1.ConfigUpdate
-	(*Shutdown)(nil),                                    // 578: groundplane.agent.v1.Shutdown
-	(*CheckBackingAccess)(nil),                          // 579: groundplane.agent.v1.CheckBackingAccess
-	(*BackingAccessParameters)(nil),                     // 580: groundplane.agent.v1.BackingAccessParameters
-	(*CancelBackingAccess)(nil),                         // 581: groundplane.agent.v1.CancelBackingAccess
-	(*BackingAccessResult)(nil),                         // 582: groundplane.agent.v1.BackingAccessResult
-	(*BackingAccessObservation)(nil),                    // 583: groundplane.agent.v1.BackingAccessObservation
-	(*BackingAccessStage)(nil),                          // 584: groundplane.agent.v1.BackingAccessStage
-	(*timestamppb.Timestamp)(nil),                       // 585: google.protobuf.Timestamp
+	(*ExecutionQuiescenceResult)(nil),                   // 175: groundplane.agent.v1.ExecutionQuiescenceResult
+	(*Ready)(nil),                                       // 176: groundplane.agent.v1.Ready
+	(*BuildProvenance)(nil),                             // 177: groundplane.agent.v1.BuildProvenance
+	(*WorkloadImageSelector)(nil),                       // 178: groundplane.agent.v1.WorkloadImageSelector
+	(*ResolveWorkloadImages)(nil),                       // 179: groundplane.agent.v1.ResolveWorkloadImages
+	(*WorkloadImageResolution)(nil),                     // 180: groundplane.agent.v1.WorkloadImageResolution
+	(*WorkloadImageResolutions)(nil),                    // 181: groundplane.agent.v1.WorkloadImageResolutions
+	(*WorkloadImageResolutionFailure)(nil),              // 182: groundplane.agent.v1.WorkloadImageResolutionFailure
+	(*WorkloadImageResolutionResult)(nil),               // 183: groundplane.agent.v1.WorkloadImageResolutionResult
+	(*ServiceObservationTarget)(nil),                    // 184: groundplane.agent.v1.ServiceObservationTarget
+	(*ServiceWorkloadObservation)(nil),                  // 185: groundplane.agent.v1.ServiceWorkloadObservation
+	(*DatabaseVersionProbe)(nil),                        // 186: groundplane.agent.v1.DatabaseVersionProbe
+	(*DatabaseVersionObservation)(nil),                  // 187: groundplane.agent.v1.DatabaseVersionObservation
+	(*ObserveServices)(nil),                             // 188: groundplane.agent.v1.ObserveServices
+	(*CancelServiceObservation)(nil),                    // 189: groundplane.agent.v1.CancelServiceObservation
+	(*ServiceReplicaCounts)(nil),                        // 190: groundplane.agent.v1.ServiceReplicaCounts
+	(*ServiceObservationRow)(nil),                       // 191: groundplane.agent.v1.ServiceObservationRow
+	(*ServiceContainerObservation)(nil),                 // 192: groundplane.agent.v1.ServiceContainerObservation
+	(*ServiceObservationResult)(nil),                    // 193: groundplane.agent.v1.ServiceObservationResult
+	(*StepFailure)(nil),                                 // 194: groundplane.agent.v1.StepFailure
+	(*ObservedState)(nil),                               // 195: groundplane.agent.v1.ObservedState
+	(*ObservedProject)(nil),                             // 196: groundplane.agent.v1.ObservedProject
+	(*ObservedContainer)(nil),                           // 197: groundplane.agent.v1.ObservedContainer
+	(*ObservedNetwork)(nil),                             // 198: groundplane.agent.v1.ObservedNetwork
+	(*ObservedVolume)(nil),                              // 199: groundplane.agent.v1.ObservedVolume
+	(*ObservedCollision)(nil),                           // 200: groundplane.agent.v1.ObservedCollision
+	(*RollingReleaseEvidence)(nil),                      // 201: groundplane.agent.v1.RollingReleaseEvidence
+	(*CandidateAbsenceEvidence)(nil),                    // 202: groundplane.agent.v1.CandidateAbsenceEvidence
+	(*DNSResolverObservationEvidence)(nil),              // 203: groundplane.agent.v1.DNSResolverObservationEvidence
+	(*DNSAnswerRecord)(nil),                             // 204: groundplane.agent.v1.DNSAnswerRecord
+	(*DNSForwardCounter)(nil),                           // 205: groundplane.agent.v1.DNSForwardCounter
+	(*DNSQueryProof)(nil),                               // 206: groundplane.agent.v1.DNSQueryProof
+	(*ControllerMessage)(nil),                           // 207: groundplane.agent.v1.ControllerMessage
+	(*CheckExecutionQuiescence)(nil),                    // 208: groundplane.agent.v1.CheckExecutionQuiescence
+	(*LogTarget)(nil),                                   // 209: groundplane.agent.v1.LogTarget
+	(*ContainerTerminalOpen)(nil),                       // 210: groundplane.agent.v1.ContainerTerminalOpen
+	(*ContainerTerminalSize)(nil),                       // 211: groundplane.agent.v1.ContainerTerminalSize
+	(*ContainerTerminalControl)(nil),                    // 212: groundplane.agent.v1.ContainerTerminalControl
+	(*ContainerTerminalClosed)(nil),                     // 213: groundplane.agent.v1.ContainerTerminalClosed
+	(*ContainerTerminalEvent)(nil),                      // 214: groundplane.agent.v1.ContainerTerminalEvent
+	(*LogSubscribe)(nil),                                // 215: groundplane.agent.v1.LogSubscribe
+	(*LogCancel)(nil),                                   // 216: groundplane.agent.v1.LogCancel
+	(*LogCredit)(nil),                                   // 217: groundplane.agent.v1.LogCredit
+	(*LogReady)(nil),                                    // 218: groundplane.agent.v1.LogReady
+	(*LogEvent)(nil),                                    // 219: groundplane.agent.v1.LogEvent
+	(*LogEnd)(nil),                                      // 220: groundplane.agent.v1.LogEnd
+	(*ScriptStartAuthorizedCheckpoint)(nil),             // 221: groundplane.agent.v1.ScriptStartAuthorizedCheckpoint
+	(*ScriptBodyPreparedCheckpoint)(nil),                // 222: groundplane.agent.v1.ScriptBodyPreparedCheckpoint
+	(*ScriptContainerCreatedCheckpoint)(nil),            // 223: groundplane.agent.v1.ScriptContainerCreatedCheckpoint
+	(*ScriptOutcomeCheckpoint)(nil),                     // 224: groundplane.agent.v1.ScriptOutcomeCheckpoint
+	(*ScriptCleanupCheckpoint)(nil),                     // 225: groundplane.agent.v1.ScriptCleanupCheckpoint
+	(*ScriptExecutionCheckpoint)(nil),                   // 226: groundplane.agent.v1.ScriptExecutionCheckpoint
+	(*ScriptCheckpointRequest)(nil),                     // 227: groundplane.agent.v1.ScriptCheckpointRequest
+	(*ScriptCheckpointAck)(nil),                         // 228: groundplane.agent.v1.ScriptCheckpointAck
+	(*BackingHookValue)(nil),                            // 229: groundplane.agent.v1.BackingHookValue
+	(*BackingHookFactDefinition)(nil),                   // 230: groundplane.agent.v1.BackingHookFactDefinition
+	(*BackingHookProcedure)(nil),                        // 231: groundplane.agent.v1.BackingHookProcedure
+	(*ExecutionPlan)(nil),                               // 232: groundplane.agent.v1.ExecutionPlan
+	(*ManagedNetworkRecoveryProcedure)(nil),             // 233: groundplane.agent.v1.ManagedNetworkRecoveryProcedure
+	(*ManagedNetworkRemovalRecovery)(nil),               // 234: groundplane.agent.v1.ManagedNetworkRemovalRecovery
+	(*ManagedNetworkPreparationRecovery)(nil),           // 235: groundplane.agent.v1.ManagedNetworkPreparationRecovery
+	(*ManagedNetworkPreparationMember)(nil),             // 236: groundplane.agent.v1.ManagedNetworkPreparationMember
+	(*ServiceAbsenceRecoveryProcedure)(nil),             // 237: groundplane.agent.v1.ServiceAbsenceRecoveryProcedure
+	(*ServiceLifecycleProcedure)(nil),                   // 238: groundplane.agent.v1.ServiceLifecycleProcedure
+	(*ServiceLifecycleSource)(nil),                      // 239: groundplane.agent.v1.ServiceLifecycleSource
+	(*ManagedComponentProcedure)(nil),                   // 240: groundplane.agent.v1.ManagedComponentProcedure
+	(*ManagedComponentService)(nil),                     // 241: groundplane.agent.v1.ManagedComponentService
+	(*CandidateReleaseProcedure)(nil),                   // 242: groundplane.agent.v1.CandidateReleaseProcedure
+	(*ConfigurationRestoration)(nil),                    // 243: groundplane.agent.v1.ConfigurationRestoration
+	(*ConfigurationFileRestoration)(nil),                // 244: groundplane.agent.v1.ConfigurationFileRestoration
+	(*CandidateReleaseMember)(nil),                      // 245: groundplane.agent.v1.CandidateReleaseMember
+	(*RollingReleaseProcedure)(nil),                     // 246: groundplane.agent.v1.RollingReleaseProcedure
+	(*RollingReplica)(nil),                              // 247: groundplane.agent.v1.RollingReplica
+	(*RollingReplicaChange)(nil),                        // 248: groundplane.agent.v1.RollingReplicaChange
+	(*ServingPredecessorRestoration)(nil),               // 249: groundplane.agent.v1.ServingPredecessorRestoration
+	(*CandidateAbsenceRestoration)(nil),                 // 250: groundplane.agent.v1.CandidateAbsenceRestoration
+	(*CandidateReleaseService)(nil),                     // 251: groundplane.agent.v1.CandidateReleaseService
+	(*CandidateRestorationProbe)(nil),                   // 252: groundplane.agent.v1.CandidateRestorationProbe
+	(*CandidateRestorationCompensate)(nil),              // 253: groundplane.agent.v1.CandidateRestorationCompensate
+	(*EntryConfigurationWorkInput)(nil),                 // 254: groundplane.agent.v1.EntryConfigurationWorkInput
+	(*ResolverWorkAssignment)(nil),                      // 255: groundplane.agent.v1.ResolverWorkAssignment
+	(*ResolverWorkCheckpointRequest)(nil),               // 256: groundplane.agent.v1.ResolverWorkCheckpointRequest
+	(*ResolverWorkCheckpointAck)(nil),                   // 257: groundplane.agent.v1.ResolverWorkCheckpointAck
+	(*ResolverWorkCompletionRequest)(nil),               // 258: groundplane.agent.v1.ResolverWorkCompletionRequest
+	(*ResolverWorkFailureRequest)(nil),                  // 259: groundplane.agent.v1.ResolverWorkFailureRequest
+	(*ResolverWorkRecoveryRequest)(nil),                 // 260: groundplane.agent.v1.ResolverWorkRecoveryRequest
+	(*ResolverWorkResultAck)(nil),                       // 261: groundplane.agent.v1.ResolverWorkResultAck
+	(*ResolverWorkHelperRequest)(nil),                   // 262: groundplane.agent.v1.ResolverWorkHelperRequest
+	(*ResolverWorkHelperResponse)(nil),                  // 263: groundplane.agent.v1.ResolverWorkHelperResponse
+	(*ComponentWorkInput)(nil),                          // 264: groundplane.agent.v1.ComponentWorkInput
+	(*ComponentWorkPredecessor)(nil),                    // 265: groundplane.agent.v1.ComponentWorkPredecessor
+	(*ComponentWorkRetainedConfiguration)(nil),          // 266: groundplane.agent.v1.ComponentWorkRetainedConfiguration
+	(*EntryConfigurationRequest)(nil),                   // 267: groundplane.agent.v1.EntryConfigurationRequest
+	(*EntryConfigurationFile)(nil),                      // 268: groundplane.agent.v1.EntryConfigurationFile
+	(*EntryConfigurationManifest)(nil),                  // 269: groundplane.agent.v1.EntryConfigurationManifest
+	(*EntryConfigurationFileRequest)(nil),               // 270: groundplane.agent.v1.EntryConfigurationFileRequest
+	(*EntryConfigurationFileDelivery)(nil),              // 271: groundplane.agent.v1.EntryConfigurationFileDelivery
+	(*EntryConfigurationWorkCheckpointRequest)(nil),     // 272: groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
+	(*EntryConfigurationWorkCheckpointAck)(nil),         // 273: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
+	(*EntryConfigurationWorkCompletionRequest)(nil),     // 274: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest
+	(*EntryConfigurationWorkCompletionAck)(nil),         // 275: groundplane.agent.v1.EntryConfigurationWorkCompletionAck
+	(*EntryConfigurationWorkFailureRequest)(nil),        // 276: groundplane.agent.v1.EntryConfigurationWorkFailureRequest
+	(*EntryConfigurationWorkFailureAck)(nil),            // 277: groundplane.agent.v1.EntryConfigurationWorkFailureAck
+	(*EntryConfigurationWorkAssignment)(nil),            // 278: groundplane.agent.v1.EntryConfigurationWorkAssignment
+	(*EntryConfigurationWorkRecoveryReportRequest)(nil), // 279: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest
+	(*EntryConfigurationWorkRecoveryReportAck)(nil),     // 280: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck
+	(*ComponentWorkAssignment)(nil),                     // 281: groundplane.agent.v1.ComponentWorkAssignment
+	(*ComponentWorkCheckpointRequest)(nil),              // 282: groundplane.agent.v1.ComponentWorkCheckpointRequest
+	(*ComponentWorkCheckpointAck)(nil),                  // 283: groundplane.agent.v1.ComponentWorkCheckpointAck
+	(*ComponentWorkCompletionRequest)(nil),              // 284: groundplane.agent.v1.ComponentWorkCompletionRequest
+	(*ComponentWorkCompletionAck)(nil),                  // 285: groundplane.agent.v1.ComponentWorkCompletionAck
+	(*ComponentWorkFailureRequest)(nil),                 // 286: groundplane.agent.v1.ComponentWorkFailureRequest
+	(*ComponentWorkFailureAck)(nil),                     // 287: groundplane.agent.v1.ComponentWorkFailureAck
+	(*ComponentWorkRecoveryReportRequest)(nil),          // 288: groundplane.agent.v1.ComponentWorkRecoveryReportRequest
+	(*ComponentWorkRecoveryReportAck)(nil),              // 289: groundplane.agent.v1.ComponentWorkRecoveryReportAck
+	(*NetworkWorkInput)(nil),                            // 290: groundplane.agent.v1.NetworkWorkInput
+	(*NetworkWorkAssignment)(nil),                       // 291: groundplane.agent.v1.NetworkWorkAssignment
+	(*NetworkWorkCheckpointRequest)(nil),                // 292: groundplane.agent.v1.NetworkWorkCheckpointRequest
+	(*NetworkWorkCheckpointAck)(nil),                    // 293: groundplane.agent.v1.NetworkWorkCheckpointAck
+	(*NetworkWorkCompletionRequest)(nil),                // 294: groundplane.agent.v1.NetworkWorkCompletionRequest
+	(*NetworkWorkCompletionAck)(nil),                    // 295: groundplane.agent.v1.NetworkWorkCompletionAck
+	(*NetworkWorkFailureRequest)(nil),                   // 296: groundplane.agent.v1.NetworkWorkFailureRequest
+	(*NetworkWorkFailureAck)(nil),                       // 297: groundplane.agent.v1.NetworkWorkFailureAck
+	(*NetworkWorkRecoveryReportRequest)(nil),            // 298: groundplane.agent.v1.NetworkWorkRecoveryReportRequest
+	(*NetworkWorkRecoveryReportAck)(nil),                // 299: groundplane.agent.v1.NetworkWorkRecoveryReportAck
+	(*ComponentWorkHelperRequest)(nil),                  // 300: groundplane.agent.v1.ComponentWorkHelperRequest
+	(*EntryConfigurationWorkHelperRequest)(nil),         // 301: groundplane.agent.v1.EntryConfigurationWorkHelperRequest
+	(*EntryConfigurationWorkHelperResponse)(nil),        // 302: groundplane.agent.v1.EntryConfigurationWorkHelperResponse
+	(*ComponentWorkHelperResponse)(nil),                 // 303: groundplane.agent.v1.ComponentWorkHelperResponse
+	(*NetworkWorkHelperRequest)(nil),                    // 304: groundplane.agent.v1.NetworkWorkHelperRequest
+	(*NetworkWorkHelperResponse)(nil),                   // 305: groundplane.agent.v1.NetworkWorkHelperResponse
+	(*ServiceRemovalRecoveryAssignment)(nil),            // 306: groundplane.agent.v1.ServiceRemovalRecoveryAssignment
+	(*ServiceRemovalConfigurationRequest)(nil),          // 307: groundplane.agent.v1.ServiceRemovalConfigurationRequest
+	(*ServiceRemovalConfigurationFile)(nil),             // 308: groundplane.agent.v1.ServiceRemovalConfigurationFile
+	(*ServiceRemovalConfigurationManifest)(nil),         // 309: groundplane.agent.v1.ServiceRemovalConfigurationManifest
+	(*ServiceRemovalConfigurationFileRequest)(nil),      // 310: groundplane.agent.v1.ServiceRemovalConfigurationFileRequest
+	(*ServiceRemovalConfigurationFileDelivery)(nil),     // 311: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery
+	(*ServiceRemovalRecoveryCheckpointRequest)(nil),     // 312: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
+	(*ServiceRemovalRecoveryCheckpointAck)(nil),         // 313: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
+	(*ServiceRemovalRecoveryCompletionRequest)(nil),     // 314: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest
+	(*ServiceRemovalRecoveryCompletionAck)(nil),         // 315: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck
+	(*ServiceRemovalRecoveryFailureRequest)(nil),        // 316: groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest
+	(*ServiceRemovalRecoveryFailureAck)(nil),            // 317: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck
+	(*ServiceRemovalRecoveryHelperRequest)(nil),         // 318: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest
+	(*ServiceRemovalRecoveryHelperResponse)(nil),        // 319: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse
+	(*ServiceLifecycleAssignment)(nil),                  // 320: groundplane.agent.v1.ServiceLifecycleAssignment
+	(*ServiceLifecycleWorkInput)(nil),                   // 321: groundplane.agent.v1.ServiceLifecycleWorkInput
+	(*ServiceLifecycleMember)(nil),                      // 322: groundplane.agent.v1.ServiceLifecycleMember
+	(*ServiceLifecycleHook)(nil),                        // 323: groundplane.agent.v1.ServiceLifecycleHook
+	(*ServiceLifecycleHookRequest)(nil),                 // 324: groundplane.agent.v1.ServiceLifecycleHookRequest
+	(*ServiceLifecycleHookDelivery)(nil),                // 325: groundplane.agent.v1.ServiceLifecycleHookDelivery
+	(*ServiceLifecycleRecoveryReportRequest)(nil),       // 326: groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest
+	(*ServiceLifecycleRecoveryReportAck)(nil),           // 327: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck
+	(*ServiceLifecycleCheckpointRequest)(nil),           // 328: groundplane.agent.v1.ServiceLifecycleCheckpointRequest
+	(*ServiceLifecycleCheckpointAck)(nil),               // 329: groundplane.agent.v1.ServiceLifecycleCheckpointAck
+	(*ServiceLifecycleCompletionRequest)(nil),           // 330: groundplane.agent.v1.ServiceLifecycleCompletionRequest
+	(*ServiceLifecycleCompletionAck)(nil),               // 331: groundplane.agent.v1.ServiceLifecycleCompletionAck
+	(*ServiceLifecycleFailureRequest)(nil),              // 332: groundplane.agent.v1.ServiceLifecycleFailureRequest
+	(*ServiceLifecycleFailureAck)(nil),                  // 333: groundplane.agent.v1.ServiceLifecycleFailureAck
+	(*ServiceLifecycleHelperRequest)(nil),               // 334: groundplane.agent.v1.ServiceLifecycleHelperRequest
+	(*ServiceLifecycleHelperResponse)(nil),              // 335: groundplane.agent.v1.ServiceLifecycleHelperResponse
+	(*VolumeWorkInput)(nil),                             // 336: groundplane.agent.v1.VolumeWorkInput
+	(*VolumeWorkAssignment)(nil),                        // 337: groundplane.agent.v1.VolumeWorkAssignment
+	(*VolumeWorkCheckpointRequest)(nil),                 // 338: groundplane.agent.v1.VolumeWorkCheckpointRequest
+	(*VolumeWorkCheckpointAck)(nil),                     // 339: groundplane.agent.v1.VolumeWorkCheckpointAck
+	(*VolumeWorkCompletionRequest)(nil),                 // 340: groundplane.agent.v1.VolumeWorkCompletionRequest
+	(*VolumeWorkCompletionAck)(nil),                     // 341: groundplane.agent.v1.VolumeWorkCompletionAck
+	(*VolumeWorkFailureRequest)(nil),                    // 342: groundplane.agent.v1.VolumeWorkFailureRequest
+	(*VolumeWorkFailureAck)(nil),                        // 343: groundplane.agent.v1.VolumeWorkFailureAck
+	(*VolumeWorkRecoveryReportRequest)(nil),             // 344: groundplane.agent.v1.VolumeWorkRecoveryReportRequest
+	(*VolumeWorkRecoveryReportAck)(nil),                 // 345: groundplane.agent.v1.VolumeWorkRecoveryReportAck
+	(*VolumeWorkHelperRequest)(nil),                     // 346: groundplane.agent.v1.VolumeWorkHelperRequest
+	(*VolumeWorkHelperResponse)(nil),                    // 347: groundplane.agent.v1.VolumeWorkHelperResponse
+	(*ComposeArtifact)(nil),                             // 348: groundplane.agent.v1.ComposeArtifact
+	(*ComposeService)(nil),                              // 349: groundplane.agent.v1.ComposeService
+	(*ComposeNetwork)(nil),                              // 350: groundplane.agent.v1.ComposeNetwork
+	(*ComposeVolume)(nil),                               // 351: groundplane.agent.v1.ComposeVolume
+	(*LabelPair)(nil),                                   // 352: groundplane.agent.v1.LabelPair
+	(*ExecutionStep)(nil),                               // 353: groundplane.agent.v1.ExecutionStep
+	(*ServiceAbsenceProbe)(nil),                         // 354: groundplane.agent.v1.ServiceAbsenceProbe
+	(*ManagedNetworkEnsure)(nil),                        // 355: groundplane.agent.v1.ManagedNetworkEnsure
+	(*ManagedNetworkPreparationProbe)(nil),              // 356: groundplane.agent.v1.ManagedNetworkPreparationProbe
+	(*ManagedVolumeEnsure)(nil),                         // 357: groundplane.agent.v1.ManagedVolumeEnsure
+	(*RunScript)(nil),                                   // 358: groundplane.agent.v1.RunScript
+	(*ResolvedRunnerSnapshot)(nil),                      // 359: groundplane.agent.v1.ResolvedRunnerSnapshot
+	(*ScriptExplicitExecutionAuthority)(nil),            // 360: groundplane.agent.v1.ScriptExplicitExecutionAuthority
+	(*ScriptExplicitExecutionContext)(nil),              // 361: groundplane.agent.v1.ScriptExplicitExecutionContext
+	(*ScriptExplicitVolumeGrant)(nil),                   // 362: groundplane.agent.v1.ScriptExplicitVolumeGrant
+	(*ScriptRunnerNetwork)(nil),                         // 363: groundplane.agent.v1.ScriptRunnerNetwork
+	(*ScriptNetworkAttachment)(nil),                     // 364: groundplane.agent.v1.ScriptNetworkAttachment
+	(*ScriptRunnerMount)(nil),                           // 365: groundplane.agent.v1.ScriptRunnerMount
+	(*ScriptSourceAuthority)(nil),                       // 366: groundplane.agent.v1.ScriptSourceAuthority
+	(*ScriptExistingSourceAuthority)(nil),               // 367: groundplane.agent.v1.ScriptExistingSourceAuthority
+	(*ScriptStagedSourceAuthority)(nil),                 // 368: groundplane.agent.v1.ScriptStagedSourceAuthority
+	(*ScriptMount)(nil),                                 // 369: groundplane.agent.v1.ScriptMount
+	(*ScriptRunnerEntryBinding)(nil),                    // 370: groundplane.agent.v1.ScriptRunnerEntryBinding
+	(*ScriptRunnerSecretValue)(nil),                     // 371: groundplane.agent.v1.ScriptRunnerSecretValue
+	(*ScriptRunnerProjection)(nil),                      // 372: groundplane.agent.v1.ScriptRunnerProjection
+	(*ScriptStringPair)(nil),                            // 373: groundplane.agent.v1.ScriptStringPair
+	(*ScriptUlimit)(nil),                                // 374: groundplane.agent.v1.ScriptUlimit
+	(*ScriptBlkio)(nil),                                 // 375: groundplane.agent.v1.ScriptBlkio
+	(*ScriptWeightDevice)(nil),                          // 376: groundplane.agent.v1.ScriptWeightDevice
+	(*ScriptThrottleDevice)(nil),                        // 377: groundplane.agent.v1.ScriptThrottleDevice
+	(*ScriptResource)(nil),                              // 378: groundplane.agent.v1.ScriptResource
+	(*ScriptBodyArtifactMetadata)(nil),                  // 379: groundplane.agent.v1.ScriptBodyArtifactMetadata
+	(*ScriptBodyArtifact)(nil),                          // 380: groundplane.agent.v1.ScriptBodyArtifact
+	(*ScriptEntryArtifact)(nil),                         // 381: groundplane.agent.v1.ScriptEntryArtifact
+	(*RevisionDigest)(nil),                              // 382: groundplane.agent.v1.RevisionDigest
+	(*CheckpointFence)(nil),                             // 383: groundplane.agent.v1.CheckpointFence
+	(*BackupResourceIdentity)(nil),                      // 384: groundplane.agent.v1.BackupResourceIdentity
+	(*BackupEncryptionAuthority)(nil),                   // 385: groundplane.agent.v1.BackupEncryptionAuthority
+	(*BackupPriorRuntimeIntent)(nil),                    // 386: groundplane.agent.v1.BackupPriorRuntimeIntent
+	(*BackupServiceFact)(nil),                           // 387: groundplane.agent.v1.BackupServiceFact
+	(*BackupConnectorAuthority)(nil),                    // 388: groundplane.agent.v1.BackupConnectorAuthority
+	(*BackupObjectTarget)(nil),                          // 389: groundplane.agent.v1.BackupObjectTarget
+	(*BackupS3VersionId)(nil),                           // 390: groundplane.agent.v1.BackupS3VersionId
+	(*BackupS3ETag)(nil),                                // 391: groundplane.agent.v1.BackupS3ETag
+	(*BackupObjectIdentity)(nil),                        // 392: groundplane.agent.v1.BackupObjectIdentity
+	(*BackupArtifactEvidence)(nil),                      // 393: groundplane.agent.v1.BackupArtifactEvidence
+	(*BackupWorkInput)(nil),                             // 394: groundplane.agent.v1.BackupWorkInput
+	(*BackupWorkAssignment)(nil),                        // 395: groundplane.agent.v1.BackupWorkAssignment
+	(*BackupConsumerHelperRequest)(nil),                 // 396: groundplane.agent.v1.BackupConsumerHelperRequest
+	(*BackupConsumerHelperResponse)(nil),                // 397: groundplane.agent.v1.BackupConsumerHelperResponse
+	(*BackupRecoveryAssignment)(nil),                    // 398: groundplane.agent.v1.BackupRecoveryAssignment
+	(*BackupRecoveryRequest)(nil),                       // 399: groundplane.agent.v1.BackupRecoveryRequest
+	(*BackupConfigRecoveryPrepareRequest)(nil),          // 400: groundplane.agent.v1.BackupConfigRecoveryPrepareRequest
+	(*BackupConfigRecoveryPrepareAck)(nil),              // 401: groundplane.agent.v1.BackupConfigRecoveryPrepareAck
+	(*BackupRecoveryAck)(nil),                           // 402: groundplane.agent.v1.BackupRecoveryAck
+	(*BackupWorkCheckpointRequest)(nil),                 // 403: groundplane.agent.v1.BackupWorkCheckpointRequest
+	(*BackupWorkCompletionRequest)(nil),                 // 404: groundplane.agent.v1.BackupWorkCompletionRequest
+	(*BackupWorkFailureRequest)(nil),                    // 405: groundplane.agent.v1.BackupWorkFailureRequest
+	(*BackupWorkFailureAck)(nil),                        // 406: groundplane.agent.v1.BackupWorkFailureAck
+	(*BackupWorkCompletionAck)(nil),                     // 407: groundplane.agent.v1.BackupWorkCompletionAck
+	(*BackupWorkCheckpointAck)(nil),                     // 408: groundplane.agent.v1.BackupWorkCheckpointAck
+	(*BackupPlanScope)(nil),                             // 409: groundplane.agent.v1.BackupPlanScope
+	(*BackupStepAuthority)(nil),                         // 410: groundplane.agent.v1.BackupStepAuthority
+	(*BackupStepResume)(nil),                            // 411: groundplane.agent.v1.BackupStepResume
+	(*BackupCaptureResume)(nil),                         // 412: groundplane.agent.v1.BackupCaptureResume
+	(*BackupPruneResume)(nil),                           // 413: groundplane.agent.v1.BackupPruneResume
+	(*BackupRestoreResume)(nil),                         // 414: groundplane.agent.v1.BackupRestoreResume
+	(*BackupDatabaseRestoreProgress)(nil),               // 415: groundplane.agent.v1.BackupDatabaseRestoreProgress
+	(*BackupDatabaseConsumerRecovery)(nil),              // 416: groundplane.agent.v1.BackupDatabaseConsumerRecovery
+	(*BackupCaptureCursor)(nil),                         // 417: groundplane.agent.v1.BackupCaptureCursor
+	(*BackupRestoreCursor)(nil),                         // 418: groundplane.agent.v1.BackupRestoreCursor
+	(*BackupCaptureAuthority)(nil),                      // 419: groundplane.agent.v1.BackupCaptureAuthority
+	(*BackupRestoreAuthority)(nil),                      // 420: groundplane.agent.v1.BackupRestoreAuthority
+	(*BackupPruneAuthority)(nil),                        // 421: groundplane.agent.v1.BackupPruneAuthority
+	(*BackupOriginalIdentity)(nil),                      // 422: groundplane.agent.v1.BackupOriginalIdentity
+	(*BackupAdoptedIdentity)(nil),                       // 423: groundplane.agent.v1.BackupAdoptedIdentity
+	(*BackupPruneObject)(nil),                           // 424: groundplane.agent.v1.BackupPruneObject
+	(*BackupPruneObjectDeleted)(nil),                    // 425: groundplane.agent.v1.BackupPruneObjectDeleted
+	(*BackupStagingInventory)(nil),                      // 426: groundplane.agent.v1.BackupStagingInventory
+	(*BackupRecoveredVolumeRestore)(nil),                // 427: groundplane.agent.v1.BackupRecoveredVolumeRestore
+	(*BackupRecoveredStage)(nil),                        // 428: groundplane.agent.v1.BackupRecoveredStage
+	(*BackupRecoveredFile)(nil),                         // 429: groundplane.agent.v1.BackupRecoveredFile
+	(*BackupStagingRecoveryPlan)(nil),                   // 430: groundplane.agent.v1.BackupStagingRecoveryPlan
+	(*BackupVolumeRestoreRecoveryDisposition)(nil),      // 431: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition
+	(*BackupVolumeRestoreResume)(nil),                   // 432: groundplane.agent.v1.BackupVolumeRestoreResume
+	(*BackupVolumeRestoreHold)(nil),                     // 433: groundplane.agent.v1.BackupVolumeRestoreHold
+	(*BackupVolumeRestoreCleanup)(nil),                  // 434: groundplane.agent.v1.BackupVolumeRestoreCleanup
+	(*BackupStagingDisposition)(nil),                    // 435: groundplane.agent.v1.BackupStagingDisposition
+	(*BackupDatabaseStagingGuard)(nil),                  // 436: groundplane.agent.v1.BackupDatabaseStagingGuard
+	(*BackupResumePrepared)(nil),                        // 437: groundplane.agent.v1.BackupResumePrepared
+	(*BackupRestartConfigEncryption)(nil),               // 438: groundplane.agent.v1.BackupRestartConfigEncryption
+	(*BackupRestartDatabaseEncryption)(nil),             // 439: groundplane.agent.v1.BackupRestartDatabaseEncryption
+	(*BackupDiscardRecovered)(nil),                      // 440: groundplane.agent.v1.BackupDiscardRecovered
+	(*BackupRecoveryRequired)(nil),                      // 441: groundplane.agent.v1.BackupRecoveryRequired
+	(*BackupStagingRecoveryAck)(nil),                    // 442: groundplane.agent.v1.BackupStagingRecoveryAck
+	(*BackupConfigTransfer)(nil),                        // 443: groundplane.agent.v1.BackupConfigTransfer
+	(*BackupConfigTransferStart)(nil),                   // 444: groundplane.agent.v1.BackupConfigTransferStart
+	(*BackupConfigEntryHeader)(nil),                     // 445: groundplane.agent.v1.BackupConfigEntryHeader
+	(*BackupConfigValueChunk)(nil),                      // 446: groundplane.agent.v1.BackupConfigValueChunk
+	(*BackupConfigEntryEnd)(nil),                        // 447: groundplane.agent.v1.BackupConfigEntryEnd
+	(*BackupConfigTransferEnd)(nil),                     // 448: groundplane.agent.v1.BackupConfigTransferEnd
+	(*BackupConfigTransferResume)(nil),                  // 449: groundplane.agent.v1.BackupConfigTransferResume
+	(*BackupConfigCredit)(nil),                          // 450: groundplane.agent.v1.BackupConfigCredit
+	(*BackupVolumeManifestTransfer)(nil),                // 451: groundplane.agent.v1.BackupVolumeManifestTransfer
+	(*BackupVolumeManifestStart)(nil),                   // 452: groundplane.agent.v1.BackupVolumeManifestStart
+	(*BackupVolumeManifestBatch)(nil),                   // 453: groundplane.agent.v1.BackupVolumeManifestBatch
+	(*BackupVolumeManifestEnd)(nil),                     // 454: groundplane.agent.v1.BackupVolumeManifestEnd
+	(*BackupVolumeManifestResume)(nil),                  // 455: groundplane.agent.v1.BackupVolumeManifestResume
+	(*BackupVolumeManifestAckCredit)(nil),               // 456: groundplane.agent.v1.BackupVolumeManifestAckCredit
+	(*BackupArtifactPrepared)(nil),                      // 457: groundplane.agent.v1.BackupArtifactPrepared
+	(*BackupUploadCompleted)(nil),                       // 458: groundplane.agent.v1.BackupUploadCompleted
+	(*BackupPutOutcomeUnknown)(nil),                     // 459: groundplane.agent.v1.BackupPutOutcomeUnknown
+	(*BackupUploadVerified)(nil),                        // 460: groundplane.agent.v1.BackupUploadVerified
+	(*BackupSourceCleanupCompleted)(nil),                // 461: groundplane.agent.v1.BackupSourceCleanupCompleted
+	(*BackupRestoreArtifactValidated)(nil),              // 462: groundplane.agent.v1.BackupRestoreArtifactValidated
+	(*BackupConfigCheckpoint)(nil),                      // 463: groundplane.agent.v1.BackupConfigCheckpoint
+	(*BackupConfigProgress)(nil),                        // 464: groundplane.agent.v1.BackupConfigProgress
+	(*BackupConfigValueProgress)(nil),                   // 465: groundplane.agent.v1.BackupConfigValueProgress
+	(*BackupConfigTransferCompleted)(nil),               // 466: groundplane.agent.v1.BackupConfigTransferCompleted
+	(*BackupConfigMaterializationVerified)(nil),         // 467: groundplane.agent.v1.BackupConfigMaterializationVerified
+	(*BackupVolumeCheckpoint)(nil),                      // 468: groundplane.agent.v1.BackupVolumeCheckpoint
+	(*BackupVolumeProgress)(nil),                        // 469: groundplane.agent.v1.BackupVolumeProgress
+	(*BackupStagingFinals)(nil),                         // 470: groundplane.agent.v1.BackupStagingFinals
+	(*BackupConfigEntry)(nil),                           // 471: groundplane.agent.v1.BackupConfigEntry
+	(*BackupConfigEnvironment)(nil),                     // 472: groundplane.agent.v1.BackupConfigEnvironment
+	(*BackupConfigFile)(nil),                            // 473: groundplane.agent.v1.BackupConfigFile
+	(*BackupConfigExposureAll)(nil),                     // 474: groundplane.agent.v1.BackupConfigExposureAll
+	(*BackupConfigExposureEdgeTunnel)(nil),              // 475: groundplane.agent.v1.BackupConfigExposureEdgeTunnel
+	(*BackupConfigExposureServices)(nil),                // 476: groundplane.agent.v1.BackupConfigExposureServices
+	(*BackupConfigLiteral)(nil),                         // 477: groundplane.agent.v1.BackupConfigLiteral
+	(*BackupConfigSecretRef)(nil),                       // 478: groundplane.agent.v1.BackupConfigSecretRef
+	(*BackupConfigFactRef)(nil),                         // 479: groundplane.agent.v1.BackupConfigFactRef
+	(*BackupConfigRestoreEntry)(nil),                    // 480: groundplane.agent.v1.BackupConfigRestoreEntry
+	(*BackupConfigEntryMetadata)(nil),                   // 481: groundplane.agent.v1.BackupConfigEntryMetadata
+	(*BackupConfigEntryExposure)(nil),                   // 482: groundplane.agent.v1.BackupConfigEntryExposure
+	(*BackupConfigArtifactDesiredSource)(nil),           // 483: groundplane.agent.v1.BackupConfigArtifactDesiredSource
+	(*BackupConfigLiteralSource)(nil),                   // 484: groundplane.agent.v1.BackupConfigLiteralSource
+	(*BackupConfigArtifactSecretRefSource)(nil),         // 485: groundplane.agent.v1.BackupConfigArtifactSecretRefSource
+	(*BackupConfigArtifactFactSource)(nil),              // 486: groundplane.agent.v1.BackupConfigArtifactFactSource
+	(*BackupConfigSelectedValue)(nil),                   // 487: groundplane.agent.v1.BackupConfigSelectedValue
+	(*BackupConfigContentAuthority)(nil),                // 488: groundplane.agent.v1.BackupConfigContentAuthority
+	(*BackupConfigArchiveEvidence)(nil),                 // 489: groundplane.agent.v1.BackupConfigArchiveEvidence
+	(*BackupConfigCaptureAuthority)(nil),                // 490: groundplane.agent.v1.BackupConfigCaptureAuthority
+	(*BackupConfigRestoreAuthority)(nil),                // 491: groundplane.agent.v1.BackupConfigRestoreAuthority
+	(*BackupConfigFileContext)(nil),                     // 492: groundplane.agent.v1.BackupConfigFileContext
+	(*BackupConfigFileService)(nil),                     // 493: groundplane.agent.v1.BackupConfigFileService
+	(*BackupConfigPriorFile)(nil),                       // 494: groundplane.agent.v1.BackupConfigPriorFile
+	(*BackupConfigMetadataAccepted)(nil),                // 495: groundplane.agent.v1.BackupConfigMetadataAccepted
+	(*BackupConfigValueCredit)(nil),                     // 496: groundplane.agent.v1.BackupConfigValueCredit
+	(*BackupConfigMetadataCredit)(nil),                  // 497: groundplane.agent.v1.BackupConfigMetadataCredit
+	(*BackupPostgresCaptureAuthority)(nil),              // 498: groundplane.agent.v1.BackupPostgresCaptureAuthority
+	(*BackupPostgresRestoreAuthority)(nil),              // 499: groundplane.agent.v1.BackupPostgresRestoreAuthority
+	(*BackupPostgresContainerObserved)(nil),             // 500: groundplane.agent.v1.BackupPostgresContainerObserved
+	(*BackupPostgresDumpStart)(nil),                     // 501: groundplane.agent.v1.BackupPostgresDumpStart
+	(*BackupPostgresRestoreApplyStartCheckpoint)(nil),   // 502: groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
+	(*BackupPostgresRestoreVerified)(nil),               // 503: groundplane.agent.v1.BackupPostgresRestoreVerified
+	(*BackupPostgresServiceProgress)(nil),               // 504: groundplane.agent.v1.BackupPostgresServiceProgress
+	(*BackupPostgresArchiveEvidence)(nil),               // 505: groundplane.agent.v1.BackupPostgresArchiveEvidence
+	(*BackupMySQLCaptureAuthority)(nil),                 // 506: groundplane.agent.v1.BackupMySQLCaptureAuthority
+	(*BackupMySQLRestoreAuthority)(nil),                 // 507: groundplane.agent.v1.BackupMySQLRestoreAuthority
+	(*BackupMySQLContainerObserved)(nil),                // 508: groundplane.agent.v1.BackupMySQLContainerObserved
+	(*BackupMySQLDumpStart)(nil),                        // 509: groundplane.agent.v1.BackupMySQLDumpStart
+	(*BackupMySQLRestoreApplyStartCheckpoint)(nil),      // 510: groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
+	(*BackupMySQLRestoreVerified)(nil),                  // 511: groundplane.agent.v1.BackupMySQLRestoreVerified
+	(*BackupMySQLServiceProgress)(nil),                  // 512: groundplane.agent.v1.BackupMySQLServiceProgress
+	(*BackupMySQLArchiveEvidence)(nil),                  // 513: groundplane.agent.v1.BackupMySQLArchiveEvidence
+	(*BackupVolumeManifestEntry)(nil),                   // 514: groundplane.agent.v1.BackupVolumeManifestEntry
+	(*BackupVolumeArchiveEvidence)(nil),                 // 515: groundplane.agent.v1.BackupVolumeArchiveEvidence
+	(*BackupVolumeProjectionAuthority)(nil),             // 516: groundplane.agent.v1.BackupVolumeProjectionAuthority
+	(*BackupVolumeCaptureAuthority)(nil),                // 517: groundplane.agent.v1.BackupVolumeCaptureAuthority
+	(*BackupVolumeRestoreAuthority)(nil),                // 518: groundplane.agent.v1.BackupVolumeRestoreAuthority
+	(*BackupVolumeSourceArchiveEvidence)(nil),           // 519: groundplane.agent.v1.BackupVolumeSourceArchiveEvidence
+	(*BackupVolumeNoSourceArchiveEvidence)(nil),         // 520: groundplane.agent.v1.BackupVolumeNoSourceArchiveEvidence
+	(*BackupConsumersStopped)(nil),                      // 521: groundplane.agent.v1.BackupConsumersStopped
+	(*BackupVolumeConstructionIntent)(nil),              // 522: groundplane.agent.v1.BackupVolumeConstructionIntent
+	(*BackupVolumeConstructionCompleted)(nil),           // 523: groundplane.agent.v1.BackupVolumeConstructionCompleted
+	(*BackupVolumeFinalizationIntent)(nil),              // 524: groundplane.agent.v1.BackupVolumeFinalizationIntent
+	(*BackupVolumeFinalizationCompleted)(nil),           // 525: groundplane.agent.v1.BackupVolumeFinalizationCompleted
+	(*BackupVolumeExchangeIntent)(nil),                  // 526: groundplane.agent.v1.BackupVolumeExchangeIntent
+	(*BackupVolumeTreeExchanged)(nil),                   // 527: groundplane.agent.v1.BackupVolumeTreeExchanged
+	(*BackupVolumeDeleteIntent)(nil),                    // 528: groundplane.agent.v1.BackupVolumeDeleteIntent
+	(*BackupVolumeReplacedPathCleaned)(nil),             // 529: groundplane.agent.v1.BackupVolumeReplacedPathCleaned
+	(*BackupVolumeServiceProgress)(nil),                 // 530: groundplane.agent.v1.BackupVolumeServiceProgress
+	(*BackupWorkSecretRequest)(nil),                     // 531: groundplane.agent.v1.BackupWorkSecretRequest
+	(*BackupWorkSecretTransfer)(nil),                    // 532: groundplane.agent.v1.BackupWorkSecretTransfer
+	(*BackupSecretSlotHeader)(nil),                      // 533: groundplane.agent.v1.BackupSecretSlotHeader
+	(*BackupSecretSlotChunk)(nil),                       // 534: groundplane.agent.v1.BackupSecretSlotChunk
+	(*BackupSecretSlotEnd)(nil),                         // 535: groundplane.agent.v1.BackupSecretSlotEnd
+	(*BackupStagingRecoveryAckReceipt)(nil),             // 536: groundplane.agent.v1.BackupStagingRecoveryAckReceipt
+	(*AdapterProcedure)(nil),                            // 537: groundplane.agent.v1.AdapterProcedure
+	(*MaterializeFile)(nil),                             // 538: groundplane.agent.v1.MaterializeFile
+	(*ComposeApply)(nil),                                // 539: groundplane.agent.v1.ComposeApply
+	(*ComposeStop)(nil),                                 // 540: groundplane.agent.v1.ComposeStop
+	(*ComposeRemove)(nil),                               // 541: groundplane.agent.v1.ComposeRemove
+	(*WaitHealthy)(nil),                                 // 542: groundplane.agent.v1.WaitHealthy
+	(*ComposeWorkloadApply)(nil),                        // 543: groundplane.agent.v1.ComposeWorkloadApply
+	(*WaitWorkloadHealthy)(nil),                         // 544: groundplane.agent.v1.WaitWorkloadHealthy
+	(*ComposeWorkloadRemove)(nil),                       // 545: groundplane.agent.v1.ComposeWorkloadRemove
+	(*RollingTrafficSwitch)(nil),                        // 546: groundplane.agent.v1.RollingTrafficSwitch
+	(*RollingReplicaDrain)(nil),                         // 547: groundplane.agent.v1.RollingReplicaDrain
+	(*RollingReleaseAcknowledge)(nil),                   // 548: groundplane.agent.v1.RollingReleaseAcknowledge
+	(*ServiceProxySwitch)(nil),                          // 549: groundplane.agent.v1.ServiceProxySwitch
+	(*ServiceProxyProbe)(nil),                           // 550: groundplane.agent.v1.ServiceProxyProbe
+	(*ServiceProxyCompensate)(nil),                      // 551: groundplane.agent.v1.ServiceProxyCompensate
+	(*ServiceProxyEvidence)(nil),                        // 552: groundplane.agent.v1.ServiceProxyEvidence
+	(*ServiceRecreateAcknowledge)(nil),                  // 553: groundplane.agent.v1.ServiceRecreateAcknowledge
+	(*ServiceRecreateProbe)(nil),                        // 554: groundplane.agent.v1.ServiceRecreateProbe
+	(*ServiceRecreateCompensate)(nil),                   // 555: groundplane.agent.v1.ServiceRecreateCompensate
+	(*ServiceRecreateEvidence)(nil),                     // 556: groundplane.agent.v1.ServiceRecreateEvidence
+	(*EnvironmentDirectoryCreate)(nil),                  // 557: groundplane.agent.v1.EnvironmentDirectoryCreate
+	(*EnvironmentDirectoryRemove)(nil),                  // 558: groundplane.agent.v1.EnvironmentDirectoryRemove
+	(*ManagedVolumeDirectoriesEnsure)(nil),              // 559: groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
+	(*ManagedVolumeRemove)(nil),                         // 560: groundplane.agent.v1.ManagedVolumeRemove
+	(*ManagedVolumeDirectoryRemove)(nil),                // 561: groundplane.agent.v1.ManagedVolumeDirectoryRemove
+	(*ManagedNetworkRemove)(nil),                        // 562: groundplane.agent.v1.ManagedNetworkRemove
+	(*CheckDNSConnections)(nil),                         // 563: groundplane.agent.v1.CheckDNSConnections
+	(*DNSConnectionQuery)(nil),                          // 564: groundplane.agent.v1.DNSConnectionQuery
+	(*CancelDNSConnections)(nil),                        // 565: groundplane.agent.v1.CancelDNSConnections
+	(*DNSConnectionAnswer)(nil),                         // 566: groundplane.agent.v1.DNSConnectionAnswer
+	(*DNSConnectionResult)(nil),                         // 567: groundplane.agent.v1.DNSConnectionResult
+	(*CheckEdgeConnections)(nil),                        // 568: groundplane.agent.v1.CheckEdgeConnections
+	(*CancelEdgeConnections)(nil),                       // 569: groundplane.agent.v1.CancelEdgeConnections
+	(*EdgeConnectionResult)(nil),                        // 570: groundplane.agent.v1.EdgeConnectionResult
+	(*ComponentApply)(nil),                              // 571: groundplane.agent.v1.ComponentApply
+	(*ContainerConfigTransition)(nil),                   // 572: groundplane.agent.v1.ContainerConfigTransition
+	(*HostResolutionApply)(nil),                         // 573: groundplane.agent.v1.HostResolutionApply
+	(*HostResolutionRestore)(nil),                       // 574: groundplane.agent.v1.HostResolutionRestore
+	(*ManagedConfigHelperRequest)(nil),                  // 575: groundplane.agent.v1.ManagedConfigHelperRequest
+	(*ManagedConfigHelperResponse)(nil),                 // 576: groundplane.agent.v1.ManagedConfigHelperResponse
+	(*ComposeHelperResponse)(nil),                       // 577: groundplane.agent.v1.ComposeHelperResponse
+	(*RollingProxyEvidence)(nil),                        // 578: groundplane.agent.v1.RollingProxyEvidence
+	(*ConfigUpdate)(nil),                                // 579: groundplane.agent.v1.ConfigUpdate
+	(*Shutdown)(nil),                                    // 580: groundplane.agent.v1.Shutdown
+	(*CheckBackingAccess)(nil),                          // 581: groundplane.agent.v1.CheckBackingAccess
+	(*BackingAccessParameters)(nil),                     // 582: groundplane.agent.v1.BackingAccessParameters
+	(*CancelBackingAccess)(nil),                         // 583: groundplane.agent.v1.CancelBackingAccess
+	(*BackingAccessResult)(nil),                         // 584: groundplane.agent.v1.BackingAccessResult
+	(*BackingAccessObservation)(nil),                    // 585: groundplane.agent.v1.BackingAccessObservation
+	(*BackingAccessStage)(nil),                          // 586: groundplane.agent.v1.BackingAccessStage
+	(*timestamppb.Timestamp)(nil),                       // 587: google.protobuf.Timestamp
 }
 var file_proto_agent_proto_depIdxs = []int32{
 	56,   // 0: groundplane.agent.v1.WorkJournalReplayRequest.unreported_attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 1: groundplane.agent.v1.WorkReportRejection.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	0,    // 2: groundplane.agent.v1.WorkAttemptIdentity.direction:type_name -> groundplane.agent.v1.WorkDirection
 	51,   // 3: groundplane.agent.v1.WorkAttemptIdentity.input:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 4: groundplane.agent.v1.WorkAttemptIdentity.assigned_at:type_name -> google.protobuf.Timestamp
-	585,  // 5: groundplane.agent.v1.WorkAttemptIdentity.deadline:type_name -> google.protobuf.Timestamp
+	587,  // 4: groundplane.agent.v1.WorkAttemptIdentity.assigned_at:type_name -> google.protobuf.Timestamp
+	587,  // 5: groundplane.agent.v1.WorkAttemptIdentity.deadline:type_name -> google.protobuf.Timestamp
 	56,   // 6: groundplane.agent.v1.WorkStartRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 7: groundplane.agent.v1.WorkCancel.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 8: groundplane.agent.v1.WorkStartAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	585,  // 9: groundplane.agent.v1.WorkStartAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 9: groundplane.agent.v1.WorkStartAck.started_at:type_name -> google.protobuf.Timestamp
 	56,   // 10: groundplane.agent.v1.EnvironmentRemovalAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	61,   // 11: groundplane.agent.v1.EnvironmentRemovalAssignment.removal:type_name -> groundplane.agent.v1.EnvironmentRemovalInput
 	51,   // 12: groundplane.agent.v1.EnvironmentRemovalInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
-	346,  // 13: groundplane.agent.v1.EnvironmentRemovalInput.compose:type_name -> groundplane.agent.v1.ComposeArtifact
-	585,  // 14: groundplane.agent.v1.EnvironmentProvisionInput.created_at:type_name -> google.protobuf.Timestamp
-	346,  // 15: groundplane.agent.v1.BackingProvisionInput.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
+	348,  // 13: groundplane.agent.v1.EnvironmentRemovalInput.compose:type_name -> groundplane.agent.v1.ComposeArtifact
+	587,  // 14: groundplane.agent.v1.EnvironmentProvisionInput.created_at:type_name -> google.protobuf.Timestamp
+	348,  // 15: groundplane.agent.v1.BackingProvisionInput.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
 	165,  // 16: groundplane.agent.v1.BackingProvisionInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	536,  // 17: groundplane.agent.v1.BackingProvisionInput.files:type_name -> groundplane.agent.v1.MaterializeFile
+	538,  // 17: groundplane.agent.v1.BackingProvisionInput.files:type_name -> groundplane.agent.v1.MaterializeFile
 	64,   // 18: groundplane.agent.v1.BackingProvisionInput.after_start:type_name -> groundplane.agent.v1.BackingProvisionAfterStart
-	585,  // 19: groundplane.agent.v1.BackingProvisionInput.created_at:type_name -> google.protobuf.Timestamp
-	585,  // 20: groundplane.agent.v1.BackingProvisionInput.deadline:type_name -> google.protobuf.Timestamp
+	587,  // 19: groundplane.agent.v1.BackingProvisionInput.created_at:type_name -> google.protobuf.Timestamp
+	587,  // 20: groundplane.agent.v1.BackingProvisionInput.deadline:type_name -> google.protobuf.Timestamp
 	51,   // 21: groundplane.agent.v1.BackingProvisionAfterStart.encrypted_inputs:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 22: groundplane.agent.v1.BackingProvisionAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	63,   // 23: groundplane.agent.v1.BackingProvisionAssignment.input:type_name -> groundplane.agent.v1.BackingProvisionInput
@@ -53438,29 +53577,29 @@ var file_proto_agent_proto_depIdxs = []int32{
 	51,   // 28: groundplane.agent.v1.BackingProvisionCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 29: groundplane.agent.v1.BackingProvisionCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 30: groundplane.agent.v1.BackingProvisionCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 31: groundplane.agent.v1.BackingProvisionCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 32: groundplane.agent.v1.BackingProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 31: groundplane.agent.v1.BackingProvisionCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 32: groundplane.agent.v1.BackingProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	56,   // 33: groundplane.agent.v1.BackingProvisionFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 34: groundplane.agent.v1.BackingProvisionFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 35: groundplane.agent.v1.BackingProvisionFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 36: groundplane.agent.v1.BackingProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 37: groundplane.agent.v1.BackingProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 36: groundplane.agent.v1.BackingProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 37: groundplane.agent.v1.BackingProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
 	56,   // 38: groundplane.agent.v1.BackingProvisionConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 39: groundplane.agent.v1.BackingProvisionConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	165,  // 40: groundplane.agent.v1.BackingProvisionConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	536,  // 41: groundplane.agent.v1.BackingProvisionConfigurationManifest.files:type_name -> groundplane.agent.v1.MaterializeFile
+	538,  // 41: groundplane.agent.v1.BackingProvisionConfigurationManifest.files:type_name -> groundplane.agent.v1.MaterializeFile
 	56,   // 42: groundplane.agent.v1.BackingProvisionFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 43: groundplane.agent.v1.BackingProvisionFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	165,  // 44: groundplane.agent.v1.BackingProvisionFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	536,  // 45: groundplane.agent.v1.BackingProvisionFileDelivery.file:type_name -> groundplane.agent.v1.MaterializeFile
+	538,  // 45: groundplane.agent.v1.BackingProvisionFileDelivery.file:type_name -> groundplane.agent.v1.MaterializeFile
 	56,   // 46: groundplane.agent.v1.BackingProvisionHookRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 47: groundplane.agent.v1.BackingProvisionHookDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	229,  // 48: groundplane.agent.v1.BackingProvisionHookDelivery.hook:type_name -> groundplane.agent.v1.BackingHookProcedure
+	231,  // 48: groundplane.agent.v1.BackingProvisionHookDelivery.hook:type_name -> groundplane.agent.v1.BackingHookProcedure
 	56,   // 49: groundplane.agent.v1.BackingProvisionRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 50: groundplane.agent.v1.BackingProvisionRecoveryAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 51: groundplane.agent.v1.BackingProvisionRecoveryAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 52: groundplane.agent.v1.BackingProvisionRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 53: groundplane.agent.v1.BackingProvisionRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 52: groundplane.agent.v1.BackingProvisionRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 53: groundplane.agent.v1.BackingProvisionRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
 	65,   // 54: groundplane.agent.v1.BackingProvisionHelperRequest.assignment:type_name -> groundplane.agent.v1.BackingProvisionAssignment
 	59,   // 55: groundplane.agent.v1.BackingProvisionHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	66,   // 56: groundplane.agent.v1.BackingProvisionHelperRequest.report:type_name -> groundplane.agent.v1.BackingProvisionCheckpointRequest
@@ -53469,19 +53608,19 @@ var file_proto_agent_proto_depIdxs = []int32{
 	62,   // 59: groundplane.agent.v1.EnvironmentProvisionAssignment.input:type_name -> groundplane.agent.v1.EnvironmentProvisionInput
 	83,   // 60: groundplane.agent.v1.EnvironmentProvisionAssignment.recovery_source:type_name -> groundplane.agent.v1.EnvironmentProvisionRecoverySource
 	56,   // 61: groundplane.agent.v1.EnvironmentProvisionRecoverySource.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	585,  // 62: groundplane.agent.v1.EnvironmentProvisionRecoverySource.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 63: groundplane.agent.v1.EnvironmentProvisionRecoverySource.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 62: groundplane.agent.v1.EnvironmentProvisionRecoverySource.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 63: groundplane.agent.v1.EnvironmentProvisionRecoverySource.finished_at:type_name -> google.protobuf.Timestamp
 	51,   // 64: groundplane.agent.v1.EnvironmentProvisionRecoverySource.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 65: groundplane.agent.v1.EnvironmentProvisionResultRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	585,  // 66: groundplane.agent.v1.EnvironmentProvisionResultRequest.observed_at:type_name -> google.protobuf.Timestamp
+	587,  // 66: groundplane.agent.v1.EnvironmentProvisionResultRequest.observed_at:type_name -> google.protobuf.Timestamp
 	56,   // 67: groundplane.agent.v1.EnvironmentProvisionResultAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 68: groundplane.agent.v1.EnvironmentProvisionResultAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 69: groundplane.agent.v1.EnvironmentProvisionResultAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 70: groundplane.agent.v1.EnvironmentProvisionResultAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 69: groundplane.agent.v1.EnvironmentProvisionResultAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 70: groundplane.agent.v1.EnvironmentProvisionResultAck.finished_at:type_name -> google.protobuf.Timestamp
 	82,   // 71: groundplane.agent.v1.EnvironmentProvisionHelperRequest.assignment:type_name -> groundplane.agent.v1.EnvironmentProvisionAssignment
 	59,   // 72: groundplane.agent.v1.EnvironmentProvisionHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	51,   // 73: groundplane.agent.v1.EnvironmentProvisionHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 74: groundplane.agent.v1.EnvironmentProvisionHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	587,  // 74: groundplane.agent.v1.EnvironmentProvisionHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	56,   // 75: groundplane.agent.v1.AttachRemovalAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	107,  // 76: groundplane.agent.v1.AttachRemovalAssignment.removal:type_name -> groundplane.agent.v1.AttachRemovalInput
 	56,   // 77: groundplane.agent.v1.AttachRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
@@ -53490,10 +53629,10 @@ var file_proto_agent_proto_depIdxs = []int32{
 	51,   // 80: groundplane.agent.v1.AttachRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 81: groundplane.agent.v1.AttachRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 82: groundplane.agent.v1.AttachRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 83: groundplane.agent.v1.AttachRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	585,  // 84: groundplane.agent.v1.AttachRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 83: groundplane.agent.v1.AttachRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 84: groundplane.agent.v1.AttachRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
 	56,   // 85: groundplane.agent.v1.AttachProvisionFactsRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	227,  // 86: groundplane.agent.v1.AttachProvisionFactsRequest.facts:type_name -> groundplane.agent.v1.BackingHookValue
+	229,  // 86: groundplane.agent.v1.AttachProvisionFactsRequest.facts:type_name -> groundplane.agent.v1.BackingHookValue
 	56,   // 87: groundplane.agent.v1.AttachProvisionFactsAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 88: groundplane.agent.v1.AttachProvisionAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	104,  // 89: groundplane.agent.v1.AttachProvisionAssignment.provision:type_name -> groundplane.agent.v1.AttachProvisionInput
@@ -53503,33 +53642,33 @@ var file_proto_agent_proto_depIdxs = []int32{
 	51,   // 93: groundplane.agent.v1.AttachProvisionRecoveryReportRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 94: groundplane.agent.v1.AttachProvisionRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 95: groundplane.agent.v1.AttachProvisionRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 96: groundplane.agent.v1.AttachProvisionRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	585,  // 97: groundplane.agent.v1.AttachProvisionRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 96: groundplane.agent.v1.AttachProvisionRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 97: groundplane.agent.v1.AttachProvisionRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
 	56,   // 98: groundplane.agent.v1.AttachProvisionCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 99: groundplane.agent.v1.AttachProvisionCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 100: groundplane.agent.v1.AttachProvisionCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 101: groundplane.agent.v1.AttachProvisionCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 102: groundplane.agent.v1.AttachProvisionCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 103: groundplane.agent.v1.AttachProvisionCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 104: groundplane.agent.v1.AttachProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 104: groundplane.agent.v1.AttachProvisionCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	51,   // 105: groundplane.agent.v1.AttachProvisionCompletionAck.binding_result:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 106: groundplane.agent.v1.AttachProvisionFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 107: groundplane.agent.v1.AttachProvisionFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 108: groundplane.agent.v1.AttachProvisionFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 109: groundplane.agent.v1.AttachProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	585,  // 110: groundplane.agent.v1.AttachProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 109: groundplane.agent.v1.AttachProvisionFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 110: groundplane.agent.v1.AttachProvisionFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	51,   // 111: groundplane.agent.v1.AttachProvisionInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
 	108,  // 112: groundplane.agent.v1.AttachProvisionInput.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
 	105,  // 113: groundplane.agent.v1.AttachProvisionInput.credential:type_name -> groundplane.agent.v1.AttachCredentialProvision
-	229,  // 114: groundplane.agent.v1.AttachProvisionInput.custom_attach:type_name -> groundplane.agent.v1.BackingHookProcedure
+	231,  // 114: groundplane.agent.v1.AttachProvisionInput.custom_attach:type_name -> groundplane.agent.v1.BackingHookProcedure
 	44,   // 115: groundplane.agent.v1.AttachCredentialProvision.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
 	106,  // 116: groundplane.agent.v1.AttachCredentialProvision.grants:type_name -> groundplane.agent.v1.AttachGrantProvision
 	51,   // 117: groundplane.agent.v1.AttachRemovalInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
 	108,  // 118: groundplane.agent.v1.AttachRemovalInput.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
 	111,  // 119: groundplane.agent.v1.AttachRemovalInput.credential:type_name -> groundplane.agent.v1.AttachCredentialRemoval
-	229,  // 120: groundplane.agent.v1.AttachRemovalInput.custom_detach:type_name -> groundplane.agent.v1.BackingHookProcedure
-	346,  // 121: groundplane.agent.v1.AttachConsumerTransition.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
-	346,  // 122: groundplane.agent.v1.AttachConsumerTransition.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	231,  // 120: groundplane.agent.v1.AttachRemovalInput.custom_detach:type_name -> groundplane.agent.v1.BackingHookProcedure
+	348,  // 121: groundplane.agent.v1.AttachConsumerTransition.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
+	348,  // 122: groundplane.agent.v1.AttachConsumerTransition.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
 	1,    // 123: groundplane.agent.v1.AttachConsumerTransition.action:type_name -> groundplane.agent.v1.AttachNetworkAction
 	56,   // 124: groundplane.agent.v1.AttachConsumerHelperRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	108,  // 125: groundplane.agent.v1.AttachConsumerHelperRequest.consumer:type_name -> groundplane.agent.v1.AttachConsumerTransition
@@ -53537,7 +53676,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	114,  // 127: groundplane.agent.v1.AttachConsumerHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.AttachRemovalCheckpointAck
 	99,   // 128: groundplane.agent.v1.AttachConsumerHelperRequest.provision_acknowledgement:type_name -> groundplane.agent.v1.AttachProvisionCheckpointAck
 	51,   // 129: groundplane.agent.v1.AttachConsumerHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 130: groundplane.agent.v1.AttachConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	587,  // 130: groundplane.agent.v1.AttachConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	44,   // 131: groundplane.agent.v1.AttachCredentialRemoval.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
 	112,  // 132: groundplane.agent.v1.AttachCredentialRemoval.grants:type_name -> groundplane.agent.v1.AttachGrantRemoval
 	56,   // 133: groundplane.agent.v1.AttachRemovalCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
@@ -53546,30 +53685,30 @@ var file_proto_agent_proto_depIdxs = []int32{
 	51,   // 136: groundplane.agent.v1.AttachRemovalCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 137: groundplane.agent.v1.AttachRemovalCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 138: groundplane.agent.v1.AttachRemovalCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 139: groundplane.agent.v1.AttachRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 139: groundplane.agent.v1.AttachRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	56,   // 140: groundplane.agent.v1.AttachRemovalFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 141: groundplane.agent.v1.AttachRemovalFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 142: groundplane.agent.v1.AttachRemovalFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 143: groundplane.agent.v1.AttachRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	585,  // 144: groundplane.agent.v1.AttachRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 143: groundplane.agent.v1.AttachRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 144: groundplane.agent.v1.AttachRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	56,   // 145: groundplane.agent.v1.EnvironmentRemovalCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 146: groundplane.agent.v1.EnvironmentRemovalCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 147: groundplane.agent.v1.EnvironmentRemovalCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 148: groundplane.agent.v1.EnvironmentRemovalCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 149: groundplane.agent.v1.EnvironmentRemovalCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 150: groundplane.agent.v1.EnvironmentRemovalCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 151: groundplane.agent.v1.EnvironmentRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 151: groundplane.agent.v1.EnvironmentRemovalCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	56,   // 152: groundplane.agent.v1.EnvironmentRemovalFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 153: groundplane.agent.v1.EnvironmentRemovalFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 154: groundplane.agent.v1.EnvironmentRemovalFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 155: groundplane.agent.v1.EnvironmentRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	585,  // 156: groundplane.agent.v1.EnvironmentRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 155: groundplane.agent.v1.EnvironmentRemovalFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 156: groundplane.agent.v1.EnvironmentRemovalFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	60,   // 157: groundplane.agent.v1.EnvironmentRemovalHelperRequest.assignment:type_name -> groundplane.agent.v1.EnvironmentRemovalAssignment
 	59,   // 158: groundplane.agent.v1.EnvironmentRemovalHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	119,  // 159: groundplane.agent.v1.EnvironmentRemovalHelperRequest.report:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointRequest
 	120,  // 160: groundplane.agent.v1.EnvironmentRemovalHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointAck
 	51,   // 161: groundplane.agent.v1.EnvironmentRemovalHelperResponse.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 162: groundplane.agent.v1.EnvironmentRemovalHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	587,  // 162: groundplane.agent.v1.EnvironmentRemovalHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
 	56,   // 163: groundplane.agent.v1.ReleaseWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	163,  // 164: groundplane.agent.v1.ReleaseWorkAssignment.release:type_name -> groundplane.agent.v1.ReleaseWorkInput
 	127,  // 165: groundplane.agent.v1.ReleaseRecoveryAssignment.work:type_name -> groundplane.agent.v1.ReleaseWorkAssignment
@@ -53582,44 +53721,44 @@ var file_proto_agent_proto_depIdxs = []int32{
 	51,   // 172: groundplane.agent.v1.ReleaseWorkCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 173: groundplane.agent.v1.ReleaseWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 174: groundplane.agent.v1.ReleaseWorkCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 175: groundplane.agent.v1.ReleaseWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 175: groundplane.agent.v1.ReleaseWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	56,   // 176: groundplane.agent.v1.ReleaseWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 177: groundplane.agent.v1.ReleaseWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 178: groundplane.agent.v1.ReleaseWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 179: groundplane.agent.v1.ReleaseWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	585,  // 180: groundplane.agent.v1.ReleaseWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 179: groundplane.agent.v1.ReleaseWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 180: groundplane.agent.v1.ReleaseWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
 	56,   // 181: groundplane.agent.v1.ReleaseEffectEvidenceRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 182: groundplane.agent.v1.ReleaseEffectEvidenceRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 183: groundplane.agent.v1.ReleaseEffectEvidenceAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 184: groundplane.agent.v1.ReleaseEffectEvidenceAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 185: groundplane.agent.v1.ScriptWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	356,  // 186: groundplane.agent.v1.ScriptWorkAssignment.run:type_name -> groundplane.agent.v1.RunScript
-	357,  // 187: groundplane.agent.v1.ScriptWorkAssignment.snapshot:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
-	370,  // 188: groundplane.agent.v1.ScriptWorkAssignment.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
-	378,  // 189: groundplane.agent.v1.ScriptWorkAssignment.body:type_name -> groundplane.agent.v1.ScriptBodyArtifact
-	379,  // 190: groundplane.agent.v1.ScriptWorkAssignment.entries:type_name -> groundplane.agent.v1.ScriptEntryArtifact
-	224,  // 191: groundplane.agent.v1.ScriptWorkAssignment.checkpoint:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
+	358,  // 186: groundplane.agent.v1.ScriptWorkAssignment.run:type_name -> groundplane.agent.v1.RunScript
+	359,  // 187: groundplane.agent.v1.ScriptWorkAssignment.snapshot:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
+	372,  // 188: groundplane.agent.v1.ScriptWorkAssignment.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
+	380,  // 189: groundplane.agent.v1.ScriptWorkAssignment.body:type_name -> groundplane.agent.v1.ScriptBodyArtifact
+	381,  // 190: groundplane.agent.v1.ScriptWorkAssignment.entries:type_name -> groundplane.agent.v1.ScriptEntryArtifact
+	226,  // 191: groundplane.agent.v1.ScriptWorkAssignment.checkpoint:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
 	56,   // 192: groundplane.agent.v1.ScriptWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	225,  // 193: groundplane.agent.v1.ScriptWorkCheckpointRequest.checkpoint:type_name -> groundplane.agent.v1.ScriptCheckpointRequest
+	227,  // 193: groundplane.agent.v1.ScriptWorkCheckpointRequest.checkpoint:type_name -> groundplane.agent.v1.ScriptCheckpointRequest
 	56,   // 194: groundplane.agent.v1.ScriptWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	226,  // 195: groundplane.agent.v1.ScriptWorkCheckpointAck.checkpoint:type_name -> groundplane.agent.v1.ScriptCheckpointAck
+	228,  // 195: groundplane.agent.v1.ScriptWorkCheckpointAck.checkpoint:type_name -> groundplane.agent.v1.ScriptCheckpointAck
 	56,   // 196: groundplane.agent.v1.ScriptWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 197: groundplane.agent.v1.ScriptWorkCompletionRequest.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 198: groundplane.agent.v1.ScriptWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 199: groundplane.agent.v1.ScriptWorkCompletionAck.checkpoint_evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 200: groundplane.agent.v1.ScriptWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 200: groundplane.agent.v1.ScriptWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	56,   // 201: groundplane.agent.v1.ScriptRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	370,  // 202: groundplane.agent.v1.ScriptRecoveryAssignment.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
+	372,  // 202: groundplane.agent.v1.ScriptRecoveryAssignment.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
 	169,  // 203: groundplane.agent.v1.ScriptRecoveryAssignment.artifacts:type_name -> groundplane.agent.v1.ScriptCleanupArtifacts
 	56,   // 204: groundplane.agent.v1.ScriptRecoveryCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 205: groundplane.agent.v1.ScriptRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
 	56,   // 206: groundplane.agent.v1.ScriptRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 207: groundplane.agent.v1.ScriptRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 208: groundplane.agent.v1.ScriptRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 208: groundplane.agent.v1.ScriptRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
 	56,   // 209: groundplane.agent.v1.ScriptWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 210: groundplane.agent.v1.ScriptWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 211: groundplane.agent.v1.ScriptWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 212: groundplane.agent.v1.ScriptWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 212: groundplane.agent.v1.ScriptWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
 	56,   // 213: groundplane.agent.v1.ReleaseConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 214: groundplane.agent.v1.ComponentConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 215: groundplane.agent.v1.ComponentConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
@@ -53640,13 +53779,13 @@ var file_proto_agent_proto_depIdxs = []int32{
 	59,   // 230: groundplane.agent.v1.ReleaseHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	131,  // 231: groundplane.agent.v1.ReleaseHelperRequest.report:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointRequest
 	132,  // 232: groundplane.agent.v1.ReleaseHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointAck
-	550,  // 233: groundplane.agent.v1.ReleaseHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
+	552,  // 233: groundplane.agent.v1.ReleaseHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
 	128,  // 234: groundplane.agent.v1.ReleaseRecoveryHelperRequest.assignment:type_name -> groundplane.agent.v1.ReleaseRecoveryAssignment
 	59,   // 235: groundplane.agent.v1.ReleaseRecoveryHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
 	129,  // 236: groundplane.agent.v1.ReleaseRecoveryHelperRequest.report:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointRequest
 	130,  // 237: groundplane.agent.v1.ReleaseRecoveryHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointAck
 	2,    // 238: groundplane.agent.v1.ReleaseWorkInput.strategy:type_name -> groundplane.agent.v1.WorkReleaseStrategy
-	346,  // 239: groundplane.agent.v1.ReleaseWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	348,  // 239: groundplane.agent.v1.ReleaseWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
 	164,  // 240: groundplane.agent.v1.ReleaseWorkInput.predecessor:type_name -> groundplane.agent.v1.ReleaseWorkPredecessor
 	165,  // 241: groundplane.agent.v1.ReleaseWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
 	165,  // 242: groundplane.agent.v1.ReleaseWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
@@ -53657,38 +53796,38 @@ var file_proto_agent_proto_depIdxs = []int32{
 	56,   // 247: groundplane.agent.v1.ReleaseHookRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	56,   // 248: groundplane.agent.v1.ReleaseHookDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
 	51,   // 249: groundplane.agent.v1.ReleaseHookDelivery.input:type_name -> groundplane.agent.v1.WorkInputReference
-	356,  // 250: groundplane.agent.v1.ReleaseHookDelivery.run:type_name -> groundplane.agent.v1.RunScript
-	357,  // 251: groundplane.agent.v1.ReleaseHookDelivery.snapshot:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
-	370,  // 252: groundplane.agent.v1.ReleaseHookDelivery.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
-	378,  // 253: groundplane.agent.v1.ReleaseHookDelivery.body:type_name -> groundplane.agent.v1.ScriptBodyArtifact
-	379,  // 254: groundplane.agent.v1.ReleaseHookDelivery.entries:type_name -> groundplane.agent.v1.ScriptEntryArtifact
-	224,  // 255: groundplane.agent.v1.ReleaseHookDelivery.checkpoint:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
+	358,  // 250: groundplane.agent.v1.ReleaseHookDelivery.run:type_name -> groundplane.agent.v1.RunScript
+	359,  // 251: groundplane.agent.v1.ReleaseHookDelivery.snapshot:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
+	372,  // 252: groundplane.agent.v1.ReleaseHookDelivery.projection:type_name -> groundplane.agent.v1.ScriptRunnerProjection
+	380,  // 253: groundplane.agent.v1.ReleaseHookDelivery.body:type_name -> groundplane.agent.v1.ScriptBodyArtifact
+	381,  // 254: groundplane.agent.v1.ReleaseHookDelivery.entries:type_name -> groundplane.agent.v1.ScriptEntryArtifact
+	226,  // 255: groundplane.agent.v1.ReleaseHookDelivery.checkpoint:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
 	169,  // 256: groundplane.agent.v1.ReleaseHookDelivery.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupArtifacts
 	51,   // 257: groundplane.agent.v1.ReleaseHookDelivery.interrupted_cleanup:type_name -> groundplane.agent.v1.WorkInputReference
-	377,  // 258: groundplane.agent.v1.ScriptCleanupArtifacts.body_metadata:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
-	220,  // 259: groundplane.agent.v1.ScriptCleanupArtifacts.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
-	221,  // 260: groundplane.agent.v1.ScriptCleanupArtifacts.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
-	245,  // 261: groundplane.agent.v1.ReleaseWorkRolling.prior:type_name -> groundplane.agent.v1.RollingReplica
-	245,  // 262: groundplane.agent.v1.ReleaseWorkRolling.candidate:type_name -> groundplane.agent.v1.RollingReplica
-	245,  // 263: groundplane.agent.v1.ReleaseWorkRolling.retained:type_name -> groundplane.agent.v1.RollingReplica
+	379,  // 258: groundplane.agent.v1.ScriptCleanupArtifacts.body_metadata:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
+	222,  // 259: groundplane.agent.v1.ScriptCleanupArtifacts.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
+	223,  // 260: groundplane.agent.v1.ScriptCleanupArtifacts.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
+	247,  // 261: groundplane.agent.v1.ReleaseWorkRolling.prior:type_name -> groundplane.agent.v1.RollingReplica
+	247,  // 262: groundplane.agent.v1.ReleaseWorkRolling.candidate:type_name -> groundplane.agent.v1.RollingReplica
+	247,  // 263: groundplane.agent.v1.ReleaseWorkRolling.retained:type_name -> groundplane.agent.v1.RollingReplica
 	173,  // 264: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentLabel
 	171,  // 265: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
-	175,  // 266: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
-	194,  // 267: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
-	217,  // 268: groundplane.agent.v1.AgentMessage.log_event:type_name -> groundplane.agent.v1.LogEvent
-	218,  // 269: groundplane.agent.v1.AgentMessage.log_end:type_name -> groundplane.agent.v1.LogEnd
-	216,  // 270: groundplane.agent.v1.AgentMessage.log_ready:type_name -> groundplane.agent.v1.LogReady
-	182,  // 271: groundplane.agent.v1.AgentMessage.workload_image_resolution_result:type_name -> groundplane.agent.v1.WorkloadImageResolutionResult
-	192,  // 272: groundplane.agent.v1.AgentMessage.service_observation_result:type_name -> groundplane.agent.v1.ServiceObservationResult
-	582,  // 273: groundplane.agent.v1.AgentMessage.backing_access_result:type_name -> groundplane.agent.v1.BackingAccessResult
-	565,  // 274: groundplane.agent.v1.AgentMessage.dns_connection_result:type_name -> groundplane.agent.v1.DNSConnectionResult
-	568,  // 275: groundplane.agent.v1.AgentMessage.edge_connection_result:type_name -> groundplane.agent.v1.EdgeConnectionResult
-	441,  // 276: groundplane.agent.v1.AgentMessage.backup_config_transfer:type_name -> groundplane.agent.v1.BackupConfigTransfer
-	448,  // 277: groundplane.agent.v1.AgentMessage.backup_config_credit:type_name -> groundplane.agent.v1.BackupConfigCredit
-	424,  // 278: groundplane.agent.v1.AgentMessage.backup_staging_inventory:type_name -> groundplane.agent.v1.BackupStagingInventory
-	440,  // 279: groundplane.agent.v1.AgentMessage.backup_staging_recovery_ack:type_name -> groundplane.agent.v1.BackupStagingRecoveryAck
-	449,  // 280: groundplane.agent.v1.AgentMessage.backup_volume_manifest_transfer:type_name -> groundplane.agent.v1.BackupVolumeManifestTransfer
-	454,  // 281: groundplane.agent.v1.AgentMessage.backup_volume_manifest_ack_credit:type_name -> groundplane.agent.v1.BackupVolumeManifestAckCredit
+	176,  // 266: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
+	195,  // 267: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
+	219,  // 268: groundplane.agent.v1.AgentMessage.log_event:type_name -> groundplane.agent.v1.LogEvent
+	220,  // 269: groundplane.agent.v1.AgentMessage.log_end:type_name -> groundplane.agent.v1.LogEnd
+	218,  // 270: groundplane.agent.v1.AgentMessage.log_ready:type_name -> groundplane.agent.v1.LogReady
+	183,  // 271: groundplane.agent.v1.AgentMessage.workload_image_resolution_result:type_name -> groundplane.agent.v1.WorkloadImageResolutionResult
+	193,  // 272: groundplane.agent.v1.AgentMessage.service_observation_result:type_name -> groundplane.agent.v1.ServiceObservationResult
+	584,  // 273: groundplane.agent.v1.AgentMessage.backing_access_result:type_name -> groundplane.agent.v1.BackingAccessResult
+	567,  // 274: groundplane.agent.v1.AgentMessage.dns_connection_result:type_name -> groundplane.agent.v1.DNSConnectionResult
+	570,  // 275: groundplane.agent.v1.AgentMessage.edge_connection_result:type_name -> groundplane.agent.v1.EdgeConnectionResult
+	443,  // 276: groundplane.agent.v1.AgentMessage.backup_config_transfer:type_name -> groundplane.agent.v1.BackupConfigTransfer
+	450,  // 277: groundplane.agent.v1.AgentMessage.backup_config_credit:type_name -> groundplane.agent.v1.BackupConfigCredit
+	426,  // 278: groundplane.agent.v1.AgentMessage.backup_staging_inventory:type_name -> groundplane.agent.v1.BackupStagingInventory
+	442,  // 279: groundplane.agent.v1.AgentMessage.backup_staging_recovery_ack:type_name -> groundplane.agent.v1.BackupStagingRecoveryAck
+	451,  // 280: groundplane.agent.v1.AgentMessage.backup_volume_manifest_transfer:type_name -> groundplane.agent.v1.BackupVolumeManifestTransfer
+	456,  // 281: groundplane.agent.v1.AgentMessage.backup_volume_manifest_ack_credit:type_name -> groundplane.agent.v1.BackupVolumeManifestAckCredit
 	57,   // 282: groundplane.agent.v1.AgentMessage.work_start_request:type_name -> groundplane.agent.v1.WorkStartRequest
 	131,  // 283: groundplane.agent.v1.AgentMessage.release_work_checkpoint_request:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointRequest
 	167,  // 284: groundplane.agent.v1.AgentMessage.release_hook_request:type_name -> groundplane.agent.v1.ReleaseHookRequest
@@ -53709,47 +53848,47 @@ var file_proto_agent_proto_depIdxs = []int32{
 	115,  // 299: groundplane.agent.v1.AgentMessage.attach_removal_completion_request:type_name -> groundplane.agent.v1.AttachRemovalCompletionRequest
 	117,  // 300: groundplane.agent.v1.AgentMessage.attach_removal_failure_request:type_name -> groundplane.agent.v1.AttachRemovalFailureRequest
 	90,   // 301: groundplane.agent.v1.AgentMessage.attach_recovery_completion_request:type_name -> groundplane.agent.v1.AttachRecoveryCompletionRequest
-	336,  // 302: groundplane.agent.v1.AgentMessage.volume_work_checkpoint_request:type_name -> groundplane.agent.v1.VolumeWorkCheckpointRequest
-	338,  // 303: groundplane.agent.v1.AgentMessage.volume_work_completion_request:type_name -> groundplane.agent.v1.VolumeWorkCompletionRequest
-	340,  // 304: groundplane.agent.v1.AgentMessage.volume_work_failure_request:type_name -> groundplane.agent.v1.VolumeWorkFailureRequest
-	342,  // 305: groundplane.agent.v1.AgentMessage.volume_work_recovery_report_request:type_name -> groundplane.agent.v1.VolumeWorkRecoveryReportRequest
-	290,  // 306: groundplane.agent.v1.AgentMessage.network_work_checkpoint_request:type_name -> groundplane.agent.v1.NetworkWorkCheckpointRequest
-	292,  // 307: groundplane.agent.v1.AgentMessage.network_work_completion_request:type_name -> groundplane.agent.v1.NetworkWorkCompletionRequest
-	294,  // 308: groundplane.agent.v1.AgentMessage.network_work_failure_request:type_name -> groundplane.agent.v1.NetworkWorkFailureRequest
-	296,  // 309: groundplane.agent.v1.AgentMessage.network_work_recovery_report_request:type_name -> groundplane.agent.v1.NetworkWorkRecoveryReportRequest
-	280,  // 310: groundplane.agent.v1.AgentMessage.component_work_checkpoint_request:type_name -> groundplane.agent.v1.ComponentWorkCheckpointRequest
-	282,  // 311: groundplane.agent.v1.AgentMessage.component_work_completion_request:type_name -> groundplane.agent.v1.ComponentWorkCompletionRequest
-	284,  // 312: groundplane.agent.v1.AgentMessage.component_work_failure_request:type_name -> groundplane.agent.v1.ComponentWorkFailureRequest
-	286,  // 313: groundplane.agent.v1.AgentMessage.component_work_recovery_report_request:type_name -> groundplane.agent.v1.ComponentWorkRecoveryReportRequest
+	338,  // 302: groundplane.agent.v1.AgentMessage.volume_work_checkpoint_request:type_name -> groundplane.agent.v1.VolumeWorkCheckpointRequest
+	340,  // 303: groundplane.agent.v1.AgentMessage.volume_work_completion_request:type_name -> groundplane.agent.v1.VolumeWorkCompletionRequest
+	342,  // 304: groundplane.agent.v1.AgentMessage.volume_work_failure_request:type_name -> groundplane.agent.v1.VolumeWorkFailureRequest
+	344,  // 305: groundplane.agent.v1.AgentMessage.volume_work_recovery_report_request:type_name -> groundplane.agent.v1.VolumeWorkRecoveryReportRequest
+	292,  // 306: groundplane.agent.v1.AgentMessage.network_work_checkpoint_request:type_name -> groundplane.agent.v1.NetworkWorkCheckpointRequest
+	294,  // 307: groundplane.agent.v1.AgentMessage.network_work_completion_request:type_name -> groundplane.agent.v1.NetworkWorkCompletionRequest
+	296,  // 308: groundplane.agent.v1.AgentMessage.network_work_failure_request:type_name -> groundplane.agent.v1.NetworkWorkFailureRequest
+	298,  // 309: groundplane.agent.v1.AgentMessage.network_work_recovery_report_request:type_name -> groundplane.agent.v1.NetworkWorkRecoveryReportRequest
+	282,  // 310: groundplane.agent.v1.AgentMessage.component_work_checkpoint_request:type_name -> groundplane.agent.v1.ComponentWorkCheckpointRequest
+	284,  // 311: groundplane.agent.v1.AgentMessage.component_work_completion_request:type_name -> groundplane.agent.v1.ComponentWorkCompletionRequest
+	286,  // 312: groundplane.agent.v1.AgentMessage.component_work_failure_request:type_name -> groundplane.agent.v1.ComponentWorkFailureRequest
+	288,  // 313: groundplane.agent.v1.AgentMessage.component_work_recovery_report_request:type_name -> groundplane.agent.v1.ComponentWorkRecoveryReportRequest
 	150,  // 314: groundplane.agent.v1.AgentMessage.component_configuration_request:type_name -> groundplane.agent.v1.ComponentConfigurationRequest
 	153,  // 315: groundplane.agent.v1.AgentMessage.component_configuration_file_request:type_name -> groundplane.agent.v1.ComponentConfigurationFileRequest
-	270,  // 316: groundplane.agent.v1.AgentMessage.entry_configuration_work_checkpoint_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
-	272,  // 317: groundplane.agent.v1.AgentMessage.entry_configuration_work_completion_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkCompletionRequest
-	274,  // 318: groundplane.agent.v1.AgentMessage.entry_configuration_work_failure_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkFailureRequest
-	265,  // 319: groundplane.agent.v1.AgentMessage.entry_configuration_request:type_name -> groundplane.agent.v1.EntryConfigurationRequest
-	268,  // 320: groundplane.agent.v1.AgentMessage.entry_configuration_file_request:type_name -> groundplane.agent.v1.EntryConfigurationFileRequest
-	277,  // 321: groundplane.agent.v1.AgentMessage.entry_configuration_work_recovery_report_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest
+	272,  // 316: groundplane.agent.v1.AgentMessage.entry_configuration_work_checkpoint_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
+	274,  // 317: groundplane.agent.v1.AgentMessage.entry_configuration_work_completion_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkCompletionRequest
+	276,  // 318: groundplane.agent.v1.AgentMessage.entry_configuration_work_failure_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkFailureRequest
+	267,  // 319: groundplane.agent.v1.AgentMessage.entry_configuration_request:type_name -> groundplane.agent.v1.EntryConfigurationRequest
+	270,  // 320: groundplane.agent.v1.AgentMessage.entry_configuration_file_request:type_name -> groundplane.agent.v1.EntryConfigurationFileRequest
+	279,  // 321: groundplane.agent.v1.AgentMessage.entry_configuration_work_recovery_report_request:type_name -> groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest
 	98,   // 322: groundplane.agent.v1.AgentMessage.attach_provision_checkpoint_request:type_name -> groundplane.agent.v1.AttachProvisionCheckpointRequest
 	100,  // 323: groundplane.agent.v1.AgentMessage.attach_provision_completion_request:type_name -> groundplane.agent.v1.AttachProvisionCompletionRequest
 	102,  // 324: groundplane.agent.v1.AgentMessage.attach_provision_failure_request:type_name -> groundplane.agent.v1.AttachProvisionFailureRequest
 	92,   // 325: groundplane.agent.v1.AgentMessage.attach_provision_facts_request:type_name -> groundplane.agent.v1.AttachProvisionFactsRequest
 	96,   // 326: groundplane.agent.v1.AgentMessage.attach_provision_recovery_report_request:type_name -> groundplane.agent.v1.AttachProvisionRecoveryReportRequest
-	326,  // 327: groundplane.agent.v1.AgentMessage.service_lifecycle_checkpoint_request:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointRequest
-	328,  // 328: groundplane.agent.v1.AgentMessage.service_lifecycle_completion_request:type_name -> groundplane.agent.v1.ServiceLifecycleCompletionRequest
-	330,  // 329: groundplane.agent.v1.AgentMessage.service_lifecycle_failure_request:type_name -> groundplane.agent.v1.ServiceLifecycleFailureRequest
-	322,  // 330: groundplane.agent.v1.AgentMessage.service_lifecycle_hook_request:type_name -> groundplane.agent.v1.ServiceLifecycleHookRequest
-	324,  // 331: groundplane.agent.v1.AgentMessage.service_lifecycle_recovery_report_request:type_name -> groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest
-	310,  // 332: groundplane.agent.v1.AgentMessage.service_removal_recovery_checkpoint_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
-	312,  // 333: groundplane.agent.v1.AgentMessage.service_removal_recovery_completion_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest
-	314,  // 334: groundplane.agent.v1.AgentMessage.service_removal_recovery_failure_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest
-	305,  // 335: groundplane.agent.v1.AgentMessage.service_removal_configuration_request:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationRequest
-	308,  // 336: groundplane.agent.v1.AgentMessage.service_removal_configuration_file_request:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFileRequest
-	401,  // 337: groundplane.agent.v1.AgentMessage.backup_work_checkpoint_request:type_name -> groundplane.agent.v1.BackupWorkCheckpointRequest
-	402,  // 338: groundplane.agent.v1.AgentMessage.backup_work_completion_request:type_name -> groundplane.agent.v1.BackupWorkCompletionRequest
-	529,  // 339: groundplane.agent.v1.AgentMessage.backup_work_secret_request:type_name -> groundplane.agent.v1.BackupWorkSecretRequest
-	403,  // 340: groundplane.agent.v1.AgentMessage.backup_work_failure_request:type_name -> groundplane.agent.v1.BackupWorkFailureRequest
-	397,  // 341: groundplane.agent.v1.AgentMessage.backup_recovery_request:type_name -> groundplane.agent.v1.BackupRecoveryRequest
-	398,  // 342: groundplane.agent.v1.AgentMessage.backup_config_recovery_prepare_request:type_name -> groundplane.agent.v1.BackupConfigRecoveryPrepareRequest
+	328,  // 327: groundplane.agent.v1.AgentMessage.service_lifecycle_checkpoint_request:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointRequest
+	330,  // 328: groundplane.agent.v1.AgentMessage.service_lifecycle_completion_request:type_name -> groundplane.agent.v1.ServiceLifecycleCompletionRequest
+	332,  // 329: groundplane.agent.v1.AgentMessage.service_lifecycle_failure_request:type_name -> groundplane.agent.v1.ServiceLifecycleFailureRequest
+	324,  // 330: groundplane.agent.v1.AgentMessage.service_lifecycle_hook_request:type_name -> groundplane.agent.v1.ServiceLifecycleHookRequest
+	326,  // 331: groundplane.agent.v1.AgentMessage.service_lifecycle_recovery_report_request:type_name -> groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest
+	312,  // 332: groundplane.agent.v1.AgentMessage.service_removal_recovery_checkpoint_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
+	314,  // 333: groundplane.agent.v1.AgentMessage.service_removal_recovery_completion_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest
+	316,  // 334: groundplane.agent.v1.AgentMessage.service_removal_recovery_failure_request:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest
+	307,  // 335: groundplane.agent.v1.AgentMessage.service_removal_configuration_request:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationRequest
+	310,  // 336: groundplane.agent.v1.AgentMessage.service_removal_configuration_file_request:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFileRequest
+	403,  // 337: groundplane.agent.v1.AgentMessage.backup_work_checkpoint_request:type_name -> groundplane.agent.v1.BackupWorkCheckpointRequest
+	404,  // 338: groundplane.agent.v1.AgentMessage.backup_work_completion_request:type_name -> groundplane.agent.v1.BackupWorkCompletionRequest
+	531,  // 339: groundplane.agent.v1.AgentMessage.backup_work_secret_request:type_name -> groundplane.agent.v1.BackupWorkSecretRequest
+	405,  // 340: groundplane.agent.v1.AgentMessage.backup_work_failure_request:type_name -> groundplane.agent.v1.BackupWorkFailureRequest
+	399,  // 341: groundplane.agent.v1.AgentMessage.backup_recovery_request:type_name -> groundplane.agent.v1.BackupRecoveryRequest
+	400,  // 342: groundplane.agent.v1.AgentMessage.backup_config_recovery_prepare_request:type_name -> groundplane.agent.v1.BackupConfigRecoveryPrepareRequest
 	84,   // 343: groundplane.agent.v1.AgentMessage.environment_provision_result_request:type_name -> groundplane.agent.v1.EnvironmentProvisionResultRequest
 	66,   // 344: groundplane.agent.v1.AgentMessage.backing_provision_checkpoint_request:type_name -> groundplane.agent.v1.BackingProvisionCheckpointRequest
 	68,   // 345: groundplane.agent.v1.AgentMessage.backing_provision_completion_request:type_name -> groundplane.agent.v1.BackingProvisionCompletionRequest
@@ -53758,879 +53897,881 @@ var file_proto_agent_proto_depIdxs = []int32{
 	74,   // 348: groundplane.agent.v1.AgentMessage.backing_provision_file_request:type_name -> groundplane.agent.v1.BackingProvisionFileRequest
 	76,   // 349: groundplane.agent.v1.AgentMessage.backing_provision_hook_request:type_name -> groundplane.agent.v1.BackingProvisionHookRequest
 	78,   // 350: groundplane.agent.v1.AgentMessage.backing_provision_recovery_request:type_name -> groundplane.agent.v1.BackingProvisionRecoveryRequest
-	254,  // 351: groundplane.agent.v1.AgentMessage.resolver_work_checkpoint_request:type_name -> groundplane.agent.v1.ResolverWorkCheckpointRequest
-	256,  // 352: groundplane.agent.v1.AgentMessage.resolver_work_completion_request:type_name -> groundplane.agent.v1.ResolverWorkCompletionRequest
-	257,  // 353: groundplane.agent.v1.AgentMessage.resolver_work_failure_request:type_name -> groundplane.agent.v1.ResolverWorkFailureRequest
-	258,  // 354: groundplane.agent.v1.AgentMessage.resolver_work_recovery_request:type_name -> groundplane.agent.v1.ResolverWorkRecoveryRequest
+	256,  // 351: groundplane.agent.v1.AgentMessage.resolver_work_checkpoint_request:type_name -> groundplane.agent.v1.ResolverWorkCheckpointRequest
+	258,  // 352: groundplane.agent.v1.AgentMessage.resolver_work_completion_request:type_name -> groundplane.agent.v1.ResolverWorkCompletionRequest
+	259,  // 353: groundplane.agent.v1.AgentMessage.resolver_work_failure_request:type_name -> groundplane.agent.v1.ResolverWorkFailureRequest
+	260,  // 354: groundplane.agent.v1.AgentMessage.resolver_work_recovery_request:type_name -> groundplane.agent.v1.ResolverWorkRecoveryRequest
 	53,   // 355: groundplane.agent.v1.AgentMessage.work_journal_replay_request:type_name -> groundplane.agent.v1.WorkJournalReplayRequest
-	212,  // 356: groundplane.agent.v1.AgentMessage.container_terminal_event:type_name -> groundplane.agent.v1.ContainerTerminalEvent
-	176,  // 357: groundplane.agent.v1.Ready.source:type_name -> groundplane.agent.v1.BuildProvenance
-	177,  // 358: groundplane.agent.v1.ResolveWorkloadImages.selectors:type_name -> groundplane.agent.v1.WorkloadImageSelector
-	177,  // 359: groundplane.agent.v1.WorkloadImageResolution.selector:type_name -> groundplane.agent.v1.WorkloadImageSelector
-	179,  // 360: groundplane.agent.v1.WorkloadImageResolutions.resolutions:type_name -> groundplane.agent.v1.WorkloadImageResolution
-	5,    // 361: groundplane.agent.v1.WorkloadImageResolutionFailure.kind:type_name -> groundplane.agent.v1.WorkloadImageResolutionFailureKind
-	180,  // 362: groundplane.agent.v1.WorkloadImageResolutionResult.success:type_name -> groundplane.agent.v1.WorkloadImageResolutions
-	181,  // 363: groundplane.agent.v1.WorkloadImageResolutionResult.failure:type_name -> groundplane.agent.v1.WorkloadImageResolutionFailure
-	184,  // 364: groundplane.agent.v1.ServiceObservationTarget.workloads:type_name -> groundplane.agent.v1.ServiceWorkloadObservation
-	185,  // 365: groundplane.agent.v1.ServiceObservationTarget.database_probe:type_name -> groundplane.agent.v1.DatabaseVersionProbe
-	23,   // 366: groundplane.agent.v1.ServiceObservationTarget.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
-	408,  // 367: groundplane.agent.v1.DatabaseVersionProbe.authority:type_name -> groundplane.agent.v1.BackupStepAuthority
-	385,  // 368: groundplane.agent.v1.DatabaseVersionProbe.services:type_name -> groundplane.agent.v1.BackupServiceFact
-	346,  // 369: groundplane.agent.v1.DatabaseVersionProbe.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
-	183,  // 370: groundplane.agent.v1.ObserveServices.targets:type_name -> groundplane.agent.v1.ServiceObservationTarget
-	189,  // 371: groundplane.agent.v1.ServiceObservationRow.replicas:type_name -> groundplane.agent.v1.ServiceReplicaCounts
-	6,    // 372: groundplane.agent.v1.ServiceObservationRow.proxy_state:type_name -> groundplane.agent.v1.ServiceProxyObservationState
-	191,  // 373: groundplane.agent.v1.ServiceObservationRow.containers:type_name -> groundplane.agent.v1.ServiceContainerObservation
-	186,  // 374: groundplane.agent.v1.ServiceObservationRow.database_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
-	190,  // 375: groundplane.agent.v1.ServiceObservationResult.observations:type_name -> groundplane.agent.v1.ServiceObservationRow
-	195,  // 376: groundplane.agent.v1.ObservedState.projects:type_name -> groundplane.agent.v1.ObservedProject
-	585,  // 377: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
-	196,  // 378: groundplane.agent.v1.ObservedProject.containers:type_name -> groundplane.agent.v1.ObservedContainer
-	197,  // 379: groundplane.agent.v1.ObservedProject.networks:type_name -> groundplane.agent.v1.ObservedNetwork
-	198,  // 380: groundplane.agent.v1.ObservedProject.volumes:type_name -> groundplane.agent.v1.ObservedVolume
-	199,  // 381: groundplane.agent.v1.ObservedProject.collisions:type_name -> groundplane.agent.v1.ObservedCollision
-	7,    // 382: groundplane.agent.v1.ObservedContainer.state:type_name -> groundplane.agent.v1.ObservedContainerState
-	8,    // 383: groundplane.agent.v1.ObservedContainer.health:type_name -> groundplane.agent.v1.ObservedContainerHealth
-	350,  // 384: groundplane.agent.v1.ObservedContainer.labels:type_name -> groundplane.agent.v1.LabelPair
-	50,   // 385: groundplane.agent.v1.ObservedContainer.healthcheck_diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	350,  // 386: groundplane.agent.v1.ObservedNetwork.labels:type_name -> groundplane.agent.v1.LabelPair
-	350,  // 387: groundplane.agent.v1.ObservedVolume.labels:type_name -> groundplane.agent.v1.LabelPair
-	9,    // 388: groundplane.agent.v1.ObservedCollision.kind:type_name -> groundplane.agent.v1.ObservedCollisionKind
-	249,  // 389: groundplane.agent.v1.CandidateAbsenceEvidence.candidates:type_name -> groundplane.agent.v1.CandidateReleaseService
-	585,  // 390: groundplane.agent.v1.DNSResolverObservationEvidence.observed_at:type_name -> google.protobuf.Timestamp
-	205,  // 391: groundplane.agent.v1.DNSResolverObservationEvidence.static_query:type_name -> groundplane.agent.v1.DNSQueryProof
-	205,  // 392: groundplane.agent.v1.DNSResolverObservationEvidence.catch_all_query:type_name -> groundplane.agent.v1.DNSQueryProof
-	205,  // 393: groundplane.agent.v1.DNSResolverObservationEvidence.forwarder_queries:type_name -> groundplane.agent.v1.DNSQueryProof
-	10,   // 394: groundplane.agent.v1.DNSAnswerRecord.type:type_name -> groundplane.agent.v1.DNSQueryType
-	10,   // 395: groundplane.agent.v1.DNSQueryProof.type:type_name -> groundplane.agent.v1.DNSQueryType
-	203,  // 396: groundplane.agent.v1.DNSQueryProof.answers:type_name -> groundplane.agent.v1.DNSAnswerRecord
-	204,  // 397: groundplane.agent.v1.DNSQueryProof.counters:type_name -> groundplane.agent.v1.DNSForwardCounter
-	577,  // 398: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
-	578,  // 399: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
-	213,  // 400: groundplane.agent.v1.ControllerMessage.log_subscribe:type_name -> groundplane.agent.v1.LogSubscribe
-	214,  // 401: groundplane.agent.v1.ControllerMessage.log_cancel:type_name -> groundplane.agent.v1.LogCancel
-	178,  // 402: groundplane.agent.v1.ControllerMessage.resolve_workload_images:type_name -> groundplane.agent.v1.ResolveWorkloadImages
-	187,  // 403: groundplane.agent.v1.ControllerMessage.observe_services:type_name -> groundplane.agent.v1.ObserveServices
-	188,  // 404: groundplane.agent.v1.ControllerMessage.cancel_service_observation:type_name -> groundplane.agent.v1.CancelServiceObservation
-	215,  // 405: groundplane.agent.v1.ControllerMessage.log_credit:type_name -> groundplane.agent.v1.LogCredit
-	579,  // 406: groundplane.agent.v1.ControllerMessage.check_backing_access:type_name -> groundplane.agent.v1.CheckBackingAccess
-	581,  // 407: groundplane.agent.v1.ControllerMessage.cancel_backing_access:type_name -> groundplane.agent.v1.CancelBackingAccess
-	561,  // 408: groundplane.agent.v1.ControllerMessage.check_dns_connections:type_name -> groundplane.agent.v1.CheckDNSConnections
-	563,  // 409: groundplane.agent.v1.ControllerMessage.cancel_dns_connections:type_name -> groundplane.agent.v1.CancelDNSConnections
-	566,  // 410: groundplane.agent.v1.ControllerMessage.check_edge_connections:type_name -> groundplane.agent.v1.CheckEdgeConnections
-	567,  // 411: groundplane.agent.v1.ControllerMessage.cancel_edge_connections:type_name -> groundplane.agent.v1.CancelEdgeConnections
-	441,  // 412: groundplane.agent.v1.ControllerMessage.backup_config_transfer:type_name -> groundplane.agent.v1.BackupConfigTransfer
-	448,  // 413: groundplane.agent.v1.ControllerMessage.backup_config_credit:type_name -> groundplane.agent.v1.BackupConfigCredit
-	428,  // 414: groundplane.agent.v1.ControllerMessage.backup_staging_recovery_plan:type_name -> groundplane.agent.v1.BackupStagingRecoveryPlan
-	449,  // 415: groundplane.agent.v1.ControllerMessage.backup_volume_manifest_transfer:type_name -> groundplane.agent.v1.BackupVolumeManifestTransfer
-	454,  // 416: groundplane.agent.v1.ControllerMessage.backup_volume_manifest_ack_credit:type_name -> groundplane.agent.v1.BackupVolumeManifestAckCredit
-	534,  // 417: groundplane.agent.v1.ControllerMessage.backup_staging_recovery_ack_receipt:type_name -> groundplane.agent.v1.BackupStagingRecoveryAckReceipt
-	59,   // 418: groundplane.agent.v1.ControllerMessage.work_start_ack:type_name -> groundplane.agent.v1.WorkStartAck
-	127,  // 419: groundplane.agent.v1.ControllerMessage.release_work_assignment:type_name -> groundplane.agent.v1.ReleaseWorkAssignment
-	132,  // 420: groundplane.agent.v1.ControllerMessage.release_work_checkpoint_ack:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointAck
-	168,  // 421: groundplane.agent.v1.ControllerMessage.release_hook_delivery:type_name -> groundplane.agent.v1.ReleaseHookDelivery
-	138,  // 422: groundplane.agent.v1.ControllerMessage.release_effect_evidence_ack:type_name -> groundplane.agent.v1.ReleaseEffectEvidenceAck
-	141,  // 423: groundplane.agent.v1.ControllerMessage.script_work_checkpoint_ack:type_name -> groundplane.agent.v1.ScriptWorkCheckpointAck
-	156,  // 424: groundplane.agent.v1.ControllerMessage.release_configuration_manifest:type_name -> groundplane.agent.v1.ReleaseConfigurationManifest
-	158,  // 425: groundplane.agent.v1.ControllerMessage.release_configuration_file_delivery:type_name -> groundplane.agent.v1.ReleaseConfigurationFileDelivery
-	52,   // 426: groundplane.agent.v1.ControllerMessage.work_executor_registration:type_name -> groundplane.agent.v1.WorkExecutorRegistration
-	134,  // 427: groundplane.agent.v1.ControllerMessage.release_work_completion_ack:type_name -> groundplane.agent.v1.ReleaseWorkCompletionAck
-	136,  // 428: groundplane.agent.v1.ControllerMessage.release_work_failure_ack:type_name -> groundplane.agent.v1.ReleaseWorkFailureAck
-	130,  // 429: groundplane.agent.v1.ControllerMessage.release_recovery_checkpoint_ack:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointAck
-	128,  // 430: groundplane.agent.v1.ControllerMessage.release_recovery_assignment:type_name -> groundplane.agent.v1.ReleaseRecoveryAssignment
-	139,  // 431: groundplane.agent.v1.ControllerMessage.script_work_assignment:type_name -> groundplane.agent.v1.ScriptWorkAssignment
-	143,  // 432: groundplane.agent.v1.ControllerMessage.script_work_completion_ack:type_name -> groundplane.agent.v1.ScriptWorkCompletionAck
-	144,  // 433: groundplane.agent.v1.ControllerMessage.script_recovery_assignment:type_name -> groundplane.agent.v1.ScriptRecoveryAssignment
-	146,  // 434: groundplane.agent.v1.ControllerMessage.script_recovery_completion_ack:type_name -> groundplane.agent.v1.ScriptRecoveryCompletionAck
-	148,  // 435: groundplane.agent.v1.ControllerMessage.script_work_failure_ack:type_name -> groundplane.agent.v1.ScriptWorkFailureAck
-	60,   // 436: groundplane.agent.v1.ControllerMessage.environment_removal_assignment:type_name -> groundplane.agent.v1.EnvironmentRemovalAssignment
-	120,  // 437: groundplane.agent.v1.ControllerMessage.environment_removal_checkpoint_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointAck
-	122,  // 438: groundplane.agent.v1.ControllerMessage.environment_removal_completion_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalCompletionAck
-	124,  // 439: groundplane.agent.v1.ControllerMessage.environment_removal_failure_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalFailureAck
-	88,   // 440: groundplane.agent.v1.ControllerMessage.attach_removal_assignment:type_name -> groundplane.agent.v1.AttachRemovalAssignment
-	114,  // 441: groundplane.agent.v1.ControllerMessage.attach_removal_checkpoint_ack:type_name -> groundplane.agent.v1.AttachRemovalCheckpointAck
-	116,  // 442: groundplane.agent.v1.ControllerMessage.attach_removal_completion_ack:type_name -> groundplane.agent.v1.AttachRemovalCompletionAck
-	118,  // 443: groundplane.agent.v1.ControllerMessage.attach_removal_failure_ack:type_name -> groundplane.agent.v1.AttachRemovalFailureAck
-	89,   // 444: groundplane.agent.v1.ControllerMessage.attach_recovery_assignment:type_name -> groundplane.agent.v1.AttachRecoveryAssignment
-	91,   // 445: groundplane.agent.v1.ControllerMessage.attach_recovery_completion_ack:type_name -> groundplane.agent.v1.AttachRecoveryCompletionAck
-	335,  // 446: groundplane.agent.v1.ControllerMessage.volume_work_assignment:type_name -> groundplane.agent.v1.VolumeWorkAssignment
-	337,  // 447: groundplane.agent.v1.ControllerMessage.volume_work_checkpoint_ack:type_name -> groundplane.agent.v1.VolumeWorkCheckpointAck
-	339,  // 448: groundplane.agent.v1.ControllerMessage.volume_work_completion_ack:type_name -> groundplane.agent.v1.VolumeWorkCompletionAck
-	341,  // 449: groundplane.agent.v1.ControllerMessage.volume_work_failure_ack:type_name -> groundplane.agent.v1.VolumeWorkFailureAck
-	343,  // 450: groundplane.agent.v1.ControllerMessage.volume_work_recovery_report_ack:type_name -> groundplane.agent.v1.VolumeWorkRecoveryReportAck
-	289,  // 451: groundplane.agent.v1.ControllerMessage.network_work_assignment:type_name -> groundplane.agent.v1.NetworkWorkAssignment
-	291,  // 452: groundplane.agent.v1.ControllerMessage.network_work_checkpoint_ack:type_name -> groundplane.agent.v1.NetworkWorkCheckpointAck
-	293,  // 453: groundplane.agent.v1.ControllerMessage.network_work_completion_ack:type_name -> groundplane.agent.v1.NetworkWorkCompletionAck
-	295,  // 454: groundplane.agent.v1.ControllerMessage.network_work_failure_ack:type_name -> groundplane.agent.v1.NetworkWorkFailureAck
-	297,  // 455: groundplane.agent.v1.ControllerMessage.network_work_recovery_report_ack:type_name -> groundplane.agent.v1.NetworkWorkRecoveryReportAck
-	279,  // 456: groundplane.agent.v1.ControllerMessage.component_work_assignment:type_name -> groundplane.agent.v1.ComponentWorkAssignment
-	281,  // 457: groundplane.agent.v1.ControllerMessage.component_work_checkpoint_ack:type_name -> groundplane.agent.v1.ComponentWorkCheckpointAck
-	283,  // 458: groundplane.agent.v1.ControllerMessage.component_work_completion_ack:type_name -> groundplane.agent.v1.ComponentWorkCompletionAck
-	285,  // 459: groundplane.agent.v1.ControllerMessage.component_work_failure_ack:type_name -> groundplane.agent.v1.ComponentWorkFailureAck
-	287,  // 460: groundplane.agent.v1.ControllerMessage.component_work_recovery_report_ack:type_name -> groundplane.agent.v1.ComponentWorkRecoveryReportAck
-	152,  // 461: groundplane.agent.v1.ControllerMessage.component_configuration_manifest:type_name -> groundplane.agent.v1.ComponentConfigurationManifest
-	154,  // 462: groundplane.agent.v1.ControllerMessage.component_configuration_file_delivery:type_name -> groundplane.agent.v1.ComponentConfigurationFileDelivery
-	276,  // 463: groundplane.agent.v1.ControllerMessage.entry_configuration_work_assignment:type_name -> groundplane.agent.v1.EntryConfigurationWorkAssignment
-	271,  // 464: groundplane.agent.v1.ControllerMessage.entry_configuration_work_checkpoint_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
-	273,  // 465: groundplane.agent.v1.ControllerMessage.entry_configuration_work_completion_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkCompletionAck
-	275,  // 466: groundplane.agent.v1.ControllerMessage.entry_configuration_work_failure_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkFailureAck
-	267,  // 467: groundplane.agent.v1.ControllerMessage.entry_configuration_manifest:type_name -> groundplane.agent.v1.EntryConfigurationManifest
-	269,  // 468: groundplane.agent.v1.ControllerMessage.entry_configuration_file_delivery:type_name -> groundplane.agent.v1.EntryConfigurationFileDelivery
-	278,  // 469: groundplane.agent.v1.ControllerMessage.entry_configuration_work_recovery_report_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck
-	94,   // 470: groundplane.agent.v1.ControllerMessage.attach_provision_assignment:type_name -> groundplane.agent.v1.AttachProvisionAssignment
-	99,   // 471: groundplane.agent.v1.ControllerMessage.attach_provision_checkpoint_ack:type_name -> groundplane.agent.v1.AttachProvisionCheckpointAck
-	101,  // 472: groundplane.agent.v1.ControllerMessage.attach_provision_completion_ack:type_name -> groundplane.agent.v1.AttachProvisionCompletionAck
-	103,  // 473: groundplane.agent.v1.ControllerMessage.attach_provision_failure_ack:type_name -> groundplane.agent.v1.AttachProvisionFailureAck
-	93,   // 474: groundplane.agent.v1.ControllerMessage.attach_provision_facts_ack:type_name -> groundplane.agent.v1.AttachProvisionFactsAck
-	95,   // 475: groundplane.agent.v1.ControllerMessage.attach_provision_recovery_assignment:type_name -> groundplane.agent.v1.AttachProvisionRecoveryAssignment
-	97,   // 476: groundplane.agent.v1.ControllerMessage.attach_provision_recovery_report_ack:type_name -> groundplane.agent.v1.AttachProvisionRecoveryReportAck
-	318,  // 477: groundplane.agent.v1.ControllerMessage.service_lifecycle_assignment:type_name -> groundplane.agent.v1.ServiceLifecycleAssignment
-	327,  // 478: groundplane.agent.v1.ControllerMessage.service_lifecycle_checkpoint_ack:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointAck
-	329,  // 479: groundplane.agent.v1.ControllerMessage.service_lifecycle_completion_ack:type_name -> groundplane.agent.v1.ServiceLifecycleCompletionAck
-	331,  // 480: groundplane.agent.v1.ControllerMessage.service_lifecycle_failure_ack:type_name -> groundplane.agent.v1.ServiceLifecycleFailureAck
-	323,  // 481: groundplane.agent.v1.ControllerMessage.service_lifecycle_hook_delivery:type_name -> groundplane.agent.v1.ServiceLifecycleHookDelivery
-	325,  // 482: groundplane.agent.v1.ControllerMessage.service_lifecycle_recovery_report_ack:type_name -> groundplane.agent.v1.ServiceLifecycleRecoveryReportAck
-	304,  // 483: groundplane.agent.v1.ControllerMessage.service_removal_recovery_assignment:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryAssignment
-	311,  // 484: groundplane.agent.v1.ControllerMessage.service_removal_recovery_checkpoint_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
-	313,  // 485: groundplane.agent.v1.ControllerMessage.service_removal_recovery_completion_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck
-	315,  // 486: groundplane.agent.v1.ControllerMessage.service_removal_recovery_failure_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryFailureAck
-	307,  // 487: groundplane.agent.v1.ControllerMessage.service_removal_configuration_manifest:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationManifest
-	309,  // 488: groundplane.agent.v1.ControllerMessage.service_removal_configuration_file_delivery:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery
-	393,  // 489: groundplane.agent.v1.ControllerMessage.backup_work_assignment:type_name -> groundplane.agent.v1.BackupWorkAssignment
-	406,  // 490: groundplane.agent.v1.ControllerMessage.backup_work_checkpoint_ack:type_name -> groundplane.agent.v1.BackupWorkCheckpointAck
-	530,  // 491: groundplane.agent.v1.ControllerMessage.backup_work_secret_transfer:type_name -> groundplane.agent.v1.BackupWorkSecretTransfer
-	405,  // 492: groundplane.agent.v1.ControllerMessage.backup_work_completion_ack:type_name -> groundplane.agent.v1.BackupWorkCompletionAck
-	404,  // 493: groundplane.agent.v1.ControllerMessage.backup_work_failure_ack:type_name -> groundplane.agent.v1.BackupWorkFailureAck
-	396,  // 494: groundplane.agent.v1.ControllerMessage.backup_recovery_assignment:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
-	400,  // 495: groundplane.agent.v1.ControllerMessage.backup_recovery_ack:type_name -> groundplane.agent.v1.BackupRecoveryAck
-	399,  // 496: groundplane.agent.v1.ControllerMessage.backup_config_recovery_prepare_ack:type_name -> groundplane.agent.v1.BackupConfigRecoveryPrepareAck
-	58,   // 497: groundplane.agent.v1.ControllerMessage.work_cancel:type_name -> groundplane.agent.v1.WorkCancel
-	82,   // 498: groundplane.agent.v1.ControllerMessage.environment_provision_assignment:type_name -> groundplane.agent.v1.EnvironmentProvisionAssignment
-	85,   // 499: groundplane.agent.v1.ControllerMessage.environment_provision_result_ack:type_name -> groundplane.agent.v1.EnvironmentProvisionResultAck
-	65,   // 500: groundplane.agent.v1.ControllerMessage.backing_provision_assignment:type_name -> groundplane.agent.v1.BackingProvisionAssignment
-	67,   // 501: groundplane.agent.v1.ControllerMessage.backing_provision_checkpoint_ack:type_name -> groundplane.agent.v1.BackingProvisionCheckpointAck
-	69,   // 502: groundplane.agent.v1.ControllerMessage.backing_provision_completion_ack:type_name -> groundplane.agent.v1.BackingProvisionCompletionAck
-	71,   // 503: groundplane.agent.v1.ControllerMessage.backing_provision_failure_ack:type_name -> groundplane.agent.v1.BackingProvisionFailureAck
-	73,   // 504: groundplane.agent.v1.ControllerMessage.backing_provision_configuration_manifest:type_name -> groundplane.agent.v1.BackingProvisionConfigurationManifest
-	75,   // 505: groundplane.agent.v1.ControllerMessage.backing_provision_file_delivery:type_name -> groundplane.agent.v1.BackingProvisionFileDelivery
-	77,   // 506: groundplane.agent.v1.ControllerMessage.backing_provision_hook_delivery:type_name -> groundplane.agent.v1.BackingProvisionHookDelivery
-	79,   // 507: groundplane.agent.v1.ControllerMessage.backing_provision_recovery_ack:type_name -> groundplane.agent.v1.BackingProvisionRecoveryAck
-	253,  // 508: groundplane.agent.v1.ControllerMessage.resolver_work_assignment:type_name -> groundplane.agent.v1.ResolverWorkAssignment
-	255,  // 509: groundplane.agent.v1.ControllerMessage.resolver_work_checkpoint_ack:type_name -> groundplane.agent.v1.ResolverWorkCheckpointAck
-	259,  // 510: groundplane.agent.v1.ControllerMessage.resolver_work_result_ack:type_name -> groundplane.agent.v1.ResolverWorkResultAck
-	54,   // 511: groundplane.agent.v1.ControllerMessage.work_journal_replay_ack:type_name -> groundplane.agent.v1.WorkJournalReplayAck
-	55,   // 512: groundplane.agent.v1.ControllerMessage.work_report_rejection:type_name -> groundplane.agent.v1.WorkReportRejection
-	208,  // 513: groundplane.agent.v1.ControllerMessage.container_terminal_open:type_name -> groundplane.agent.v1.ContainerTerminalOpen
-	210,  // 514: groundplane.agent.v1.ControllerMessage.container_terminal_control:type_name -> groundplane.agent.v1.ContainerTerminalControl
-	183,  // 515: groundplane.agent.v1.LogTarget.runtime:type_name -> groundplane.agent.v1.ServiceObservationTarget
-	183,  // 516: groundplane.agent.v1.ContainerTerminalOpen.sources:type_name -> groundplane.agent.v1.ServiceObservationTarget
-	209,  // 517: groundplane.agent.v1.ContainerTerminalControl.size:type_name -> groundplane.agent.v1.ContainerTerminalSize
-	211,  // 518: groundplane.agent.v1.ContainerTerminalEvent.closed:type_name -> groundplane.agent.v1.ContainerTerminalClosed
-	207,  // 519: groundplane.agent.v1.LogSubscribe.targets:type_name -> groundplane.agent.v1.LogTarget
-	12,   // 520: groundplane.agent.v1.LogEvent.slot:type_name -> groundplane.agent.v1.LogSlot
-	11,   // 521: groundplane.agent.v1.LogEvent.stream:type_name -> groundplane.agent.v1.LogStream
-	585,  // 522: groundplane.agent.v1.LogEvent.timestamp:type_name -> google.protobuf.Timestamp
-	13,   // 523: groundplane.agent.v1.LogEnd.reason:type_name -> groundplane.agent.v1.LogEndReason
-	15,   // 524: groundplane.agent.v1.ScriptOutcomeCheckpoint.reason:type_name -> groundplane.agent.v1.ScriptOutcomeReason
-	585,  // 525: groundplane.agent.v1.ScriptOutcomeCheckpoint.observed_at:type_name -> google.protobuf.Timestamp
-	14,   // 526: groundplane.agent.v1.ScriptExecutionCheckpoint.state:type_name -> groundplane.agent.v1.ScriptExecutionState
-	220,  // 527: groundplane.agent.v1.ScriptExecutionCheckpoint.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
-	221,  // 528: groundplane.agent.v1.ScriptExecutionCheckpoint.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
-	222,  // 529: groundplane.agent.v1.ScriptExecutionCheckpoint.outcome:type_name -> groundplane.agent.v1.ScriptOutcomeCheckpoint
-	223,  // 530: groundplane.agent.v1.ScriptExecutionCheckpoint.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupCheckpoint
-	14,   // 531: groundplane.agent.v1.ScriptCheckpointRequest.expected_state:type_name -> groundplane.agent.v1.ScriptExecutionState
-	14,   // 532: groundplane.agent.v1.ScriptCheckpointRequest.state:type_name -> groundplane.agent.v1.ScriptExecutionState
-	219,  // 533: groundplane.agent.v1.ScriptCheckpointRequest.start_authorized:type_name -> groundplane.agent.v1.ScriptStartAuthorizedCheckpoint
-	220,  // 534: groundplane.agent.v1.ScriptCheckpointRequest.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
-	221,  // 535: groundplane.agent.v1.ScriptCheckpointRequest.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
-	222,  // 536: groundplane.agent.v1.ScriptCheckpointRequest.outcome:type_name -> groundplane.agent.v1.ScriptOutcomeCheckpoint
-	223,  // 537: groundplane.agent.v1.ScriptCheckpointRequest.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupCheckpoint
-	585,  // 538: groundplane.agent.v1.ScriptCheckpointRequest.recorded_at:type_name -> google.protobuf.Timestamp
-	14,   // 539: groundplane.agent.v1.ScriptCheckpointAck.state:type_name -> groundplane.agent.v1.ScriptExecutionState
-	16,   // 540: groundplane.agent.v1.BackingHookProcedure.event:type_name -> groundplane.agent.v1.BackingHookEvent
-	227,  // 541: groundplane.agent.v1.BackingHookProcedure.inputs:type_name -> groundplane.agent.v1.BackingHookValue
-	227,  // 542: groundplane.agent.v1.BackingHookProcedure.facts:type_name -> groundplane.agent.v1.BackingHookValue
-	228,  // 543: groundplane.agent.v1.BackingHookProcedure.fact_schema:type_name -> groundplane.agent.v1.BackingHookFactDefinition
-	18,   // 544: groundplane.agent.v1.ExecutionPlan.operation:type_name -> groundplane.agent.v1.PlanOperation
-	346,  // 545: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
-	351,  // 546: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
-	357,  // 547: groundplane.agent.v1.ExecutionPlan.script_runner_snapshots:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
-	370,  // 548: groundplane.agent.v1.ExecutionPlan.script_runner_projections:type_name -> groundplane.agent.v1.ScriptRunnerProjection
-	377,  // 549: groundplane.agent.v1.ExecutionPlan.script_body_artifacts:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
-	17,   // 550: groundplane.agent.v1.ExecutionPlan.component_lifecycle_mode:type_name -> groundplane.agent.v1.ComponentLifecycleMode
-	569,  // 551: groundplane.agent.v1.ExecutionPlan.component_rollback_observation:type_name -> groundplane.agent.v1.ComponentApply
-	240,  // 552: groundplane.agent.v1.ExecutionPlan.candidate_release_procedure:type_name -> groundplane.agent.v1.CandidateReleaseProcedure
-	238,  // 553: groundplane.agent.v1.ExecutionPlan.managed_component_procedure:type_name -> groundplane.agent.v1.ManagedComponentProcedure
-	236,  // 554: groundplane.agent.v1.ExecutionPlan.service_lifecycle_procedure:type_name -> groundplane.agent.v1.ServiceLifecycleProcedure
-	407,  // 555: groundplane.agent.v1.ExecutionPlan.backup_scope:type_name -> groundplane.agent.v1.BackupPlanScope
-	235,  // 556: groundplane.agent.v1.ExecutionPlan.service_absence_recovery_procedure:type_name -> groundplane.agent.v1.ServiceAbsenceRecoveryProcedure
-	231,  // 557: groundplane.agent.v1.ExecutionPlan.managed_network_recovery_procedure:type_name -> groundplane.agent.v1.ManagedNetworkRecoveryProcedure
-	232,  // 558: groundplane.agent.v1.ManagedNetworkRecoveryProcedure.removal:type_name -> groundplane.agent.v1.ManagedNetworkRemovalRecovery
-	233,  // 559: groundplane.agent.v1.ManagedNetworkRecoveryProcedure.preparation:type_name -> groundplane.agent.v1.ManagedNetworkPreparationRecovery
-	234,  // 560: groundplane.agent.v1.ManagedNetworkPreparationRecovery.members:type_name -> groundplane.agent.v1.ManagedNetworkPreparationMember
-	237,  // 561: groundplane.agent.v1.ServiceLifecycleProcedure.sources:type_name -> groundplane.agent.v1.ServiceLifecycleSource
-	239,  // 562: groundplane.agent.v1.ManagedComponentProcedure.services:type_name -> groundplane.agent.v1.ManagedComponentService
-	243,  // 563: groundplane.agent.v1.CandidateReleaseProcedure.members:type_name -> groundplane.agent.v1.CandidateReleaseMember
-	241,  // 564: groundplane.agent.v1.CandidateReleaseProcedure.configuration_restoration:type_name -> groundplane.agent.v1.ConfigurationRestoration
-	242,  // 565: groundplane.agent.v1.ConfigurationRestoration.files:type_name -> groundplane.agent.v1.ConfigurationFileRestoration
-	247,  // 566: groundplane.agent.v1.CandidateReleaseMember.serving_predecessor:type_name -> groundplane.agent.v1.ServingPredecessorRestoration
-	248,  // 567: groundplane.agent.v1.CandidateReleaseMember.candidate_absence:type_name -> groundplane.agent.v1.CandidateAbsenceRestoration
-	244,  // 568: groundplane.agent.v1.CandidateReleaseMember.rolling:type_name -> groundplane.agent.v1.RollingReleaseProcedure
-	245,  // 569: groundplane.agent.v1.RollingReleaseProcedure.prior:type_name -> groundplane.agent.v1.RollingReplica
-	245,  // 570: groundplane.agent.v1.RollingReleaseProcedure.candidate:type_name -> groundplane.agent.v1.RollingReplica
-	246,  // 571: groundplane.agent.v1.RollingReleaseProcedure.changes:type_name -> groundplane.agent.v1.RollingReplicaChange
-	245,  // 572: groundplane.agent.v1.RollingReleaseProcedure.retained:type_name -> groundplane.agent.v1.RollingReplica
-	23,   // 573: groundplane.agent.v1.RollingReleaseProcedure.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
-	249,  // 574: groundplane.agent.v1.CandidateAbsenceRestoration.services:type_name -> groundplane.agent.v1.CandidateReleaseService
-	346,  // 575: groundplane.agent.v1.EntryConfigurationWorkInput.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
-	346,  // 576: groundplane.agent.v1.EntryConfigurationWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
-	165,  // 577: groundplane.agent.v1.EntryConfigurationWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	165,  // 578: groundplane.agent.v1.EntryConfigurationWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	536,  // 579: groundplane.agent.v1.EntryConfigurationWorkInput.files:type_name -> groundplane.agent.v1.MaterializeFile
-	56,   // 580: groundplane.agent.v1.ResolverWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 581: groundplane.agent.v1.ResolverWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 582: groundplane.agent.v1.ResolverWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 583: groundplane.agent.v1.ResolverWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	56,   // 584: groundplane.agent.v1.ResolverWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 585: groundplane.agent.v1.ResolverWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	202,  // 586: groundplane.agent.v1.ResolverWorkCompletionRequest.serving_proof:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
-	56,   // 587: groundplane.agent.v1.ResolverWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 588: groundplane.agent.v1.ResolverWorkRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 589: groundplane.agent.v1.ResolverWorkResultAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 590: groundplane.agent.v1.ResolverWorkResultAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 591: groundplane.agent.v1.ResolverWorkResultAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 592: groundplane.agent.v1.ResolverWorkResultAck.finished_at:type_name -> google.protobuf.Timestamp
-	253,  // 593: groundplane.agent.v1.ResolverWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.ResolverWorkAssignment
-	59,   // 594: groundplane.agent.v1.ResolverWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	255,  // 595: groundplane.agent.v1.ResolverWorkHelperRequest.checkpoint:type_name -> groundplane.agent.v1.ResolverWorkCheckpointAck
-	202,  // 596: groundplane.agent.v1.ResolverWorkHelperResponse.serving_proof:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
-	346,  // 597: groundplane.agent.v1.ComponentWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
-	263,  // 598: groundplane.agent.v1.ComponentWorkInput.predecessor:type_name -> groundplane.agent.v1.ComponentWorkPredecessor
-	569,  // 599: groundplane.agent.v1.ComponentWorkInput.configuration_action:type_name -> groundplane.agent.v1.ComponentApply
-	165,  // 600: groundplane.agent.v1.ComponentWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	165,  // 601: groundplane.agent.v1.ComponentWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	536,  // 602: groundplane.agent.v1.ComponentWorkInput.files:type_name -> groundplane.agent.v1.MaterializeFile
-	346,  // 603: groundplane.agent.v1.ComponentWorkPredecessor.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
-	264,  // 604: groundplane.agent.v1.ComponentWorkPredecessor.configuration:type_name -> groundplane.agent.v1.ComponentWorkRetainedConfiguration
-	536,  // 605: groundplane.agent.v1.ComponentWorkRetainedConfiguration.file:type_name -> groundplane.agent.v1.MaterializeFile
-	56,   // 606: groundplane.agent.v1.EntryConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 607: groundplane.agent.v1.EntryConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	165,  // 608: groundplane.agent.v1.EntryConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	266,  // 609: groundplane.agent.v1.EntryConfigurationManifest.files:type_name -> groundplane.agent.v1.EntryConfigurationFile
-	56,   // 610: groundplane.agent.v1.EntryConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 611: groundplane.agent.v1.EntryConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	165,  // 612: groundplane.agent.v1.EntryConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	266,  // 613: groundplane.agent.v1.EntryConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.EntryConfigurationFile
-	56,   // 614: groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 615: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 616: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 617: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	56,   // 618: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 619: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	56,   // 620: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 621: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 622: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 623: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	56,   // 624: groundplane.agent.v1.EntryConfigurationWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 625: groundplane.agent.v1.EntryConfigurationWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 626: groundplane.agent.v1.EntryConfigurationWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 627: groundplane.agent.v1.EntryConfigurationWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	585,  // 628: groundplane.agent.v1.EntryConfigurationWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	56,   // 629: groundplane.agent.v1.EntryConfigurationWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	252,  // 630: groundplane.agent.v1.EntryConfigurationWorkAssignment.input:type_name -> groundplane.agent.v1.EntryConfigurationWorkInput
-	56,   // 631: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 632: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 633: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 634: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 635: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	56,   // 636: groundplane.agent.v1.ComponentWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	262,  // 637: groundplane.agent.v1.ComponentWorkAssignment.input:type_name -> groundplane.agent.v1.ComponentWorkInput
-	56,   // 638: groundplane.agent.v1.ComponentWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 639: groundplane.agent.v1.ComponentWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 640: groundplane.agent.v1.ComponentWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 641: groundplane.agent.v1.ComponentWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	56,   // 642: groundplane.agent.v1.ComponentWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 643: groundplane.agent.v1.ComponentWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	56,   // 644: groundplane.agent.v1.ComponentWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 645: groundplane.agent.v1.ComponentWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 646: groundplane.agent.v1.ComponentWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 647: groundplane.agent.v1.ComponentWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	56,   // 648: groundplane.agent.v1.ComponentWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 649: groundplane.agent.v1.ComponentWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 650: groundplane.agent.v1.ComponentWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 651: groundplane.agent.v1.ComponentWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	585,  // 652: groundplane.agent.v1.ComponentWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	56,   // 653: groundplane.agent.v1.ComponentWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 654: groundplane.agent.v1.ComponentWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 655: groundplane.agent.v1.ComponentWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 656: groundplane.agent.v1.ComponentWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	19,   // 657: groundplane.agent.v1.NetworkWorkInput.action:type_name -> groundplane.agent.v1.NetworkWorkAction
-	346,  // 658: groundplane.agent.v1.NetworkWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
-	56,   // 659: groundplane.agent.v1.NetworkWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	288,  // 660: groundplane.agent.v1.NetworkWorkAssignment.input:type_name -> groundplane.agent.v1.NetworkWorkInput
-	56,   // 661: groundplane.agent.v1.NetworkWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 662: groundplane.agent.v1.NetworkWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 663: groundplane.agent.v1.NetworkWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 664: groundplane.agent.v1.NetworkWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	56,   // 665: groundplane.agent.v1.NetworkWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 666: groundplane.agent.v1.NetworkWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	56,   // 667: groundplane.agent.v1.NetworkWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 668: groundplane.agent.v1.NetworkWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 669: groundplane.agent.v1.NetworkWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 670: groundplane.agent.v1.NetworkWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	56,   // 671: groundplane.agent.v1.NetworkWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 672: groundplane.agent.v1.NetworkWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 673: groundplane.agent.v1.NetworkWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 674: groundplane.agent.v1.NetworkWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	585,  // 675: groundplane.agent.v1.NetworkWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	56,   // 676: groundplane.agent.v1.NetworkWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 677: groundplane.agent.v1.NetworkWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 678: groundplane.agent.v1.NetworkWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 679: groundplane.agent.v1.NetworkWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	279,  // 680: groundplane.agent.v1.ComponentWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.ComponentWorkAssignment
-	59,   // 681: groundplane.agent.v1.ComponentWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	280,  // 682: groundplane.agent.v1.ComponentWorkHelperRequest.report:type_name -> groundplane.agent.v1.ComponentWorkCheckpointRequest
-	281,  // 683: groundplane.agent.v1.ComponentWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ComponentWorkCheckpointAck
-	276,  // 684: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.EntryConfigurationWorkAssignment
-	59,   // 685: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	270,  // 686: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.report:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
-	271,  // 687: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
-	289,  // 688: groundplane.agent.v1.NetworkWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.NetworkWorkAssignment
-	59,   // 689: groundplane.agent.v1.NetworkWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	290,  // 690: groundplane.agent.v1.NetworkWorkHelperRequest.report:type_name -> groundplane.agent.v1.NetworkWorkCheckpointRequest
-	291,  // 691: groundplane.agent.v1.NetworkWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.NetworkWorkCheckpointAck
-	51,   // 692: groundplane.agent.v1.NetworkWorkHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 693: groundplane.agent.v1.NetworkWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	56,   // 694: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	319,  // 695: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.removal:type_name -> groundplane.agent.v1.ServiceLifecycleWorkInput
-	165,  // 696: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	56,   // 697: groundplane.agent.v1.ServiceRemovalConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 698: groundplane.agent.v1.ServiceRemovalConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	165,  // 699: groundplane.agent.v1.ServiceRemovalConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	306,  // 700: groundplane.agent.v1.ServiceRemovalConfigurationManifest.files:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFile
-	56,   // 701: groundplane.agent.v1.ServiceRemovalConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 702: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	165,  // 703: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
-	306,  // 704: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFile
-	56,   // 705: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 706: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 707: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 708: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	56,   // 709: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 710: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	56,   // 711: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 712: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 713: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 714: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	56,   // 715: groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 716: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 717: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 718: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	304,  // 719: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.assignment:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryAssignment
-	59,   // 720: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	310,  // 721: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.report:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
-	311,  // 722: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
-	51,   // 723: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 724: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	56,   // 725: groundplane.agent.v1.ServiceLifecycleAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	319,  // 726: groundplane.agent.v1.ServiceLifecycleAssignment.input:type_name -> groundplane.agent.v1.ServiceLifecycleWorkInput
-	51,   // 727: groundplane.agent.v1.ServiceLifecycleWorkInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
-	20,   // 728: groundplane.agent.v1.ServiceLifecycleWorkInput.action:type_name -> groundplane.agent.v1.ServiceLifecycleAction
-	320,  // 729: groundplane.agent.v1.ServiceLifecycleWorkInput.members:type_name -> groundplane.agent.v1.ServiceLifecycleMember
-	321,  // 730: groundplane.agent.v1.ServiceLifecycleWorkInput.hook:type_name -> groundplane.agent.v1.ServiceLifecycleHook
-	346,  // 731: groundplane.agent.v1.ServiceLifecycleMember.artifact:type_name -> groundplane.agent.v1.ComposeArtifact
-	237,  // 732: groundplane.agent.v1.ServiceLifecycleMember.ownership:type_name -> groundplane.agent.v1.ServiceLifecycleSource
-	16,   // 733: groundplane.agent.v1.ServiceLifecycleHook.event:type_name -> groundplane.agent.v1.BackingHookEvent
-	56,   // 734: groundplane.agent.v1.ServiceLifecycleHookRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 735: groundplane.agent.v1.ServiceLifecycleHookDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	229,  // 736: groundplane.agent.v1.ServiceLifecycleHookDelivery.hook:type_name -> groundplane.agent.v1.BackingHookProcedure
-	56,   // 737: groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 738: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 739: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 740: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 741: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	56,   // 742: groundplane.agent.v1.ServiceLifecycleCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 743: groundplane.agent.v1.ServiceLifecycleCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 744: groundplane.agent.v1.ServiceLifecycleCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 745: groundplane.agent.v1.ServiceLifecycleCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	56,   // 746: groundplane.agent.v1.ServiceLifecycleCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 747: groundplane.agent.v1.ServiceLifecycleCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	56,   // 748: groundplane.agent.v1.ServiceLifecycleCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 749: groundplane.agent.v1.ServiceLifecycleCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 750: groundplane.agent.v1.ServiceLifecycleCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 751: groundplane.agent.v1.ServiceLifecycleCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	331,  // 752: groundplane.agent.v1.ServiceLifecycleCompletionAck.stopped:type_name -> groundplane.agent.v1.ServiceLifecycleFailureAck
-	56,   // 753: groundplane.agent.v1.ServiceLifecycleFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 754: groundplane.agent.v1.ServiceLifecycleFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 755: groundplane.agent.v1.ServiceLifecycleFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 756: groundplane.agent.v1.ServiceLifecycleFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	318,  // 757: groundplane.agent.v1.ServiceLifecycleHelperRequest.assignment:type_name -> groundplane.agent.v1.ServiceLifecycleAssignment
-	59,   // 758: groundplane.agent.v1.ServiceLifecycleHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	326,  // 759: groundplane.agent.v1.ServiceLifecycleHelperRequest.report:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointRequest
-	327,  // 760: groundplane.agent.v1.ServiceLifecycleHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointAck
-	51,   // 761: groundplane.agent.v1.ServiceLifecycleHelperResponse.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 762: groundplane.agent.v1.ServiceLifecycleHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	21,   // 763: groundplane.agent.v1.VolumeWorkInput.action:type_name -> groundplane.agent.v1.VolumeWorkAction
-	346,  // 764: groundplane.agent.v1.VolumeWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
-	346,  // 765: groundplane.agent.v1.VolumeWorkInput.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
-	56,   // 766: groundplane.agent.v1.VolumeWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	334,  // 767: groundplane.agent.v1.VolumeWorkAssignment.input:type_name -> groundplane.agent.v1.VolumeWorkInput
-	56,   // 768: groundplane.agent.v1.VolumeWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 769: groundplane.agent.v1.VolumeWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 770: groundplane.agent.v1.VolumeWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 771: groundplane.agent.v1.VolumeWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
-	56,   // 772: groundplane.agent.v1.VolumeWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 773: groundplane.agent.v1.VolumeWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	56,   // 774: groundplane.agent.v1.VolumeWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 775: groundplane.agent.v1.VolumeWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 776: groundplane.agent.v1.VolumeWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 777: groundplane.agent.v1.VolumeWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	56,   // 778: groundplane.agent.v1.VolumeWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 779: groundplane.agent.v1.VolumeWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 780: groundplane.agent.v1.VolumeWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 781: groundplane.agent.v1.VolumeWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	585,  // 782: groundplane.agent.v1.VolumeWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	56,   // 783: groundplane.agent.v1.VolumeWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 784: groundplane.agent.v1.VolumeWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 785: groundplane.agent.v1.VolumeWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 786: groundplane.agent.v1.VolumeWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
-	335,  // 787: groundplane.agent.v1.VolumeWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.VolumeWorkAssignment
-	59,   // 788: groundplane.agent.v1.VolumeWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	336,  // 789: groundplane.agent.v1.VolumeWorkHelperRequest.report:type_name -> groundplane.agent.v1.VolumeWorkCheckpointRequest
-	337,  // 790: groundplane.agent.v1.VolumeWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.VolumeWorkCheckpointAck
-	51,   // 791: groundplane.agent.v1.VolumeWorkHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 792: groundplane.agent.v1.VolumeWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	22,   // 793: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
-	347,  // 794: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
-	348,  // 795: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
-	349,  // 796: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
-	350,  // 797: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	24,   // 798: groundplane.agent.v1.ComposeService.role:type_name -> groundplane.agent.v1.ComposeServiceRole
-	23,   // 799: groundplane.agent.v1.ComposeService.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
-	350,  // 800: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	350,  // 801: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	537,  // 802: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
-	538,  // 803: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
-	539,  // 804: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
-	540,  // 805: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
-	555,  // 806: groundplane.agent.v1.ExecutionStep.environment_directory_create:type_name -> groundplane.agent.v1.EnvironmentDirectoryCreate
-	536,  // 807: groundplane.agent.v1.ExecutionStep.materialize_file:type_name -> groundplane.agent.v1.MaterializeFile
-	557,  // 808: groundplane.agent.v1.ExecutionStep.managed_volume_directories_ensure:type_name -> groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
-	556,  // 809: groundplane.agent.v1.ExecutionStep.environment_directory_remove:type_name -> groundplane.agent.v1.EnvironmentDirectoryRemove
-	535,  // 810: groundplane.agent.v1.ExecutionStep.adapter_procedure:type_name -> groundplane.agent.v1.AdapterProcedure
-	560,  // 811: groundplane.agent.v1.ExecutionStep.managed_network_remove:type_name -> groundplane.agent.v1.ManagedNetworkRemove
-	541,  // 812: groundplane.agent.v1.ExecutionStep.compose_workload_apply:type_name -> groundplane.agent.v1.ComposeWorkloadApply
-	542,  // 813: groundplane.agent.v1.ExecutionStep.wait_workload_healthy:type_name -> groundplane.agent.v1.WaitWorkloadHealthy
-	547,  // 814: groundplane.agent.v1.ExecutionStep.service_proxy_switch:type_name -> groundplane.agent.v1.ServiceProxySwitch
-	548,  // 815: groundplane.agent.v1.ExecutionStep.service_proxy_probe:type_name -> groundplane.agent.v1.ServiceProxyProbe
-	549,  // 816: groundplane.agent.v1.ExecutionStep.service_proxy_compensate:type_name -> groundplane.agent.v1.ServiceProxyCompensate
-	551,  // 817: groundplane.agent.v1.ExecutionStep.service_recreate_acknowledge:type_name -> groundplane.agent.v1.ServiceRecreateAcknowledge
-	552,  // 818: groundplane.agent.v1.ExecutionStep.service_recreate_probe:type_name -> groundplane.agent.v1.ServiceRecreateProbe
-	553,  // 819: groundplane.agent.v1.ExecutionStep.service_recreate_compensate:type_name -> groundplane.agent.v1.ServiceRecreateCompensate
-	558,  // 820: groundplane.agent.v1.ExecutionStep.managed_volume_remove:type_name -> groundplane.agent.v1.ManagedVolumeRemove
-	559,  // 821: groundplane.agent.v1.ExecutionStep.managed_volume_directory_remove:type_name -> groundplane.agent.v1.ManagedVolumeDirectoryRemove
-	569,  // 822: groundplane.agent.v1.ExecutionStep.component_apply:type_name -> groundplane.agent.v1.ComponentApply
-	571,  // 823: groundplane.agent.v1.ExecutionStep.host_resolution_apply:type_name -> groundplane.agent.v1.HostResolutionApply
-	572,  // 824: groundplane.agent.v1.ExecutionStep.host_resolution_restore:type_name -> groundplane.agent.v1.HostResolutionRestore
-	356,  // 825: groundplane.agent.v1.ExecutionStep.run_script:type_name -> groundplane.agent.v1.RunScript
-	250,  // 826: groundplane.agent.v1.ExecutionStep.candidate_restoration_probe:type_name -> groundplane.agent.v1.CandidateRestorationProbe
-	251,  // 827: groundplane.agent.v1.ExecutionStep.candidate_restoration_compensate:type_name -> groundplane.agent.v1.CandidateRestorationCompensate
-	353,  // 828: groundplane.agent.v1.ExecutionStep.managed_network_ensure:type_name -> groundplane.agent.v1.ManagedNetworkEnsure
-	355,  // 829: groundplane.agent.v1.ExecutionStep.managed_volume_ensure:type_name -> groundplane.agent.v1.ManagedVolumeEnsure
-	229,  // 830: groundplane.agent.v1.ExecutionStep.backing_hook_procedure:type_name -> groundplane.agent.v1.BackingHookProcedure
-	408,  // 831: groundplane.agent.v1.ExecutionStep.backup_step:type_name -> groundplane.agent.v1.BackupStepAuthority
-	352,  // 832: groundplane.agent.v1.ExecutionStep.service_absence_probe:type_name -> groundplane.agent.v1.ServiceAbsenceProbe
-	543,  // 833: groundplane.agent.v1.ExecutionStep.compose_workload_remove:type_name -> groundplane.agent.v1.ComposeWorkloadRemove
-	544,  // 834: groundplane.agent.v1.ExecutionStep.rolling_traffic_switch:type_name -> groundplane.agent.v1.RollingTrafficSwitch
-	545,  // 835: groundplane.agent.v1.ExecutionStep.rolling_replica_drain:type_name -> groundplane.agent.v1.RollingReplicaDrain
-	546,  // 836: groundplane.agent.v1.ExecutionStep.rolling_release_acknowledge:type_name -> groundplane.agent.v1.RollingReleaseAcknowledge
-	354,  // 837: groundplane.agent.v1.ExecutionStep.managed_network_preparation_probe:type_name -> groundplane.agent.v1.ManagedNetworkPreparationProbe
-	27,   // 838: groundplane.agent.v1.ExecutionStep.policy:type_name -> groundplane.agent.v1.ExecutionStepPolicy
-	361,  // 839: groundplane.agent.v1.ResolvedRunnerSnapshot.networks:type_name -> groundplane.agent.v1.ScriptRunnerNetwork
-	363,  // 840: groundplane.agent.v1.ResolvedRunnerSnapshot.mounts:type_name -> groundplane.agent.v1.ScriptRunnerMount
-	368,  // 841: groundplane.agent.v1.ResolvedRunnerSnapshot.entry_bindings:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
-	369,  // 842: groundplane.agent.v1.ResolvedRunnerSnapshot.secret_values:type_name -> groundplane.agent.v1.ScriptRunnerSecretValue
-	364,  // 843: groundplane.agent.v1.ResolvedRunnerSnapshot.service_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
-	364,  // 844: groundplane.agent.v1.ResolvedRunnerSnapshot.network_topology_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
-	364,  // 845: groundplane.agent.v1.ResolvedRunnerSnapshot.applied_environment_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
-	358,  // 846: groundplane.agent.v1.ResolvedRunnerSnapshot.explicit_execution:type_name -> groundplane.agent.v1.ScriptExplicitExecutionAuthority
-	359,  // 847: groundplane.agent.v1.ScriptExplicitExecutionAuthority.context:type_name -> groundplane.agent.v1.ScriptExplicitExecutionContext
-	360,  // 848: groundplane.agent.v1.ScriptExplicitExecutionContext.volumes:type_name -> groundplane.agent.v1.ScriptExplicitVolumeGrant
-	362,  // 849: groundplane.agent.v1.ScriptRunnerNetwork.rendered_attachment:type_name -> groundplane.agent.v1.ScriptNetworkAttachment
-	364,  // 850: groundplane.agent.v1.ScriptRunnerNetwork.source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
-	371,  // 851: groundplane.agent.v1.ScriptNetworkAttachment.driver_options:type_name -> groundplane.agent.v1.ScriptStringPair
-	367,  // 852: groundplane.agent.v1.ScriptRunnerMount.rendered_mount:type_name -> groundplane.agent.v1.ScriptMount
-	364,  // 853: groundplane.agent.v1.ScriptRunnerMount.source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
-	365,  // 854: groundplane.agent.v1.ScriptSourceAuthority.existing:type_name -> groundplane.agent.v1.ScriptExistingSourceAuthority
-	366,  // 855: groundplane.agent.v1.ScriptSourceAuthority.staged:type_name -> groundplane.agent.v1.ScriptStagedSourceAuthority
-	25,   // 856: groundplane.agent.v1.ScriptRunnerEntryBinding.kind:type_name -> groundplane.agent.v1.ScriptEntryBindingKind
-	26,   // 857: groundplane.agent.v1.ScriptRunnerEntryBinding.value_storage:type_name -> groundplane.agent.v1.ScriptEntryValueStorage
-	371,  // 858: groundplane.agent.v1.ScriptRunnerProjection.environment:type_name -> groundplane.agent.v1.ScriptStringPair
-	371,  // 859: groundplane.agent.v1.ScriptRunnerProjection.sysctls:type_name -> groundplane.agent.v1.ScriptStringPair
-	372,  // 860: groundplane.agent.v1.ScriptRunnerProjection.ulimits:type_name -> groundplane.agent.v1.ScriptUlimit
-	373,  // 861: groundplane.agent.v1.ScriptRunnerProjection.blkio:type_name -> groundplane.agent.v1.ScriptBlkio
-	371,  // 862: groundplane.agent.v1.ScriptRunnerProjection.storage_opt:type_name -> groundplane.agent.v1.ScriptStringPair
-	376,  // 863: groundplane.agent.v1.ScriptRunnerProjection.limits:type_name -> groundplane.agent.v1.ScriptResource
-	376,  // 864: groundplane.agent.v1.ScriptRunnerProjection.reservations:type_name -> groundplane.agent.v1.ScriptResource
-	363,  // 865: groundplane.agent.v1.ScriptRunnerProjection.mounts:type_name -> groundplane.agent.v1.ScriptRunnerMount
-	361,  // 866: groundplane.agent.v1.ScriptRunnerProjection.networks:type_name -> groundplane.agent.v1.ScriptRunnerNetwork
-	371,  // 867: groundplane.agent.v1.ScriptRunnerProjection.labels:type_name -> groundplane.agent.v1.ScriptStringPair
-	368,  // 868: groundplane.agent.v1.ScriptRunnerProjection.entry_bindings:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
-	374,  // 869: groundplane.agent.v1.ScriptBlkio.weight_devices:type_name -> groundplane.agent.v1.ScriptWeightDevice
-	375,  // 870: groundplane.agent.v1.ScriptBlkio.device_read_bps:type_name -> groundplane.agent.v1.ScriptThrottleDevice
-	375,  // 871: groundplane.agent.v1.ScriptBlkio.device_read_iops:type_name -> groundplane.agent.v1.ScriptThrottleDevice
-	375,  // 872: groundplane.agent.v1.ScriptBlkio.device_write_bps:type_name -> groundplane.agent.v1.ScriptThrottleDevice
-	375,  // 873: groundplane.agent.v1.ScriptBlkio.device_write_iops:type_name -> groundplane.agent.v1.ScriptThrottleDevice
-	377,  // 874: groundplane.agent.v1.ScriptBodyArtifact.metadata:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
-	368,  // 875: groundplane.agent.v1.ScriptEntryArtifact.binding:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
-	28,   // 876: groundplane.agent.v1.BackupResourceIdentity.kind:type_name -> groundplane.agent.v1.BackupResourceKind
-	380,  // 877: groundplane.agent.v1.BackupResourceIdentity.resource:type_name -> groundplane.agent.v1.RevisionDigest
-	29,   // 878: groundplane.agent.v1.BackupEncryptionAuthority.kind:type_name -> groundplane.agent.v1.BackupEncryption
-	380,  // 879: groundplane.agent.v1.BackupEncryptionAuthority.secret_slot:type_name -> groundplane.agent.v1.RevisionDigest
-	30,   // 880: groundplane.agent.v1.BackupPriorRuntimeIntent.kind:type_name -> groundplane.agent.v1.BackupServiceRuntimeIntent
-	380,  // 881: groundplane.agent.v1.BackupPriorRuntimeIntent.intent:type_name -> groundplane.agent.v1.RevisionDigest
-	380,  // 882: groundplane.agent.v1.BackupServiceFact.service:type_name -> groundplane.agent.v1.RevisionDigest
-	380,  // 883: groundplane.agent.v1.BackupServiceFact.compose:type_name -> groundplane.agent.v1.RevisionDigest
-	384,  // 884: groundplane.agent.v1.BackupServiceFact.prior_runtime_intent:type_name -> groundplane.agent.v1.BackupPriorRuntimeIntent
-	380,  // 885: groundplane.agent.v1.BackupConnectorAuthority.connector:type_name -> groundplane.agent.v1.RevisionDigest
-	380,  // 886: groundplane.agent.v1.BackupConnectorAuthority.access_key_slot:type_name -> groundplane.agent.v1.RevisionDigest
-	380,  // 887: groundplane.agent.v1.BackupConnectorAuthority.secret_key_slot:type_name -> groundplane.agent.v1.RevisionDigest
-	386,  // 888: groundplane.agent.v1.BackupObjectTarget.connector:type_name -> groundplane.agent.v1.BackupConnectorAuthority
-	386,  // 889: groundplane.agent.v1.BackupObjectIdentity.connector:type_name -> groundplane.agent.v1.BackupConnectorAuthority
-	388,  // 890: groundplane.agent.v1.BackupObjectIdentity.version_id:type_name -> groundplane.agent.v1.BackupS3VersionId
-	389,  // 891: groundplane.agent.v1.BackupObjectIdentity.etag:type_name -> groundplane.agent.v1.BackupS3ETag
-	31,   // 892: groundplane.agent.v1.BackupWorkInput.operation:type_name -> groundplane.agent.v1.BackupWorkOperation
-	380,  // 893: groundplane.agent.v1.BackupWorkInput.project:type_name -> groundplane.agent.v1.RevisionDigest
-	380,  // 894: groundplane.agent.v1.BackupWorkInput.environment:type_name -> groundplane.agent.v1.RevisionDigest
-	385,  // 895: groundplane.agent.v1.BackupWorkInput.services:type_name -> groundplane.agent.v1.BackupServiceFact
-	408,  // 896: groundplane.agent.v1.BackupWorkInput.steps:type_name -> groundplane.agent.v1.BackupStepAuthority
-	346,  // 897: groundplane.agent.v1.BackupWorkInput.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
-	56,   // 898: groundplane.agent.v1.BackupWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	392,  // 899: groundplane.agent.v1.BackupWorkAssignment.input:type_name -> groundplane.agent.v1.BackupWorkInput
-	409,  // 900: groundplane.agent.v1.BackupWorkAssignment.sources:type_name -> groundplane.agent.v1.BackupStepResume
-	393,  // 901: groundplane.agent.v1.BackupConsumerHelperRequest.assignment:type_name -> groundplane.agent.v1.BackupWorkAssignment
-	59,   // 902: groundplane.agent.v1.BackupConsumerHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
-	48,   // 903: groundplane.agent.v1.BackupConsumerHelperRequest.operation:type_name -> groundplane.agent.v1.BackupConsumerOperation
-	401,  // 904: groundplane.agent.v1.BackupConsumerHelperRequest.checkpoint:type_name -> groundplane.agent.v1.BackupWorkCheckpointRequest
-	406,  // 905: groundplane.agent.v1.BackupConsumerHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.BackupWorkCheckpointAck
-	396,  // 906: groundplane.agent.v1.BackupConsumerHelperRequest.recovery:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
-	56,   // 907: groundplane.agent.v1.BackupConsumerHelperResponse.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	195,  // 908: groundplane.agent.v1.BackupConsumerHelperResponse.observed:type_name -> groundplane.agent.v1.ObservedProject
-	585,  // 909: groundplane.agent.v1.BackupConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
-	56,   // 910: groundplane.agent.v1.BackupRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	392,  // 911: groundplane.agent.v1.BackupRecoveryAssignment.input:type_name -> groundplane.agent.v1.BackupWorkInput
-	409,  // 912: groundplane.agent.v1.BackupRecoveryAssignment.sources:type_name -> groundplane.agent.v1.BackupStepResume
-	32,   // 913: groundplane.agent.v1.BackupRecoveryAssignment.restore_mode:type_name -> groundplane.agent.v1.BackupRestoreRecoveryMode
-	56,   // 914: groundplane.agent.v1.BackupRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 915: groundplane.agent.v1.BackupConfigRecoveryPrepareRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	396,  // 916: groundplane.agent.v1.BackupConfigRecoveryPrepareAck.assignment:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
-	464,  // 917: groundplane.agent.v1.BackupConfigRecoveryPrepareAck.completed:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
-	56,   // 918: groundplane.agent.v1.BackupRecoveryAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 919: groundplane.agent.v1.BackupRecoveryAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 920: groundplane.agent.v1.BackupRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 921: groundplane.agent.v1.BackupRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
-	56,   // 922: groundplane.agent.v1.BackupWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	381,  // 923: groundplane.agent.v1.BackupWorkCheckpointRequest.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
-	455,  // 924: groundplane.agent.v1.BackupWorkCheckpointRequest.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPrepared
-	458,  // 925: groundplane.agent.v1.BackupWorkCheckpointRequest.upload_verified:type_name -> groundplane.agent.v1.BackupUploadVerified
-	459,  // 926: groundplane.agent.v1.BackupWorkCheckpointRequest.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
-	498,  // 927: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
-	499,  // 928: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
-	500,  // 929: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_restore_apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
-	460,  // 930: groundplane.agent.v1.BackupWorkCheckpointRequest.restore_artifact_validated:type_name -> groundplane.agent.v1.BackupRestoreArtifactValidated
-	461,  // 931: groundplane.agent.v1.BackupWorkCheckpointRequest.config:type_name -> groundplane.agent.v1.BackupConfigCheckpoint
-	466,  // 932: groundplane.agent.v1.BackupWorkCheckpointRequest.volume:type_name -> groundplane.agent.v1.BackupVolumeCheckpoint
-	423,  // 933: groundplane.agent.v1.BackupWorkCheckpointRequest.prune_object_deleted:type_name -> groundplane.agent.v1.BackupPruneObjectDeleted
-	501,  // 934: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_restore_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
-	502,  // 935: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_service_progress:type_name -> groundplane.agent.v1.BackupPostgresServiceProgress
-	456,  // 936: groundplane.agent.v1.BackupWorkCheckpointRequest.upload_completed:type_name -> groundplane.agent.v1.BackupUploadCompleted
-	506,  // 937: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
-	507,  // 938: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_dump_start:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
-	508,  // 939: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_restore_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
-	509,  // 940: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_restore_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
-	510,  // 941: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_service_progress:type_name -> groundplane.agent.v1.BackupMySQLServiceProgress
-	414,  // 942: groundplane.agent.v1.BackupWorkCheckpointRequest.database_consumer_recovery:type_name -> groundplane.agent.v1.BackupDatabaseConsumerRecovery
-	56,   // 943: groundplane.agent.v1.BackupWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 944: groundplane.agent.v1.BackupWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	56,   // 945: groundplane.agent.v1.BackupWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 946: groundplane.agent.v1.BackupWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 947: groundplane.agent.v1.BackupWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 948: groundplane.agent.v1.BackupWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 949: groundplane.agent.v1.BackupWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
-	56,   // 950: groundplane.agent.v1.BackupWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	51,   // 951: groundplane.agent.v1.BackupWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
-	585,  // 952: groundplane.agent.v1.BackupWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 953: groundplane.agent.v1.BackupWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
-	56,   // 954: groundplane.agent.v1.BackupWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	381,  // 955: groundplane.agent.v1.BackupWorkCheckpointAck.committed:type_name -> groundplane.agent.v1.CheckpointFence
-	409,  // 956: groundplane.agent.v1.BackupWorkCheckpointAck.source:type_name -> groundplane.agent.v1.BackupStepResume
-	380,  // 957: groundplane.agent.v1.BackupPlanScope.project:type_name -> groundplane.agent.v1.RevisionDigest
-	380,  // 958: groundplane.agent.v1.BackupPlanScope.environment:type_name -> groundplane.agent.v1.RevisionDigest
-	385,  // 959: groundplane.agent.v1.BackupPlanScope.services:type_name -> groundplane.agent.v1.BackupServiceFact
-	417,  // 960: groundplane.agent.v1.BackupStepAuthority.capture:type_name -> groundplane.agent.v1.BackupCaptureAuthority
-	419,  // 961: groundplane.agent.v1.BackupStepAuthority.prune:type_name -> groundplane.agent.v1.BackupPruneAuthority
-	418,  // 962: groundplane.agent.v1.BackupStepAuthority.restore:type_name -> groundplane.agent.v1.BackupRestoreAuthority
-	410,  // 963: groundplane.agent.v1.BackupStepResume.capture:type_name -> groundplane.agent.v1.BackupCaptureResume
-	411,  // 964: groundplane.agent.v1.BackupStepResume.prune:type_name -> groundplane.agent.v1.BackupPruneResume
-	412,  // 965: groundplane.agent.v1.BackupStepResume.restore:type_name -> groundplane.agent.v1.BackupRestoreResume
-	381,  // 966: groundplane.agent.v1.BackupCaptureResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
-	33,   // 967: groundplane.agent.v1.BackupCaptureResume.phase:type_name -> groundplane.agent.v1.BackupCapturePhase
-	415,  // 968: groundplane.agent.v1.BackupCaptureResume.cursor:type_name -> groundplane.agent.v1.BackupCaptureCursor
-	455,  // 969: groundplane.agent.v1.BackupCaptureResume.prepared_artifact:type_name -> groundplane.agent.v1.BackupArtifactPrepared
-	499,  // 970: groundplane.agent.v1.BackupCaptureResume.dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
-	507,  // 971: groundplane.agent.v1.BackupCaptureResume.mysql_dump_start:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
-	455,  // 972: groundplane.agent.v1.BackupCaptureResume.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPrepared
-	458,  // 973: groundplane.agent.v1.BackupCaptureResume.upload_verified:type_name -> groundplane.agent.v1.BackupUploadVerified
-	459,  // 974: groundplane.agent.v1.BackupCaptureResume.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
-	498,  // 975: groundplane.agent.v1.BackupCaptureResume.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
-	499,  // 976: groundplane.agent.v1.BackupCaptureResume.postgres_dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
-	467,  // 977: groundplane.agent.v1.BackupCaptureResume.volume_progress:type_name -> groundplane.agent.v1.BackupVolumeProgress
-	462,  // 978: groundplane.agent.v1.BackupCaptureResume.config_progress:type_name -> groundplane.agent.v1.BackupConfigProgress
-	456,  // 979: groundplane.agent.v1.BackupCaptureResume.upload_completed:type_name -> groundplane.agent.v1.BackupUploadCompleted
-	506,  // 980: groundplane.agent.v1.BackupCaptureResume.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
-	507,  // 981: groundplane.agent.v1.BackupCaptureResume.mysql_dump_start_checkpoint:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
-	381,  // 982: groundplane.agent.v1.BackupPruneResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
-	423,  // 983: groundplane.agent.v1.BackupPruneResume.object_deleted:type_name -> groundplane.agent.v1.BackupPruneObjectDeleted
-	381,  // 984: groundplane.agent.v1.BackupRestoreResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
-	34,   // 985: groundplane.agent.v1.BackupRestoreResume.phase:type_name -> groundplane.agent.v1.BackupRestorePhase
-	416,  // 986: groundplane.agent.v1.BackupRestoreResume.cursor:type_name -> groundplane.agent.v1.BackupRestoreCursor
-	500,  // 987: groundplane.agent.v1.BackupRestoreResume.apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
-	508,  // 988: groundplane.agent.v1.BackupRestoreResume.mysql_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
-	413,  // 989: groundplane.agent.v1.BackupRestoreResume.database_progress:type_name -> groundplane.agent.v1.BackupDatabaseRestoreProgress
-	460,  // 990: groundplane.agent.v1.BackupRestoreResume.artifact_validated:type_name -> groundplane.agent.v1.BackupRestoreArtifactValidated
-	498,  // 991: groundplane.agent.v1.BackupRestoreResume.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
-	500,  // 992: groundplane.agent.v1.BackupRestoreResume.postgres_restore_apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
-	462,  // 993: groundplane.agent.v1.BackupRestoreResume.config_progress:type_name -> groundplane.agent.v1.BackupConfigProgress
-	467,  // 994: groundplane.agent.v1.BackupRestoreResume.volume_progress:type_name -> groundplane.agent.v1.BackupVolumeProgress
-	501,  // 995: groundplane.agent.v1.BackupRestoreResume.postgres_restore_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
-	502,  // 996: groundplane.agent.v1.BackupRestoreResume.postgres_service_progress:type_name -> groundplane.agent.v1.BackupPostgresServiceProgress
-	459,  // 997: groundplane.agent.v1.BackupRestoreResume.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
-	506,  // 998: groundplane.agent.v1.BackupRestoreResume.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
-	508,  // 999: groundplane.agent.v1.BackupRestoreResume.mysql_restore_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
-	509,  // 1000: groundplane.agent.v1.BackupRestoreResume.mysql_restore_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
-	510,  // 1001: groundplane.agent.v1.BackupRestoreResume.mysql_service_progress:type_name -> groundplane.agent.v1.BackupMySQLServiceProgress
-	40,   // 1002: groundplane.agent.v1.BackupDatabaseRestoreProgress.consumer_phase:type_name -> groundplane.agent.v1.BackupServicePhase
-	498,  // 1003: groundplane.agent.v1.BackupDatabaseRestoreProgress.postgres_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
-	506,  // 1004: groundplane.agent.v1.BackupDatabaseRestoreProgress.mysql_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
-	501,  // 1005: groundplane.agent.v1.BackupDatabaseRestoreProgress.postgres_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
-	509,  // 1006: groundplane.agent.v1.BackupDatabaseRestoreProgress.mysql_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
-	382,  // 1007: groundplane.agent.v1.BackupCaptureAuthority.resource:type_name -> groundplane.agent.v1.BackupResourceIdentity
-	387,  // 1008: groundplane.agent.v1.BackupCaptureAuthority.target:type_name -> groundplane.agent.v1.BackupObjectTarget
-	383,  // 1009: groundplane.agent.v1.BackupCaptureAuthority.encryption:type_name -> groundplane.agent.v1.BackupEncryptionAuthority
-	496,  // 1010: groundplane.agent.v1.BackupCaptureAuthority.postgres:type_name -> groundplane.agent.v1.BackupPostgresCaptureAuthority
-	488,  // 1011: groundplane.agent.v1.BackupCaptureAuthority.config:type_name -> groundplane.agent.v1.BackupConfigCaptureAuthority
-	515,  // 1012: groundplane.agent.v1.BackupCaptureAuthority.volume:type_name -> groundplane.agent.v1.BackupVolumeCaptureAuthority
-	504,  // 1013: groundplane.agent.v1.BackupCaptureAuthority.mysql:type_name -> groundplane.agent.v1.BackupMySQLCaptureAuthority
-	382,  // 1014: groundplane.agent.v1.BackupRestoreAuthority.destination:type_name -> groundplane.agent.v1.BackupResourceIdentity
-	390,  // 1015: groundplane.agent.v1.BackupRestoreAuthority.source_object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	391,  // 1016: groundplane.agent.v1.BackupRestoreAuthority.expected_evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	383,  // 1017: groundplane.agent.v1.BackupRestoreAuthority.encryption:type_name -> groundplane.agent.v1.BackupEncryptionAuthority
-	497,  // 1018: groundplane.agent.v1.BackupRestoreAuthority.postgres:type_name -> groundplane.agent.v1.BackupPostgresRestoreAuthority
-	489,  // 1019: groundplane.agent.v1.BackupRestoreAuthority.config:type_name -> groundplane.agent.v1.BackupConfigRestoreAuthority
-	516,  // 1020: groundplane.agent.v1.BackupRestoreAuthority.volume:type_name -> groundplane.agent.v1.BackupVolumeRestoreAuthority
-	505,  // 1021: groundplane.agent.v1.BackupRestoreAuthority.mysql:type_name -> groundplane.agent.v1.BackupMySQLRestoreAuthority
-	420,  // 1022: groundplane.agent.v1.BackupRestoreAuthority.original_identity:type_name -> groundplane.agent.v1.BackupOriginalIdentity
-	421,  // 1023: groundplane.agent.v1.BackupRestoreAuthority.adopted_identity:type_name -> groundplane.agent.v1.BackupAdoptedIdentity
-	380,  // 1024: groundplane.agent.v1.BackupPruneAuthority.retention_policy:type_name -> groundplane.agent.v1.RevisionDigest
-	422,  // 1025: groundplane.agent.v1.BackupPruneAuthority.objects:type_name -> groundplane.agent.v1.BackupPruneObject
-	382,  // 1026: groundplane.agent.v1.BackupOriginalIdentity.destination:type_name -> groundplane.agent.v1.BackupResourceIdentity
-	381,  // 1027: groundplane.agent.v1.BackupAdoptedIdentity.predecessor_fence:type_name -> groundplane.agent.v1.CheckpointFence
-	380,  // 1028: groundplane.agent.v1.BackupPruneObject.point:type_name -> groundplane.agent.v1.RevisionDigest
-	391,  // 1029: groundplane.agent.v1.BackupPruneObject.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	390,  // 1030: groundplane.agent.v1.BackupPruneObject.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	390,  // 1031: groundplane.agent.v1.BackupPruneObjectDeleted.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	426,  // 1032: groundplane.agent.v1.BackupStagingInventory.entries:type_name -> groundplane.agent.v1.BackupRecoveredStage
-	425,  // 1033: groundplane.agent.v1.BackupStagingInventory.volume_restores:type_name -> groundplane.agent.v1.BackupRecoveredVolumeRestore
-	56,   // 1034: groundplane.agent.v1.BackupRecoveredVolumeRestore.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	427,  // 1035: groundplane.agent.v1.BackupRecoveredStage.files:type_name -> groundplane.agent.v1.BackupRecoveredFile
-	35,   // 1036: groundplane.agent.v1.BackupRecoveredFile.role:type_name -> groundplane.agent.v1.BackupRecoveredFileRole
-	433,  // 1037: groundplane.agent.v1.BackupStagingRecoveryPlan.dispositions:type_name -> groundplane.agent.v1.BackupStagingDisposition
-	429,  // 1038: groundplane.agent.v1.BackupStagingRecoveryPlan.volume_dispositions:type_name -> groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition
-	430,  // 1039: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.resume:type_name -> groundplane.agent.v1.BackupVolumeRestoreResume
-	431,  // 1040: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.hold:type_name -> groundplane.agent.v1.BackupVolumeRestoreHold
-	432,  // 1041: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.cleanup:type_name -> groundplane.agent.v1.BackupVolumeRestoreCleanup
-	435,  // 1042: groundplane.agent.v1.BackupStagingDisposition.resume_prepared:type_name -> groundplane.agent.v1.BackupResumePrepared
-	438,  // 1043: groundplane.agent.v1.BackupStagingDisposition.discard_recovered:type_name -> groundplane.agent.v1.BackupDiscardRecovered
-	439,  // 1044: groundplane.agent.v1.BackupStagingDisposition.recovery_required:type_name -> groundplane.agent.v1.BackupRecoveryRequired
-	434,  // 1045: groundplane.agent.v1.BackupStagingDisposition.database_guard:type_name -> groundplane.agent.v1.BackupDatabaseStagingGuard
-	408,  // 1046: groundplane.agent.v1.BackupDatabaseStagingGuard.step:type_name -> groundplane.agent.v1.BackupStepAuthority
-	385,  // 1047: groundplane.agent.v1.BackupDatabaseStagingGuard.database_service:type_name -> groundplane.agent.v1.BackupServiceFact
-	346,  // 1048: groundplane.agent.v1.BackupDatabaseStagingGuard.database_artifact:type_name -> groundplane.agent.v1.ComposeArtifact
-	500,  // 1049: groundplane.agent.v1.BackupDatabaseStagingGuard.postgres_recovery_apply:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
-	508,  // 1050: groundplane.agent.v1.BackupDatabaseStagingGuard.mysql_recovery_apply:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
-	36,   // 1051: groundplane.agent.v1.BackupResumePrepared.remaining_growth:type_name -> groundplane.agent.v1.BackupRemainingGrowth
-	427,  // 1052: groundplane.agent.v1.BackupResumePrepared.expected_files:type_name -> groundplane.agent.v1.BackupRecoveredFile
-	436,  // 1053: groundplane.agent.v1.BackupResumePrepared.restart_config_encryption:type_name -> groundplane.agent.v1.BackupRestartConfigEncryption
-	437,  // 1054: groundplane.agent.v1.BackupResumePrepared.restart_database_encryption:type_name -> groundplane.agent.v1.BackupRestartDatabaseEncryption
-	427,  // 1055: groundplane.agent.v1.BackupRecoveryRequired.expected_files:type_name -> groundplane.agent.v1.BackupRecoveredFile
-	56,   // 1056: groundplane.agent.v1.BackupConfigTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	442,  // 1057: groundplane.agent.v1.BackupConfigTransfer.start:type_name -> groundplane.agent.v1.BackupConfigTransferStart
-	443,  // 1058: groundplane.agent.v1.BackupConfigTransfer.entry_header:type_name -> groundplane.agent.v1.BackupConfigEntryHeader
-	444,  // 1059: groundplane.agent.v1.BackupConfigTransfer.value_chunk:type_name -> groundplane.agent.v1.BackupConfigValueChunk
-	445,  // 1060: groundplane.agent.v1.BackupConfigTransfer.entry_end:type_name -> groundplane.agent.v1.BackupConfigEntryEnd
-	446,  // 1061: groundplane.agent.v1.BackupConfigTransfer.end:type_name -> groundplane.agent.v1.BackupConfigTransferEnd
-	447,  // 1062: groundplane.agent.v1.BackupConfigTransfer.resume:type_name -> groundplane.agent.v1.BackupConfigTransferResume
-	37,   // 1063: groundplane.agent.v1.BackupConfigTransferStart.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
-	486,  // 1064: groundplane.agent.v1.BackupConfigTransferStart.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
-	469,  // 1065: groundplane.agent.v1.BackupConfigEntryHeader.capture_entry:type_name -> groundplane.agent.v1.BackupConfigEntry
-	478,  // 1066: groundplane.agent.v1.BackupConfigEntryHeader.restore_entry:type_name -> groundplane.agent.v1.BackupConfigRestoreEntry
-	37,   // 1067: groundplane.agent.v1.BackupConfigTransferEnd.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
-	486,  // 1068: groundplane.agent.v1.BackupConfigTransferEnd.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
-	56,   // 1069: groundplane.agent.v1.BackupConfigCredit.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	37,   // 1070: groundplane.agent.v1.BackupConfigCredit.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
-	493,  // 1071: groundplane.agent.v1.BackupConfigCredit.metadata_accepted:type_name -> groundplane.agent.v1.BackupConfigMetadataAccepted
-	494,  // 1072: groundplane.agent.v1.BackupConfigCredit.value_credit:type_name -> groundplane.agent.v1.BackupConfigValueCredit
-	495,  // 1073: groundplane.agent.v1.BackupConfigCredit.metadata_credit:type_name -> groundplane.agent.v1.BackupConfigMetadataCredit
-	56,   // 1074: groundplane.agent.v1.BackupVolumeManifestTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	38,   // 1075: groundplane.agent.v1.BackupVolumeManifestTransfer.direction:type_name -> groundplane.agent.v1.BackupVolumeManifestDirection
-	450,  // 1076: groundplane.agent.v1.BackupVolumeManifestTransfer.start:type_name -> groundplane.agent.v1.BackupVolumeManifestStart
-	451,  // 1077: groundplane.agent.v1.BackupVolumeManifestTransfer.batch:type_name -> groundplane.agent.v1.BackupVolumeManifestBatch
-	452,  // 1078: groundplane.agent.v1.BackupVolumeManifestTransfer.end:type_name -> groundplane.agent.v1.BackupVolumeManifestEnd
-	453,  // 1079: groundplane.agent.v1.BackupVolumeManifestTransfer.resume:type_name -> groundplane.agent.v1.BackupVolumeManifestResume
-	39,   // 1080: groundplane.agent.v1.BackupVolumeManifestStart.role:type_name -> groundplane.agent.v1.BackupVolumeManifestRole
-	517,  // 1081: groundplane.agent.v1.BackupVolumeManifestStart.source_archive:type_name -> groundplane.agent.v1.BackupVolumeSourceArchiveEvidence
-	518,  // 1082: groundplane.agent.v1.BackupVolumeManifestStart.no_source_archive:type_name -> groundplane.agent.v1.BackupVolumeNoSourceArchiveEvidence
-	512,  // 1083: groundplane.agent.v1.BackupVolumeManifestBatch.entries:type_name -> groundplane.agent.v1.BackupVolumeManifestEntry
-	56,   // 1084: groundplane.agent.v1.BackupVolumeManifestAckCredit.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	391,  // 1085: groundplane.agent.v1.BackupArtifactPrepared.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	468,  // 1086: groundplane.agent.v1.BackupArtifactPrepared.finals:type_name -> groundplane.agent.v1.BackupStagingFinals
-	503,  // 1087: groundplane.agent.v1.BackupArtifactPrepared.postgres:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
-	487,  // 1088: groundplane.agent.v1.BackupArtifactPrepared.config:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
-	513,  // 1089: groundplane.agent.v1.BackupArtifactPrepared.volume:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
-	511,  // 1090: groundplane.agent.v1.BackupArtifactPrepared.mysql:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
-	391,  // 1091: groundplane.agent.v1.BackupUploadCompleted.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	387,  // 1092: groundplane.agent.v1.BackupUploadCompleted.target:type_name -> groundplane.agent.v1.BackupObjectTarget
-	390,  // 1093: groundplane.agent.v1.BackupUploadCompleted.returned_object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	457,  // 1094: groundplane.agent.v1.BackupUploadCompleted.unknown:type_name -> groundplane.agent.v1.BackupPutOutcomeUnknown
-	391,  // 1095: groundplane.agent.v1.BackupUploadVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	390,  // 1096: groundplane.agent.v1.BackupUploadVerified.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	391,  // 1097: groundplane.agent.v1.BackupSourceCleanupCompleted.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	390,  // 1098: groundplane.agent.v1.BackupRestoreArtifactValidated.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
-	391,  // 1099: groundplane.agent.v1.BackupRestoreArtifactValidated.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	468,  // 1100: groundplane.agent.v1.BackupRestoreArtifactValidated.finals:type_name -> groundplane.agent.v1.BackupStagingFinals
-	503,  // 1101: groundplane.agent.v1.BackupRestoreArtifactValidated.postgres:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
-	487,  // 1102: groundplane.agent.v1.BackupRestoreArtifactValidated.config:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
-	513,  // 1103: groundplane.agent.v1.BackupRestoreArtifactValidated.volume:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
-	511,  // 1104: groundplane.agent.v1.BackupRestoreArtifactValidated.mysql:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
-	463,  // 1105: groundplane.agent.v1.BackupConfigCheckpoint.value_progress:type_name -> groundplane.agent.v1.BackupConfigValueProgress
-	464,  // 1106: groundplane.agent.v1.BackupConfigCheckpoint.transfer_completed:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
-	465,  // 1107: groundplane.agent.v1.BackupConfigCheckpoint.materialization_verified:type_name -> groundplane.agent.v1.BackupConfigMaterializationVerified
-	459,  // 1108: groundplane.agent.v1.BackupConfigProgress.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
-	464,  // 1109: groundplane.agent.v1.BackupConfigProgress.transfer:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
-	465,  // 1110: groundplane.agent.v1.BackupConfigProgress.materialization:type_name -> groundplane.agent.v1.BackupConfigMaterializationVerified
-	486,  // 1111: groundplane.agent.v1.BackupConfigTransferCompleted.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
-	519,  // 1112: groundplane.agent.v1.BackupVolumeCheckpoint.consumers_stopped:type_name -> groundplane.agent.v1.BackupConsumersStopped
-	520,  // 1113: groundplane.agent.v1.BackupVolumeCheckpoint.construction_intent:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
-	521,  // 1114: groundplane.agent.v1.BackupVolumeCheckpoint.construction_completed:type_name -> groundplane.agent.v1.BackupVolumeConstructionCompleted
-	522,  // 1115: groundplane.agent.v1.BackupVolumeCheckpoint.finalization_intent:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
-	523,  // 1116: groundplane.agent.v1.BackupVolumeCheckpoint.finalization_completed:type_name -> groundplane.agent.v1.BackupVolumeFinalizationCompleted
-	524,  // 1117: groundplane.agent.v1.BackupVolumeCheckpoint.exchange_intent:type_name -> groundplane.agent.v1.BackupVolumeExchangeIntent
-	525,  // 1118: groundplane.agent.v1.BackupVolumeCheckpoint.tree_exchanged:type_name -> groundplane.agent.v1.BackupVolumeTreeExchanged
-	526,  // 1119: groundplane.agent.v1.BackupVolumeCheckpoint.replaced_path_delete_intent:type_name -> groundplane.agent.v1.BackupVolumeDeleteIntent
-	527,  // 1120: groundplane.agent.v1.BackupVolumeCheckpoint.volume_replaced_path_cleaned:type_name -> groundplane.agent.v1.BackupVolumeReplacedPathCleaned
-	528,  // 1121: groundplane.agent.v1.BackupVolumeCheckpoint.service_progress:type_name -> groundplane.agent.v1.BackupVolumeServiceProgress
-	520,  // 1122: groundplane.agent.v1.BackupVolumeProgress.pending_construction:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
-	522,  // 1123: groundplane.agent.v1.BackupVolumeProgress.pending_finalization:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
-	524,  // 1124: groundplane.agent.v1.BackupVolumeProgress.pending_exchange:type_name -> groundplane.agent.v1.BackupVolumeExchangeIntent
-	526,  // 1125: groundplane.agent.v1.BackupVolumeProgress.pending_delete:type_name -> groundplane.agent.v1.BackupVolumeDeleteIntent
-	40,   // 1126: groundplane.agent.v1.BackupVolumeProgress.service_phase:type_name -> groundplane.agent.v1.BackupServicePhase
-	380,  // 1127: groundplane.agent.v1.BackupConfigEntry.entry:type_name -> groundplane.agent.v1.RevisionDigest
-	470,  // 1128: groundplane.agent.v1.BackupConfigEntry.environment:type_name -> groundplane.agent.v1.BackupConfigEnvironment
-	471,  // 1129: groundplane.agent.v1.BackupConfigEntry.file:type_name -> groundplane.agent.v1.BackupConfigFile
-	472,  // 1130: groundplane.agent.v1.BackupConfigEntry.exposure_all:type_name -> groundplane.agent.v1.BackupConfigExposureAll
-	474,  // 1131: groundplane.agent.v1.BackupConfigEntry.exposure_services:type_name -> groundplane.agent.v1.BackupConfigExposureServices
-	473,  // 1132: groundplane.agent.v1.BackupConfigEntry.exposure_edge_tunnel:type_name -> groundplane.agent.v1.BackupConfigExposureEdgeTunnel
-	475,  // 1133: groundplane.agent.v1.BackupConfigEntry.literal:type_name -> groundplane.agent.v1.BackupConfigLiteral
-	476,  // 1134: groundplane.agent.v1.BackupConfigEntry.secret_ref:type_name -> groundplane.agent.v1.BackupConfigSecretRef
-	477,  // 1135: groundplane.agent.v1.BackupConfigEntry.fact_ref:type_name -> groundplane.agent.v1.BackupConfigFactRef
-	380,  // 1136: groundplane.agent.v1.BackupConfigSecretRef.secret:type_name -> groundplane.agent.v1.RevisionDigest
-	380,  // 1137: groundplane.agent.v1.BackupConfigFactRef.attach:type_name -> groundplane.agent.v1.RevisionDigest
-	380,  // 1138: groundplane.agent.v1.BackupConfigFactRef.grant_attach:type_name -> groundplane.agent.v1.RevisionDigest
-	479,  // 1139: groundplane.agent.v1.BackupConfigRestoreEntry.metadata:type_name -> groundplane.agent.v1.BackupConfigEntryMetadata
-	480,  // 1140: groundplane.agent.v1.BackupConfigRestoreEntry.exposure:type_name -> groundplane.agent.v1.BackupConfigEntryExposure
-	481,  // 1141: groundplane.agent.v1.BackupConfigRestoreEntry.source:type_name -> groundplane.agent.v1.BackupConfigArtifactDesiredSource
-	485,  // 1142: groundplane.agent.v1.BackupConfigRestoreEntry.selected_value:type_name -> groundplane.agent.v1.BackupConfigSelectedValue
-	470,  // 1143: groundplane.agent.v1.BackupConfigEntryMetadata.environment:type_name -> groundplane.agent.v1.BackupConfigEnvironment
-	471,  // 1144: groundplane.agent.v1.BackupConfigEntryMetadata.file:type_name -> groundplane.agent.v1.BackupConfigFile
-	472,  // 1145: groundplane.agent.v1.BackupConfigEntryExposure.all:type_name -> groundplane.agent.v1.BackupConfigExposureAll
-	474,  // 1146: groundplane.agent.v1.BackupConfigEntryExposure.services:type_name -> groundplane.agent.v1.BackupConfigExposureServices
-	473,  // 1147: groundplane.agent.v1.BackupConfigEntryExposure.edge_tunnel:type_name -> groundplane.agent.v1.BackupConfigExposureEdgeTunnel
-	482,  // 1148: groundplane.agent.v1.BackupConfigArtifactDesiredSource.literal:type_name -> groundplane.agent.v1.BackupConfigLiteralSource
-	483,  // 1149: groundplane.agent.v1.BackupConfigArtifactDesiredSource.secret_ref:type_name -> groundplane.agent.v1.BackupConfigArtifactSecretRefSource
-	484,  // 1150: groundplane.agent.v1.BackupConfigArtifactDesiredSource.fact_ref:type_name -> groundplane.agent.v1.BackupConfigArtifactFactSource
-	486,  // 1151: groundplane.agent.v1.BackupConfigArchiveEvidence.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
-	486,  // 1152: groundplane.agent.v1.BackupConfigCaptureAuthority.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
-	487,  // 1153: groundplane.agent.v1.BackupConfigRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
-	490,  // 1154: groundplane.agent.v1.BackupConfigRestoreAuthority.files:type_name -> groundplane.agent.v1.BackupConfigFileContext
-	491,  // 1155: groundplane.agent.v1.BackupConfigFileContext.services:type_name -> groundplane.agent.v1.BackupConfigFileService
-	492,  // 1156: groundplane.agent.v1.BackupConfigFileContext.prior_files:type_name -> groundplane.agent.v1.BackupConfigPriorFile
-	503,  // 1157: groundplane.agent.v1.BackupPostgresRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
-	186,  // 1158: groundplane.agent.v1.BackupPostgresRestoreAuthority.expected_target_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
-	503,  // 1159: groundplane.agent.v1.BackupPostgresDumpStart.archive:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
-	391,  // 1160: groundplane.agent.v1.BackupPostgresRestoreVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	40,   // 1161: groundplane.agent.v1.BackupPostgresServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
-	511,  // 1162: groundplane.agent.v1.BackupMySQLRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
-	186,  // 1163: groundplane.agent.v1.BackupMySQLRestoreAuthority.expected_target_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
-	511,  // 1164: groundplane.agent.v1.BackupMySQLDumpStart.archive:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
-	391,  // 1165: groundplane.agent.v1.BackupMySQLRestoreVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
-	40,   // 1166: groundplane.agent.v1.BackupMySQLServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
-	41,   // 1167: groundplane.agent.v1.BackupVolumeManifestEntry.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
-	380,  // 1168: groundplane.agent.v1.BackupVolumeCaptureAuthority.volume:type_name -> groundplane.agent.v1.RevisionDigest
-	514,  // 1169: groundplane.agent.v1.BackupVolumeCaptureAuthority.projection:type_name -> groundplane.agent.v1.BackupVolumeProjectionAuthority
-	380,  // 1170: groundplane.agent.v1.BackupVolumeRestoreAuthority.volume:type_name -> groundplane.agent.v1.RevisionDigest
-	513,  // 1171: groundplane.agent.v1.BackupVolumeRestoreAuthority.archive:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
-	514,  // 1172: groundplane.agent.v1.BackupVolumeRestoreAuthority.projection:type_name -> groundplane.agent.v1.BackupVolumeProjectionAuthority
-	41,   // 1173: groundplane.agent.v1.BackupVolumeConstructionIntent.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
-	520,  // 1174: groundplane.agent.v1.BackupVolumeConstructionCompleted.intent:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
-	522,  // 1175: groundplane.agent.v1.BackupVolumeFinalizationCompleted.intent:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
-	41,   // 1176: groundplane.agent.v1.BackupVolumeDeleteIntent.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
-	41,   // 1177: groundplane.agent.v1.BackupVolumeReplacedPathCleaned.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
-	40,   // 1178: groundplane.agent.v1.BackupVolumeServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
-	56,   // 1179: groundplane.agent.v1.BackupWorkSecretRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	56,   // 1180: groundplane.agent.v1.BackupWorkSecretTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
-	42,   // 1181: groundplane.agent.v1.BackupWorkSecretTransfer.purpose:type_name -> groundplane.agent.v1.BackupSecretSlotPurpose
-	531,  // 1182: groundplane.agent.v1.BackupWorkSecretTransfer.header:type_name -> groundplane.agent.v1.BackupSecretSlotHeader
-	532,  // 1183: groundplane.agent.v1.BackupWorkSecretTransfer.chunk:type_name -> groundplane.agent.v1.BackupSecretSlotChunk
-	533,  // 1184: groundplane.agent.v1.BackupWorkSecretTransfer.end:type_name -> groundplane.agent.v1.BackupSecretSlotEnd
-	43,   // 1185: groundplane.agent.v1.AdapterProcedure.phase:type_name -> groundplane.agent.v1.AdapterProcedurePhase
-	44,   // 1186: groundplane.agent.v1.AdapterProcedure.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
-	45,   // 1187: groundplane.agent.v1.MaterializeFile.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
-	569,  // 1188: groundplane.agent.v1.CheckDNSConnections.action:type_name -> groundplane.agent.v1.ComponentApply
-	346,  // 1189: groundplane.agent.v1.CheckDNSConnections.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
-	202,  // 1190: groundplane.agent.v1.CheckDNSConnections.prior_observation:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
-	562,  // 1191: groundplane.agent.v1.CheckDNSConnections.queries:type_name -> groundplane.agent.v1.DNSConnectionQuery
-	10,   // 1192: groundplane.agent.v1.DNSConnectionQuery.type:type_name -> groundplane.agent.v1.DNSQueryType
-	10,   // 1193: groundplane.agent.v1.DNSConnectionAnswer.type:type_name -> groundplane.agent.v1.DNSQueryType
-	203,  // 1194: groundplane.agent.v1.DNSConnectionAnswer.answers:type_name -> groundplane.agent.v1.DNSAnswerRecord
-	585,  // 1195: groundplane.agent.v1.DNSConnectionResult.observed_at:type_name -> google.protobuf.Timestamp
-	564,  // 1196: groundplane.agent.v1.DNSConnectionResult.answers:type_name -> groundplane.agent.v1.DNSConnectionAnswer
-	569,  // 1197: groundplane.agent.v1.CheckEdgeConnections.action:type_name -> groundplane.agent.v1.ComponentApply
-	346,  // 1198: groundplane.agent.v1.CheckEdgeConnections.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
-	570,  // 1199: groundplane.agent.v1.ComponentApply.container_config_transition:type_name -> groundplane.agent.v1.ContainerConfigTransition
-	46,   // 1200: groundplane.agent.v1.ManagedConfigHelperRequest.operation:type_name -> groundplane.agent.v1.ManagedConfigOperation
-	46,   // 1201: groundplane.agent.v1.ManagedConfigHelperResponse.operation:type_name -> groundplane.agent.v1.ManagedConfigOperation
-	47,   // 1202: groundplane.agent.v1.ManagedConfigHelperResponse.disposition:type_name -> groundplane.agent.v1.ManagedConfigReplayDisposition
-	49,   // 1203: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
-	50,   // 1204: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	550,  // 1205: groundplane.agent.v1.ComposeHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
-	554,  // 1206: groundplane.agent.v1.ComposeHelperResponse.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
-	201,  // 1207: groundplane.agent.v1.ComposeHelperResponse.candidate_absence_evidence:type_name -> groundplane.agent.v1.CandidateAbsenceEvidence
-	576,  // 1208: groundplane.agent.v1.ComposeHelperResponse.rolling_proxy_evidence:type_name -> groundplane.agent.v1.RollingProxyEvidence
-	200,  // 1209: groundplane.agent.v1.ComposeHelperResponse.rolling_evidence:type_name -> groundplane.agent.v1.RollingReleaseEvidence
-	172,  // 1210: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
-	183,  // 1211: groundplane.agent.v1.CheckBackingAccess.consumer_runtime:type_name -> groundplane.agent.v1.ServiceObservationTarget
-	580,  // 1212: groundplane.agent.v1.CheckBackingAccess.parameters:type_name -> groundplane.agent.v1.BackingAccessParameters
-	583,  // 1213: groundplane.agent.v1.BackingAccessResult.observation:type_name -> groundplane.agent.v1.BackingAccessObservation
-	585,  // 1214: groundplane.agent.v1.BackingAccessObservation.started_at:type_name -> google.protobuf.Timestamp
-	585,  // 1215: groundplane.agent.v1.BackingAccessObservation.finished_at:type_name -> google.protobuf.Timestamp
-	584,  // 1216: groundplane.agent.v1.BackingAccessObservation.stages:type_name -> groundplane.agent.v1.BackingAccessStage
-	174,  // 1217: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
-	206,  // 1218: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
-	1218, // [1218:1219] is the sub-list for method output_type
-	1217, // [1217:1218] is the sub-list for method input_type
-	1217, // [1217:1217] is the sub-list for extension type_name
-	1217, // [1217:1217] is the sub-list for extension extendee
-	0,    // [0:1217] is the sub-list for field type_name
+	214,  // 356: groundplane.agent.v1.AgentMessage.container_terminal_event:type_name -> groundplane.agent.v1.ContainerTerminalEvent
+	175,  // 357: groundplane.agent.v1.AgentMessage.execution_quiescence_result:type_name -> groundplane.agent.v1.ExecutionQuiescenceResult
+	177,  // 358: groundplane.agent.v1.Ready.source:type_name -> groundplane.agent.v1.BuildProvenance
+	178,  // 359: groundplane.agent.v1.ResolveWorkloadImages.selectors:type_name -> groundplane.agent.v1.WorkloadImageSelector
+	178,  // 360: groundplane.agent.v1.WorkloadImageResolution.selector:type_name -> groundplane.agent.v1.WorkloadImageSelector
+	180,  // 361: groundplane.agent.v1.WorkloadImageResolutions.resolutions:type_name -> groundplane.agent.v1.WorkloadImageResolution
+	5,    // 362: groundplane.agent.v1.WorkloadImageResolutionFailure.kind:type_name -> groundplane.agent.v1.WorkloadImageResolutionFailureKind
+	181,  // 363: groundplane.agent.v1.WorkloadImageResolutionResult.success:type_name -> groundplane.agent.v1.WorkloadImageResolutions
+	182,  // 364: groundplane.agent.v1.WorkloadImageResolutionResult.failure:type_name -> groundplane.agent.v1.WorkloadImageResolutionFailure
+	185,  // 365: groundplane.agent.v1.ServiceObservationTarget.workloads:type_name -> groundplane.agent.v1.ServiceWorkloadObservation
+	186,  // 366: groundplane.agent.v1.ServiceObservationTarget.database_probe:type_name -> groundplane.agent.v1.DatabaseVersionProbe
+	23,   // 367: groundplane.agent.v1.ServiceObservationTarget.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
+	410,  // 368: groundplane.agent.v1.DatabaseVersionProbe.authority:type_name -> groundplane.agent.v1.BackupStepAuthority
+	387,  // 369: groundplane.agent.v1.DatabaseVersionProbe.services:type_name -> groundplane.agent.v1.BackupServiceFact
+	348,  // 370: groundplane.agent.v1.DatabaseVersionProbe.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
+	184,  // 371: groundplane.agent.v1.ObserveServices.targets:type_name -> groundplane.agent.v1.ServiceObservationTarget
+	190,  // 372: groundplane.agent.v1.ServiceObservationRow.replicas:type_name -> groundplane.agent.v1.ServiceReplicaCounts
+	6,    // 373: groundplane.agent.v1.ServiceObservationRow.proxy_state:type_name -> groundplane.agent.v1.ServiceProxyObservationState
+	192,  // 374: groundplane.agent.v1.ServiceObservationRow.containers:type_name -> groundplane.agent.v1.ServiceContainerObservation
+	187,  // 375: groundplane.agent.v1.ServiceObservationRow.database_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
+	191,  // 376: groundplane.agent.v1.ServiceObservationResult.observations:type_name -> groundplane.agent.v1.ServiceObservationRow
+	196,  // 377: groundplane.agent.v1.ObservedState.projects:type_name -> groundplane.agent.v1.ObservedProject
+	587,  // 378: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
+	197,  // 379: groundplane.agent.v1.ObservedProject.containers:type_name -> groundplane.agent.v1.ObservedContainer
+	198,  // 380: groundplane.agent.v1.ObservedProject.networks:type_name -> groundplane.agent.v1.ObservedNetwork
+	199,  // 381: groundplane.agent.v1.ObservedProject.volumes:type_name -> groundplane.agent.v1.ObservedVolume
+	200,  // 382: groundplane.agent.v1.ObservedProject.collisions:type_name -> groundplane.agent.v1.ObservedCollision
+	7,    // 383: groundplane.agent.v1.ObservedContainer.state:type_name -> groundplane.agent.v1.ObservedContainerState
+	8,    // 384: groundplane.agent.v1.ObservedContainer.health:type_name -> groundplane.agent.v1.ObservedContainerHealth
+	352,  // 385: groundplane.agent.v1.ObservedContainer.labels:type_name -> groundplane.agent.v1.LabelPair
+	50,   // 386: groundplane.agent.v1.ObservedContainer.healthcheck_diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	352,  // 387: groundplane.agent.v1.ObservedNetwork.labels:type_name -> groundplane.agent.v1.LabelPair
+	352,  // 388: groundplane.agent.v1.ObservedVolume.labels:type_name -> groundplane.agent.v1.LabelPair
+	9,    // 389: groundplane.agent.v1.ObservedCollision.kind:type_name -> groundplane.agent.v1.ObservedCollisionKind
+	251,  // 390: groundplane.agent.v1.CandidateAbsenceEvidence.candidates:type_name -> groundplane.agent.v1.CandidateReleaseService
+	587,  // 391: groundplane.agent.v1.DNSResolverObservationEvidence.observed_at:type_name -> google.protobuf.Timestamp
+	206,  // 392: groundplane.agent.v1.DNSResolverObservationEvidence.static_query:type_name -> groundplane.agent.v1.DNSQueryProof
+	206,  // 393: groundplane.agent.v1.DNSResolverObservationEvidence.catch_all_query:type_name -> groundplane.agent.v1.DNSQueryProof
+	206,  // 394: groundplane.agent.v1.DNSResolverObservationEvidence.forwarder_queries:type_name -> groundplane.agent.v1.DNSQueryProof
+	10,   // 395: groundplane.agent.v1.DNSAnswerRecord.type:type_name -> groundplane.agent.v1.DNSQueryType
+	10,   // 396: groundplane.agent.v1.DNSQueryProof.type:type_name -> groundplane.agent.v1.DNSQueryType
+	204,  // 397: groundplane.agent.v1.DNSQueryProof.answers:type_name -> groundplane.agent.v1.DNSAnswerRecord
+	205,  // 398: groundplane.agent.v1.DNSQueryProof.counters:type_name -> groundplane.agent.v1.DNSForwardCounter
+	579,  // 399: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
+	580,  // 400: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
+	215,  // 401: groundplane.agent.v1.ControllerMessage.log_subscribe:type_name -> groundplane.agent.v1.LogSubscribe
+	216,  // 402: groundplane.agent.v1.ControllerMessage.log_cancel:type_name -> groundplane.agent.v1.LogCancel
+	179,  // 403: groundplane.agent.v1.ControllerMessage.resolve_workload_images:type_name -> groundplane.agent.v1.ResolveWorkloadImages
+	188,  // 404: groundplane.agent.v1.ControllerMessage.observe_services:type_name -> groundplane.agent.v1.ObserveServices
+	189,  // 405: groundplane.agent.v1.ControllerMessage.cancel_service_observation:type_name -> groundplane.agent.v1.CancelServiceObservation
+	217,  // 406: groundplane.agent.v1.ControllerMessage.log_credit:type_name -> groundplane.agent.v1.LogCredit
+	581,  // 407: groundplane.agent.v1.ControllerMessage.check_backing_access:type_name -> groundplane.agent.v1.CheckBackingAccess
+	583,  // 408: groundplane.agent.v1.ControllerMessage.cancel_backing_access:type_name -> groundplane.agent.v1.CancelBackingAccess
+	563,  // 409: groundplane.agent.v1.ControllerMessage.check_dns_connections:type_name -> groundplane.agent.v1.CheckDNSConnections
+	565,  // 410: groundplane.agent.v1.ControllerMessage.cancel_dns_connections:type_name -> groundplane.agent.v1.CancelDNSConnections
+	568,  // 411: groundplane.agent.v1.ControllerMessage.check_edge_connections:type_name -> groundplane.agent.v1.CheckEdgeConnections
+	569,  // 412: groundplane.agent.v1.ControllerMessage.cancel_edge_connections:type_name -> groundplane.agent.v1.CancelEdgeConnections
+	443,  // 413: groundplane.agent.v1.ControllerMessage.backup_config_transfer:type_name -> groundplane.agent.v1.BackupConfigTransfer
+	450,  // 414: groundplane.agent.v1.ControllerMessage.backup_config_credit:type_name -> groundplane.agent.v1.BackupConfigCredit
+	430,  // 415: groundplane.agent.v1.ControllerMessage.backup_staging_recovery_plan:type_name -> groundplane.agent.v1.BackupStagingRecoveryPlan
+	451,  // 416: groundplane.agent.v1.ControllerMessage.backup_volume_manifest_transfer:type_name -> groundplane.agent.v1.BackupVolumeManifestTransfer
+	456,  // 417: groundplane.agent.v1.ControllerMessage.backup_volume_manifest_ack_credit:type_name -> groundplane.agent.v1.BackupVolumeManifestAckCredit
+	536,  // 418: groundplane.agent.v1.ControllerMessage.backup_staging_recovery_ack_receipt:type_name -> groundplane.agent.v1.BackupStagingRecoveryAckReceipt
+	59,   // 419: groundplane.agent.v1.ControllerMessage.work_start_ack:type_name -> groundplane.agent.v1.WorkStartAck
+	127,  // 420: groundplane.agent.v1.ControllerMessage.release_work_assignment:type_name -> groundplane.agent.v1.ReleaseWorkAssignment
+	132,  // 421: groundplane.agent.v1.ControllerMessage.release_work_checkpoint_ack:type_name -> groundplane.agent.v1.ReleaseWorkCheckpointAck
+	168,  // 422: groundplane.agent.v1.ControllerMessage.release_hook_delivery:type_name -> groundplane.agent.v1.ReleaseHookDelivery
+	138,  // 423: groundplane.agent.v1.ControllerMessage.release_effect_evidence_ack:type_name -> groundplane.agent.v1.ReleaseEffectEvidenceAck
+	141,  // 424: groundplane.agent.v1.ControllerMessage.script_work_checkpoint_ack:type_name -> groundplane.agent.v1.ScriptWorkCheckpointAck
+	156,  // 425: groundplane.agent.v1.ControllerMessage.release_configuration_manifest:type_name -> groundplane.agent.v1.ReleaseConfigurationManifest
+	158,  // 426: groundplane.agent.v1.ControllerMessage.release_configuration_file_delivery:type_name -> groundplane.agent.v1.ReleaseConfigurationFileDelivery
+	52,   // 427: groundplane.agent.v1.ControllerMessage.work_executor_registration:type_name -> groundplane.agent.v1.WorkExecutorRegistration
+	134,  // 428: groundplane.agent.v1.ControllerMessage.release_work_completion_ack:type_name -> groundplane.agent.v1.ReleaseWorkCompletionAck
+	136,  // 429: groundplane.agent.v1.ControllerMessage.release_work_failure_ack:type_name -> groundplane.agent.v1.ReleaseWorkFailureAck
+	130,  // 430: groundplane.agent.v1.ControllerMessage.release_recovery_checkpoint_ack:type_name -> groundplane.agent.v1.ReleaseRecoveryCheckpointAck
+	128,  // 431: groundplane.agent.v1.ControllerMessage.release_recovery_assignment:type_name -> groundplane.agent.v1.ReleaseRecoveryAssignment
+	139,  // 432: groundplane.agent.v1.ControllerMessage.script_work_assignment:type_name -> groundplane.agent.v1.ScriptWorkAssignment
+	143,  // 433: groundplane.agent.v1.ControllerMessage.script_work_completion_ack:type_name -> groundplane.agent.v1.ScriptWorkCompletionAck
+	144,  // 434: groundplane.agent.v1.ControllerMessage.script_recovery_assignment:type_name -> groundplane.agent.v1.ScriptRecoveryAssignment
+	146,  // 435: groundplane.agent.v1.ControllerMessage.script_recovery_completion_ack:type_name -> groundplane.agent.v1.ScriptRecoveryCompletionAck
+	148,  // 436: groundplane.agent.v1.ControllerMessage.script_work_failure_ack:type_name -> groundplane.agent.v1.ScriptWorkFailureAck
+	60,   // 437: groundplane.agent.v1.ControllerMessage.environment_removal_assignment:type_name -> groundplane.agent.v1.EnvironmentRemovalAssignment
+	120,  // 438: groundplane.agent.v1.ControllerMessage.environment_removal_checkpoint_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalCheckpointAck
+	122,  // 439: groundplane.agent.v1.ControllerMessage.environment_removal_completion_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalCompletionAck
+	124,  // 440: groundplane.agent.v1.ControllerMessage.environment_removal_failure_ack:type_name -> groundplane.agent.v1.EnvironmentRemovalFailureAck
+	88,   // 441: groundplane.agent.v1.ControllerMessage.attach_removal_assignment:type_name -> groundplane.agent.v1.AttachRemovalAssignment
+	114,  // 442: groundplane.agent.v1.ControllerMessage.attach_removal_checkpoint_ack:type_name -> groundplane.agent.v1.AttachRemovalCheckpointAck
+	116,  // 443: groundplane.agent.v1.ControllerMessage.attach_removal_completion_ack:type_name -> groundplane.agent.v1.AttachRemovalCompletionAck
+	118,  // 444: groundplane.agent.v1.ControllerMessage.attach_removal_failure_ack:type_name -> groundplane.agent.v1.AttachRemovalFailureAck
+	89,   // 445: groundplane.agent.v1.ControllerMessage.attach_recovery_assignment:type_name -> groundplane.agent.v1.AttachRecoveryAssignment
+	91,   // 446: groundplane.agent.v1.ControllerMessage.attach_recovery_completion_ack:type_name -> groundplane.agent.v1.AttachRecoveryCompletionAck
+	337,  // 447: groundplane.agent.v1.ControllerMessage.volume_work_assignment:type_name -> groundplane.agent.v1.VolumeWorkAssignment
+	339,  // 448: groundplane.agent.v1.ControllerMessage.volume_work_checkpoint_ack:type_name -> groundplane.agent.v1.VolumeWorkCheckpointAck
+	341,  // 449: groundplane.agent.v1.ControllerMessage.volume_work_completion_ack:type_name -> groundplane.agent.v1.VolumeWorkCompletionAck
+	343,  // 450: groundplane.agent.v1.ControllerMessage.volume_work_failure_ack:type_name -> groundplane.agent.v1.VolumeWorkFailureAck
+	345,  // 451: groundplane.agent.v1.ControllerMessage.volume_work_recovery_report_ack:type_name -> groundplane.agent.v1.VolumeWorkRecoveryReportAck
+	291,  // 452: groundplane.agent.v1.ControllerMessage.network_work_assignment:type_name -> groundplane.agent.v1.NetworkWorkAssignment
+	293,  // 453: groundplane.agent.v1.ControllerMessage.network_work_checkpoint_ack:type_name -> groundplane.agent.v1.NetworkWorkCheckpointAck
+	295,  // 454: groundplane.agent.v1.ControllerMessage.network_work_completion_ack:type_name -> groundplane.agent.v1.NetworkWorkCompletionAck
+	297,  // 455: groundplane.agent.v1.ControllerMessage.network_work_failure_ack:type_name -> groundplane.agent.v1.NetworkWorkFailureAck
+	299,  // 456: groundplane.agent.v1.ControllerMessage.network_work_recovery_report_ack:type_name -> groundplane.agent.v1.NetworkWorkRecoveryReportAck
+	281,  // 457: groundplane.agent.v1.ControllerMessage.component_work_assignment:type_name -> groundplane.agent.v1.ComponentWorkAssignment
+	283,  // 458: groundplane.agent.v1.ControllerMessage.component_work_checkpoint_ack:type_name -> groundplane.agent.v1.ComponentWorkCheckpointAck
+	285,  // 459: groundplane.agent.v1.ControllerMessage.component_work_completion_ack:type_name -> groundplane.agent.v1.ComponentWorkCompletionAck
+	287,  // 460: groundplane.agent.v1.ControllerMessage.component_work_failure_ack:type_name -> groundplane.agent.v1.ComponentWorkFailureAck
+	289,  // 461: groundplane.agent.v1.ControllerMessage.component_work_recovery_report_ack:type_name -> groundplane.agent.v1.ComponentWorkRecoveryReportAck
+	152,  // 462: groundplane.agent.v1.ControllerMessage.component_configuration_manifest:type_name -> groundplane.agent.v1.ComponentConfigurationManifest
+	154,  // 463: groundplane.agent.v1.ControllerMessage.component_configuration_file_delivery:type_name -> groundplane.agent.v1.ComponentConfigurationFileDelivery
+	278,  // 464: groundplane.agent.v1.ControllerMessage.entry_configuration_work_assignment:type_name -> groundplane.agent.v1.EntryConfigurationWorkAssignment
+	273,  // 465: groundplane.agent.v1.ControllerMessage.entry_configuration_work_checkpoint_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
+	275,  // 466: groundplane.agent.v1.ControllerMessage.entry_configuration_work_completion_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkCompletionAck
+	277,  // 467: groundplane.agent.v1.ControllerMessage.entry_configuration_work_failure_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkFailureAck
+	269,  // 468: groundplane.agent.v1.ControllerMessage.entry_configuration_manifest:type_name -> groundplane.agent.v1.EntryConfigurationManifest
+	271,  // 469: groundplane.agent.v1.ControllerMessage.entry_configuration_file_delivery:type_name -> groundplane.agent.v1.EntryConfigurationFileDelivery
+	280,  // 470: groundplane.agent.v1.ControllerMessage.entry_configuration_work_recovery_report_ack:type_name -> groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck
+	94,   // 471: groundplane.agent.v1.ControllerMessage.attach_provision_assignment:type_name -> groundplane.agent.v1.AttachProvisionAssignment
+	99,   // 472: groundplane.agent.v1.ControllerMessage.attach_provision_checkpoint_ack:type_name -> groundplane.agent.v1.AttachProvisionCheckpointAck
+	101,  // 473: groundplane.agent.v1.ControllerMessage.attach_provision_completion_ack:type_name -> groundplane.agent.v1.AttachProvisionCompletionAck
+	103,  // 474: groundplane.agent.v1.ControllerMessage.attach_provision_failure_ack:type_name -> groundplane.agent.v1.AttachProvisionFailureAck
+	93,   // 475: groundplane.agent.v1.ControllerMessage.attach_provision_facts_ack:type_name -> groundplane.agent.v1.AttachProvisionFactsAck
+	95,   // 476: groundplane.agent.v1.ControllerMessage.attach_provision_recovery_assignment:type_name -> groundplane.agent.v1.AttachProvisionRecoveryAssignment
+	97,   // 477: groundplane.agent.v1.ControllerMessage.attach_provision_recovery_report_ack:type_name -> groundplane.agent.v1.AttachProvisionRecoveryReportAck
+	320,  // 478: groundplane.agent.v1.ControllerMessage.service_lifecycle_assignment:type_name -> groundplane.agent.v1.ServiceLifecycleAssignment
+	329,  // 479: groundplane.agent.v1.ControllerMessage.service_lifecycle_checkpoint_ack:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointAck
+	331,  // 480: groundplane.agent.v1.ControllerMessage.service_lifecycle_completion_ack:type_name -> groundplane.agent.v1.ServiceLifecycleCompletionAck
+	333,  // 481: groundplane.agent.v1.ControllerMessage.service_lifecycle_failure_ack:type_name -> groundplane.agent.v1.ServiceLifecycleFailureAck
+	325,  // 482: groundplane.agent.v1.ControllerMessage.service_lifecycle_hook_delivery:type_name -> groundplane.agent.v1.ServiceLifecycleHookDelivery
+	327,  // 483: groundplane.agent.v1.ControllerMessage.service_lifecycle_recovery_report_ack:type_name -> groundplane.agent.v1.ServiceLifecycleRecoveryReportAck
+	306,  // 484: groundplane.agent.v1.ControllerMessage.service_removal_recovery_assignment:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryAssignment
+	313,  // 485: groundplane.agent.v1.ControllerMessage.service_removal_recovery_checkpoint_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
+	315,  // 486: groundplane.agent.v1.ControllerMessage.service_removal_recovery_completion_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck
+	317,  // 487: groundplane.agent.v1.ControllerMessage.service_removal_recovery_failure_ack:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryFailureAck
+	309,  // 488: groundplane.agent.v1.ControllerMessage.service_removal_configuration_manifest:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationManifest
+	311,  // 489: groundplane.agent.v1.ControllerMessage.service_removal_configuration_file_delivery:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery
+	395,  // 490: groundplane.agent.v1.ControllerMessage.backup_work_assignment:type_name -> groundplane.agent.v1.BackupWorkAssignment
+	408,  // 491: groundplane.agent.v1.ControllerMessage.backup_work_checkpoint_ack:type_name -> groundplane.agent.v1.BackupWorkCheckpointAck
+	532,  // 492: groundplane.agent.v1.ControllerMessage.backup_work_secret_transfer:type_name -> groundplane.agent.v1.BackupWorkSecretTransfer
+	407,  // 493: groundplane.agent.v1.ControllerMessage.backup_work_completion_ack:type_name -> groundplane.agent.v1.BackupWorkCompletionAck
+	406,  // 494: groundplane.agent.v1.ControllerMessage.backup_work_failure_ack:type_name -> groundplane.agent.v1.BackupWorkFailureAck
+	398,  // 495: groundplane.agent.v1.ControllerMessage.backup_recovery_assignment:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
+	402,  // 496: groundplane.agent.v1.ControllerMessage.backup_recovery_ack:type_name -> groundplane.agent.v1.BackupRecoveryAck
+	401,  // 497: groundplane.agent.v1.ControllerMessage.backup_config_recovery_prepare_ack:type_name -> groundplane.agent.v1.BackupConfigRecoveryPrepareAck
+	58,   // 498: groundplane.agent.v1.ControllerMessage.work_cancel:type_name -> groundplane.agent.v1.WorkCancel
+	82,   // 499: groundplane.agent.v1.ControllerMessage.environment_provision_assignment:type_name -> groundplane.agent.v1.EnvironmentProvisionAssignment
+	85,   // 500: groundplane.agent.v1.ControllerMessage.environment_provision_result_ack:type_name -> groundplane.agent.v1.EnvironmentProvisionResultAck
+	65,   // 501: groundplane.agent.v1.ControllerMessage.backing_provision_assignment:type_name -> groundplane.agent.v1.BackingProvisionAssignment
+	67,   // 502: groundplane.agent.v1.ControllerMessage.backing_provision_checkpoint_ack:type_name -> groundplane.agent.v1.BackingProvisionCheckpointAck
+	69,   // 503: groundplane.agent.v1.ControllerMessage.backing_provision_completion_ack:type_name -> groundplane.agent.v1.BackingProvisionCompletionAck
+	71,   // 504: groundplane.agent.v1.ControllerMessage.backing_provision_failure_ack:type_name -> groundplane.agent.v1.BackingProvisionFailureAck
+	73,   // 505: groundplane.agent.v1.ControllerMessage.backing_provision_configuration_manifest:type_name -> groundplane.agent.v1.BackingProvisionConfigurationManifest
+	75,   // 506: groundplane.agent.v1.ControllerMessage.backing_provision_file_delivery:type_name -> groundplane.agent.v1.BackingProvisionFileDelivery
+	77,   // 507: groundplane.agent.v1.ControllerMessage.backing_provision_hook_delivery:type_name -> groundplane.agent.v1.BackingProvisionHookDelivery
+	79,   // 508: groundplane.agent.v1.ControllerMessage.backing_provision_recovery_ack:type_name -> groundplane.agent.v1.BackingProvisionRecoveryAck
+	255,  // 509: groundplane.agent.v1.ControllerMessage.resolver_work_assignment:type_name -> groundplane.agent.v1.ResolverWorkAssignment
+	257,  // 510: groundplane.agent.v1.ControllerMessage.resolver_work_checkpoint_ack:type_name -> groundplane.agent.v1.ResolverWorkCheckpointAck
+	261,  // 511: groundplane.agent.v1.ControllerMessage.resolver_work_result_ack:type_name -> groundplane.agent.v1.ResolverWorkResultAck
+	54,   // 512: groundplane.agent.v1.ControllerMessage.work_journal_replay_ack:type_name -> groundplane.agent.v1.WorkJournalReplayAck
+	55,   // 513: groundplane.agent.v1.ControllerMessage.work_report_rejection:type_name -> groundplane.agent.v1.WorkReportRejection
+	210,  // 514: groundplane.agent.v1.ControllerMessage.container_terminal_open:type_name -> groundplane.agent.v1.ContainerTerminalOpen
+	212,  // 515: groundplane.agent.v1.ControllerMessage.container_terminal_control:type_name -> groundplane.agent.v1.ContainerTerminalControl
+	208,  // 516: groundplane.agent.v1.ControllerMessage.check_execution_quiescence:type_name -> groundplane.agent.v1.CheckExecutionQuiescence
+	184,  // 517: groundplane.agent.v1.LogTarget.runtime:type_name -> groundplane.agent.v1.ServiceObservationTarget
+	184,  // 518: groundplane.agent.v1.ContainerTerminalOpen.sources:type_name -> groundplane.agent.v1.ServiceObservationTarget
+	211,  // 519: groundplane.agent.v1.ContainerTerminalControl.size:type_name -> groundplane.agent.v1.ContainerTerminalSize
+	213,  // 520: groundplane.agent.v1.ContainerTerminalEvent.closed:type_name -> groundplane.agent.v1.ContainerTerminalClosed
+	209,  // 521: groundplane.agent.v1.LogSubscribe.targets:type_name -> groundplane.agent.v1.LogTarget
+	12,   // 522: groundplane.agent.v1.LogEvent.slot:type_name -> groundplane.agent.v1.LogSlot
+	11,   // 523: groundplane.agent.v1.LogEvent.stream:type_name -> groundplane.agent.v1.LogStream
+	587,  // 524: groundplane.agent.v1.LogEvent.timestamp:type_name -> google.protobuf.Timestamp
+	13,   // 525: groundplane.agent.v1.LogEnd.reason:type_name -> groundplane.agent.v1.LogEndReason
+	15,   // 526: groundplane.agent.v1.ScriptOutcomeCheckpoint.reason:type_name -> groundplane.agent.v1.ScriptOutcomeReason
+	587,  // 527: groundplane.agent.v1.ScriptOutcomeCheckpoint.observed_at:type_name -> google.protobuf.Timestamp
+	14,   // 528: groundplane.agent.v1.ScriptExecutionCheckpoint.state:type_name -> groundplane.agent.v1.ScriptExecutionState
+	222,  // 529: groundplane.agent.v1.ScriptExecutionCheckpoint.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
+	223,  // 530: groundplane.agent.v1.ScriptExecutionCheckpoint.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
+	224,  // 531: groundplane.agent.v1.ScriptExecutionCheckpoint.outcome:type_name -> groundplane.agent.v1.ScriptOutcomeCheckpoint
+	225,  // 532: groundplane.agent.v1.ScriptExecutionCheckpoint.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupCheckpoint
+	14,   // 533: groundplane.agent.v1.ScriptCheckpointRequest.expected_state:type_name -> groundplane.agent.v1.ScriptExecutionState
+	14,   // 534: groundplane.agent.v1.ScriptCheckpointRequest.state:type_name -> groundplane.agent.v1.ScriptExecutionState
+	221,  // 535: groundplane.agent.v1.ScriptCheckpointRequest.start_authorized:type_name -> groundplane.agent.v1.ScriptStartAuthorizedCheckpoint
+	222,  // 536: groundplane.agent.v1.ScriptCheckpointRequest.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
+	223,  // 537: groundplane.agent.v1.ScriptCheckpointRequest.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
+	224,  // 538: groundplane.agent.v1.ScriptCheckpointRequest.outcome:type_name -> groundplane.agent.v1.ScriptOutcomeCheckpoint
+	225,  // 539: groundplane.agent.v1.ScriptCheckpointRequest.cleanup:type_name -> groundplane.agent.v1.ScriptCleanupCheckpoint
+	587,  // 540: groundplane.agent.v1.ScriptCheckpointRequest.recorded_at:type_name -> google.protobuf.Timestamp
+	14,   // 541: groundplane.agent.v1.ScriptCheckpointAck.state:type_name -> groundplane.agent.v1.ScriptExecutionState
+	16,   // 542: groundplane.agent.v1.BackingHookProcedure.event:type_name -> groundplane.agent.v1.BackingHookEvent
+	229,  // 543: groundplane.agent.v1.BackingHookProcedure.inputs:type_name -> groundplane.agent.v1.BackingHookValue
+	229,  // 544: groundplane.agent.v1.BackingHookProcedure.facts:type_name -> groundplane.agent.v1.BackingHookValue
+	230,  // 545: groundplane.agent.v1.BackingHookProcedure.fact_schema:type_name -> groundplane.agent.v1.BackingHookFactDefinition
+	18,   // 546: groundplane.agent.v1.ExecutionPlan.operation:type_name -> groundplane.agent.v1.PlanOperation
+	348,  // 547: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
+	353,  // 548: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
+	359,  // 549: groundplane.agent.v1.ExecutionPlan.script_runner_snapshots:type_name -> groundplane.agent.v1.ResolvedRunnerSnapshot
+	372,  // 550: groundplane.agent.v1.ExecutionPlan.script_runner_projections:type_name -> groundplane.agent.v1.ScriptRunnerProjection
+	379,  // 551: groundplane.agent.v1.ExecutionPlan.script_body_artifacts:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
+	17,   // 552: groundplane.agent.v1.ExecutionPlan.component_lifecycle_mode:type_name -> groundplane.agent.v1.ComponentLifecycleMode
+	571,  // 553: groundplane.agent.v1.ExecutionPlan.component_rollback_observation:type_name -> groundplane.agent.v1.ComponentApply
+	242,  // 554: groundplane.agent.v1.ExecutionPlan.candidate_release_procedure:type_name -> groundplane.agent.v1.CandidateReleaseProcedure
+	240,  // 555: groundplane.agent.v1.ExecutionPlan.managed_component_procedure:type_name -> groundplane.agent.v1.ManagedComponentProcedure
+	238,  // 556: groundplane.agent.v1.ExecutionPlan.service_lifecycle_procedure:type_name -> groundplane.agent.v1.ServiceLifecycleProcedure
+	409,  // 557: groundplane.agent.v1.ExecutionPlan.backup_scope:type_name -> groundplane.agent.v1.BackupPlanScope
+	237,  // 558: groundplane.agent.v1.ExecutionPlan.service_absence_recovery_procedure:type_name -> groundplane.agent.v1.ServiceAbsenceRecoveryProcedure
+	233,  // 559: groundplane.agent.v1.ExecutionPlan.managed_network_recovery_procedure:type_name -> groundplane.agent.v1.ManagedNetworkRecoveryProcedure
+	234,  // 560: groundplane.agent.v1.ManagedNetworkRecoveryProcedure.removal:type_name -> groundplane.agent.v1.ManagedNetworkRemovalRecovery
+	235,  // 561: groundplane.agent.v1.ManagedNetworkRecoveryProcedure.preparation:type_name -> groundplane.agent.v1.ManagedNetworkPreparationRecovery
+	236,  // 562: groundplane.agent.v1.ManagedNetworkPreparationRecovery.members:type_name -> groundplane.agent.v1.ManagedNetworkPreparationMember
+	239,  // 563: groundplane.agent.v1.ServiceLifecycleProcedure.sources:type_name -> groundplane.agent.v1.ServiceLifecycleSource
+	241,  // 564: groundplane.agent.v1.ManagedComponentProcedure.services:type_name -> groundplane.agent.v1.ManagedComponentService
+	245,  // 565: groundplane.agent.v1.CandidateReleaseProcedure.members:type_name -> groundplane.agent.v1.CandidateReleaseMember
+	243,  // 566: groundplane.agent.v1.CandidateReleaseProcedure.configuration_restoration:type_name -> groundplane.agent.v1.ConfigurationRestoration
+	244,  // 567: groundplane.agent.v1.ConfigurationRestoration.files:type_name -> groundplane.agent.v1.ConfigurationFileRestoration
+	249,  // 568: groundplane.agent.v1.CandidateReleaseMember.serving_predecessor:type_name -> groundplane.agent.v1.ServingPredecessorRestoration
+	250,  // 569: groundplane.agent.v1.CandidateReleaseMember.candidate_absence:type_name -> groundplane.agent.v1.CandidateAbsenceRestoration
+	246,  // 570: groundplane.agent.v1.CandidateReleaseMember.rolling:type_name -> groundplane.agent.v1.RollingReleaseProcedure
+	247,  // 571: groundplane.agent.v1.RollingReleaseProcedure.prior:type_name -> groundplane.agent.v1.RollingReplica
+	247,  // 572: groundplane.agent.v1.RollingReleaseProcedure.candidate:type_name -> groundplane.agent.v1.RollingReplica
+	248,  // 573: groundplane.agent.v1.RollingReleaseProcedure.changes:type_name -> groundplane.agent.v1.RollingReplicaChange
+	247,  // 574: groundplane.agent.v1.RollingReleaseProcedure.retained:type_name -> groundplane.agent.v1.RollingReplica
+	23,   // 575: groundplane.agent.v1.RollingReleaseProcedure.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
+	251,  // 576: groundplane.agent.v1.CandidateAbsenceRestoration.services:type_name -> groundplane.agent.v1.CandidateReleaseService
+	348,  // 577: groundplane.agent.v1.EntryConfigurationWorkInput.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
+	348,  // 578: groundplane.agent.v1.EntryConfigurationWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	165,  // 579: groundplane.agent.v1.EntryConfigurationWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	165,  // 580: groundplane.agent.v1.EntryConfigurationWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	538,  // 581: groundplane.agent.v1.EntryConfigurationWorkInput.files:type_name -> groundplane.agent.v1.MaterializeFile
+	56,   // 582: groundplane.agent.v1.ResolverWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 583: groundplane.agent.v1.ResolverWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 584: groundplane.agent.v1.ResolverWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 585: groundplane.agent.v1.ResolverWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	56,   // 586: groundplane.agent.v1.ResolverWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 587: groundplane.agent.v1.ResolverWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	203,  // 588: groundplane.agent.v1.ResolverWorkCompletionRequest.serving_proof:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
+	56,   // 589: groundplane.agent.v1.ResolverWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 590: groundplane.agent.v1.ResolverWorkRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 591: groundplane.agent.v1.ResolverWorkResultAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 592: groundplane.agent.v1.ResolverWorkResultAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 593: groundplane.agent.v1.ResolverWorkResultAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 594: groundplane.agent.v1.ResolverWorkResultAck.finished_at:type_name -> google.protobuf.Timestamp
+	255,  // 595: groundplane.agent.v1.ResolverWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.ResolverWorkAssignment
+	59,   // 596: groundplane.agent.v1.ResolverWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	257,  // 597: groundplane.agent.v1.ResolverWorkHelperRequest.checkpoint:type_name -> groundplane.agent.v1.ResolverWorkCheckpointAck
+	203,  // 598: groundplane.agent.v1.ResolverWorkHelperResponse.serving_proof:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
+	348,  // 599: groundplane.agent.v1.ComponentWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	265,  // 600: groundplane.agent.v1.ComponentWorkInput.predecessor:type_name -> groundplane.agent.v1.ComponentWorkPredecessor
+	571,  // 601: groundplane.agent.v1.ComponentWorkInput.configuration_action:type_name -> groundplane.agent.v1.ComponentApply
+	165,  // 602: groundplane.agent.v1.ComponentWorkInput.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	165,  // 603: groundplane.agent.v1.ComponentWorkInput.prior_configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	538,  // 604: groundplane.agent.v1.ComponentWorkInput.files:type_name -> groundplane.agent.v1.MaterializeFile
+	348,  // 605: groundplane.agent.v1.ComponentWorkPredecessor.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
+	266,  // 606: groundplane.agent.v1.ComponentWorkPredecessor.configuration:type_name -> groundplane.agent.v1.ComponentWorkRetainedConfiguration
+	538,  // 607: groundplane.agent.v1.ComponentWorkRetainedConfiguration.file:type_name -> groundplane.agent.v1.MaterializeFile
+	56,   // 608: groundplane.agent.v1.EntryConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 609: groundplane.agent.v1.EntryConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	165,  // 610: groundplane.agent.v1.EntryConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	268,  // 611: groundplane.agent.v1.EntryConfigurationManifest.files:type_name -> groundplane.agent.v1.EntryConfigurationFile
+	56,   // 612: groundplane.agent.v1.EntryConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 613: groundplane.agent.v1.EntryConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	165,  // 614: groundplane.agent.v1.EntryConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	268,  // 615: groundplane.agent.v1.EntryConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.EntryConfigurationFile
+	56,   // 616: groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 617: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 618: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 619: groundplane.agent.v1.EntryConfigurationWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	56,   // 620: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 621: groundplane.agent.v1.EntryConfigurationWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	56,   // 622: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 623: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 624: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 625: groundplane.agent.v1.EntryConfigurationWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	56,   // 626: groundplane.agent.v1.EntryConfigurationWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 627: groundplane.agent.v1.EntryConfigurationWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 628: groundplane.agent.v1.EntryConfigurationWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 629: groundplane.agent.v1.EntryConfigurationWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 630: groundplane.agent.v1.EntryConfigurationWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	56,   // 631: groundplane.agent.v1.EntryConfigurationWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	254,  // 632: groundplane.agent.v1.EntryConfigurationWorkAssignment.input:type_name -> groundplane.agent.v1.EntryConfigurationWorkInput
+	56,   // 633: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 634: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 635: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 636: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 637: groundplane.agent.v1.EntryConfigurationWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	56,   // 638: groundplane.agent.v1.ComponentWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	264,  // 639: groundplane.agent.v1.ComponentWorkAssignment.input:type_name -> groundplane.agent.v1.ComponentWorkInput
+	56,   // 640: groundplane.agent.v1.ComponentWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 641: groundplane.agent.v1.ComponentWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 642: groundplane.agent.v1.ComponentWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 643: groundplane.agent.v1.ComponentWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	56,   // 644: groundplane.agent.v1.ComponentWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 645: groundplane.agent.v1.ComponentWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	56,   // 646: groundplane.agent.v1.ComponentWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 647: groundplane.agent.v1.ComponentWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 648: groundplane.agent.v1.ComponentWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 649: groundplane.agent.v1.ComponentWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	56,   // 650: groundplane.agent.v1.ComponentWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 651: groundplane.agent.v1.ComponentWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 652: groundplane.agent.v1.ComponentWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 653: groundplane.agent.v1.ComponentWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 654: groundplane.agent.v1.ComponentWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	56,   // 655: groundplane.agent.v1.ComponentWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 656: groundplane.agent.v1.ComponentWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 657: groundplane.agent.v1.ComponentWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 658: groundplane.agent.v1.ComponentWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	19,   // 659: groundplane.agent.v1.NetworkWorkInput.action:type_name -> groundplane.agent.v1.NetworkWorkAction
+	348,  // 660: groundplane.agent.v1.NetworkWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	56,   // 661: groundplane.agent.v1.NetworkWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	290,  // 662: groundplane.agent.v1.NetworkWorkAssignment.input:type_name -> groundplane.agent.v1.NetworkWorkInput
+	56,   // 663: groundplane.agent.v1.NetworkWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 664: groundplane.agent.v1.NetworkWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 665: groundplane.agent.v1.NetworkWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 666: groundplane.agent.v1.NetworkWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	56,   // 667: groundplane.agent.v1.NetworkWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 668: groundplane.agent.v1.NetworkWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	56,   // 669: groundplane.agent.v1.NetworkWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 670: groundplane.agent.v1.NetworkWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 671: groundplane.agent.v1.NetworkWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 672: groundplane.agent.v1.NetworkWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	56,   // 673: groundplane.agent.v1.NetworkWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 674: groundplane.agent.v1.NetworkWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 675: groundplane.agent.v1.NetworkWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 676: groundplane.agent.v1.NetworkWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 677: groundplane.agent.v1.NetworkWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	56,   // 678: groundplane.agent.v1.NetworkWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 679: groundplane.agent.v1.NetworkWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 680: groundplane.agent.v1.NetworkWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 681: groundplane.agent.v1.NetworkWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	281,  // 682: groundplane.agent.v1.ComponentWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.ComponentWorkAssignment
+	59,   // 683: groundplane.agent.v1.ComponentWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	282,  // 684: groundplane.agent.v1.ComponentWorkHelperRequest.report:type_name -> groundplane.agent.v1.ComponentWorkCheckpointRequest
+	283,  // 685: groundplane.agent.v1.ComponentWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ComponentWorkCheckpointAck
+	278,  // 686: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.EntryConfigurationWorkAssignment
+	59,   // 687: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	272,  // 688: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.report:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointRequest
+	273,  // 689: groundplane.agent.v1.EntryConfigurationWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.EntryConfigurationWorkCheckpointAck
+	291,  // 690: groundplane.agent.v1.NetworkWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.NetworkWorkAssignment
+	59,   // 691: groundplane.agent.v1.NetworkWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	292,  // 692: groundplane.agent.v1.NetworkWorkHelperRequest.report:type_name -> groundplane.agent.v1.NetworkWorkCheckpointRequest
+	293,  // 693: groundplane.agent.v1.NetworkWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.NetworkWorkCheckpointAck
+	51,   // 694: groundplane.agent.v1.NetworkWorkHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 695: groundplane.agent.v1.NetworkWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	56,   // 696: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	321,  // 697: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.removal:type_name -> groundplane.agent.v1.ServiceLifecycleWorkInput
+	165,  // 698: groundplane.agent.v1.ServiceRemovalRecoveryAssignment.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	56,   // 699: groundplane.agent.v1.ServiceRemovalConfigurationRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 700: groundplane.agent.v1.ServiceRemovalConfigurationManifest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	165,  // 701: groundplane.agent.v1.ServiceRemovalConfigurationManifest.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	308,  // 702: groundplane.agent.v1.ServiceRemovalConfigurationManifest.files:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFile
+	56,   // 703: groundplane.agent.v1.ServiceRemovalConfigurationFileRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 704: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	165,  // 705: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.configuration:type_name -> groundplane.agent.v1.WorkConfigurationReference
+	308,  // 706: groundplane.agent.v1.ServiceRemovalConfigurationFileDelivery.file:type_name -> groundplane.agent.v1.ServiceRemovalConfigurationFile
+	56,   // 707: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 708: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 709: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 710: groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	56,   // 711: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 712: groundplane.agent.v1.ServiceRemovalRecoveryCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	56,   // 713: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 714: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 715: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 716: groundplane.agent.v1.ServiceRemovalRecoveryCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	56,   // 717: groundplane.agent.v1.ServiceRemovalRecoveryFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 718: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 719: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 720: groundplane.agent.v1.ServiceRemovalRecoveryFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	306,  // 721: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.assignment:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryAssignment
+	59,   // 722: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	312,  // 723: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.report:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointRequest
+	313,  // 724: groundplane.agent.v1.ServiceRemovalRecoveryHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ServiceRemovalRecoveryCheckpointAck
+	51,   // 725: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 726: groundplane.agent.v1.ServiceRemovalRecoveryHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	56,   // 727: groundplane.agent.v1.ServiceLifecycleAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	321,  // 728: groundplane.agent.v1.ServiceLifecycleAssignment.input:type_name -> groundplane.agent.v1.ServiceLifecycleWorkInput
+	51,   // 729: groundplane.agent.v1.ServiceLifecycleWorkInput.captured_source:type_name -> groundplane.agent.v1.WorkInputReference
+	20,   // 730: groundplane.agent.v1.ServiceLifecycleWorkInput.action:type_name -> groundplane.agent.v1.ServiceLifecycleAction
+	322,  // 731: groundplane.agent.v1.ServiceLifecycleWorkInput.members:type_name -> groundplane.agent.v1.ServiceLifecycleMember
+	323,  // 732: groundplane.agent.v1.ServiceLifecycleWorkInput.hook:type_name -> groundplane.agent.v1.ServiceLifecycleHook
+	348,  // 733: groundplane.agent.v1.ServiceLifecycleMember.artifact:type_name -> groundplane.agent.v1.ComposeArtifact
+	239,  // 734: groundplane.agent.v1.ServiceLifecycleMember.ownership:type_name -> groundplane.agent.v1.ServiceLifecycleSource
+	16,   // 735: groundplane.agent.v1.ServiceLifecycleHook.event:type_name -> groundplane.agent.v1.BackingHookEvent
+	56,   // 736: groundplane.agent.v1.ServiceLifecycleHookRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 737: groundplane.agent.v1.ServiceLifecycleHookDelivery.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	231,  // 738: groundplane.agent.v1.ServiceLifecycleHookDelivery.hook:type_name -> groundplane.agent.v1.BackingHookProcedure
+	56,   // 739: groundplane.agent.v1.ServiceLifecycleRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 740: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 741: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 742: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 743: groundplane.agent.v1.ServiceLifecycleRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	56,   // 744: groundplane.agent.v1.ServiceLifecycleCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 745: groundplane.agent.v1.ServiceLifecycleCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 746: groundplane.agent.v1.ServiceLifecycleCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 747: groundplane.agent.v1.ServiceLifecycleCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	56,   // 748: groundplane.agent.v1.ServiceLifecycleCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 749: groundplane.agent.v1.ServiceLifecycleCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	56,   // 750: groundplane.agent.v1.ServiceLifecycleCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 751: groundplane.agent.v1.ServiceLifecycleCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 752: groundplane.agent.v1.ServiceLifecycleCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 753: groundplane.agent.v1.ServiceLifecycleCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	333,  // 754: groundplane.agent.v1.ServiceLifecycleCompletionAck.stopped:type_name -> groundplane.agent.v1.ServiceLifecycleFailureAck
+	56,   // 755: groundplane.agent.v1.ServiceLifecycleFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 756: groundplane.agent.v1.ServiceLifecycleFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 757: groundplane.agent.v1.ServiceLifecycleFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 758: groundplane.agent.v1.ServiceLifecycleFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	320,  // 759: groundplane.agent.v1.ServiceLifecycleHelperRequest.assignment:type_name -> groundplane.agent.v1.ServiceLifecycleAssignment
+	59,   // 760: groundplane.agent.v1.ServiceLifecycleHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	328,  // 761: groundplane.agent.v1.ServiceLifecycleHelperRequest.report:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointRequest
+	329,  // 762: groundplane.agent.v1.ServiceLifecycleHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.ServiceLifecycleCheckpointAck
+	51,   // 763: groundplane.agent.v1.ServiceLifecycleHelperResponse.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 764: groundplane.agent.v1.ServiceLifecycleHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	21,   // 765: groundplane.agent.v1.VolumeWorkInput.action:type_name -> groundplane.agent.v1.VolumeWorkAction
+	348,  // 766: groundplane.agent.v1.VolumeWorkInput.candidate:type_name -> groundplane.agent.v1.ComposeArtifact
+	348,  // 767: groundplane.agent.v1.VolumeWorkInput.baseline:type_name -> groundplane.agent.v1.ComposeArtifact
+	56,   // 768: groundplane.agent.v1.VolumeWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	336,  // 769: groundplane.agent.v1.VolumeWorkAssignment.input:type_name -> groundplane.agent.v1.VolumeWorkInput
+	56,   // 770: groundplane.agent.v1.VolumeWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 771: groundplane.agent.v1.VolumeWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 772: groundplane.agent.v1.VolumeWorkCheckpointAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 773: groundplane.agent.v1.VolumeWorkCheckpointAck.recorded_at:type_name -> google.protobuf.Timestamp
+	56,   // 774: groundplane.agent.v1.VolumeWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 775: groundplane.agent.v1.VolumeWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	56,   // 776: groundplane.agent.v1.VolumeWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 777: groundplane.agent.v1.VolumeWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 778: groundplane.agent.v1.VolumeWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 779: groundplane.agent.v1.VolumeWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	56,   // 780: groundplane.agent.v1.VolumeWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 781: groundplane.agent.v1.VolumeWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 782: groundplane.agent.v1.VolumeWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 783: groundplane.agent.v1.VolumeWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	587,  // 784: groundplane.agent.v1.VolumeWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	56,   // 785: groundplane.agent.v1.VolumeWorkRecoveryReportRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 786: groundplane.agent.v1.VolumeWorkRecoveryReportAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 787: groundplane.agent.v1.VolumeWorkRecoveryReportAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 788: groundplane.agent.v1.VolumeWorkRecoveryReportAck.finished_at:type_name -> google.protobuf.Timestamp
+	337,  // 789: groundplane.agent.v1.VolumeWorkHelperRequest.assignment:type_name -> groundplane.agent.v1.VolumeWorkAssignment
+	59,   // 790: groundplane.agent.v1.VolumeWorkHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	338,  // 791: groundplane.agent.v1.VolumeWorkHelperRequest.report:type_name -> groundplane.agent.v1.VolumeWorkCheckpointRequest
+	339,  // 792: groundplane.agent.v1.VolumeWorkHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.VolumeWorkCheckpointAck
+	51,   // 793: groundplane.agent.v1.VolumeWorkHelperResponse.input:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 794: groundplane.agent.v1.VolumeWorkHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	22,   // 795: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
+	349,  // 796: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
+	350,  // 797: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
+	351,  // 798: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
+	352,  // 799: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	24,   // 800: groundplane.agent.v1.ComposeService.role:type_name -> groundplane.agent.v1.ComposeServiceRole
+	23,   // 801: groundplane.agent.v1.ComposeService.proxy_implementation:type_name -> groundplane.agent.v1.ServiceProxyImplementation
+	352,  // 802: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	352,  // 803: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	539,  // 804: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
+	540,  // 805: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
+	541,  // 806: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
+	542,  // 807: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
+	557,  // 808: groundplane.agent.v1.ExecutionStep.environment_directory_create:type_name -> groundplane.agent.v1.EnvironmentDirectoryCreate
+	538,  // 809: groundplane.agent.v1.ExecutionStep.materialize_file:type_name -> groundplane.agent.v1.MaterializeFile
+	559,  // 810: groundplane.agent.v1.ExecutionStep.managed_volume_directories_ensure:type_name -> groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
+	558,  // 811: groundplane.agent.v1.ExecutionStep.environment_directory_remove:type_name -> groundplane.agent.v1.EnvironmentDirectoryRemove
+	537,  // 812: groundplane.agent.v1.ExecutionStep.adapter_procedure:type_name -> groundplane.agent.v1.AdapterProcedure
+	562,  // 813: groundplane.agent.v1.ExecutionStep.managed_network_remove:type_name -> groundplane.agent.v1.ManagedNetworkRemove
+	543,  // 814: groundplane.agent.v1.ExecutionStep.compose_workload_apply:type_name -> groundplane.agent.v1.ComposeWorkloadApply
+	544,  // 815: groundplane.agent.v1.ExecutionStep.wait_workload_healthy:type_name -> groundplane.agent.v1.WaitWorkloadHealthy
+	549,  // 816: groundplane.agent.v1.ExecutionStep.service_proxy_switch:type_name -> groundplane.agent.v1.ServiceProxySwitch
+	550,  // 817: groundplane.agent.v1.ExecutionStep.service_proxy_probe:type_name -> groundplane.agent.v1.ServiceProxyProbe
+	551,  // 818: groundplane.agent.v1.ExecutionStep.service_proxy_compensate:type_name -> groundplane.agent.v1.ServiceProxyCompensate
+	553,  // 819: groundplane.agent.v1.ExecutionStep.service_recreate_acknowledge:type_name -> groundplane.agent.v1.ServiceRecreateAcknowledge
+	554,  // 820: groundplane.agent.v1.ExecutionStep.service_recreate_probe:type_name -> groundplane.agent.v1.ServiceRecreateProbe
+	555,  // 821: groundplane.agent.v1.ExecutionStep.service_recreate_compensate:type_name -> groundplane.agent.v1.ServiceRecreateCompensate
+	560,  // 822: groundplane.agent.v1.ExecutionStep.managed_volume_remove:type_name -> groundplane.agent.v1.ManagedVolumeRemove
+	561,  // 823: groundplane.agent.v1.ExecutionStep.managed_volume_directory_remove:type_name -> groundplane.agent.v1.ManagedVolumeDirectoryRemove
+	571,  // 824: groundplane.agent.v1.ExecutionStep.component_apply:type_name -> groundplane.agent.v1.ComponentApply
+	573,  // 825: groundplane.agent.v1.ExecutionStep.host_resolution_apply:type_name -> groundplane.agent.v1.HostResolutionApply
+	574,  // 826: groundplane.agent.v1.ExecutionStep.host_resolution_restore:type_name -> groundplane.agent.v1.HostResolutionRestore
+	358,  // 827: groundplane.agent.v1.ExecutionStep.run_script:type_name -> groundplane.agent.v1.RunScript
+	252,  // 828: groundplane.agent.v1.ExecutionStep.candidate_restoration_probe:type_name -> groundplane.agent.v1.CandidateRestorationProbe
+	253,  // 829: groundplane.agent.v1.ExecutionStep.candidate_restoration_compensate:type_name -> groundplane.agent.v1.CandidateRestorationCompensate
+	355,  // 830: groundplane.agent.v1.ExecutionStep.managed_network_ensure:type_name -> groundplane.agent.v1.ManagedNetworkEnsure
+	357,  // 831: groundplane.agent.v1.ExecutionStep.managed_volume_ensure:type_name -> groundplane.agent.v1.ManagedVolumeEnsure
+	231,  // 832: groundplane.agent.v1.ExecutionStep.backing_hook_procedure:type_name -> groundplane.agent.v1.BackingHookProcedure
+	410,  // 833: groundplane.agent.v1.ExecutionStep.backup_step:type_name -> groundplane.agent.v1.BackupStepAuthority
+	354,  // 834: groundplane.agent.v1.ExecutionStep.service_absence_probe:type_name -> groundplane.agent.v1.ServiceAbsenceProbe
+	545,  // 835: groundplane.agent.v1.ExecutionStep.compose_workload_remove:type_name -> groundplane.agent.v1.ComposeWorkloadRemove
+	546,  // 836: groundplane.agent.v1.ExecutionStep.rolling_traffic_switch:type_name -> groundplane.agent.v1.RollingTrafficSwitch
+	547,  // 837: groundplane.agent.v1.ExecutionStep.rolling_replica_drain:type_name -> groundplane.agent.v1.RollingReplicaDrain
+	548,  // 838: groundplane.agent.v1.ExecutionStep.rolling_release_acknowledge:type_name -> groundplane.agent.v1.RollingReleaseAcknowledge
+	356,  // 839: groundplane.agent.v1.ExecutionStep.managed_network_preparation_probe:type_name -> groundplane.agent.v1.ManagedNetworkPreparationProbe
+	27,   // 840: groundplane.agent.v1.ExecutionStep.policy:type_name -> groundplane.agent.v1.ExecutionStepPolicy
+	363,  // 841: groundplane.agent.v1.ResolvedRunnerSnapshot.networks:type_name -> groundplane.agent.v1.ScriptRunnerNetwork
+	365,  // 842: groundplane.agent.v1.ResolvedRunnerSnapshot.mounts:type_name -> groundplane.agent.v1.ScriptRunnerMount
+	370,  // 843: groundplane.agent.v1.ResolvedRunnerSnapshot.entry_bindings:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
+	371,  // 844: groundplane.agent.v1.ResolvedRunnerSnapshot.secret_values:type_name -> groundplane.agent.v1.ScriptRunnerSecretValue
+	366,  // 845: groundplane.agent.v1.ResolvedRunnerSnapshot.service_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
+	366,  // 846: groundplane.agent.v1.ResolvedRunnerSnapshot.network_topology_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
+	366,  // 847: groundplane.agent.v1.ResolvedRunnerSnapshot.applied_environment_source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
+	360,  // 848: groundplane.agent.v1.ResolvedRunnerSnapshot.explicit_execution:type_name -> groundplane.agent.v1.ScriptExplicitExecutionAuthority
+	361,  // 849: groundplane.agent.v1.ScriptExplicitExecutionAuthority.context:type_name -> groundplane.agent.v1.ScriptExplicitExecutionContext
+	362,  // 850: groundplane.agent.v1.ScriptExplicitExecutionContext.volumes:type_name -> groundplane.agent.v1.ScriptExplicitVolumeGrant
+	364,  // 851: groundplane.agent.v1.ScriptRunnerNetwork.rendered_attachment:type_name -> groundplane.agent.v1.ScriptNetworkAttachment
+	366,  // 852: groundplane.agent.v1.ScriptRunnerNetwork.source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
+	373,  // 853: groundplane.agent.v1.ScriptNetworkAttachment.driver_options:type_name -> groundplane.agent.v1.ScriptStringPair
+	369,  // 854: groundplane.agent.v1.ScriptRunnerMount.rendered_mount:type_name -> groundplane.agent.v1.ScriptMount
+	366,  // 855: groundplane.agent.v1.ScriptRunnerMount.source:type_name -> groundplane.agent.v1.ScriptSourceAuthority
+	367,  // 856: groundplane.agent.v1.ScriptSourceAuthority.existing:type_name -> groundplane.agent.v1.ScriptExistingSourceAuthority
+	368,  // 857: groundplane.agent.v1.ScriptSourceAuthority.staged:type_name -> groundplane.agent.v1.ScriptStagedSourceAuthority
+	25,   // 858: groundplane.agent.v1.ScriptRunnerEntryBinding.kind:type_name -> groundplane.agent.v1.ScriptEntryBindingKind
+	26,   // 859: groundplane.agent.v1.ScriptRunnerEntryBinding.value_storage:type_name -> groundplane.agent.v1.ScriptEntryValueStorage
+	373,  // 860: groundplane.agent.v1.ScriptRunnerProjection.environment:type_name -> groundplane.agent.v1.ScriptStringPair
+	373,  // 861: groundplane.agent.v1.ScriptRunnerProjection.sysctls:type_name -> groundplane.agent.v1.ScriptStringPair
+	374,  // 862: groundplane.agent.v1.ScriptRunnerProjection.ulimits:type_name -> groundplane.agent.v1.ScriptUlimit
+	375,  // 863: groundplane.agent.v1.ScriptRunnerProjection.blkio:type_name -> groundplane.agent.v1.ScriptBlkio
+	373,  // 864: groundplane.agent.v1.ScriptRunnerProjection.storage_opt:type_name -> groundplane.agent.v1.ScriptStringPair
+	378,  // 865: groundplane.agent.v1.ScriptRunnerProjection.limits:type_name -> groundplane.agent.v1.ScriptResource
+	378,  // 866: groundplane.agent.v1.ScriptRunnerProjection.reservations:type_name -> groundplane.agent.v1.ScriptResource
+	365,  // 867: groundplane.agent.v1.ScriptRunnerProjection.mounts:type_name -> groundplane.agent.v1.ScriptRunnerMount
+	363,  // 868: groundplane.agent.v1.ScriptRunnerProjection.networks:type_name -> groundplane.agent.v1.ScriptRunnerNetwork
+	373,  // 869: groundplane.agent.v1.ScriptRunnerProjection.labels:type_name -> groundplane.agent.v1.ScriptStringPair
+	370,  // 870: groundplane.agent.v1.ScriptRunnerProjection.entry_bindings:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
+	376,  // 871: groundplane.agent.v1.ScriptBlkio.weight_devices:type_name -> groundplane.agent.v1.ScriptWeightDevice
+	377,  // 872: groundplane.agent.v1.ScriptBlkio.device_read_bps:type_name -> groundplane.agent.v1.ScriptThrottleDevice
+	377,  // 873: groundplane.agent.v1.ScriptBlkio.device_read_iops:type_name -> groundplane.agent.v1.ScriptThrottleDevice
+	377,  // 874: groundplane.agent.v1.ScriptBlkio.device_write_bps:type_name -> groundplane.agent.v1.ScriptThrottleDevice
+	377,  // 875: groundplane.agent.v1.ScriptBlkio.device_write_iops:type_name -> groundplane.agent.v1.ScriptThrottleDevice
+	379,  // 876: groundplane.agent.v1.ScriptBodyArtifact.metadata:type_name -> groundplane.agent.v1.ScriptBodyArtifactMetadata
+	370,  // 877: groundplane.agent.v1.ScriptEntryArtifact.binding:type_name -> groundplane.agent.v1.ScriptRunnerEntryBinding
+	28,   // 878: groundplane.agent.v1.BackupResourceIdentity.kind:type_name -> groundplane.agent.v1.BackupResourceKind
+	382,  // 879: groundplane.agent.v1.BackupResourceIdentity.resource:type_name -> groundplane.agent.v1.RevisionDigest
+	29,   // 880: groundplane.agent.v1.BackupEncryptionAuthority.kind:type_name -> groundplane.agent.v1.BackupEncryption
+	382,  // 881: groundplane.agent.v1.BackupEncryptionAuthority.secret_slot:type_name -> groundplane.agent.v1.RevisionDigest
+	30,   // 882: groundplane.agent.v1.BackupPriorRuntimeIntent.kind:type_name -> groundplane.agent.v1.BackupServiceRuntimeIntent
+	382,  // 883: groundplane.agent.v1.BackupPriorRuntimeIntent.intent:type_name -> groundplane.agent.v1.RevisionDigest
+	382,  // 884: groundplane.agent.v1.BackupServiceFact.service:type_name -> groundplane.agent.v1.RevisionDigest
+	382,  // 885: groundplane.agent.v1.BackupServiceFact.compose:type_name -> groundplane.agent.v1.RevisionDigest
+	386,  // 886: groundplane.agent.v1.BackupServiceFact.prior_runtime_intent:type_name -> groundplane.agent.v1.BackupPriorRuntimeIntent
+	382,  // 887: groundplane.agent.v1.BackupConnectorAuthority.connector:type_name -> groundplane.agent.v1.RevisionDigest
+	382,  // 888: groundplane.agent.v1.BackupConnectorAuthority.access_key_slot:type_name -> groundplane.agent.v1.RevisionDigest
+	382,  // 889: groundplane.agent.v1.BackupConnectorAuthority.secret_key_slot:type_name -> groundplane.agent.v1.RevisionDigest
+	388,  // 890: groundplane.agent.v1.BackupObjectTarget.connector:type_name -> groundplane.agent.v1.BackupConnectorAuthority
+	388,  // 891: groundplane.agent.v1.BackupObjectIdentity.connector:type_name -> groundplane.agent.v1.BackupConnectorAuthority
+	390,  // 892: groundplane.agent.v1.BackupObjectIdentity.version_id:type_name -> groundplane.agent.v1.BackupS3VersionId
+	391,  // 893: groundplane.agent.v1.BackupObjectIdentity.etag:type_name -> groundplane.agent.v1.BackupS3ETag
+	31,   // 894: groundplane.agent.v1.BackupWorkInput.operation:type_name -> groundplane.agent.v1.BackupWorkOperation
+	382,  // 895: groundplane.agent.v1.BackupWorkInput.project:type_name -> groundplane.agent.v1.RevisionDigest
+	382,  // 896: groundplane.agent.v1.BackupWorkInput.environment:type_name -> groundplane.agent.v1.RevisionDigest
+	387,  // 897: groundplane.agent.v1.BackupWorkInput.services:type_name -> groundplane.agent.v1.BackupServiceFact
+	410,  // 898: groundplane.agent.v1.BackupWorkInput.steps:type_name -> groundplane.agent.v1.BackupStepAuthority
+	348,  // 899: groundplane.agent.v1.BackupWorkInput.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
+	56,   // 900: groundplane.agent.v1.BackupWorkAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	394,  // 901: groundplane.agent.v1.BackupWorkAssignment.input:type_name -> groundplane.agent.v1.BackupWorkInput
+	411,  // 902: groundplane.agent.v1.BackupWorkAssignment.sources:type_name -> groundplane.agent.v1.BackupStepResume
+	395,  // 903: groundplane.agent.v1.BackupConsumerHelperRequest.assignment:type_name -> groundplane.agent.v1.BackupWorkAssignment
+	59,   // 904: groundplane.agent.v1.BackupConsumerHelperRequest.start:type_name -> groundplane.agent.v1.WorkStartAck
+	48,   // 905: groundplane.agent.v1.BackupConsumerHelperRequest.operation:type_name -> groundplane.agent.v1.BackupConsumerOperation
+	403,  // 906: groundplane.agent.v1.BackupConsumerHelperRequest.checkpoint:type_name -> groundplane.agent.v1.BackupWorkCheckpointRequest
+	408,  // 907: groundplane.agent.v1.BackupConsumerHelperRequest.acknowledgement:type_name -> groundplane.agent.v1.BackupWorkCheckpointAck
+	398,  // 908: groundplane.agent.v1.BackupConsumerHelperRequest.recovery:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
+	56,   // 909: groundplane.agent.v1.BackupConsumerHelperResponse.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	196,  // 910: groundplane.agent.v1.BackupConsumerHelperResponse.observed:type_name -> groundplane.agent.v1.ObservedProject
+	587,  // 911: groundplane.agent.v1.BackupConsumerHelperResponse.observed_at:type_name -> google.protobuf.Timestamp
+	56,   // 912: groundplane.agent.v1.BackupRecoveryAssignment.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	394,  // 913: groundplane.agent.v1.BackupRecoveryAssignment.input:type_name -> groundplane.agent.v1.BackupWorkInput
+	411,  // 914: groundplane.agent.v1.BackupRecoveryAssignment.sources:type_name -> groundplane.agent.v1.BackupStepResume
+	32,   // 915: groundplane.agent.v1.BackupRecoveryAssignment.restore_mode:type_name -> groundplane.agent.v1.BackupRestoreRecoveryMode
+	56,   // 916: groundplane.agent.v1.BackupRecoveryRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 917: groundplane.agent.v1.BackupConfigRecoveryPrepareRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	398,  // 918: groundplane.agent.v1.BackupConfigRecoveryPrepareAck.assignment:type_name -> groundplane.agent.v1.BackupRecoveryAssignment
+	466,  // 919: groundplane.agent.v1.BackupConfigRecoveryPrepareAck.completed:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
+	56,   // 920: groundplane.agent.v1.BackupRecoveryAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 921: groundplane.agent.v1.BackupRecoveryAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 922: groundplane.agent.v1.BackupRecoveryAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 923: groundplane.agent.v1.BackupRecoveryAck.finished_at:type_name -> google.protobuf.Timestamp
+	56,   // 924: groundplane.agent.v1.BackupWorkCheckpointRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	383,  // 925: groundplane.agent.v1.BackupWorkCheckpointRequest.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
+	457,  // 926: groundplane.agent.v1.BackupWorkCheckpointRequest.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPrepared
+	460,  // 927: groundplane.agent.v1.BackupWorkCheckpointRequest.upload_verified:type_name -> groundplane.agent.v1.BackupUploadVerified
+	461,  // 928: groundplane.agent.v1.BackupWorkCheckpointRequest.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
+	500,  // 929: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
+	501,  // 930: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
+	502,  // 931: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_restore_apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
+	462,  // 932: groundplane.agent.v1.BackupWorkCheckpointRequest.restore_artifact_validated:type_name -> groundplane.agent.v1.BackupRestoreArtifactValidated
+	463,  // 933: groundplane.agent.v1.BackupWorkCheckpointRequest.config:type_name -> groundplane.agent.v1.BackupConfigCheckpoint
+	468,  // 934: groundplane.agent.v1.BackupWorkCheckpointRequest.volume:type_name -> groundplane.agent.v1.BackupVolumeCheckpoint
+	425,  // 935: groundplane.agent.v1.BackupWorkCheckpointRequest.prune_object_deleted:type_name -> groundplane.agent.v1.BackupPruneObjectDeleted
+	503,  // 936: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_restore_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
+	504,  // 937: groundplane.agent.v1.BackupWorkCheckpointRequest.postgres_service_progress:type_name -> groundplane.agent.v1.BackupPostgresServiceProgress
+	458,  // 938: groundplane.agent.v1.BackupWorkCheckpointRequest.upload_completed:type_name -> groundplane.agent.v1.BackupUploadCompleted
+	508,  // 939: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
+	509,  // 940: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_dump_start:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
+	510,  // 941: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_restore_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
+	511,  // 942: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_restore_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
+	512,  // 943: groundplane.agent.v1.BackupWorkCheckpointRequest.mysql_service_progress:type_name -> groundplane.agent.v1.BackupMySQLServiceProgress
+	416,  // 944: groundplane.agent.v1.BackupWorkCheckpointRequest.database_consumer_recovery:type_name -> groundplane.agent.v1.BackupDatabaseConsumerRecovery
+	56,   // 945: groundplane.agent.v1.BackupWorkCompletionRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 946: groundplane.agent.v1.BackupWorkCompletionRequest.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	56,   // 947: groundplane.agent.v1.BackupWorkFailureRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 948: groundplane.agent.v1.BackupWorkFailureAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 949: groundplane.agent.v1.BackupWorkFailureAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 950: groundplane.agent.v1.BackupWorkFailureAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 951: groundplane.agent.v1.BackupWorkFailureAck.finished_at:type_name -> google.protobuf.Timestamp
+	56,   // 952: groundplane.agent.v1.BackupWorkCompletionAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	51,   // 953: groundplane.agent.v1.BackupWorkCompletionAck.evidence:type_name -> groundplane.agent.v1.WorkInputReference
+	587,  // 954: groundplane.agent.v1.BackupWorkCompletionAck.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 955: groundplane.agent.v1.BackupWorkCompletionAck.finished_at:type_name -> google.protobuf.Timestamp
+	56,   // 956: groundplane.agent.v1.BackupWorkCheckpointAck.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	383,  // 957: groundplane.agent.v1.BackupWorkCheckpointAck.committed:type_name -> groundplane.agent.v1.CheckpointFence
+	411,  // 958: groundplane.agent.v1.BackupWorkCheckpointAck.source:type_name -> groundplane.agent.v1.BackupStepResume
+	382,  // 959: groundplane.agent.v1.BackupPlanScope.project:type_name -> groundplane.agent.v1.RevisionDigest
+	382,  // 960: groundplane.agent.v1.BackupPlanScope.environment:type_name -> groundplane.agent.v1.RevisionDigest
+	387,  // 961: groundplane.agent.v1.BackupPlanScope.services:type_name -> groundplane.agent.v1.BackupServiceFact
+	419,  // 962: groundplane.agent.v1.BackupStepAuthority.capture:type_name -> groundplane.agent.v1.BackupCaptureAuthority
+	421,  // 963: groundplane.agent.v1.BackupStepAuthority.prune:type_name -> groundplane.agent.v1.BackupPruneAuthority
+	420,  // 964: groundplane.agent.v1.BackupStepAuthority.restore:type_name -> groundplane.agent.v1.BackupRestoreAuthority
+	412,  // 965: groundplane.agent.v1.BackupStepResume.capture:type_name -> groundplane.agent.v1.BackupCaptureResume
+	413,  // 966: groundplane.agent.v1.BackupStepResume.prune:type_name -> groundplane.agent.v1.BackupPruneResume
+	414,  // 967: groundplane.agent.v1.BackupStepResume.restore:type_name -> groundplane.agent.v1.BackupRestoreResume
+	383,  // 968: groundplane.agent.v1.BackupCaptureResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
+	33,   // 969: groundplane.agent.v1.BackupCaptureResume.phase:type_name -> groundplane.agent.v1.BackupCapturePhase
+	417,  // 970: groundplane.agent.v1.BackupCaptureResume.cursor:type_name -> groundplane.agent.v1.BackupCaptureCursor
+	457,  // 971: groundplane.agent.v1.BackupCaptureResume.prepared_artifact:type_name -> groundplane.agent.v1.BackupArtifactPrepared
+	501,  // 972: groundplane.agent.v1.BackupCaptureResume.dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
+	509,  // 973: groundplane.agent.v1.BackupCaptureResume.mysql_dump_start:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
+	457,  // 974: groundplane.agent.v1.BackupCaptureResume.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPrepared
+	460,  // 975: groundplane.agent.v1.BackupCaptureResume.upload_verified:type_name -> groundplane.agent.v1.BackupUploadVerified
+	461,  // 976: groundplane.agent.v1.BackupCaptureResume.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
+	500,  // 977: groundplane.agent.v1.BackupCaptureResume.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
+	501,  // 978: groundplane.agent.v1.BackupCaptureResume.postgres_dump_start:type_name -> groundplane.agent.v1.BackupPostgresDumpStart
+	469,  // 979: groundplane.agent.v1.BackupCaptureResume.volume_progress:type_name -> groundplane.agent.v1.BackupVolumeProgress
+	464,  // 980: groundplane.agent.v1.BackupCaptureResume.config_progress:type_name -> groundplane.agent.v1.BackupConfigProgress
+	458,  // 981: groundplane.agent.v1.BackupCaptureResume.upload_completed:type_name -> groundplane.agent.v1.BackupUploadCompleted
+	508,  // 982: groundplane.agent.v1.BackupCaptureResume.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
+	509,  // 983: groundplane.agent.v1.BackupCaptureResume.mysql_dump_start_checkpoint:type_name -> groundplane.agent.v1.BackupMySQLDumpStart
+	383,  // 984: groundplane.agent.v1.BackupPruneResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
+	425,  // 985: groundplane.agent.v1.BackupPruneResume.object_deleted:type_name -> groundplane.agent.v1.BackupPruneObjectDeleted
+	383,  // 986: groundplane.agent.v1.BackupRestoreResume.preceding_checkpoint:type_name -> groundplane.agent.v1.CheckpointFence
+	34,   // 987: groundplane.agent.v1.BackupRestoreResume.phase:type_name -> groundplane.agent.v1.BackupRestorePhase
+	418,  // 988: groundplane.agent.v1.BackupRestoreResume.cursor:type_name -> groundplane.agent.v1.BackupRestoreCursor
+	502,  // 989: groundplane.agent.v1.BackupRestoreResume.apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
+	510,  // 990: groundplane.agent.v1.BackupRestoreResume.mysql_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
+	415,  // 991: groundplane.agent.v1.BackupRestoreResume.database_progress:type_name -> groundplane.agent.v1.BackupDatabaseRestoreProgress
+	462,  // 992: groundplane.agent.v1.BackupRestoreResume.artifact_validated:type_name -> groundplane.agent.v1.BackupRestoreArtifactValidated
+	500,  // 993: groundplane.agent.v1.BackupRestoreResume.postgres_container_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
+	502,  // 994: groundplane.agent.v1.BackupRestoreResume.postgres_restore_apply_start:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
+	464,  // 995: groundplane.agent.v1.BackupRestoreResume.config_progress:type_name -> groundplane.agent.v1.BackupConfigProgress
+	469,  // 996: groundplane.agent.v1.BackupRestoreResume.volume_progress:type_name -> groundplane.agent.v1.BackupVolumeProgress
+	503,  // 997: groundplane.agent.v1.BackupRestoreResume.postgres_restore_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
+	504,  // 998: groundplane.agent.v1.BackupRestoreResume.postgres_service_progress:type_name -> groundplane.agent.v1.BackupPostgresServiceProgress
+	461,  // 999: groundplane.agent.v1.BackupRestoreResume.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
+	508,  // 1000: groundplane.agent.v1.BackupRestoreResume.mysql_container_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
+	510,  // 1001: groundplane.agent.v1.BackupRestoreResume.mysql_restore_apply_start:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
+	511,  // 1002: groundplane.agent.v1.BackupRestoreResume.mysql_restore_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
+	512,  // 1003: groundplane.agent.v1.BackupRestoreResume.mysql_service_progress:type_name -> groundplane.agent.v1.BackupMySQLServiceProgress
+	40,   // 1004: groundplane.agent.v1.BackupDatabaseRestoreProgress.consumer_phase:type_name -> groundplane.agent.v1.BackupServicePhase
+	500,  // 1005: groundplane.agent.v1.BackupDatabaseRestoreProgress.postgres_observed:type_name -> groundplane.agent.v1.BackupPostgresContainerObserved
+	508,  // 1006: groundplane.agent.v1.BackupDatabaseRestoreProgress.mysql_observed:type_name -> groundplane.agent.v1.BackupMySQLContainerObserved
+	503,  // 1007: groundplane.agent.v1.BackupDatabaseRestoreProgress.postgres_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerified
+	511,  // 1008: groundplane.agent.v1.BackupDatabaseRestoreProgress.mysql_verified:type_name -> groundplane.agent.v1.BackupMySQLRestoreVerified
+	384,  // 1009: groundplane.agent.v1.BackupCaptureAuthority.resource:type_name -> groundplane.agent.v1.BackupResourceIdentity
+	389,  // 1010: groundplane.agent.v1.BackupCaptureAuthority.target:type_name -> groundplane.agent.v1.BackupObjectTarget
+	385,  // 1011: groundplane.agent.v1.BackupCaptureAuthority.encryption:type_name -> groundplane.agent.v1.BackupEncryptionAuthority
+	498,  // 1012: groundplane.agent.v1.BackupCaptureAuthority.postgres:type_name -> groundplane.agent.v1.BackupPostgresCaptureAuthority
+	490,  // 1013: groundplane.agent.v1.BackupCaptureAuthority.config:type_name -> groundplane.agent.v1.BackupConfigCaptureAuthority
+	517,  // 1014: groundplane.agent.v1.BackupCaptureAuthority.volume:type_name -> groundplane.agent.v1.BackupVolumeCaptureAuthority
+	506,  // 1015: groundplane.agent.v1.BackupCaptureAuthority.mysql:type_name -> groundplane.agent.v1.BackupMySQLCaptureAuthority
+	384,  // 1016: groundplane.agent.v1.BackupRestoreAuthority.destination:type_name -> groundplane.agent.v1.BackupResourceIdentity
+	392,  // 1017: groundplane.agent.v1.BackupRestoreAuthority.source_object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	393,  // 1018: groundplane.agent.v1.BackupRestoreAuthority.expected_evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	385,  // 1019: groundplane.agent.v1.BackupRestoreAuthority.encryption:type_name -> groundplane.agent.v1.BackupEncryptionAuthority
+	499,  // 1020: groundplane.agent.v1.BackupRestoreAuthority.postgres:type_name -> groundplane.agent.v1.BackupPostgresRestoreAuthority
+	491,  // 1021: groundplane.agent.v1.BackupRestoreAuthority.config:type_name -> groundplane.agent.v1.BackupConfigRestoreAuthority
+	518,  // 1022: groundplane.agent.v1.BackupRestoreAuthority.volume:type_name -> groundplane.agent.v1.BackupVolumeRestoreAuthority
+	507,  // 1023: groundplane.agent.v1.BackupRestoreAuthority.mysql:type_name -> groundplane.agent.v1.BackupMySQLRestoreAuthority
+	422,  // 1024: groundplane.agent.v1.BackupRestoreAuthority.original_identity:type_name -> groundplane.agent.v1.BackupOriginalIdentity
+	423,  // 1025: groundplane.agent.v1.BackupRestoreAuthority.adopted_identity:type_name -> groundplane.agent.v1.BackupAdoptedIdentity
+	382,  // 1026: groundplane.agent.v1.BackupPruneAuthority.retention_policy:type_name -> groundplane.agent.v1.RevisionDigest
+	424,  // 1027: groundplane.agent.v1.BackupPruneAuthority.objects:type_name -> groundplane.agent.v1.BackupPruneObject
+	384,  // 1028: groundplane.agent.v1.BackupOriginalIdentity.destination:type_name -> groundplane.agent.v1.BackupResourceIdentity
+	383,  // 1029: groundplane.agent.v1.BackupAdoptedIdentity.predecessor_fence:type_name -> groundplane.agent.v1.CheckpointFence
+	382,  // 1030: groundplane.agent.v1.BackupPruneObject.point:type_name -> groundplane.agent.v1.RevisionDigest
+	393,  // 1031: groundplane.agent.v1.BackupPruneObject.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	392,  // 1032: groundplane.agent.v1.BackupPruneObject.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	392,  // 1033: groundplane.agent.v1.BackupPruneObjectDeleted.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	428,  // 1034: groundplane.agent.v1.BackupStagingInventory.entries:type_name -> groundplane.agent.v1.BackupRecoveredStage
+	427,  // 1035: groundplane.agent.v1.BackupStagingInventory.volume_restores:type_name -> groundplane.agent.v1.BackupRecoveredVolumeRestore
+	56,   // 1036: groundplane.agent.v1.BackupRecoveredVolumeRestore.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	429,  // 1037: groundplane.agent.v1.BackupRecoveredStage.files:type_name -> groundplane.agent.v1.BackupRecoveredFile
+	35,   // 1038: groundplane.agent.v1.BackupRecoveredFile.role:type_name -> groundplane.agent.v1.BackupRecoveredFileRole
+	435,  // 1039: groundplane.agent.v1.BackupStagingRecoveryPlan.dispositions:type_name -> groundplane.agent.v1.BackupStagingDisposition
+	431,  // 1040: groundplane.agent.v1.BackupStagingRecoveryPlan.volume_dispositions:type_name -> groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition
+	432,  // 1041: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.resume:type_name -> groundplane.agent.v1.BackupVolumeRestoreResume
+	433,  // 1042: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.hold:type_name -> groundplane.agent.v1.BackupVolumeRestoreHold
+	434,  // 1043: groundplane.agent.v1.BackupVolumeRestoreRecoveryDisposition.cleanup:type_name -> groundplane.agent.v1.BackupVolumeRestoreCleanup
+	437,  // 1044: groundplane.agent.v1.BackupStagingDisposition.resume_prepared:type_name -> groundplane.agent.v1.BackupResumePrepared
+	440,  // 1045: groundplane.agent.v1.BackupStagingDisposition.discard_recovered:type_name -> groundplane.agent.v1.BackupDiscardRecovered
+	441,  // 1046: groundplane.agent.v1.BackupStagingDisposition.recovery_required:type_name -> groundplane.agent.v1.BackupRecoveryRequired
+	436,  // 1047: groundplane.agent.v1.BackupStagingDisposition.database_guard:type_name -> groundplane.agent.v1.BackupDatabaseStagingGuard
+	410,  // 1048: groundplane.agent.v1.BackupDatabaseStagingGuard.step:type_name -> groundplane.agent.v1.BackupStepAuthority
+	387,  // 1049: groundplane.agent.v1.BackupDatabaseStagingGuard.database_service:type_name -> groundplane.agent.v1.BackupServiceFact
+	348,  // 1050: groundplane.agent.v1.BackupDatabaseStagingGuard.database_artifact:type_name -> groundplane.agent.v1.ComposeArtifact
+	502,  // 1051: groundplane.agent.v1.BackupDatabaseStagingGuard.postgres_recovery_apply:type_name -> groundplane.agent.v1.BackupPostgresRestoreApplyStartCheckpoint
+	510,  // 1052: groundplane.agent.v1.BackupDatabaseStagingGuard.mysql_recovery_apply:type_name -> groundplane.agent.v1.BackupMySQLRestoreApplyStartCheckpoint
+	36,   // 1053: groundplane.agent.v1.BackupResumePrepared.remaining_growth:type_name -> groundplane.agent.v1.BackupRemainingGrowth
+	429,  // 1054: groundplane.agent.v1.BackupResumePrepared.expected_files:type_name -> groundplane.agent.v1.BackupRecoveredFile
+	438,  // 1055: groundplane.agent.v1.BackupResumePrepared.restart_config_encryption:type_name -> groundplane.agent.v1.BackupRestartConfigEncryption
+	439,  // 1056: groundplane.agent.v1.BackupResumePrepared.restart_database_encryption:type_name -> groundplane.agent.v1.BackupRestartDatabaseEncryption
+	429,  // 1057: groundplane.agent.v1.BackupRecoveryRequired.expected_files:type_name -> groundplane.agent.v1.BackupRecoveredFile
+	56,   // 1058: groundplane.agent.v1.BackupConfigTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	444,  // 1059: groundplane.agent.v1.BackupConfigTransfer.start:type_name -> groundplane.agent.v1.BackupConfigTransferStart
+	445,  // 1060: groundplane.agent.v1.BackupConfigTransfer.entry_header:type_name -> groundplane.agent.v1.BackupConfigEntryHeader
+	446,  // 1061: groundplane.agent.v1.BackupConfigTransfer.value_chunk:type_name -> groundplane.agent.v1.BackupConfigValueChunk
+	447,  // 1062: groundplane.agent.v1.BackupConfigTransfer.entry_end:type_name -> groundplane.agent.v1.BackupConfigEntryEnd
+	448,  // 1063: groundplane.agent.v1.BackupConfigTransfer.end:type_name -> groundplane.agent.v1.BackupConfigTransferEnd
+	449,  // 1064: groundplane.agent.v1.BackupConfigTransfer.resume:type_name -> groundplane.agent.v1.BackupConfigTransferResume
+	37,   // 1065: groundplane.agent.v1.BackupConfigTransferStart.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
+	488,  // 1066: groundplane.agent.v1.BackupConfigTransferStart.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
+	471,  // 1067: groundplane.agent.v1.BackupConfigEntryHeader.capture_entry:type_name -> groundplane.agent.v1.BackupConfigEntry
+	480,  // 1068: groundplane.agent.v1.BackupConfigEntryHeader.restore_entry:type_name -> groundplane.agent.v1.BackupConfigRestoreEntry
+	37,   // 1069: groundplane.agent.v1.BackupConfigTransferEnd.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
+	488,  // 1070: groundplane.agent.v1.BackupConfigTransferEnd.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
+	56,   // 1071: groundplane.agent.v1.BackupConfigCredit.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	37,   // 1072: groundplane.agent.v1.BackupConfigCredit.direction:type_name -> groundplane.agent.v1.BackupConfigDirection
+	495,  // 1073: groundplane.agent.v1.BackupConfigCredit.metadata_accepted:type_name -> groundplane.agent.v1.BackupConfigMetadataAccepted
+	496,  // 1074: groundplane.agent.v1.BackupConfigCredit.value_credit:type_name -> groundplane.agent.v1.BackupConfigValueCredit
+	497,  // 1075: groundplane.agent.v1.BackupConfigCredit.metadata_credit:type_name -> groundplane.agent.v1.BackupConfigMetadataCredit
+	56,   // 1076: groundplane.agent.v1.BackupVolumeManifestTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	38,   // 1077: groundplane.agent.v1.BackupVolumeManifestTransfer.direction:type_name -> groundplane.agent.v1.BackupVolumeManifestDirection
+	452,  // 1078: groundplane.agent.v1.BackupVolumeManifestTransfer.start:type_name -> groundplane.agent.v1.BackupVolumeManifestStart
+	453,  // 1079: groundplane.agent.v1.BackupVolumeManifestTransfer.batch:type_name -> groundplane.agent.v1.BackupVolumeManifestBatch
+	454,  // 1080: groundplane.agent.v1.BackupVolumeManifestTransfer.end:type_name -> groundplane.agent.v1.BackupVolumeManifestEnd
+	455,  // 1081: groundplane.agent.v1.BackupVolumeManifestTransfer.resume:type_name -> groundplane.agent.v1.BackupVolumeManifestResume
+	39,   // 1082: groundplane.agent.v1.BackupVolumeManifestStart.role:type_name -> groundplane.agent.v1.BackupVolumeManifestRole
+	519,  // 1083: groundplane.agent.v1.BackupVolumeManifestStart.source_archive:type_name -> groundplane.agent.v1.BackupVolumeSourceArchiveEvidence
+	520,  // 1084: groundplane.agent.v1.BackupVolumeManifestStart.no_source_archive:type_name -> groundplane.agent.v1.BackupVolumeNoSourceArchiveEvidence
+	514,  // 1085: groundplane.agent.v1.BackupVolumeManifestBatch.entries:type_name -> groundplane.agent.v1.BackupVolumeManifestEntry
+	56,   // 1086: groundplane.agent.v1.BackupVolumeManifestAckCredit.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	393,  // 1087: groundplane.agent.v1.BackupArtifactPrepared.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	470,  // 1088: groundplane.agent.v1.BackupArtifactPrepared.finals:type_name -> groundplane.agent.v1.BackupStagingFinals
+	505,  // 1089: groundplane.agent.v1.BackupArtifactPrepared.postgres:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
+	489,  // 1090: groundplane.agent.v1.BackupArtifactPrepared.config:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
+	515,  // 1091: groundplane.agent.v1.BackupArtifactPrepared.volume:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
+	513,  // 1092: groundplane.agent.v1.BackupArtifactPrepared.mysql:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
+	393,  // 1093: groundplane.agent.v1.BackupUploadCompleted.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	389,  // 1094: groundplane.agent.v1.BackupUploadCompleted.target:type_name -> groundplane.agent.v1.BackupObjectTarget
+	392,  // 1095: groundplane.agent.v1.BackupUploadCompleted.returned_object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	459,  // 1096: groundplane.agent.v1.BackupUploadCompleted.unknown:type_name -> groundplane.agent.v1.BackupPutOutcomeUnknown
+	393,  // 1097: groundplane.agent.v1.BackupUploadVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	392,  // 1098: groundplane.agent.v1.BackupUploadVerified.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	393,  // 1099: groundplane.agent.v1.BackupSourceCleanupCompleted.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	392,  // 1100: groundplane.agent.v1.BackupRestoreArtifactValidated.object:type_name -> groundplane.agent.v1.BackupObjectIdentity
+	393,  // 1101: groundplane.agent.v1.BackupRestoreArtifactValidated.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	470,  // 1102: groundplane.agent.v1.BackupRestoreArtifactValidated.finals:type_name -> groundplane.agent.v1.BackupStagingFinals
+	505,  // 1103: groundplane.agent.v1.BackupRestoreArtifactValidated.postgres:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
+	489,  // 1104: groundplane.agent.v1.BackupRestoreArtifactValidated.config:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
+	515,  // 1105: groundplane.agent.v1.BackupRestoreArtifactValidated.volume:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
+	513,  // 1106: groundplane.agent.v1.BackupRestoreArtifactValidated.mysql:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
+	465,  // 1107: groundplane.agent.v1.BackupConfigCheckpoint.value_progress:type_name -> groundplane.agent.v1.BackupConfigValueProgress
+	466,  // 1108: groundplane.agent.v1.BackupConfigCheckpoint.transfer_completed:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
+	467,  // 1109: groundplane.agent.v1.BackupConfigCheckpoint.materialization_verified:type_name -> groundplane.agent.v1.BackupConfigMaterializationVerified
+	461,  // 1110: groundplane.agent.v1.BackupConfigProgress.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompleted
+	466,  // 1111: groundplane.agent.v1.BackupConfigProgress.transfer:type_name -> groundplane.agent.v1.BackupConfigTransferCompleted
+	467,  // 1112: groundplane.agent.v1.BackupConfigProgress.materialization:type_name -> groundplane.agent.v1.BackupConfigMaterializationVerified
+	488,  // 1113: groundplane.agent.v1.BackupConfigTransferCompleted.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
+	521,  // 1114: groundplane.agent.v1.BackupVolumeCheckpoint.consumers_stopped:type_name -> groundplane.agent.v1.BackupConsumersStopped
+	522,  // 1115: groundplane.agent.v1.BackupVolumeCheckpoint.construction_intent:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
+	523,  // 1116: groundplane.agent.v1.BackupVolumeCheckpoint.construction_completed:type_name -> groundplane.agent.v1.BackupVolumeConstructionCompleted
+	524,  // 1117: groundplane.agent.v1.BackupVolumeCheckpoint.finalization_intent:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
+	525,  // 1118: groundplane.agent.v1.BackupVolumeCheckpoint.finalization_completed:type_name -> groundplane.agent.v1.BackupVolumeFinalizationCompleted
+	526,  // 1119: groundplane.agent.v1.BackupVolumeCheckpoint.exchange_intent:type_name -> groundplane.agent.v1.BackupVolumeExchangeIntent
+	527,  // 1120: groundplane.agent.v1.BackupVolumeCheckpoint.tree_exchanged:type_name -> groundplane.agent.v1.BackupVolumeTreeExchanged
+	528,  // 1121: groundplane.agent.v1.BackupVolumeCheckpoint.replaced_path_delete_intent:type_name -> groundplane.agent.v1.BackupVolumeDeleteIntent
+	529,  // 1122: groundplane.agent.v1.BackupVolumeCheckpoint.volume_replaced_path_cleaned:type_name -> groundplane.agent.v1.BackupVolumeReplacedPathCleaned
+	530,  // 1123: groundplane.agent.v1.BackupVolumeCheckpoint.service_progress:type_name -> groundplane.agent.v1.BackupVolumeServiceProgress
+	522,  // 1124: groundplane.agent.v1.BackupVolumeProgress.pending_construction:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
+	524,  // 1125: groundplane.agent.v1.BackupVolumeProgress.pending_finalization:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
+	526,  // 1126: groundplane.agent.v1.BackupVolumeProgress.pending_exchange:type_name -> groundplane.agent.v1.BackupVolumeExchangeIntent
+	528,  // 1127: groundplane.agent.v1.BackupVolumeProgress.pending_delete:type_name -> groundplane.agent.v1.BackupVolumeDeleteIntent
+	40,   // 1128: groundplane.agent.v1.BackupVolumeProgress.service_phase:type_name -> groundplane.agent.v1.BackupServicePhase
+	382,  // 1129: groundplane.agent.v1.BackupConfigEntry.entry:type_name -> groundplane.agent.v1.RevisionDigest
+	472,  // 1130: groundplane.agent.v1.BackupConfigEntry.environment:type_name -> groundplane.agent.v1.BackupConfigEnvironment
+	473,  // 1131: groundplane.agent.v1.BackupConfigEntry.file:type_name -> groundplane.agent.v1.BackupConfigFile
+	474,  // 1132: groundplane.agent.v1.BackupConfigEntry.exposure_all:type_name -> groundplane.agent.v1.BackupConfigExposureAll
+	476,  // 1133: groundplane.agent.v1.BackupConfigEntry.exposure_services:type_name -> groundplane.agent.v1.BackupConfigExposureServices
+	475,  // 1134: groundplane.agent.v1.BackupConfigEntry.exposure_edge_tunnel:type_name -> groundplane.agent.v1.BackupConfigExposureEdgeTunnel
+	477,  // 1135: groundplane.agent.v1.BackupConfigEntry.literal:type_name -> groundplane.agent.v1.BackupConfigLiteral
+	478,  // 1136: groundplane.agent.v1.BackupConfigEntry.secret_ref:type_name -> groundplane.agent.v1.BackupConfigSecretRef
+	479,  // 1137: groundplane.agent.v1.BackupConfigEntry.fact_ref:type_name -> groundplane.agent.v1.BackupConfigFactRef
+	382,  // 1138: groundplane.agent.v1.BackupConfigSecretRef.secret:type_name -> groundplane.agent.v1.RevisionDigest
+	382,  // 1139: groundplane.agent.v1.BackupConfigFactRef.attach:type_name -> groundplane.agent.v1.RevisionDigest
+	382,  // 1140: groundplane.agent.v1.BackupConfigFactRef.grant_attach:type_name -> groundplane.agent.v1.RevisionDigest
+	481,  // 1141: groundplane.agent.v1.BackupConfigRestoreEntry.metadata:type_name -> groundplane.agent.v1.BackupConfigEntryMetadata
+	482,  // 1142: groundplane.agent.v1.BackupConfigRestoreEntry.exposure:type_name -> groundplane.agent.v1.BackupConfigEntryExposure
+	483,  // 1143: groundplane.agent.v1.BackupConfigRestoreEntry.source:type_name -> groundplane.agent.v1.BackupConfigArtifactDesiredSource
+	487,  // 1144: groundplane.agent.v1.BackupConfigRestoreEntry.selected_value:type_name -> groundplane.agent.v1.BackupConfigSelectedValue
+	472,  // 1145: groundplane.agent.v1.BackupConfigEntryMetadata.environment:type_name -> groundplane.agent.v1.BackupConfigEnvironment
+	473,  // 1146: groundplane.agent.v1.BackupConfigEntryMetadata.file:type_name -> groundplane.agent.v1.BackupConfigFile
+	474,  // 1147: groundplane.agent.v1.BackupConfigEntryExposure.all:type_name -> groundplane.agent.v1.BackupConfigExposureAll
+	476,  // 1148: groundplane.agent.v1.BackupConfigEntryExposure.services:type_name -> groundplane.agent.v1.BackupConfigExposureServices
+	475,  // 1149: groundplane.agent.v1.BackupConfigEntryExposure.edge_tunnel:type_name -> groundplane.agent.v1.BackupConfigExposureEdgeTunnel
+	484,  // 1150: groundplane.agent.v1.BackupConfigArtifactDesiredSource.literal:type_name -> groundplane.agent.v1.BackupConfigLiteralSource
+	485,  // 1151: groundplane.agent.v1.BackupConfigArtifactDesiredSource.secret_ref:type_name -> groundplane.agent.v1.BackupConfigArtifactSecretRefSource
+	486,  // 1152: groundplane.agent.v1.BackupConfigArtifactDesiredSource.fact_ref:type_name -> groundplane.agent.v1.BackupConfigArtifactFactSource
+	488,  // 1153: groundplane.agent.v1.BackupConfigArchiveEvidence.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
+	488,  // 1154: groundplane.agent.v1.BackupConfigCaptureAuthority.content:type_name -> groundplane.agent.v1.BackupConfigContentAuthority
+	489,  // 1155: groundplane.agent.v1.BackupConfigRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupConfigArchiveEvidence
+	492,  // 1156: groundplane.agent.v1.BackupConfigRestoreAuthority.files:type_name -> groundplane.agent.v1.BackupConfigFileContext
+	493,  // 1157: groundplane.agent.v1.BackupConfigFileContext.services:type_name -> groundplane.agent.v1.BackupConfigFileService
+	494,  // 1158: groundplane.agent.v1.BackupConfigFileContext.prior_files:type_name -> groundplane.agent.v1.BackupConfigPriorFile
+	505,  // 1159: groundplane.agent.v1.BackupPostgresRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
+	187,  // 1160: groundplane.agent.v1.BackupPostgresRestoreAuthority.expected_target_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
+	505,  // 1161: groundplane.agent.v1.BackupPostgresDumpStart.archive:type_name -> groundplane.agent.v1.BackupPostgresArchiveEvidence
+	393,  // 1162: groundplane.agent.v1.BackupPostgresRestoreVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	40,   // 1163: groundplane.agent.v1.BackupPostgresServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
+	513,  // 1164: groundplane.agent.v1.BackupMySQLRestoreAuthority.expected_archive:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
+	187,  // 1165: groundplane.agent.v1.BackupMySQLRestoreAuthority.expected_target_versions:type_name -> groundplane.agent.v1.DatabaseVersionObservation
+	513,  // 1166: groundplane.agent.v1.BackupMySQLDumpStart.archive:type_name -> groundplane.agent.v1.BackupMySQLArchiveEvidence
+	393,  // 1167: groundplane.agent.v1.BackupMySQLRestoreVerified.evidence:type_name -> groundplane.agent.v1.BackupArtifactEvidence
+	40,   // 1168: groundplane.agent.v1.BackupMySQLServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
+	41,   // 1169: groundplane.agent.v1.BackupVolumeManifestEntry.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
+	382,  // 1170: groundplane.agent.v1.BackupVolumeCaptureAuthority.volume:type_name -> groundplane.agent.v1.RevisionDigest
+	516,  // 1171: groundplane.agent.v1.BackupVolumeCaptureAuthority.projection:type_name -> groundplane.agent.v1.BackupVolumeProjectionAuthority
+	382,  // 1172: groundplane.agent.v1.BackupVolumeRestoreAuthority.volume:type_name -> groundplane.agent.v1.RevisionDigest
+	515,  // 1173: groundplane.agent.v1.BackupVolumeRestoreAuthority.archive:type_name -> groundplane.agent.v1.BackupVolumeArchiveEvidence
+	516,  // 1174: groundplane.agent.v1.BackupVolumeRestoreAuthority.projection:type_name -> groundplane.agent.v1.BackupVolumeProjectionAuthority
+	41,   // 1175: groundplane.agent.v1.BackupVolumeConstructionIntent.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
+	522,  // 1176: groundplane.agent.v1.BackupVolumeConstructionCompleted.intent:type_name -> groundplane.agent.v1.BackupVolumeConstructionIntent
+	524,  // 1177: groundplane.agent.v1.BackupVolumeFinalizationCompleted.intent:type_name -> groundplane.agent.v1.BackupVolumeFinalizationIntent
+	41,   // 1178: groundplane.agent.v1.BackupVolumeDeleteIntent.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
+	41,   // 1179: groundplane.agent.v1.BackupVolumeReplacedPathCleaned.kind:type_name -> groundplane.agent.v1.BackupVolumeEntryKind
+	40,   // 1180: groundplane.agent.v1.BackupVolumeServiceProgress.phase:type_name -> groundplane.agent.v1.BackupServicePhase
+	56,   // 1181: groundplane.agent.v1.BackupWorkSecretRequest.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	56,   // 1182: groundplane.agent.v1.BackupWorkSecretTransfer.attempt:type_name -> groundplane.agent.v1.WorkAttemptIdentity
+	42,   // 1183: groundplane.agent.v1.BackupWorkSecretTransfer.purpose:type_name -> groundplane.agent.v1.BackupSecretSlotPurpose
+	533,  // 1184: groundplane.agent.v1.BackupWorkSecretTransfer.header:type_name -> groundplane.agent.v1.BackupSecretSlotHeader
+	534,  // 1185: groundplane.agent.v1.BackupWorkSecretTransfer.chunk:type_name -> groundplane.agent.v1.BackupSecretSlotChunk
+	535,  // 1186: groundplane.agent.v1.BackupWorkSecretTransfer.end:type_name -> groundplane.agent.v1.BackupSecretSlotEnd
+	43,   // 1187: groundplane.agent.v1.AdapterProcedure.phase:type_name -> groundplane.agent.v1.AdapterProcedurePhase
+	44,   // 1188: groundplane.agent.v1.AdapterProcedure.authentication:type_name -> groundplane.agent.v1.BackingAuthentication
+	45,   // 1189: groundplane.agent.v1.MaterializeFile.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
+	571,  // 1190: groundplane.agent.v1.CheckDNSConnections.action:type_name -> groundplane.agent.v1.ComponentApply
+	348,  // 1191: groundplane.agent.v1.CheckDNSConnections.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
+	203,  // 1192: groundplane.agent.v1.CheckDNSConnections.prior_observation:type_name -> groundplane.agent.v1.DNSResolverObservationEvidence
+	564,  // 1193: groundplane.agent.v1.CheckDNSConnections.queries:type_name -> groundplane.agent.v1.DNSConnectionQuery
+	10,   // 1194: groundplane.agent.v1.DNSConnectionQuery.type:type_name -> groundplane.agent.v1.DNSQueryType
+	10,   // 1195: groundplane.agent.v1.DNSConnectionAnswer.type:type_name -> groundplane.agent.v1.DNSQueryType
+	204,  // 1196: groundplane.agent.v1.DNSConnectionAnswer.answers:type_name -> groundplane.agent.v1.DNSAnswerRecord
+	587,  // 1197: groundplane.agent.v1.DNSConnectionResult.observed_at:type_name -> google.protobuf.Timestamp
+	566,  // 1198: groundplane.agent.v1.DNSConnectionResult.answers:type_name -> groundplane.agent.v1.DNSConnectionAnswer
+	571,  // 1199: groundplane.agent.v1.CheckEdgeConnections.action:type_name -> groundplane.agent.v1.ComponentApply
+	348,  // 1200: groundplane.agent.v1.CheckEdgeConnections.runtime:type_name -> groundplane.agent.v1.ComposeArtifact
+	572,  // 1201: groundplane.agent.v1.ComponentApply.container_config_transition:type_name -> groundplane.agent.v1.ContainerConfigTransition
+	46,   // 1202: groundplane.agent.v1.ManagedConfigHelperRequest.operation:type_name -> groundplane.agent.v1.ManagedConfigOperation
+	46,   // 1203: groundplane.agent.v1.ManagedConfigHelperResponse.operation:type_name -> groundplane.agent.v1.ManagedConfigOperation
+	47,   // 1204: groundplane.agent.v1.ManagedConfigHelperResponse.disposition:type_name -> groundplane.agent.v1.ManagedConfigReplayDisposition
+	49,   // 1205: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
+	50,   // 1206: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	552,  // 1207: groundplane.agent.v1.ComposeHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
+	556,  // 1208: groundplane.agent.v1.ComposeHelperResponse.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
+	202,  // 1209: groundplane.agent.v1.ComposeHelperResponse.candidate_absence_evidence:type_name -> groundplane.agent.v1.CandidateAbsenceEvidence
+	578,  // 1210: groundplane.agent.v1.ComposeHelperResponse.rolling_proxy_evidence:type_name -> groundplane.agent.v1.RollingProxyEvidence
+	201,  // 1211: groundplane.agent.v1.ComposeHelperResponse.rolling_evidence:type_name -> groundplane.agent.v1.RollingReleaseEvidence
+	172,  // 1212: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
+	184,  // 1213: groundplane.agent.v1.CheckBackingAccess.consumer_runtime:type_name -> groundplane.agent.v1.ServiceObservationTarget
+	582,  // 1214: groundplane.agent.v1.CheckBackingAccess.parameters:type_name -> groundplane.agent.v1.BackingAccessParameters
+	585,  // 1215: groundplane.agent.v1.BackingAccessResult.observation:type_name -> groundplane.agent.v1.BackingAccessObservation
+	587,  // 1216: groundplane.agent.v1.BackingAccessObservation.started_at:type_name -> google.protobuf.Timestamp
+	587,  // 1217: groundplane.agent.v1.BackingAccessObservation.finished_at:type_name -> google.protobuf.Timestamp
+	586,  // 1218: groundplane.agent.v1.BackingAccessObservation.stages:type_name -> groundplane.agent.v1.BackingAccessStage
+	174,  // 1219: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
+	207,  // 1220: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
+	1220, // [1220:1221] is the sub-list for method output_type
+	1219, // [1219:1220] is the sub-list for method input_type
+	1219, // [1219:1219] is the sub-list for extension type_name
+	1219, // [1219:1219] is the sub-list for extension extendee
+	0,    // [0:1219] is the sub-list for field type_name
 }
 
 func init() { file_proto_agent_proto_init() }
@@ -54739,24 +54880,25 @@ func file_proto_agent_proto_init() {
 		(*AgentMessage_ResolverWorkRecoveryRequest)(nil),
 		(*AgentMessage_WorkJournalReplayRequest)(nil),
 		(*AgentMessage_ContainerTerminalEvent)(nil),
+		(*AgentMessage_ExecutionQuiescenceResult)(nil),
 	}
-	file_proto_agent_proto_msgTypes[124].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[126].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[125].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[127].OneofWrappers = []any{
 		(*WorkloadImageSelector_RequestedReference)(nil),
 		(*WorkloadImageSelector_LocalImageId)(nil),
 	}
-	file_proto_agent_proto_msgTypes[130].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[131].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[131].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[132].OneofWrappers = []any{
 		(*WorkloadImageResolutionResult_Success)(nil),
 		(*WorkloadImageResolutionResult_Failure)(nil),
 	}
-	file_proto_agent_proto_msgTypes[139].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[140].OneofWrappers = []any{
 		(*ServiceObservationRow_Replicas)(nil),
 		(*ServiceObservationRow_Unavailable)(nil),
 	}
-	file_proto_agent_proto_msgTypes[143].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[145].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[155].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[144].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[146].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[156].OneofWrappers = []any{
 		(*ControllerMessage_ConfigUpdate)(nil),
 		(*ControllerMessage_Shutdown)(nil),
 		(*ControllerMessage_LogSubscribe)(nil),
@@ -54874,31 +55016,32 @@ func file_proto_agent_proto_init() {
 		(*ControllerMessage_WorkReportRejection)(nil),
 		(*ControllerMessage_ContainerTerminalOpen)(nil),
 		(*ControllerMessage_ContainerTerminalControl)(nil),
+		(*ControllerMessage_CheckExecutionQuiescence)(nil),
 	}
-	file_proto_agent_proto_msgTypes[159].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[161].OneofWrappers = []any{
 		(*ContainerTerminalControl_Input)(nil),
 		(*ContainerTerminalControl_Size)(nil),
 		(*ContainerTerminalControl_Terminate)(nil),
 		(*ContainerTerminalControl_Credit)(nil),
 	}
-	file_proto_agent_proto_msgTypes[161].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[163].OneofWrappers = []any{
 		(*ContainerTerminalEvent_Ready)(nil),
 		(*ContainerTerminalEvent_Output)(nil),
 		(*ContainerTerminalEvent_Closed)(nil),
 	}
-	file_proto_agent_proto_msgTypes[171].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[174].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[173].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[176].OneofWrappers = []any{
 		(*ScriptCheckpointRequest_StartAuthorized)(nil),
 		(*ScriptCheckpointRequest_BodyPrepared)(nil),
 		(*ScriptCheckpointRequest_ContainerCreated)(nil),
 		(*ScriptCheckpointRequest_Outcome)(nil),
 		(*ScriptCheckpointRequest_Cleanup)(nil),
 	}
-	file_proto_agent_proto_msgTypes[180].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[182].OneofWrappers = []any{
 		(*ManagedNetworkRecoveryProcedure_Removal)(nil),
 		(*ManagedNetworkRecoveryProcedure_Preparation)(nil),
 	}
-	file_proto_agent_proto_msgTypes[300].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[302].OneofWrappers = []any{
 		(*ExecutionStep_ComposeApply)(nil),
 		(*ExecutionStep_ComposeStop)(nil),
 		(*ExecutionStep_ComposeRemove)(nil),
@@ -54936,14 +55079,14 @@ func file_proto_agent_proto_init() {
 		(*ExecutionStep_RollingReleaseAcknowledge)(nil),
 		(*ExecutionStep_ManagedNetworkPreparationProbe)(nil),
 	}
-	file_proto_agent_proto_msgTypes[319].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[332].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[335].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[339].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[321].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[334].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[337].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[341].OneofWrappers = []any{
 		(*BackupObjectIdentity_VersionId)(nil),
 		(*BackupObjectIdentity_Etag)(nil),
 	}
-	file_proto_agent_proto_msgTypes[350].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[352].OneofWrappers = []any{
 		(*BackupWorkCheckpointRequest_ArtifactPrepared)(nil),
 		(*BackupWorkCheckpointRequest_UploadVerified)(nil),
 		(*BackupWorkCheckpointRequest_SourceCleanupCompleted)(nil),
@@ -54964,17 +55107,17 @@ func file_proto_agent_proto_init() {
 		(*BackupWorkCheckpointRequest_MysqlServiceProgress)(nil),
 		(*BackupWorkCheckpointRequest_DatabaseConsumerRecovery)(nil),
 	}
-	file_proto_agent_proto_msgTypes[357].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[359].OneofWrappers = []any{
 		(*BackupStepAuthority_Capture)(nil),
 		(*BackupStepAuthority_Prune)(nil),
 		(*BackupStepAuthority_Restore)(nil),
 	}
-	file_proto_agent_proto_msgTypes[358].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[360].OneofWrappers = []any{
 		(*BackupStepResume_Capture)(nil),
 		(*BackupStepResume_Prune)(nil),
 		(*BackupStepResume_Restore)(nil),
 	}
-	file_proto_agent_proto_msgTypes[359].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[361].OneofWrappers = []any{
 		(*BackupCaptureResume_ArtifactPrepared)(nil),
 		(*BackupCaptureResume_UploadVerified)(nil),
 		(*BackupCaptureResume_SourceCleanupCompleted)(nil),
@@ -54986,10 +55129,10 @@ func file_proto_agent_proto_init() {
 		(*BackupCaptureResume_MysqlContainerObserved)(nil),
 		(*BackupCaptureResume_MysqlDumpStartCheckpoint)(nil),
 	}
-	file_proto_agent_proto_msgTypes[360].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[362].OneofWrappers = []any{
 		(*BackupPruneResume_ObjectDeleted)(nil),
 	}
-	file_proto_agent_proto_msgTypes[361].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[363].OneofWrappers = []any{
 		(*BackupRestoreResume_ArtifactValidated)(nil),
 		(*BackupRestoreResume_PostgresContainerObserved)(nil),
 		(*BackupRestoreResume_PostgresRestoreApplyStart)(nil),
@@ -55003,13 +55146,13 @@ func file_proto_agent_proto_init() {
 		(*BackupRestoreResume_MysqlRestoreVerified)(nil),
 		(*BackupRestoreResume_MysqlServiceProgress)(nil),
 	}
-	file_proto_agent_proto_msgTypes[366].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[368].OneofWrappers = []any{
 		(*BackupCaptureAuthority_Postgres)(nil),
 		(*BackupCaptureAuthority_Config)(nil),
 		(*BackupCaptureAuthority_Volume)(nil),
 		(*BackupCaptureAuthority_Mysql)(nil),
 	}
-	file_proto_agent_proto_msgTypes[367].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[369].OneofWrappers = []any{
 		(*BackupRestoreAuthority_Postgres)(nil),
 		(*BackupRestoreAuthority_Config)(nil),
 		(*BackupRestoreAuthority_Volume)(nil),
@@ -55017,21 +55160,21 @@ func file_proto_agent_proto_init() {
 		(*BackupRestoreAuthority_OriginalIdentity)(nil),
 		(*BackupRestoreAuthority_AdoptedIdentity)(nil),
 	}
-	file_proto_agent_proto_msgTypes[378].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[380].OneofWrappers = []any{
 		(*BackupVolumeRestoreRecoveryDisposition_Resume)(nil),
 		(*BackupVolumeRestoreRecoveryDisposition_Hold)(nil),
 		(*BackupVolumeRestoreRecoveryDisposition_Cleanup)(nil),
 	}
-	file_proto_agent_proto_msgTypes[382].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[384].OneofWrappers = []any{
 		(*BackupStagingDisposition_ResumePrepared)(nil),
 		(*BackupStagingDisposition_DiscardRecovered)(nil),
 		(*BackupStagingDisposition_RecoveryRequired)(nil),
 	}
-	file_proto_agent_proto_msgTypes[383].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[385].OneofWrappers = []any{
 		(*BackupDatabaseStagingGuard_PostgresRecoveryApply)(nil),
 		(*BackupDatabaseStagingGuard_MysqlRecoveryApply)(nil),
 	}
-	file_proto_agent_proto_msgTypes[390].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[392].OneofWrappers = []any{
 		(*BackupConfigTransfer_Start)(nil),
 		(*BackupConfigTransfer_EntryHeader)(nil),
 		(*BackupConfigTransfer_ValueChunk)(nil),
@@ -55039,51 +55182,51 @@ func file_proto_agent_proto_init() {
 		(*BackupConfigTransfer_End)(nil),
 		(*BackupConfigTransfer_Resume)(nil),
 	}
-	file_proto_agent_proto_msgTypes[392].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[394].OneofWrappers = []any{
 		(*BackupConfigEntryHeader_CaptureEntry)(nil),
 		(*BackupConfigEntryHeader_RestoreEntry)(nil),
 	}
-	file_proto_agent_proto_msgTypes[397].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[399].OneofWrappers = []any{
 		(*BackupConfigCredit_MetadataAccepted)(nil),
 		(*BackupConfigCredit_ValueCredit)(nil),
 		(*BackupConfigCredit_MetadataCredit)(nil),
 	}
-	file_proto_agent_proto_msgTypes[398].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[400].OneofWrappers = []any{
 		(*BackupVolumeManifestTransfer_Start)(nil),
 		(*BackupVolumeManifestTransfer_Batch)(nil),
 		(*BackupVolumeManifestTransfer_End)(nil),
 		(*BackupVolumeManifestTransfer_Resume)(nil),
 	}
-	file_proto_agent_proto_msgTypes[399].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[401].OneofWrappers = []any{
 		(*BackupVolumeManifestStart_SourceArchive)(nil),
 		(*BackupVolumeManifestStart_NoSourceArchive)(nil),
 	}
-	file_proto_agent_proto_msgTypes[404].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[406].OneofWrappers = []any{
 		(*BackupArtifactPrepared_Postgres)(nil),
 		(*BackupArtifactPrepared_Config)(nil),
 		(*BackupArtifactPrepared_Volume)(nil),
 		(*BackupArtifactPrepared_Mysql)(nil),
 	}
-	file_proto_agent_proto_msgTypes[405].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[407].OneofWrappers = []any{
 		(*BackupUploadCompleted_ReturnedObject)(nil),
 		(*BackupUploadCompleted_Unknown)(nil),
 	}
-	file_proto_agent_proto_msgTypes[409].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[411].OneofWrappers = []any{
 		(*BackupRestoreArtifactValidated_Postgres)(nil),
 		(*BackupRestoreArtifactValidated_Config)(nil),
 		(*BackupRestoreArtifactValidated_Volume)(nil),
 		(*BackupRestoreArtifactValidated_Mysql)(nil),
 	}
-	file_proto_agent_proto_msgTypes[410].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[412].OneofWrappers = []any{
 		(*BackupConfigCheckpoint_ValueProgress)(nil),
 		(*BackupConfigCheckpoint_TransferCompleted)(nil),
 		(*BackupConfigCheckpoint_MaterializationVerified)(nil),
 	}
-	file_proto_agent_proto_msgTypes[411].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[413].OneofWrappers = []any{
 		(*BackupConfigProgress_Transfer)(nil),
 		(*BackupConfigProgress_Materialization)(nil),
 	}
-	file_proto_agent_proto_msgTypes[415].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[417].OneofWrappers = []any{
 		(*BackupVolumeCheckpoint_ConsumersStopped)(nil),
 		(*BackupVolumeCheckpoint_ConstructionIntent)(nil),
 		(*BackupVolumeCheckpoint_ConstructionCompleted)(nil),
@@ -55095,9 +55238,9 @@ func file_proto_agent_proto_init() {
 		(*BackupVolumeCheckpoint_VolumeReplacedPathCleaned)(nil),
 		(*BackupVolumeCheckpoint_ServiceProgress)(nil),
 	}
-	file_proto_agent_proto_msgTypes[416].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[417].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[418].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[418].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[419].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[420].OneofWrappers = []any{
 		(*BackupConfigEntry_Environment)(nil),
 		(*BackupConfigEntry_File)(nil),
 		(*BackupConfigEntry_ExposureAll)(nil),
@@ -55107,36 +55250,36 @@ func file_proto_agent_proto_init() {
 		(*BackupConfigEntry_SecretRef)(nil),
 		(*BackupConfigEntry_FactRef)(nil),
 	}
-	file_proto_agent_proto_msgTypes[426].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[427].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[428].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[428].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[429].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[430].OneofWrappers = []any{
 		(*BackupConfigEntryMetadata_Environment)(nil),
 		(*BackupConfigEntryMetadata_File)(nil),
 	}
-	file_proto_agent_proto_msgTypes[429].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[431].OneofWrappers = []any{
 		(*BackupConfigEntryExposure_All)(nil),
 		(*BackupConfigEntryExposure_Services)(nil),
 		(*BackupConfigEntryExposure_EdgeTunnel)(nil),
 	}
-	file_proto_agent_proto_msgTypes[430].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[432].OneofWrappers = []any{
 		(*BackupConfigArtifactDesiredSource_Literal)(nil),
 		(*BackupConfigArtifactDesiredSource_SecretRef)(nil),
 		(*BackupConfigArtifactDesiredSource_FactRef)(nil),
 	}
-	file_proto_agent_proto_msgTypes[433].OneofWrappers = []any{}
-	file_proto_agent_proto_msgTypes[479].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[435].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[481].OneofWrappers = []any{
 		(*BackupWorkSecretTransfer_Header)(nil),
 		(*BackupWorkSecretTransfer_Chunk)(nil),
 		(*BackupWorkSecretTransfer_End)(nil),
 	}
-	file_proto_agent_proto_msgTypes[513].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[515].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)),
 			NumEnums:      51,
-			NumMessages:   534,
+			NumMessages:   536,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

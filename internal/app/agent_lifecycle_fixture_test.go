@@ -179,7 +179,7 @@ func newAgentLifecycleFixture(t *testing.T, elapsed time.Duration) *agentLifecyc
 	if err != nil {
 		t.Fatal(err)
 	}
-	maintenance, err := agentruntime.NewWork(f.queue, agents)
+	maintenance, err := agentruntime.NewWork(f.queue, agents, f.registry)
 	if err != nil {
 		t.Fatal(err)
 	}

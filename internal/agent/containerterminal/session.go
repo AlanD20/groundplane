@@ -46,6 +46,17 @@ func New(ctx context.Context, opener Opener) *Session {
 
 func (s *Session) Outputs() <-chan *agentpb.AgentMessage { return s.outputs }
 
+// Quiescent is a read-only observation. Maintenance never terminates an
+// operator's active terminal to make an Agent replacement proceed.
+func (s *Session) Quiescent() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ctx.Err() == nil && len(s.active) == 0
+}
+
 func (s *Session) Open(request *agentpb.ContainerTerminalOpen) error {
 	if _, err := agentprotocol.ContainerOptionsFromWire(request); err != nil {
 		return err

@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -34,7 +35,7 @@ func TestAgentMaintenanceIdleCheckPreservesAssignedWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	maintenance, err := agentruntime.NewWork(queue, agents)
+	maintenance, err := agentruntime.NewWork(queue, agents, agentchannel.NewRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +77,7 @@ func TestAgentMaintenanceCancellationRetainsUnsettledEffects(t *testing.T) {
 	}
 	taskID, itemID := seedAgentMaintenanceWork(t, store, queue, agents, record.ID, record.Generation)
 	backend.taskKey = workqueue.TaskKey(taskID)
-	maintenance, err := agentruntime.NewWork(queue, agents)
+	maintenance, err := agentruntime.NewWork(queue, agents, agentchannel.NewRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}

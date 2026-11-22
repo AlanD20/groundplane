@@ -1107,7 +1107,13 @@ message AgentMessage {
     ResolverWorkRecoveryRequest resolver_work_recovery_request = 112;
     WorkJournalReplayRequest work_journal_replay_request = 113;
     ContainerTerminalEvent container_terminal_event = 114;
+    ExecutionQuiescenceResult execution_quiescence_result = 115;
   }
+}
+
+message ExecutionQuiescenceResult {
+  string request_id = 1;
+  bool quiescent = 2;
 }
 
 message Ready {
@@ -1544,7 +1550,12 @@ message ControllerMessage {
     WorkReportRejection work_report_rejection = 135;
     ContainerTerminalOpen container_terminal_open = 136;
     ContainerTerminalControl container_terminal_control = 137;
+    CheckExecutionQuiescence check_execution_quiescence = 138;
   }
+}
+
+message CheckExecutionQuiescence {
+  string request_id = 1;
 }
 
 message LogTarget {

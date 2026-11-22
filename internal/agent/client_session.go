@@ -266,6 +266,25 @@ func (c *Client) runSession(
 			if err := c.processOwnership.Check(); err != nil {
 				return false, err
 			}
+			if handled, err := c.handleExecutionQuiescence(
+				streamCtx,
+				stream,
+				result.message,
+				releases,
+				c.processOwnership,
+				images,
+				observations,
+				backingAccess,
+				dnsChecks,
+				edgeChecks,
+				terminals,
+			); handled {
+				if err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			if transfer := result.message.GetBackupWorkSecretTransfer(); transfer != nil {
 				if err := native.acceptBackupSecrets(streamCtx, transfer); err != nil {
 					return false, err

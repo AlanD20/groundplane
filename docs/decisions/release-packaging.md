@@ -169,6 +169,15 @@ systemd recovery service runs the predecessor's closed recovery mode, swaps the
 candidate, starts it, and waits for the same Task to prove executing-binary,
 listener, etcd, and authenticated-Agent readiness.
 
+Unresolved effect ownership must not be confused with an executing process.
+The bounded Entry recovery exception checks durable closed attempts and obtains
+a nonce-bound observation from the current authenticated Agent under the update's
+assignment hold. The channel pins that process until lifecycle replacement or
+release of the hold, so a reconnect cannot replace the observed process between
+the reply and journal publication. The observer never stops a helper or changes
+recovery evidence. Unsupported operations and readers remain blocking; an Agent
+replacement additionally needs proof of compatible retained-journal recovery.
+
 The candidate resumes the Task and brings the Agent to the release-pinned
 digest through the normal Agent replacement contract. Failure restores the
 Controller predecessor and, when changed, the prior Agent with fresh generation

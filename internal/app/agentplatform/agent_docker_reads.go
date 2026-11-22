@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/agent/componentaction"
 	"github.com/AlanD20/groundplane/internal/infra/docker/backingaccesscheck"
+	"github.com/AlanD20/groundplane/internal/infra/docker/executionquiescence"
 	"github.com/AlanD20/groundplane/internal/infra/docker/serviceobserver"
 	"github.com/AlanD20/groundplane/internal/infra/docker/workloadimages"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -25,6 +26,13 @@ func ConfigureDockerReads(
 	engine, err := client.New(client.WithHost("unix:///var/run/docker.sock"))
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	quiescence, err := executionquiescence.New(engine)
+	if err != nil {
+		return engine, err
+	}
+	if err := target.SetExecutionQuiescenceChecker(quiescence); err != nil {
+		return engine, err
 	}
 	resolver, err := workloadimages.New(engine)
 	if err != nil {

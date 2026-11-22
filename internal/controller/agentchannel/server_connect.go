@@ -173,6 +173,18 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				return err
 			}
 			command.result <- nil
+		case connectExecutionQuiescenceCommand:
+			command := event.quiescence
+			if !session.executionQuiescenceCommandCurrent(command) {
+				continue
+			}
+			if err := stream.Send(&agentpb.ControllerMessage{
+				Payload: &agentpb.ControllerMessage_CheckExecutionQuiescence{
+					CheckExecutionQuiescence: command.request,
+				},
+			}); err != nil {
+				return err
+			}
 		case connectDispatchWake:
 			capacity, ready := session.dispatchCapacity()
 			if !ready || capacity == 0 {
@@ -263,6 +275,10 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			}
 			if result.message.GetWorkloadImageResolutionResult() != nil {
 				session.acceptImageResult(result.message)
+				continue
+			}
+			if result.message.GetExecutionQuiescenceResult() != nil {
+				session.acceptExecutionQuiescenceResult(result.message)
 				continue
 			}
 			if result.message.GetEdgeConnectionResult() != nil {

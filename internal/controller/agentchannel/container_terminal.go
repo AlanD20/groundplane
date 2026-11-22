@@ -46,18 +46,24 @@ func (r *Registry) OpenContainerShell(
 	}
 	r.mu.Lock()
 	var state *sessionState
-	for _, candidate := range r.agents {
+	var agentID string
+	for candidateID, candidate := range r.agents {
 		if candidate.online && candidate.readyReported && !candidate.revoked {
 			if state != nil {
 				r.mu.Unlock()
 				return nil, errs.New(errs.KindStateConflict, "container shell requires an unambiguous Agent host")
 			}
 			state = candidate
+			agentID = candidateID
 		}
 	}
 	if state == nil {
 		r.mu.Unlock()
 		return nil, errs.New(errs.KindRequestUnavailable, "Agent is unavailable for container shell")
+	}
+	if !r.auxiliaryAllowedLocked(agentID, state) {
+		r.mu.Unlock()
+		return nil, auxiliaryPaused()
 	}
 	if _, exists := r.terminals[request.SessionId]; exists || len(r.terminals) >= terminalsession.MaximumSessions {
 		r.mu.Unlock()

@@ -351,16 +351,65 @@ func (agents *coordinatorAgents) RecoverUpdate(
 }
 
 type coordinatorWork struct {
-	busy    bool
-	onCheck func()
+	retained bool
+	busy     bool
+	onCheck  func()
 }
 
 func (work *coordinatorWork) RequireIdle(context.Context, string, uint64, int32) error {
 	if work.onCheck != nil {
 		work.onCheck()
 	}
-	if work.busy {
+	if work.busy || work.retained {
 		return errs.New(errs.KindResourceInUse, "active work")
 	}
 	return nil
+}
+
+func (owner *coordinatorWork) RequireUpgradeReady(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	maximum int32,
+) error {
+	if owner.retained && !owner.busy {
+		return nil
+	}
+	return owner.RequireIdle(ctx, agentID, generation, maximum)
+}
+
+// A retained-recovery exception cannot silently include Agent replacement or
+// channel-format cutover. Observe actual staging/handoff, not method selection.
+func TestControllerRecoveryAdmissionPreservesAgentAndChannel(t *testing.T) {
+	for _, changedAgent := range []bool{false, true} {
+		for _, changedChannel := range []bool{false, true} {
+			h := newCoordinatorHarness(t)
+			if !changedAgent {
+				h.expected.Manifest.AgentImage = h.expected.Agent.Image
+			}
+			if changedChannel {
+				h.expected.Manifest.ChannelSchema++
+			}
+			h.store.manifest = h.expected.Manifest
+			h.work.retained = true
+			h.work.onCheck = func() { h.now = h.now.Add(121 * time.Second) }
+			coordinator := h.coordinator(t, h.input.PreviousController)
+			ctx, cancel := context.WithCancel(t.Context())
+			h.unit.launch = cancel
+			if err := coordinator.Restore(ctx, h.expected); err != nil {
+				t.Fatal(err)
+			}
+			result, err := coordinator.Execute(ctx, h.expected, true, h.progress(ctx))
+			allowed := !changedAgent && !changedChannel
+			if allowed {
+				if !errors.Is(err, context.Canceled) || !h.store.found || h.unit.launches != 1 ||
+					h.store.current().Phase != upgrade.PhaseActivating {
+					t.Fatalf("preserved Agent handoff=%v error=%v launches=%d", result, err, h.unit.launches)
+				}
+			} else if err != nil || result.Outcome != workexecution.Failed || h.store.found || h.unit.launches != 0 {
+				t.Fatalf("unsafe handoff changedAgent=%v changedChannel=%v result=%v error=%v launches=%d", changedAgent, changedChannel, result, err, h.unit.launches)
+			}
+			cancel()
+		}
+	}
 }
