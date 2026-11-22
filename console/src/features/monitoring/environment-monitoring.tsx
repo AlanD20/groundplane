@@ -26,10 +26,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { HealthOverview } from "./health-overview";
 import { monitoringHealth } from "./health-summary";
 import type { MonitoringRange } from "./api";
-import {
-  MonitoringCursorPagination,
-  MonitoringMetrics,
-} from "./scoped-monitoring";
+import { MonitoringCursorPagination } from "./scoped-monitoring";
+import { MonitoringMetrics } from "./monitoring-metrics";
 import {
   useMonitoringCursor,
   useMonitoringQuery,

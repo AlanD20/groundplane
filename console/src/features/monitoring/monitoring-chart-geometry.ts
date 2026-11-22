@@ -61,7 +61,7 @@ export function chartY(value: number, maximum: number): number {
   return chartPlot.bottom - fraction * (chartPlot.bottom - chartPlot.top);
 }
 
-function pointCenter(point: MonitoringChartBucketPoint): number {
+export function pointCenter(point: MonitoringChartBucketPoint): number {
   return point.from + (point.to - point.from) / 2;
 }
 
@@ -155,4 +155,14 @@ export function frozenSeries(
     ...item,
     points: item.points.map((point) => ({ ...point })),
   }));
+}
+
+export function pointForTime(
+  item: MonitoringChartSeries,
+  time: number,
+): MonitoringChartBucketPoint | null {
+  const index = bucketIndexAtTime(item.points, time);
+  if (index === null) return null;
+  const point = item.points[index];
+  return time >= point.from && time < point.to ? point : null;
 }

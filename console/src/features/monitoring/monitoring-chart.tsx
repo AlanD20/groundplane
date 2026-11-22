@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { MonitoringBucketDetails } from "./monitoring-bucket-details";
 import {
   useCallback,
   useEffect,
@@ -22,6 +23,8 @@ import {
   chartY,
   frozenSeries,
   rangeBandPath,
+  pointCenter,
+  pointForTime,
 } from "./monitoring-chart-geometry";
 import type {
   MonitoringChartBucketPoint,
@@ -63,20 +66,9 @@ const viewBoxHeight = 248;
 const plotWidth = chartPlot.right - chartPlot.left;
 const valueTickCount = 4;
 
-const valueFormatter = new Intl.NumberFormat(undefined, {
-  maximumFractionDigits: 2,
+const axisValueFormatter = new Intl.NumberFormat(undefined, {
+  maximumSignificantDigits: 4,
 });
-
-const timestampFormat = {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-  timeZoneName: "shortOffset",
-} satisfies Intl.DateTimeFormatOptions;
 
 const axisDateFormat = {
   day: "2-digit",
@@ -121,26 +113,26 @@ function chartTimeTicks(window: MonitoringChartWindow, timeZone: string) {
   return ticks;
 }
 
-function readableMaximum(maximum: number) {
+function readableAxis(maximum: number) {
   const interval = maximum / valueTickCount;
   const order = 10 ** Math.floor(Math.log10(interval));
-  const step =
-    [1, 2, 2.5, 5, 10].find((value) => value * order >= interval) ?? 10;
-  return step * order * valueTickCount;
-}
-
-function pointCenter(point: MonitoringChartBucketPoint): number {
-  return point.from + (point.to - point.from) / 2;
-}
-
-function formatValue(value: number | null, unit: string): string {
-  if (value === null || !Number.isFinite(value)) return "Unavailable";
-  return `${valueFormatter.format(value)} ${unit}`;
-}
-
-function formatCoverage(valid: number, expected: number): string {
-  if (expected === 0) return "Not applicable";
-  return `${valueFormatter.format(valid)} / ${valueFormatter.format(expected)}`;
+  const fraction = interval / order;
+  const nearest = [2, 2.5, 5, 10].reduce(
+    (current, value) =>
+      Math.abs(value - fraction) < Math.abs(current - fraction)
+        ? value
+        : current,
+    1,
+  );
+  const step = nearest * order;
+  const intervals = Math.ceil(maximum / step);
+  return {
+    top: intervals * step,
+    labels: Array.from(
+      { length: intervals + 1 },
+      (_, index) => (intervals - index) * step,
+    ),
+  };
 }
 
 function seriesDash(index: number): string | undefined {
@@ -159,120 +151,6 @@ function selectionIdentity(
         `${item.id}\u0000${item.label}\u0000${item.unit}\u0000${item.color}`,
     )
     .join("\u0001")}`;
-}
-
-function pointForTime(
-  item: MonitoringChartSeries,
-  time: number,
-): MonitoringChartBucketPoint | null {
-  const index = bucketIndexAtTime(item.points, time);
-  if (index === null) return null;
-  const point = item.points[index];
-  return time >= point.from && time < point.to ? point : null;
-}
-
-function MonitoringBucketDetails({
-  id,
-  series,
-  bucket,
-  label,
-  pinned,
-  timeZone,
-}: {
-  readonly id: string;
-  readonly series: readonly MonitoringChartSeries[];
-  readonly bucket: MonitoringChartBucketPoint;
-  readonly label: string;
-  readonly pinned: boolean;
-  readonly timeZone: string;
-}) {
-  const time = pointCenter(bucket);
-  return (
-    <div id={id} className="min-w-0 border-t border-border bg-card px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2 text-xs">
-        <span className="shrink-0 font-semibold text-primary">{label}</span>
-        <time
-          className="min-w-0 truncate text-muted-foreground"
-          dateTime={new Date(bucket.from).toISOString()}
-        >
-          {new Intl.DateTimeFormat(undefined, {
-            ...timestampFormat,
-            timeZone,
-          }).formatRange(bucket.from, bucket.to)}
-        </time>
-        <span className="ml-auto hidden shrink-0 text-muted-foreground sm:inline">
-          {pinned ? "Enter to unpin" : "Enter to pin"}
-        </span>
-      </div>
-      <div className="mt-1 overflow-x-auto">
-        <table className="w-full min-w-[31rem] text-left text-xs tabular-nums">
-          <thead className="text-muted-foreground">
-            <tr>
-              <th scope="col" className="py-1 font-medium">
-                Series
-              </th>
-              {["Average", "Min", "Max", "Samples", "Contributors"].map(
-                (name) => (
-                  <th scope="col" key={name} className="px-1 py-1 font-medium">
-                    {name}
-                  </th>
-                ),
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {series.map((item) => {
-              const point = pointForTime(item, time);
-              return (
-                <tr key={item.id} className="border-t border-border">
-                  <th scope="row" className="py-1 font-medium">
-                    <span className="flex items-center gap-1.5 whitespace-nowrap">
-                      <span
-                        aria-hidden="true"
-                        className="size-2 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      {item.label}
-                    </span>
-                  </th>
-                  {point?.average != null ? (
-                    <>
-                      {[point.average, point.minimum, point.maximum].map(
-                        (value, index) => (
-                          <td
-                            key={index}
-                            className="whitespace-nowrap px-1 py-1"
-                          >
-                            {formatValue(value, item.unit)}
-                          </td>
-                        ),
-                      )}
-                    </>
-                  ) : (
-                    <td colSpan={3} className="px-1 py-1 text-muted-foreground">
-                      No samples in this interval
-                    </td>
-                  )}
-                  <td className="whitespace-nowrap px-1 py-1">
-                    {formatCoverage(
-                      point?.validSamples ?? 0,
-                      point?.expectedSamples ?? 0,
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-1 py-1">
-                    {formatCoverage(
-                      point?.validContributions ?? 0,
-                      point?.expectedContributions ?? 0,
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 }
 
 export function MonitoringChart({
@@ -312,21 +190,18 @@ export function MonitoringChart({
     const useGiB =
       maximum >= 1024 && displayedSeries.every((item) => item.unit === "MiB");
     const factor = useGiB ? 1024 : 1;
-    const top = readableMaximum(maximum / factor);
+    const { top, labels } = readableAxis(maximum / factor);
     return {
       unit: useGiB ? "GiB" : unit,
       maximum: top * factor,
-      labels: Array.from(
-        { length: valueTickCount + 1 },
-        (_, index) => top * (1 - index / valueTickCount),
-      ),
+      labels,
     };
   }, [displayedSeries]);
   const valueTicks = scale.labels.map((value, index) => ({
     value,
     y:
       chartPlot.top +
-      (index / valueTickCount) * (chartPlot.bottom - chartPlot.top),
+      (index / (scale.labels.length - 1)) * (chartPlot.bottom - chartPlot.top),
   }));
   const timeTicks = useMemo(
     () => chartTimeTicks(displayedWindow, timeZone),
@@ -542,7 +417,7 @@ export function MonitoringChart({
               style={{ top: `${(y / viewBoxHeight) * 100}%` }}
               key={y}
             >
-              {valueFormatter.format(value)}
+              {axisValueFormatter.format(value)}
             </span>
           ))}
         </div>
