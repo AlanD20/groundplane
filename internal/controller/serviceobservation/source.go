@@ -54,6 +54,11 @@ type source struct {
 	expected                                                            uint32
 	runtimeRevision, projectionRevision, intentRevision, renderRevision int64
 	acknowledgedRuntimeRevision                                         int64
+	monitoringArtifact                                                  *agentpb.ComposeArtifact
+	monitoringArtifactBytes                                             []byte
+	monitoringVolumes                                                   []projectionrecord.EnvironmentVolumeIdentity
+	monitoringMounts                                                    []projectionrecord.EnvironmentServiceVolumeMount
+	monitoringArtifactVolumes                                           bool
 }
 
 func capture(
@@ -116,7 +121,10 @@ func capture(
 	return source{target: observation, expected: expected,
 		runtimeRevision: servicerecord.ServiceRuntimeRevision(service), projectionRevision: serving.ProjectionRevision,
 		intentRevision: serving.IntentRevision, renderRevision: render.Revision,
-		acknowledgedRuntimeRevision: runtimes[0].Revision}, true
+		acknowledgedRuntimeRevision: runtimes[0].Revision,
+		monitoringArtifactBytes:     runtime.Runtime.CurrentArtifact,
+		monitoringVolumes:           input.Projection.Volumes,
+		monitoringMounts:            input.Projection.VolumeMounts}, true
 }
 
 func (captured source) unchanged(current source) bool {

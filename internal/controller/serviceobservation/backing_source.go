@@ -73,6 +73,9 @@ func captureBacking(
 				ComposeName: workload.ComposeName}}, RuntimeRole: "backing"},
 		expected: workload.ExpectedReplicas, runtimeRevision: servicerecord.ServiceRuntimeRevision(service),
 		projectionRevision: applied.Revision,
+		monitoringArtifact: artifact,
+		monitoringVolumes:  applied.Record.Volumes,
+		monitoringMounts:   applied.Record.VolumeMounts,
 	}, true
 }
 
@@ -89,7 +92,7 @@ func capturePostgres(ctx context.Context, releases Releases,
 		applied.Revision > service.ReadRevision {
 		return source{}, false
 	}
-	_, workload, err := backingpostgresruntime.Select(applied.Record)
+	artifact, workload, err := backingpostgresruntime.Select(applied.Record)
 	if err != nil {
 		return source{}, false
 	}
@@ -116,5 +119,6 @@ func capturePostgres(ctx context.Context, releases Releases,
 		target.ReleaseId = applied.Record.DeploymentReleaseID
 	}
 	return source{target: target, expected: workload.ExpectedReplicas,
-		runtimeRevision: servicerecord.ServiceRuntimeRevision(service), projectionRevision: applied.Revision}, true
+		runtimeRevision: servicerecord.ServiceRuntimeRevision(service), projectionRevision: applied.Revision,
+		monitoringArtifact: artifact, monitoringArtifactVolumes: true}, true
 }
