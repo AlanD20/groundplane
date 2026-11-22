@@ -1,3 +1,4 @@
+import { formatCount } from "@/lib/format-count";
 import { useEditorSession } from "@/components/common/editor-session";
 ("use client");
 
@@ -67,7 +68,8 @@ export default function TenantSettingsPage() {
           <>
             <MetaPill icon={<Fingerprint />}>{tenant.id}</MetaPill>
             <MetaPill icon={<Boxes />}>
-              {projects.length} projects · {environments.length} environments
+              {formatCount(projects.length, "project")} ·{" "}
+              {formatCount(environments.length, "environment")}
             </MetaPill>
             {tenant.deletionTaskId && (
               <MetaPill icon={<Trash2 />}>
@@ -169,8 +171,9 @@ export default function TenantSettingsPage() {
           </div>
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
-              {projects.length} projects · {environments.length} environments ·{" "}
-              {runners.length} runners inside this tenant.
+              {formatCount(projects.length, "project")} ·{" "}
+              {formatCount(environments.length, "environment")} ·{" "}
+              {formatCount(runners.length, "runner")} inside this tenant.
             </p>
             <Button
               size="sm"
@@ -221,11 +224,12 @@ export default function TenantSettingsPage() {
           <p className="max-w-3xl text-xs text-muted-foreground">
             Deleting the Tenant removes everything it owns:{" "}
             <span className="font-medium text-foreground">
-              {projects.length} projects
+              {formatCount(projects.length, "project")}
             </span>{" "}
-            ({environments.length} environments), their volumes, secrets,
-            connectors, and {runners.length} runners. Backing services are not
-            tenant-owned and survive. This cannot be undone.
+            ({formatCount(environments.length, "environment")}), their volumes,
+            secrets, connectors, and {formatCount(runners.length, "runner")}.
+            Backing services are not tenant-owned and survive. This cannot be
+            undone.
           </p>
           <div>
             <Button
@@ -244,7 +248,7 @@ export default function TenantSettingsPage() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete tenant ${tenant.name}`}
-        description={`This permanently removes the tenant and everything inside it — ${projects.length} projects, ${environments.length} environments with volumes and data, secrets, connectors, and runners. Backing services survive.`}
+        description={`This permanently removes the tenant and everything inside it — ${formatCount(projects.length, "project")}, ${formatCount(environments.length, "environment")} with volumes and data, secrets, connectors, and runners. Backing services survive.`}
         type="remove"
         target={tenant.id}
         workspace={tenant.slug}

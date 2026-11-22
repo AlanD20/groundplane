@@ -1,3 +1,4 @@
+import { formatCount } from "@/lib/format-count";
 import { ImageReference } from "@/components/common/image-reference";
 import { ResourceActionMenu } from "@/components/common/resource-action-menu";
 import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
@@ -132,9 +133,10 @@ export function EnvironmentsTable({
                       </p>
                     ) : (
                       <>
-                        <p>{env.services.length} Services</p>
+                        <p>{formatCount(env.services.length, "service")}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {env.routes.length} Routes, {env.zones.length} Zones,{" "}
+                          {formatCount(env.routes.length, "route")},{" "}
+                          {formatCount(env.zones.length, "zone")},{" "}
                           {env.attaches.length} connections
                         </p>
                       </>

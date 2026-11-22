@@ -1,3 +1,4 @@
+import { formatCount } from "@/lib/format-count";
 import { EmptyState } from "@/components/common/empty-state";
 import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -142,7 +143,7 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">
-              {summary.total} {summary.total === 1 ? "Service" : "Services"}
+              {formatCount(summary.total, "service")}
               {monitoring.paused ? " · live refresh paused" : ""}
             </span>
           </div>

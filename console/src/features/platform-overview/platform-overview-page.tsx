@@ -1,4 +1,5 @@
-"use client";
+import { formatCount } from "@/lib/format-count";
+("use client");
 
 import { ImageReference } from "@/components/common/image-reference";
 import { PageHeader } from "@/components/common/page-header";
@@ -146,7 +147,7 @@ export default function PlatformOverviewPage() {
         <SummaryItem label="Tenants">
           {tenants.length}
           <span className="mt-1 block text-xs font-normal text-muted-foreground">
-            {tenantProjects.length} projects
+            {formatCount(tenantProjects.length, "project")}
           </span>
         </SummaryItem>
         <SummaryItem label="Environments">
@@ -211,7 +212,7 @@ export default function PlatformOverviewPage() {
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="hidden shrink-0 whitespace-nowrap text-xs text-muted-foreground sm:block">
-                        {projects.length} projects
+                        {formatCount(projects.length, "project")}
                       </span>
                       <ArrowRight className="size-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                     </div>
@@ -374,7 +375,7 @@ export default function PlatformOverviewPage() {
                       </span>
                       <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                         <span className="shrink-0">
-                          {env.services.length} Services
+                          {formatCount(env.services.length, "service")}
                         </span>
                         <ImageReference value={env.release} />
                       </span>

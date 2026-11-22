@@ -1,3 +1,4 @@
+import { formatCount } from "@/lib/format-count";
 import { EnvironmentMonitoring } from "@/features/monitoring/environment-monitoring";
 import { CreationButton } from "@/components/common/creation-button";
 import RunnerManager from "@/features/runners/runner-manager";
@@ -266,15 +267,15 @@ export default function EnvironmentPage() {
           <>
             <span className="inline-flex items-center gap-1.5">
               <Boxes className="size-3.5" />
-              {env.services.length} Services
+              {formatCount(env.services.length, "service")}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Network className="size-3.5" />
-              {env.zones.length} Zones
+              {formatCount(env.zones.length, "zone")}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Plug className="size-3.5" />
-              {env.routes.length} Routes
+              {formatCount(env.routes.length, "route")}
             </span>
             {env.provisioningState !== "ready" && (
               <StatusBadge

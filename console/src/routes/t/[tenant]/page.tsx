@@ -1,3 +1,4 @@
+import { formatCount } from "@/lib/format-count";
 import { CreationButton } from "@/components/common/creation-button";
 import { ProjectsTable } from "@/features/project/projects-table";
 
@@ -91,9 +92,11 @@ export default function TenantPage() {
         icon={<Boxes />}
         meta={
           <>
-            <MetaPill icon={<Boxes />}>{projects.length} projects</MetaPill>
+            <MetaPill icon={<Boxes />}>
+              {formatCount(projects.length, "project")}
+            </MetaPill>
             <MetaPill icon={<Cpu />}>
-              {runners.length} runners ·{" "}
+              {formatCount(runners.length, "runner")} ·{" "}
               {runners.filter((r) => r.online).length} online
             </MetaPill>
             <MetaPill tone="success" icon={<ShieldCheck />}>

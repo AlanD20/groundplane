@@ -1,3 +1,4 @@
+import { formatCount } from "@/lib/format-count";
 import { EmptyState } from "@/components/common/empty-state";
 import { AnimatedSection } from "@/components/common/animated-section";
 import { useState, type ReactNode } from "react";
@@ -131,7 +132,7 @@ export function ZoneMap({
                   {z.internal ? "Internal" : "Outbound allowed"}
                 </Badge>
                 <span className="text-xs text-muted-foreground">
-                  {members(z).length} Services
+                  {formatCount(members(z).length, "service")}
                 </span>
               </Button>
               <div
@@ -187,7 +188,7 @@ export function ZoneMap({
                 onClick={() => select("unzoned")}
               >
                 <Boxes />
-                No Zone · {unzoned.length} Services
+                No Zone · {formatCount(unzoned.length, "service")}
               </Button>
               <AnimatedSection open={selectedZone === "unzoned"}>
                 {selectedZone === "unzoned" && renderUnzoned(selection)}
