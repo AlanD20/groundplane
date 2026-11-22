@@ -30,7 +30,10 @@ func TestPrepareEntryCreationAcceptsTransientSecretLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareEntryCreation() error = %v", err)
 	}
-	if entry.Source.Literal != "private" || entry.Encrypted() || !entry.ValueMetadataProtected() || len(entry.Exposure) != 2 ||
+	if entry.Source.Literal != "private" ||
+		entry.Encrypted() ||
+		!entry.ValueMetadataProtected() ||
+		len(entry.Exposure) != 2 ||
 		entry.Exposure[0] != "api" ||
 		entry.Exposure[1] != "worker" {
 		t.Fatalf("prepareEntryCreation() = %#v", entry)

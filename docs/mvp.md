@@ -213,7 +213,9 @@ use the captured local image id, not a mutable tag resolved again. Managed GP
 images are installation/release assets with their own immutable selection.
 Software preparation builds Groundplane source refs in Docker on this host or
 imports verified component releases. Controller, Agent and Both selections retain
-digest-pinned outputs in GP's registry; a separate Apply activates them.
+digest-pinned native outputs in GP's registry; a separate Apply activates them.
+Console assets have independent published releases, with exact API compatibility;
+All prepares and activates the matching Controller, Agent and Console together.
 Both updates qualify the prepared Controller/Agent pair together and restore both
 predecessors if qualification fails. Single-component updates must retain channel
 compatibility; persistent-format incompatibility still rejects activation. Host-built

@@ -227,7 +227,10 @@ func ValidateProgress(progress Progress, input Input) error {
 	}
 	switch progress.Phase {
 	case PhaseAccepted:
-		if progress.StagedController != nil || progress.AgentStaged || progress.ConsoleStaged || progress.ControllerApplied ||
+		if progress.StagedController != nil ||
+			progress.AgentStaged ||
+			progress.ConsoleStaged ||
+			progress.ControllerApplied ||
 			progress.AgentApplied ||
 			progress.ConsoleApplied ||
 			progress.ErrorCode != "" ||

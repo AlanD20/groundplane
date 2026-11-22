@@ -89,6 +89,16 @@ and newer Agent generations remain protected. Reconnect cannot bypass the pause.
 When publication may have committed, GP retains the hold until it resolves the
 outcome instead of reopening the previous generation.
 
+## Downgrade limits
+
+Matching storage and channel versions do not establish arbitrary downgrade
+compatibility. This release reads existing Entry records without migration and
+keeps their legacy storage behavior. Once an operator writes explicit Entry
+encryption settings, Controller builds predating independent Entry encryption
+cannot read those definitions. Do not select such a build as a later update.
+The automatic predecessor recovery window ends when the candidate qualifies;
+ordinary configuration mutations remain blocked until that transition.
+
 ## Failure and interruption
 
 The durable Task and private update journal retain the operation across Controller
