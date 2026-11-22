@@ -267,12 +267,24 @@ func consoleParentService(
 		t.Fatal(err)
 	}
 	store := &consoleParentStore{revision: fixture.view.ReadRevision, values: map[string]keyvalue.KeyValue{
-		workqueue.TaskKey(owner.TaskID):                                             {Value: taskRaw, ModRevision: fixture.view.Task.Revision},
-		workqueue.ItemKey(owner.WorkItemID):                                         {Value: itemRaw, ModRevision: fixture.view.Item.Revision},
+		workqueue.TaskKey(owner.TaskID): {
+			Value:       taskRaw,
+			ModRevision: fixture.view.Task.Revision,
+		},
+		workqueue.ItemKey(owner.WorkItemID): {
+			Value:       itemRaw,
+			ModRevision: fixture.view.Item.Revision,
+		},
 		workqueue.TaskItemKey(owner.TaskID, owner.WorkItemID):                       {Value: memberRaw, ModRevision: 9},
 		workqueue.AttemptIndexKey(owner.WorkItemID, fixture.attempt.Attempt.Number): {Value: indexRaw, ModRevision: 10},
-		workqueue.AttemptKey(fixture.attempt.Attempt.ID):                            {Value: attemptRaw, ModRevision: fixture.attempt.Revision},
-		activation.ConsoleResultKey(fixture.attempt.Attempt.ID):                     {Value: bytes.Clone(receipt), ModRevision: 11},
+		workqueue.AttemptKey(fixture.attempt.Attempt.ID): {
+			Value:       attemptRaw,
+			ModRevision: fixture.attempt.Revision,
+		},
+		activation.ConsoleResultKey(fixture.attempt.Attempt.ID): {
+			Value:       bytes.Clone(receipt),
+			ModRevision: 11,
+		},
 	}}
 	for key, value := range store.values {
 		value.Key = key
