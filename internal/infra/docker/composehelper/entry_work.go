@@ -113,7 +113,7 @@ func inspectEntryConsumers(ctx context.Context, taskRunner runner.Runner, artifa
 		if uint64(len(containers)) != uint64(service.ExpectedReplicas) {
 			ready = false
 		}
-		result, err := runEntryCompose(ctx, taskRunner, artifact, "config", "--hash", service.ComposeName)
+		result, err := entryConsumerHash(ctx, taskRunner, artifact, service.ComposeName)
 		if err != nil {
 			return false, err
 		}
@@ -166,6 +166,7 @@ func runEntryCompose(
 	if err != nil {
 		return runner.Result{}, err
 	}
+	defer clear(input)
 	prefix := []string{"compose", "--project-name", artifact.ProjectName,
 		"--project-directory", composeProjectDirectory(artifact), "--file", "-"}
 	return runEntryCommand(ctx, taskRunner, runner.RunCmdOpts{Name: DockerExecutable,
@@ -174,7 +175,9 @@ func runEntryCompose(
 
 func runEntryCommand(ctx context.Context, taskRunner runner.Runner, command runner.RunCmdOpts) (runner.Result, error) {
 	command.Dir, command.Env, command.ReplaceEnv = WorkDirectory, slices.Clone(fixedEnvironment), true
-	command.CaptureLimitBytes = 32 * 1024
+	if command.CaptureLimitBytes == 0 {
+		command.CaptureLimitBytes = 32 * 1024
+	}
 	result, err := taskRunner.Run(ctx, command)
 	clear(result.Stderr)
 	if ctx.Err() != nil || err != nil || result.ExitCode != 0 ||

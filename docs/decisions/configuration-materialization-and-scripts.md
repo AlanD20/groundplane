@@ -63,6 +63,13 @@ per-Environment writer ownership serializes materialization and exact retry.
 The helper reduces accidental exposure but does not contain an Agent that owns
 the root-equivalent Docker socket.
 
+Retained Entry consumer recovery verifies the resolved Compose model against
+running container configuration, including generated environment-file values.
+The hash-only Compose command omits environment-file resolution; it cannot be
+used directly as this proof. Resolve the captured model first, keep plaintext
+only in bounded transient buffers, then hash it without changing literal values.
+A hash mismatch remains unresolved recovery, not permission to discard ownership.
+
 ## Scripts run as sealed one-off workloads
 
 A Script has a stable id, an immutable Blueprint reconciliation key when
