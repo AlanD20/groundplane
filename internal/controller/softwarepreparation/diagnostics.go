@@ -83,6 +83,8 @@ func preparationStage(key string) (string, string, error) {
 		return "Build Agent image", "Build the captured source revision for the selected host architecture", nil
 	case "software_release_import":
 		return "Import published release", "Verify the captured component release checksums and immutable artifact identities", nil
+	case "software_console_publish":
+		return "Stage Console bundle", "Verify the published Console archive and stage its assets for activation", nil
 	case "software_agent_publish":
 		return "Publish Agent image", "Push the Agent artifact to GP's registry and verify its readback", nil
 	case "software_controller_publish":
