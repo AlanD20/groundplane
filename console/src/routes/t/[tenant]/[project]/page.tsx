@@ -4,6 +4,7 @@ import { useEditorSession } from "@/components/common/editor-session";
 import { EnvironmentsTable } from "@/features/environment/environments-table";
 
 import { EmptyState } from "@/components/common/empty-state";
+import { ResourceLookupState } from "@/components/common/resource-lookup-state";
 import { HierarchyDeleteDialog } from "@/components/common/hierarchy-delete-dialog";
 import { MetaPill } from "@/components/common/meta-pill";
 import { PageHeader } from "@/components/common/page-header";
@@ -53,9 +54,11 @@ export default function TenantProjectPage() {
 
   if (!tenant || !project || project.tenantId !== tenant.id) {
     return (
-      <EmptyState
+      <ResourceLookupState
         icon={<Boxes />}
-        title="Project not found"
+        resource="Project"
+        loading={store.tenantsLoading || store.projectsLoading}
+        error={store.tenantError ?? store.projectError}
         description={`${params.tenant}/${params.project} does not exist.`}
         action={
           <Link to={`/t/${params.tenant}`}>

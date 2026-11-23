@@ -2,7 +2,7 @@ import { workspaceSectionClassName } from "@/components/common/workspace-section
 import { CompactReference } from "@/components/common/compact-reference";
 ("use client");
 
-import { EmptyState } from "@/components/common/empty-state";
+import { ResourceLookupState } from "@/components/common/resource-lookup-state";
 import { MetaPill } from "@/components/common/meta-pill";
 import { PageHeader } from "@/components/common/page-header";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
@@ -54,9 +54,13 @@ export default function ReleaseGroupDetailPage() {
 
   if (!environment || !group) {
     return (
-      <EmptyState
+      <ResourceLookupState
         icon={<Workflow />}
-        title="Deployment group not found"
+        resource="Deployment group"
+        loading={store.tenantsLoading || store.projectsLoading}
+        error={
+          store.tenantError ?? store.projectError ?? environment?.resourceLoadError
+        }
         description={`${params.id} does not exist in ${params.tenant}/${params.project}/${params.env}.`}
         action={
           <Link to={listPath}>

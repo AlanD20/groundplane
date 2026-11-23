@@ -13,7 +13,7 @@ import {
   Settings,
   Trash2,
 } from "lucide-react";
-import { EmptyState } from "@/components/common/empty-state";
+import { ResourceLookupState } from "@/components/common/resource-lookup-state";
 import { MetaPill } from "@/components/common/meta-pill";
 import { PageHeader } from "@/components/common/page-header";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
@@ -46,13 +46,13 @@ export default function ProjectSettingsPage() {
   const [mutating, setMutating] = useState(false);
 
   if (!tenant || !project) {
-    if (store.tenantsLoading || store.projectsLoading)
-      return <EmptyState icon={<Boxes />} title="Loading project" />;
     return (
-      <EmptyState
+      <ResourceLookupState
         icon={<Boxes />}
-        title="Project not found"
-        description={store.projectError ?? undefined}
+        resource="Project"
+        loading={store.tenantsLoading || store.projectsLoading}
+        error={store.tenantError ?? store.projectError}
+        description={`${params.tenant}/${params.project} does not exist.`}
       />
     );
   }

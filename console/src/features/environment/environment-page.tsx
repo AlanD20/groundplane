@@ -3,6 +3,7 @@ import { EnvironmentMonitoring } from "@/features/monitoring/environment-monitor
 import { CreationButton } from "@/components/common/creation-button";
 import RunnerManager from "@/features/runners/runner-manager";
 import { EmptyState } from "@/components/common/empty-state";
+import { ResourceLookupState } from "@/components/common/resource-lookup-state";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
@@ -97,13 +98,11 @@ export default function EnvironmentPage() {
   });
   if (!env || !project)
     return (
-      <EmptyState
+      <ResourceLookupState
         icon={<Layers />}
-        title={
-          store.tenantsLoading || store.projectsLoading
-            ? "Loading Environment"
-            : "Environment not found"
-        }
+        resource="Environment"
+        loading={store.tenantsLoading || store.projectsLoading}
+        error={store.tenantError ?? store.projectError}
         description={`${params.tenant} / ${params.project} / ${params.env}`}
         action={
           <Link to={`/t/${params.tenant}`}>

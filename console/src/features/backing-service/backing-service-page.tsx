@@ -1,5 +1,5 @@
 import { ServiceMetadata } from "@/features/service/service-metadata";
-import { EmptyState } from "@/components/common/empty-state";
+import { ResourceLookupState } from "@/components/common/resource-lookup-state";
 import { DetailRow } from "@/components/common/detail-row";
 import { PageHeader } from "@/components/common/page-header";
 import { ResourcePanel } from "@/components/common/resource-panel";
@@ -69,9 +69,11 @@ export default function BackingServiceDetailPage() {
 
   if (!g || !env || !svc) {
     return (
-      <EmptyState
+      <ResourceLookupState
         icon={<Database />}
-        title="Backing service not found"
+        resource="Backing Service"
+        loading={store.backingProjectsLoading}
+        error={store.backingProjectError}
         description={`${params.id} does not exist.`}
         action={
           <Link to="/platform/backing-services">

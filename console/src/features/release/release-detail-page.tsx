@@ -7,6 +7,7 @@ import { CompactReference } from "@/components/common/compact-reference";
 ("use client");
 
 import { EmptyState } from "@/components/common/empty-state";
+import { ResourceLookupState } from "@/components/common/resource-lookup-state";
 import { ImageReference } from "@/components/common/image-reference";
 import { MetaPill } from "@/components/common/meta-pill";
 import { PageHeader } from "@/components/common/page-header";
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
+import { ControllerRequestError } from "@/lib/controller-request-errors";
 import { ArrowLeft, History } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -37,6 +39,18 @@ export default function ReleaseDetailPage() {
   const listPath = originService
     ? `${basePath}?view=overview&service=${originService.id}&serviceTab=releases`
     : `${basePath}?view=operations&panel=releases`;
+
+  if (!environment) {
+    return (
+      <ResourceLookupState
+        icon={<History />}
+        resource="Environment"
+        loading={store.tenantsLoading || store.projectsLoading}
+        error={store.tenantError ?? store.projectError}
+        description={`${params.tenant}/${params.project}/${params.env}`}
+      />
+    );
+  }
 
   return (
     <ReleaseDetails
@@ -63,7 +77,10 @@ export function ReleaseDetails({
   inline?: boolean;
 }) {
   const [release, setRelease] = useState<ReleaseDetailResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{
+    message: string;
+    notFound: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,11 +98,14 @@ export function ReleaseDetails({
         })
         .catch((cause: unknown) => {
           if (!controller.signal.aborted && requestVersion === version)
-            setError(
-              cause instanceof Error
-                ? cause.message
-                : "Deployment could not be refreshed",
-            );
+            setError({
+              message:
+                cause instanceof Error
+                  ? cause.message
+                  : "Deployment could not be refreshed",
+              notFound:
+                cause instanceof ControllerRequestError && cause.status === 404,
+            });
         });
     };
     refresh();
@@ -100,10 +120,11 @@ export function ReleaseDetails({
 
   if (!environment || (error && !release)) {
     return (
-      <EmptyState
+      <ResourceLookupState
         icon={<History />}
-        title="Release not found"
-        description={error ?? `${id} is outside this environment.`}
+        resource="Release"
+        error={error && !error.notFound ? error.message : undefined}
+        description={error?.message ?? `${id} is outside this environment.`}
         action={
           !inline && (
             <Link to={listPath}>
@@ -118,7 +139,7 @@ export function ReleaseDetails({
   }
   if (!release)
     return (
-      <EmptyState icon={<History />} title="Loading release" description="" />
+      <EmptyState loading icon={<History />} title="Loading release" />
     );
   if (release.environment_id !== environment.id) {
     return (
@@ -243,7 +264,7 @@ export function ReleaseDetails({
       </Disclosure>
       {error && (
         <p role="alert" className="text-sm text-destructive">
-          Refresh failed: {error}. The last loaded deployment remains visible.
+          Showing the last loaded deployment. Refresh failed: {error.message}
         </p>
       )}
     </div>

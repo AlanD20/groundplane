@@ -10,7 +10,7 @@ import { BulkSecretEditor } from "@/features/secrets/bulk-secret-editor";
 import { CreationButton } from "@/components/common/creation-button";
 ("use client");
 
-import { EmptyState } from "@/components/common/empty-state";
+import { ResourceLookupState } from "@/components/common/resource-lookup-state";
 import { MetaPill } from "@/components/common/meta-pill";
 import { PageHeader } from "@/components/common/page-header";
 import { ResourcePanel } from "@/components/common/resource-panel";
@@ -44,9 +44,11 @@ export default function ProjectSecretsPage() {
   }
   if (!tenant || !project || project.tenantId !== tenant.id) {
     return (
-      <EmptyState
+      <ResourceLookupState
         icon={<KeyRound />}
-        title="Project not found"
+        resource="Project"
+        loading={store.tenantsLoading || store.projectsLoading}
+        error={store.tenantError ?? store.projectError}
         description={`${params.tenant}/${params.project} does not exist.`}
         action={
           <Link to={`/t/${params.tenant}`}>
