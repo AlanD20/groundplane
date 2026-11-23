@@ -1,5 +1,4 @@
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
-import { AnimatedSection } from "@/components/common/animated-section";
 import {
   ResourceForm,
   ResourceFormHeader as DialogHeader,
@@ -29,7 +28,7 @@ export function AttachFormDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const form = open ? (
+  return open ? (
     <AttachForm
       key={`${env.id}/${initialServiceId ?? "all"}`}
       initialServiceId={initialServiceId}
@@ -39,7 +38,6 @@ export function AttachFormDialog({
       onOpenChange={onOpenChange}
     />
   ) : null;
-  return inline ? <AnimatedSection open={open}>{form}</AnimatedSection> : form;
 }
 
 function AttachForm({

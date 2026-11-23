@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { AnimatedSection } from "@/components/common/animated-section";
 import { Disclosure } from "@/components/common/disclosure";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
@@ -170,7 +169,7 @@ export function EntryRow({
       ) : (
         preview
       )}
-      <AnimatedSection open={!!editor}>{editor}</AnimatedSection>
+      {editor}
     </li>
   );
 }

@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 export type InspectionItem = {
   id: string;
@@ -36,12 +36,24 @@ export function InspectionWorkspace({
   actionId?: string;
   children: ReactNode;
 }) {
+  const workspace = useRef<HTMLDivElement>(null);
   const detail = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const element = workspace.current;
+    const page = element?.closest("main");
+    if (!element || !page) return;
+    const onWheel = (event: WheelEvent) => handOffWheel(event, page);
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => element.removeEventListener("wheel", onWheel);
+  }, []);
   useLayoutEffect(() => {
     if (detail.current) detail.current.scrollTop = 0;
   }, [selectedId]);
   return (
-    <div className="grid min-w-0 items-start gap-4 lg:h-[clamp(32rem,80dvh,56rem)] lg:grid-cols-[minmax(15rem,19rem)_minmax(0,1fr)] lg:items-stretch">
+    <div
+      ref={workspace}
+      className="grid min-w-0 items-start gap-4 lg:h-[clamp(32rem,80dvh,56rem)] lg:grid-cols-[minmax(15rem,19rem)_minmax(0,1fr)] lg:items-stretch"
+    >
       <Card className="min-w-0 lg:flex lg:min-h-0 lg:flex-col">
         <CardHeader className="shrink-0 gap-3 px-4 py-3">
           <CardTitle>{title}</CardTitle>
@@ -64,6 +76,7 @@ export function InspectionWorkspace({
               />
               <ul
                 aria-label={title}
+                data-inspection-pane
                 className="hidden min-h-0 flex-1 space-y-1 overflow-y-auto p-1 lg:block"
               >
                 {items.map(({ id, label, description, status }) => (
@@ -103,6 +116,7 @@ export function InspectionWorkspace({
       </Card>
       <section
         ref={detail}
+        data-inspection-pane
         aria-label={detailsLabel}
         tabIndex={0}
         className="h-[clamp(20rem,65dvh,42rem)] min-h-0 min-w-0 space-y-3 overflow-y-auto rounded-xl border border-border bg-card p-4 [scrollbar-gutter:stable] focus-visible:outline-2 focus-visible:outline-ring lg:h-full"
@@ -113,4 +127,58 @@ export function InspectionWorkspace({
       </section>
     </div>
   );
+}
+
+// Native scrolling stays in charge until the current scroller reaches an edge.
+function handOffWheel(event: WheelEvent, page: HTMLElement) {
+  if (
+    event.defaultPrevented ||
+    !event.cancelable ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    event.altKey ||
+    Math.abs(event.deltaY) <= Math.abs(event.deltaX) ||
+    !(event.target instanceof Element)
+  )
+    return;
+
+  const pane = event.target.closest<HTMLElement>("[data-inspection-pane]");
+  if (!pane || !page.contains(pane)) return;
+  let atBoundary = false;
+  for (
+    let element: Element | null = event.target;
+    element;
+    element = element.parentElement
+  ) {
+    if (!(element instanceof HTMLElement)) continue;
+    const isBoundary = element === pane || element === page;
+    if (!isBoundary && element.scrollHeight <= element.clientHeight) continue;
+    const style = getComputedStyle(element);
+    if (!isBoundary && !["auto", "scroll", "overlay"].includes(style.overflowY))
+      continue;
+    const scrollable =
+      event.deltaY < 0
+        ? element.scrollTop > 0
+        : element.scrollTop < element.scrollHeight - element.clientHeight - 1;
+    if (scrollable) {
+      if (atBoundary) {
+        const unit =
+          event.deltaMode === 1
+            ? Number.parseFloat(style.lineHeight) || 16
+            : event.deltaMode === 2
+              ? element.clientHeight
+              : 1;
+        event.preventDefault();
+        element.scrollTop += event.deltaY * unit;
+      }
+      return;
+    }
+    if (
+      element === page ||
+      (!isBoundary && style.overscrollBehaviorY !== "auto")
+    )
+      return;
+    atBoundary = true;
+  }
 }

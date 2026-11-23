@@ -18,7 +18,6 @@ import {
   workspaceSectionClassName,
   editorFooterClassName,
 } from "./workspace-section";
-import { AnimatedSection } from "./animated-section";
 import { cn } from "@/lib/utils";
 
 const Inline = createContext(false);
@@ -74,7 +73,8 @@ export function ResourceForm({
 }) {
   const region = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!open || !inline || !editing) return;
+    const element = region.current;
+    if (!open || !inline || !editing || !element) return;
     const previousFocus = document.activeElement as HTMLElement | null;
     const frame = requestAnimationFrame(() => {
       region.current?.scrollIntoView({ block: "nearest" });
@@ -86,10 +86,15 @@ export function ResourceForm({
     });
     return () => {
       cancelAnimationFrame(frame);
-      if (region.current?.contains(document.activeElement))
-        previousFocus?.focus({ preventScroll: true });
+      if (
+        previousFocus?.isConnected &&
+        (element.contains(document.activeElement) ||
+          document.activeElement === document.body)
+      )
+        previousFocus.focus({ preventScroll: true });
     };
   }, [open, inline, editing]);
+  if (inline && !open) return null;
   return (
     <Editing.Provider value={editing}>
       <Inline.Provider value={inline}>
@@ -103,34 +108,29 @@ export function ResourceForm({
             }}
           >
             <FormActionsActive.Provider value={open && editing}>
-              <AnimatedSection
-                open={open}
-                className="w-full min-w-0 basis-full"
+              <div
+                ref={region}
+                className={cn(
+                  "w-full min-w-0 basis-full scroll-mt-24 py-2",
+                  className,
+                )}
               >
-                <div
-                  ref={region}
-                  className={cn(
-                    "w-full min-w-0 basis-full scroll-mt-24 py-2",
-                    className,
-                  )}
-                >
-                  <div className="w-full">
-                    <section
-                      data-form-owner
-                      className={
-                        editing
-                          ? workspaceSectionClassName(
-                              true,
-                              "space-y-4 [&_input:not([type=checkbox]):not([type=radio])]:max-w-lg [&_[role=combobox]]:max-w-lg",
-                            )
-                          : "space-y-4 border-t border-border pt-4"
-                      }
-                    >
-                      {children}
-                    </section>
-                  </div>
+                <div className="w-full">
+                  <section
+                    data-form-owner
+                    className={
+                      editing
+                        ? workspaceSectionClassName(
+                            true,
+                            "space-y-4 [&_input:not([type=checkbox]):not([type=radio])]:max-w-lg [&_[role=combobox]]:max-w-lg",
+                          )
+                        : "space-y-4 border-t border-border pt-4"
+                    }
+                  >
+                    {children}
+                  </section>
                 </div>
-              </AnimatedSection>
+              </div>
             </FormActionsActive.Provider>
           </EditorDiscard.Provider>
         ) : (

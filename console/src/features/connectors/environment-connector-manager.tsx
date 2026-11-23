@@ -1,6 +1,5 @@
 import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
-import { AnimatedSection } from "@/components/common/animated-section";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
 
@@ -300,40 +299,38 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                       environmentName={env.name}
                     />
 
-                    <AnimatedSection open={editingId === connector.id}>
-                      {editingId === connector.id && (
-                        <ConnectorEditorDrawer
-                          mode="edit"
-                          open={editingId !== null}
-                          onOpenChange={(open) => {
-                            if (!open) closeEdit();
-                          }}
-                          env={env}
-                          existingNames={connectors.map(
-                            (connector) => connector.name,
-                          )}
-                          secretOptions={secretOptions}
-                          snapshot={editSnapshot}
-                          loading={editLoading}
-                          loadError={editError}
-                          onReload={() => {
-                            if (editingId) loadEdit(editingId);
-                          }}
-                          onSave={async (input, etag, intent) => {
-                            if (!editSnapshot)
-                              throw new Error(
-                                "Current Connector metadata is unavailable",
-                              );
-                            await store.editConnector(
-                              editSnapshot.connector.id,
-                              input,
-                              etag,
-                              intent,
+                    {editingId === connector.id && (
+                      <ConnectorEditorDrawer
+                        mode="edit"
+                        open={editingId !== null}
+                        onOpenChange={(open) => {
+                          if (!open) closeEdit();
+                        }}
+                        env={env}
+                        existingNames={connectors.map(
+                          (connector) => connector.name,
+                        )}
+                        secretOptions={secretOptions}
+                        snapshot={editSnapshot}
+                        loading={editLoading}
+                        loadError={editError}
+                        onReload={() => {
+                          if (editingId) loadEdit(editingId);
+                        }}
+                        onSave={async (input, etag, intent) => {
+                          if (!editSnapshot)
+                            throw new Error(
+                              "Current Connector metadata is unavailable",
                             );
-                          }}
-                        />
-                      )}
-                    </AnimatedSection>
+                          await store.editConnector(
+                            editSnapshot.connector.id,
+                            input,
+                            etag,
+                            intent,
+                          );
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
               );

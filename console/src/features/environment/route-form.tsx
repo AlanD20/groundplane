@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { AnimatedSection } from "@/components/common/animated-section";
 import {
   ResourceForm,
   ResourceFormHeader as DialogHeader,
@@ -68,13 +67,9 @@ export function RouteFormDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  return (
-    <AnimatedSection open={open}>
-      {open ? (
-        <RouteForm key={env.id} env={env} open onOpenChange={onOpenChange} />
-      ) : null}
-    </AnimatedSection>
-  );
+  return open ? (
+    <RouteForm key={env.id} env={env} open onOpenChange={onOpenChange} />
+  ) : null;
 }
 
 function RouteForm({
