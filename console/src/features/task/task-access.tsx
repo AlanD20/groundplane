@@ -53,8 +53,7 @@ export function TaskNotifications() {
     if (open && unread) markTaskNotificationsRead();
   }, [open, unread]);
 
-  // Dismissing a popup or opening the drawer never restarts Task reads.
-  const taskKey = notifications.map(({ id }) => id).join("/");
+  // New acceptances queue refreshes without canceling reads already in flight.
   useVisibleRefresh(
     async (signal) => {
       const pending = notifications.filter(
@@ -87,7 +86,7 @@ export function TaskNotifications() {
         return next;
       });
     },
-    { key: taskKey, enabled: !!taskKey, interval: 2_000 },
+    { enabled: notifications.length > 0, interval: 2_000 },
   );
 
   const notificationLink = (id: string, onClick: () => void) => {

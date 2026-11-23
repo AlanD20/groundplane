@@ -1,3 +1,4 @@
+import { reportResourceChange } from "@/lib/resource-observation";
 import { useSyncExternalStore } from "react";
 
 export type TaskNotification = {
@@ -36,6 +37,7 @@ export function reportAcceptedTasks(response: unknown) {
     ...accepted,
   ].slice(0, 50);
   listeners.forEach((listener) => listener());
+  reportResourceChange();
 }
 
 export function dismissAcceptedTask(id: string) {
