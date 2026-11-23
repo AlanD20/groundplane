@@ -1,11 +1,15 @@
-import { AnimatedSection } from "@/components/common/animated-section";
+import { InspectionWorkspace } from "@/components/common/inspection-workspace";
+import {
+  ListToolbar,
+  TablePagination,
+  useTableView,
+} from "@/components/common/table-controls";
+import { readRoute } from "./network-api";
 import { RouteFormDialog } from "./route-form";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
-import { InlineEditorRegion } from "@/components/common/inline-editor-region";
 import { RouteAccessCheck } from "./edge-check-panel";
-import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import {
   ResourceForm,
   ResourceFormHeader as DialogHeader,
@@ -23,14 +27,8 @@ import { Select } from "@/components/ui/select";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { Environment, Route } from "@/lib/types";
-import {
-  ChevronRight,
-  Pencil,
-  Plus,
-  Router as RouterIcon,
-  Trash2,
-} from "lucide-react";
-import { useRef, useState } from "react";
+import { Pencil, Plus, Router as RouterIcon, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 // ---- Routes ----
 
@@ -38,10 +36,8 @@ export function RoutesCard({ env }: { env: Environment }) {
   const store = useStore();
   const params = useRequiredParams("tenant");
   const [open, setOpen] = useState(false);
-  const [detailTarget, setDetailTarget] = useState<Route | null>(null);
-  const [detailRoute, setDetailRoute] = useState<Route>();
-  const [detailError, setDetailError] = useState<string>();
-  const detailRequest = useRef(0);
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string>();
   const [editing, setEditing] = useState<Route | null>(null);
   const [removing, setRemoving] = useState<Route | null>(null);
   const [exposure, setExposure] = useState<Route["exposure"]>("internal");
@@ -68,108 +64,33 @@ export function RoutesCard({ env }: { env: Environment }) {
       setEditSubmitting(false);
     }
   };
-  const details = (
-    <ResourceForm
-      editing={false}
-      open={detailTarget !== null}
-      onOpenChange={(next) => {
-        if (!next) {
-          detailRequest.current++;
-          setDetailTarget(null);
-        }
-      }}
-    >
-      <DialogHeader>
-        <DialogTitle>
-          Route details ·{" "}
-          {detailTarget
-            ? `${detailTarget.host || "internal"}${detailTarget.path}`
-            : ""}
-        </DialogTitle>
-      </DialogHeader>
-      {!detailRoute && !detailError ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          Loading Route details...
-        </p>
-      ) : null}
-      {detailError ? (
-        <p role="alert" className="text-sm text-destructive">
-          {detailError}
-        </p>
-      ) : null}
-      {detailRoute ? (
-        <div>
-          <div className="grid max-w-4xl gap-4 sm:grid-cols-2">
-            <div className="min-w-0 space-y-2 rounded-lg border border-border p-3">
-              <p className="text-xs font-medium text-muted-foreground">
-                Incoming request
-              </p>
-              <p className="break-all font-mono text-sm">
-                {detailRoute.host || "Any internal host"}
-                {detailRoute.path}
-              </p>
-              <ExposurePill exposure={detailRoute.exposure} />
-            </div>
-            <div className="min-w-0 space-y-2 rounded-lg border border-border p-3">
-              <p className="text-xs font-medium text-muted-foreground">
-                Destination Service
-              </p>
-              <p className="break-all font-mono text-sm">
-                {env.services.find(
-                  (service) => service.id === detailRoute.targetServiceId,
-                )?.name ?? detailRoute.targetServiceId}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Port{" "}
-                <span className="font-mono text-foreground">
-                  {detailRoute.targetPort}
-                </span>
-              </p>
-            </div>
-          </div>
-          <p className="mt-4 text-sm">
-            <span className="text-muted-foreground">Serving status: </span>
-            {detailRoute.status}
-          </p>
-          {detailRoute.exposure === "public" && (
-            <div className="mt-4">
-              <RouteAccessCheck
-                key={detailRoute.id}
-                environmentId={env.id}
-                route={detailRoute}
-                components={env.components}
-                open={detailTarget !== null}
-              />
-            </div>
-          )}
-          <div className="mt-4 flex flex-wrap gap-3 border-t border-border pt-3">
-            <CompactReference label="Route ID" value={detailRoute.id} />
-            <CompactReference
-              label="Service ID"
-              value={detailRoute.targetServiceId}
-            />
-            <CompactReference
-              label="Environment ID"
-              value={detailRoute.environmentId}
-            />
-          </div>
-        </div>
-      ) : null}
-      <DialogFooter>
-        <Button
-          variant="outline"
-          onClick={() => {
-            detailRequest.current++;
-            setDetailTarget(null);
-          }}
-        >
-          Close
-        </Button>
-      </DialogFooter>
-    </ResourceForm>
+  const rows = env.routes.map((route) => ({
+    route,
+    address: `${route.host || "internal"}${route.path}`,
+    service:
+      env.services.find((item) => item.id === route.targetServiceId)?.name ??
+      route.targetServiceId,
+  }));
+  const table = useTableView(
+    rows.filter(({ route, address, service }) =>
+      `${address} ${service} ${route.targetPort} ${route.exposure} ${route.status}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+    ),
+    {
+      address: ({ address }) => address,
+      service: ({ service }) => service,
+      exposure: ({ route }) => route.exposure,
+    },
+    "address",
+    "asc",
+    `${env.id}/${query}`,
   );
+  const selected =
+    table.rows.find(({ route }) => route.id === selectedId) ?? table.rows[0];
   const editor = (
     <ResourceForm
+      inline={false}
       open={!!editing}
       onOpenChange={(next) => {
         if (!next) {
@@ -250,97 +171,58 @@ export function RoutesCard({ env }: { env: Environment }) {
             description="Add a Route to direct requests to a Service."
           />
         )}
-        {env.routes.map((r) => (
-          <InlineEditorRegion key={r.id} editing={false}>
-            <div className={workspaceSectionClassName()}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <ExposurePill exposure={r.exposure} />
-                  <span className="truncate font-mono text-sm">
-                    {r.host || "internal"}
-                    {r.path}
-                  </span>
-                </div>
-                <div className="flex min-w-0 items-center gap-1">
-                  <span className="truncate font-mono text-xs text-muted-foreground">
-                    →{" "}
-                    {env.services.find(
-                      (service) => service.id === r.targetServiceId,
-                    )?.name ?? r.targetServiceId}
-                    :{r.targetPort}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    data-action-id="route.show"
-                    aria-label={`Show Route ${r.host || "internal"}${r.path}`}
-                    title="Toggle route details"
-                    aria-expanded={detailTarget?.id === r.id}
-                    onClick={() => {
-                      const request = ++detailRequest.current;
-                      if (detailTarget?.id === r.id) {
-                        setDetailTarget(null);
-                        return;
-                      }
-                      setDetailTarget(r);
-                      setDetailRoute(undefined);
-                      setDetailError(undefined);
-                      void store
-                        .getRoute(r.id)
-                        .then((route) => {
-                          if (request === detailRequest.current)
-                            setDetailRoute(route);
-                        })
-                        .catch((error: unknown) => {
-                          if (request !== detailRequest.current) return;
-                          setDetailError(
-                            error instanceof Error
-                              ? error.message
-                              : "Unable to load Route details",
-                          );
-                        });
-                    }}
-                  >
-                    <ChevronRight
-                      className={`size-3.5 transition-transform ${detailTarget?.id === r.id ? "rotate-90" : ""}`}
-                    />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    title="Edit route exposure"
-                    onClick={() => {
-                      detailRequest.current++;
-                      setDetailTarget(null);
-                      setEditAfter([]);
-                      setExposure(r.exposure);
-                      setEditError(undefined);
-                      setEditing(r);
-                    }}
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="text-muted-foreground hover:text-destructive"
-                    title="Remove route"
-                    onClick={() => setRemoving(r)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </div>
-              <AnimatedSection open={detailTarget?.id === r.id}>
-                {detailTarget?.id === r.id && details}
-              </AnimatedSection>
-              <AnimatedSection open={editing?.id === r.id}>
-                {editing?.id === r.id && editor}
-              </AnimatedSection>
-            </div>
-          </InlineEditorRegion>
-        ))}
+        {env.routes.length > 0 && (
+          <InspectionWorkspace
+            title="Route list"
+            selectionLabel="Select route"
+            detailsLabel="Selected route"
+            actionId="route.show"
+            emptyMessage="No routes match your search."
+            selectedId={selected?.route.id}
+            onSelect={setSelectedId}
+            items={table.rows.map(({ route, address, service }) => ({
+              id: route.id,
+              label: address,
+              description: `${service}:${route.targetPort}`,
+              status: <ExposurePill exposure={route.exposure} />,
+            }))}
+            toolbar={
+              <ListToolbar
+                label="routes"
+                query={query}
+                onQueryChange={setQuery}
+                sort={table}
+                fields={[
+                  { value: "address", label: "Host and path" },
+                  { value: "service", label: "Destination" },
+                  { value: "exposure", label: "Exposure" },
+                ]}
+              />
+            }
+            footer={
+              table.pages > 1 && (
+                <TablePagination table={table} label="Routes" />
+              )
+            }
+          >
+            {selected && (
+              <SelectedRoute
+                key={selected.route.id}
+                env={env}
+                route={selected.route}
+                onEdit={() => {
+                  setEditAfter([]);
+                  setExposure(selected.route.exposure);
+                  setEditError(undefined);
+                  setEditing(selected.route);
+                }}
+                onRemove={() => setRemoving(selected.route)}
+              />
+            )}
+          </InspectionWorkspace>
+        )}
       </CardContent>
+      {editor}
       <TaskRunnerDialog
         runAfter
         open={!!removing}
@@ -358,6 +240,116 @@ export function RoutesCard({ env }: { env: Environment }) {
         }}
       />
     </Card>
+  );
+}
+
+function SelectedRoute({
+  env,
+  route,
+  onEdit,
+  onRemove,
+}: {
+  env: Environment;
+  route: Route;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const [detail, setDetail] = useState<Route>();
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    const controller = new AbortController();
+    setError(undefined);
+    void readRoute(route.id, controller.signal)
+      .then((next) => {
+        if (!controller.signal.aborted) setDetail(next);
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Unable to load route details",
+          );
+      });
+    return () => controller.abort();
+  }, [route.id, route.status, route.exposure]);
+  const detailRoute = detail ?? route;
+  return (
+    <div className="space-y-4">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
+        <h3 className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">
+          {route.host || "internal"}
+          {route.path}
+        </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onEdit}>
+            <Pencil className="size-3.5" /> Edit exposure
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onRemove}>
+            <Trash2 className="size-3.5" /> Remove route
+          </Button>
+        </div>
+      </header>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="grid max-w-4xl gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2 rounded-lg border border-border p-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            Incoming request
+          </p>
+          <p className="break-all font-mono text-sm">
+            {detailRoute.host || "Any internal host"}
+            {detailRoute.path}
+          </p>
+          <ExposurePill exposure={detailRoute.exposure} />
+        </div>
+        <div className="min-w-0 space-y-2 rounded-lg border border-border p-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            Destination Service
+          </p>
+          <p className="break-all font-mono text-sm">
+            {env.services.find(
+              (service) => service.id === detailRoute.targetServiceId,
+            )?.name ?? detailRoute.targetServiceId}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Port{" "}
+            <span className="font-mono text-foreground">
+              {detailRoute.targetPort}
+            </span>
+          </p>
+        </div>
+      </div>
+      <p className="mt-4 text-sm">
+        <span className="text-muted-foreground">Serving status: </span>
+        {detailRoute.status}
+      </p>
+      {detailRoute.exposure === "public" && (
+        <div className="mt-4">
+          <RouteAccessCheck
+            key={detailRoute.id}
+            environmentId={env.id}
+            route={detailRoute}
+            components={env.components}
+            open
+          />
+        </div>
+      )}
+      <div className="mt-4 flex flex-wrap gap-3 border-t border-border pt-3">
+        <CompactReference label="Route ID" value={detailRoute.id} />
+        <CompactReference
+          label="Service ID"
+          value={detailRoute.targetServiceId}
+        />
+        <CompactReference
+          label="Environment ID"
+          value={detailRoute.environmentId}
+        />
+      </div>
+    </div>
   );
 }
 

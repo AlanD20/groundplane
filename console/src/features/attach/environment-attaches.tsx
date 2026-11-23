@@ -1,4 +1,3 @@
-import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
 import {
   ResourceForm,
@@ -9,13 +8,7 @@ import {
 } from "@/components/common/resource-form";
 ("use client");
 
-import { workspaceSectionClassName } from "@/components/common/workspace-section";
-
-import {
-  ListToolbar,
-  TablePagination,
-  useTableView,
-} from "@/components/common/table-controls";
+import { ConnectionInspection } from "./connection-inspection";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,7 +34,6 @@ export function AttachesCard({
   env: Environment;
   service?: Service;
 }) {
-  const store = useStore();
   const attaches = env.attaches.filter(
     (attach) =>
       !service ||
@@ -49,23 +41,6 @@ export function AttachesCard({
       attach.service === service.name,
   );
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const table = useTableView(
-    attaches.filter((attach) =>
-      `${attach.name} ${attach.service} ${attach.database} ${store.getBackingProject(attach.projectId)?.name}`
-        .toLowerCase()
-        .includes(query.trim().toLowerCase()),
-    ),
-    {
-      name: (attach) => attach.name,
-      service: (attach) => attach.service,
-      backing: (attach) =>
-        store.getBackingProject(attach.projectId)?.name ?? "",
-    },
-    "name",
-    "asc",
-    `${env.id}/${query}`,
-  );
   return (
     <Card>
       <CardHeader className="flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -95,82 +70,55 @@ export function AttachesCard({
             : `Connections owned by Services in ${env.name}.`}{" "}
           Connection values must be explicitly mapped to variables or files.
         </p>
-        <ListToolbar
-          label="Connections"
-          query={query}
-          onQueryChange={setQuery}
-          sort={table}
-          fields={[
-            { value: "name", label: "Name" },
-            { value: "service", label: "Service" },
-            { value: "backing", label: "Backing Service" },
-          ]}
-        />
-        {table.rows.map((a) => (
-          <div
-            key={a.id}
-            className={workspaceSectionClassName(false, "space-y-3")}
-          >
-            <div className="flex flex-wrap items-center gap-3">
-              <ContextLink
-                returnLabel={`${service?.name ?? env.name} · Backing connections`}
-                to={`/platform/backing-services/${a.projectId}`}
-                className="flex min-w-0 basis-full flex-col items-start gap-1 transition-colors hover:border-ring/50 sm:flex-1"
-              >
-                <span className="text-sm font-medium [overflow-wrap:anywhere]">
-                  {a.name} ·{" "}
-                  {store.getBackingProject(a.projectId)?.name ?? a.projectId}
-                </span>
-                <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                  {a.factLoadError
-                    ? "Connection values unavailable"
-                    : a.database !== "—"
-                      ? `database ${a.database} · role ${a.role}`
-                      : "attached"}
-                  {a.service ? ` · for ${a.service}` : ""}
-                </span>
-              </ContextLink>
-              <RenameAttach env={env} attach={a} inline />
-              <StatusBadge status={a.status} />
-              <DetachAttach env={env} attach={a} />
-            </div>
-            {a.factLoadError && (
-              <p
-                role="alert"
-                className="text-sm text-destructive [overflow-wrap:anywhere]"
-              >
-                Connection values unavailable: {a.factLoadError}
-              </p>
-            )}
-            <ConnectionValues attach={a} env={env} />
-            <BackingAccessCheck
-              environmentId={env.id}
-              attachId={a.id}
-              disabled={a.status !== "healthy"}
-              grants={(a.grantAttachIds ?? []).map((id) => ({
-                id,
-                name:
-                  env.attaches.find((attach) => attach.id === id)?.name ?? id,
-              }))}
-            />
-          </div>
-        ))}
-        {!table.total && (
-          <EmptyState
-            embedded
-            title={
-              attaches.length
-                ? "No matching connections"
-                : "No backing connections yet"
-            }
-            description={
-              attaches.length
-                ? "Try another search."
-                : "Connect a backing service to share its database, cache or other resources."
-            }
-          />
-        )}
-        <TablePagination table={table} label="Connections" />
+        <ConnectionInspection scope={service?.id ?? env.id} attaches={attaches}>
+          {(attach, backingName) => (
+            <>
+              <header className="flex flex-wrap items-start gap-2">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
+                    {attach.name}
+                  </h3>
+                  <ContextLink
+                    returnLabel={`${service?.name ?? env.name} · Backing connections`}
+                    to={`/platform/backing-services/${attach.projectId}`}
+                    className="text-xs text-primary hover:underline [overflow-wrap:anywhere]"
+                  >
+                    {backingName}
+                  </ContextLink>
+                  <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                    {attach.database !== "—" &&
+                      `Database ${attach.database} · Role ${attach.role}`}
+                    {attach.database !== "—" && attach.service && " · "}
+                    {attach.service}
+                  </p>
+                </div>
+                <StatusBadge status={attach.status} />
+                <RenameAttach env={env} attach={attach} />
+                <DetachAttach env={env} attach={attach} />
+              </header>
+              {attach.factLoadError && (
+                <p
+                  role="alert"
+                  className="text-sm text-destructive [overflow-wrap:anywhere]"
+                >
+                  Connection values unavailable · {attach.factLoadError}
+                </p>
+              )}
+              <ConnectionValues attach={attach} env={env} />
+              <BackingAccessCheck
+                environmentId={env.id}
+                attachId={attach.id}
+                disabled={attach.status !== "healthy"}
+                grants={(attach.grantAttachIds ?? []).map((id) => ({
+                  id,
+                  name:
+                    env.attaches.find((candidate) => candidate.id === id)
+                      ?.name ?? id,
+                }))}
+              />
+            </>
+          )}
+        </ConnectionInspection>
       </CardContent>
     </Card>
   );

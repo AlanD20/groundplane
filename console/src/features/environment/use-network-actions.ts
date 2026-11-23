@@ -10,7 +10,6 @@ import {
 import type { TaskResponse } from "@/features/task/api";
 import {
   zoneFromAPI,
-  routeFromAPI,
   type ZoneCreateRequest,
   type ZoneCreateResponse,
   type ZoneRemoveResponse,
@@ -19,7 +18,6 @@ import {
   type RouteCreateAccepted,
   type RouteEditRequest,
   type RouteEditAccepted,
-  type RouteShowResponse,
   type ZoneShowResponse,
 } from "./network-api";
 
@@ -47,7 +45,6 @@ export type NetworkActions = {
       after?: string[];
     },
   ) => Promise<string>;
-  getRoute: (routeId: string) => Promise<Route>;
   updateRoute: (
     envId: string,
     routeId: string,
@@ -166,14 +163,6 @@ export function useNetworkActions({
       );
       return requireTaskId(accepted, "Route creation");
     },
-    getRoute: async (routeId) =>
-      routeFromAPI(
-        await controllerRequest<RouteShowResponse>(
-          `/routes/${encodeURIComponent(routeId)}`,
-          200,
-          { method: "GET" },
-        ),
-      ),
     updateRoute: async (envId, routeId, patch) => {
       assertEnvironmentMutable(envId, "Route mutation");
       const body: RouteEditRequest = {

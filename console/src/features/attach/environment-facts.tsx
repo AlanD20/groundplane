@@ -1,13 +1,9 @@
-import { Disclosure } from "@/components/common/disclosure";
-import { workspaceSectionClassName } from "@/components/common/workspace-section";
-("use client");
-
 import { RevealValue } from "@/components/common/reveal-value";
-import { EmptyState } from "@/components/common/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useStore } from "@/lib/store";
-import type { Attach, Environment, Service } from "@/lib/types";
+import type { Environment, Service } from "@/lib/types";
 import { Database } from "lucide-react";
+import { ConnectionInspection } from "./connection-inspection";
 
 export function FactsCard({
   env,
@@ -16,21 +12,10 @@ export function FactsCard({
   env: Environment;
   service?: Service;
 }) {
-  const store = useStore();
-  const factGroups = new Map<string, Attach[]>();
-  for (const attach of env.attaches) {
-    if (service && attach.serviceId !== service.id) continue;
-    if (
-      !attach.factLoadError &&
-      !attach.factSets.some((set) => set.facts.length)
-    )
-      continue;
-    const group = factGroups.get(attach.serviceId);
-    if (group) group.push(attach);
-    else factGroups.set(attach.serviceId, [attach]);
-  }
-  const groups = [...factGroups].sort(([, left], [, right]) =>
-    left[0].service.localeCompare(right[0].service),
+  const attaches = env.attaches.filter(
+    (attach) =>
+      (!service || attach.serviceId === service.id) &&
+      (attach.factLoadError || attach.factSets.some((set) => set.facts.length)),
   );
 
   return (
@@ -41,86 +26,64 @@ export function FactsCard({
           values
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {!groups.length && (
-          <EmptyState
-            embedded
-            icon={<Database />}
-            title="No connection values yet"
-            description="Connect a Service to a backing service to receive its connection values."
-          />
-        )}
-
-        {!!groups.length && (
+      <CardContent className="space-y-4">
+        {attaches.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            View the values each backing connection provides. Use Configuration
-            to make a value available to a Service.
+            Use Configuration to make a connection value available to a Service.
           </p>
         )}
-        {groups.map(([id, attaches]) => (
-          <section key={id} className="flex flex-col gap-2">
-            {!service && (
-              <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
-                {attaches[0].service || id}
-              </h3>
-            )}
-            {attaches.map((attach) => {
-              const backing = store.getBackingProject(attach.projectId);
-              return (
-                <Disclosure
-                  summary={
-                    <span className="flex flex-wrap gap-2 text-sm font-medium">
-                      {attach.name}
-                      <span className="text-xs text-muted-foreground">
-                        {backing?.name}
-                      </span>
-                    </span>
-                  }
-                  key={attach.id}
-                  className={workspaceSectionClassName(
-                    false,
-                    "flex flex-col gap-3",
-                  )}
+        <ConnectionInspection
+          scope={service?.id ?? env.id}
+          attaches={attaches}
+          showValues
+        >
+          {(attach, backingName) => (
+            <>
+              <header className="border-b border-border pb-3">
+                <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
+                  {attach.name}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {[attach.service, backingName].filter(Boolean).join(" · ")}
+                </p>
+              </header>
+              {attach.factLoadError && (
+                <p
+                  role="alert"
+                  className="text-sm text-destructive [overflow-wrap:anywhere]"
                 >
-                  {attach.factLoadError && (
-                    <p
-                      role="alert"
-                      className="text-sm text-destructive [overflow-wrap:anywhere]"
-                    >
-                      {attach.factLoadError}
-                    </p>
-                  )}
-                  {attach.factSets
-                    .filter((set) => set.facts.length > 0)
-                    .map((set) => (
-                      <div
-                        key={set.grantAttachId ?? "own"}
-                        className="divide-y divide-border border-t border-border [&>div]:py-3"
-                      >
-                        {set.grantAttachId && (
-                          <p className="pt-2 text-xs font-medium text-muted-foreground">
-                            Granted by{" "}
-                            {env.attaches.find(
-                              (item) => item.id === set.grantAttachId,
-                            )?.name ?? set.grantAttachId}
-                          </p>
-                        )}
-                        {set.facts.map((fact) => (
-                          <FactRow
-                            key={fact.key}
-                            attachId={attach.id}
-                            grantAttachId={set.grantAttachId}
-                            k={fact.key}
-                            secret={fact.secret}
-                          />
-                        ))}
-                      </div>
+                  {attach.factLoadError}
+                </p>
+              )}
+              {attach.factSets
+                .filter((set) => set.facts.length > 0)
+                .map((set) => (
+                  <div
+                    key={set.grantAttachId ?? "own"}
+                    className="divide-y divide-border [&>div]:py-3"
+                  >
+                    {set.grantAttachId && (
+                      <p className="py-2 text-xs font-medium text-muted-foreground">
+                        Granted by{" "}
+                        {env.attaches.find(
+                          (item) => item.id === set.grantAttachId,
+                        )?.name ?? set.grantAttachId}
+                      </p>
+                    )}
+                    {set.facts.map((fact) => (
+                      <FactRow
+                        key={fact.key}
+                        attachId={attach.id}
+                        grantAttachId={set.grantAttachId}
+                        k={fact.key}
+                        secret={fact.secret}
+                      />
                     ))}
-                </Disclosure>
-              );
-            })}
-          </section>
-        ))}
+                  </div>
+                ))}
+            </>
+          )}
+        </ConnectionInspection>
       </CardContent>
     </Card>
   );

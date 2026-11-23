@@ -104,6 +104,18 @@ export function routeFromAPI(
   };
 }
 
+export async function readRoute(
+  routeId: string,
+  signal?: AbortSignal,
+): Promise<Route> {
+  const route = await controllerRequest<RouteShowResponse>(
+    `/routes/${encodeURIComponent(routeId)}`,
+    200,
+    { signal },
+  );
+  return routeFromAPI(route);
+}
+
 export async function listAllRoutes(
   environmentId: string,
   signal?: AbortSignal,
