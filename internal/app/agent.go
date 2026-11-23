@@ -150,7 +150,7 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 			),
 		)
 	}
-	componentActions, err := componentaction.New(
+	actions, err := componentaction.New(
 		actionCatalog, dnsObserver,
 	)
 	if err != nil {
@@ -318,12 +318,7 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	if err := client.SetVolumeExecutor(volumeExecutor); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
-	runtimeResources.dockerReads, err = agentplatform.ConfigureDockerReads(
-		ctx,
-		client,
-		componentActions,
-		cfg.Storage.VolumeRoot,
-	)
+	runtimeResources.dockerReads, err = agentplatform.ConfigureDockerReads(ctx, client, actions, cfg.Storage.VolumeRoot)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
@@ -451,7 +446,7 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	if err := client.SetReleaseRecoveryExecutor(recoveryExecutor); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
-	if err := client.SetDNSConnectionChecker(componentActions); err != nil {
+	if err := client.SetDNSConnectionChecker(actions); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	return &Agent{Config: cfg, Logger: logger, Client: client, resources: runtimeResources}, nil
