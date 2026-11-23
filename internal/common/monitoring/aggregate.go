@@ -16,9 +16,10 @@ type Ownership struct {
 }
 
 type VolumeUsage struct {
-	VolumeID  string
-	UsedBytes *uint64
-	Summary   MetricSummary
+	VolumeID   string
+	UsedBytes  *uint64
+	ObservedAt time.Time
+	Summary    MetricSummary
 }
 
 type ServiceMeasurement struct {

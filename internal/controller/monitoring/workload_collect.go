@@ -323,8 +323,12 @@ func (collector *WorkloadCollector) serviceSample(
 	sample.Point, sample.Summaries = aggregateContainers(at, sample.ExpectedReplicas, containers)
 	for _, target := range captured.Source.VolumeTargets {
 		usage := metrics.VolumeUsage{VolumeID: target.VolumeId}
-		if observed := volumeSamples[target.VolumeId]; observed != nil {
+		if observed := volumeSamples[target.VolumeId]; observed != nil && observed.UsedBytes != nil {
 			usage.UsedBytes = cloneUint64(observed.UsedBytes)
+			usage.ObservedAt = time.Unix(0, observed.ObservedAtUnixNano).UTC()
+			if usage.ObservedAt.After(sample.StorageObservedAt) {
+				sample.StorageObservedAt = usage.ObservedAt
+			}
 		}
 		usage.Summary = instantUintSummary(usage.UsedBytes, 1)
 		sample.Volumes = append(sample.Volumes, usage)
@@ -335,14 +339,6 @@ func (collector *WorkloadCollector) serviceSample(
 	for _, container := range containers {
 		if container.Point.WritableLayerBytes != nil && container.ObservedAt.After(sample.StorageObservedAt) {
 			sample.StorageObservedAt = container.ObservedAt
-		}
-	}
-	for _, target := range captured.Source.VolumeTargets {
-		if observed := volumeSamples[target.VolumeId]; observed != nil && observed.UsedBytes != nil {
-			at := time.Unix(0, observed.ObservedAtUnixNano).UTC()
-			if at.After(sample.StorageObservedAt) {
-				sample.StorageObservedAt = at
-			}
 		}
 	}
 	return sample, rawSamples

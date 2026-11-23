@@ -107,15 +107,19 @@ func TestMonitoringContainerPagesStayScopedAndKeepStorageSampleTime(t *testing.T
 	at := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
 	reader := &Reader{now: func() time.Time { return at }}
 	used := uint64(1234)
+	volumeSampledAt := at.Add(-45 * time.Second)
+	laterVolumeSampledAt := volumeSampledAt.Add(time.Second)
 	sample := ServiceSample{
 		Ownership:          metrics.Ownership{ServiceID: "svc-one"},
 		Available:          true,
 		ContainersComplete: true,
 		Point:              metrics.MetricPoint{At: at},
-		StorageObservedAt: at.Add(
-			-45 * time.Second,
-		),
-		Volumes: []metrics.VolumeUsage{{VolumeID: "volume", UsedBytes: &used}},
+		StorageObservedAt:  laterVolumeSampledAt,
+		Volumes: []metrics.VolumeUsage{
+			{VolumeID: "volume", UsedBytes: &used, ObservedAt: volumeSampledAt},
+			{VolumeID: "other-volume", UsedBytes: &used, ObservedAt: laterVolumeSampledAt},
+			{VolumeID: "unobserved-volume"},
+		},
 		Containers: []ContainerSample{
 			{ID: strings.Repeat("b", 64), ObservedAt: at},
 			{ID: strings.Repeat("a", 64), ObservedAt: at},
@@ -126,8 +130,11 @@ func TestMonitoringContainerPagesStayScopedAndKeepStorageSampleTime(t *testing.T
 		first.Containers.Items[0].ID != strings.Repeat("a", 64) {
 		t.Fatalf("first container page: %#v, %v", first, err)
 	}
-	if !first.Volumes[0].ObservedAt.Equal(sample.StorageObservedAt) {
-		t.Fatal("storage was falsely refreshed with live CPU")
+	if len(first.Volumes) != 3 || first.Volumes[0].ObservedAt == nil || first.Volumes[1].ObservedAt == nil ||
+		!first.Volumes[0].ObservedAt.Equal(volumeSampledAt) ||
+		!first.Volumes[1].ObservedAt.Equal(laterVolumeSampledAt) ||
+		first.Volumes[2].ObservedAt != nil {
+		t.Fatalf("every Volume should report only its own observation time: %+v", first.Volumes)
 	}
 	second, err := reader.serviceLive(sample, Query{Limit: 1, Cursor: first.Containers.NextCursor})
 	if err != nil || len(second.Containers.Items) != 1 || second.Containers.NextCursor != "" ||

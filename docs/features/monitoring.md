@@ -46,9 +46,9 @@ restart starts a new segment even when Docker retains the same container id and
 restart count.
 
 Persistent-volume usage and writable container layers are distinct. Shared Volumes
-count once in parent totals. Storage timestamps remain visible because storage
-is measured less frequently than CPU, memory and I/O. After container replacement,
-writable-layer usage stays unavailable until the next storage sample.
+count once in parent totals. Each Volume shows its own observation time because
+storage is measured less frequently than CPU, memory and I/O. After container
+replacement, writable-layer usage stays unavailable until the next storage sample.
 
 Health remains separate from usage and runtime intent. Running without a
 healthcheck does not prove application readiness. A deliberately stopped Service

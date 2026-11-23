@@ -64,7 +64,8 @@ func TestWorkloadStorageKeepsVolumeSampleAndDropsReplacedContainerLayer(t *testi
 	if live.Point.PersistentVolumeUsedBytes == nil || history.Point.PersistentVolumeUsedBytes == nil ||
 		*live.Point.PersistentVolumeUsedBytes != *stored.Point.PersistentVolumeUsedBytes ||
 		*history.Point.PersistentVolumeUsedBytes != *stored.Point.PersistentVolumeUsedBytes ||
-		!live.StorageObservedAt.Equal(stored.StorageObservedAt) {
+		!live.StorageObservedAt.Equal(stored.StorageObservedAt) ||
+		!live.Volumes[0].ObservedAt.Equal(clock.Now().Add(-10*time.Second)) {
 		t.Fatal("persistent Volume lost its previous sampled capacity or timestamp")
 	}
 }

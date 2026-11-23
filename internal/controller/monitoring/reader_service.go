@@ -239,8 +239,8 @@ func (reader *Reader) serviceLive(sample ServiceSample, query Query) (api.Servic
 	}
 	for _, volume := range sample.Volumes {
 		var at *time.Time
-		if !sample.StorageObservedAt.IsZero() {
-			observed := sample.StorageObservedAt.UTC()
+		if !volume.ObservedAt.IsZero() {
+			observed := volume.ObservedAt.UTC()
 			at = &observed
 		}
 		value.Volumes = append(
