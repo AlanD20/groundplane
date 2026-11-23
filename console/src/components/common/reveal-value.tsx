@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CodeEditor } from "@/components/ui/code-editor";
 
+export const valueActionWidth = "w-20";
+
 // Masked value with an optional typed-confirmation reveal (never cached,
 // never logged). The typed confirmation is a PLATFORM-wide preference — off by
 // default (Settings → Preferences → "Require typed confirmation to reveal
@@ -124,7 +126,7 @@ export function RevealValue({
           }}
           className={cn(
             "h-9 shrink-0 gap-1 rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-            file ? "w-24" : "w-20",
+            file ? "w-24" : valueActionWidth,
           )}
           aria-label={
             revealed

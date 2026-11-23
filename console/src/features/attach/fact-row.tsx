@@ -1,5 +1,5 @@
 import { CopyButton } from "@/components/common/copy-button";
-import { RevealValue } from "@/components/common/reveal-value";
+import { RevealValue, valueActionWidth } from "@/components/common/reveal-value";
 import { useEffect, useState } from "react";
 import { revealAttachFactValue } from "./api";
 
@@ -17,7 +17,7 @@ export function FactRow({
 }: FactIdentity & { secret: boolean }) {
   const identity = `${attachId}/${grantAttachId ?? ""}/${k}`;
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,min(10rem,45%))_minmax(0,1fr)] items-center gap-2">
+    <div className="grid min-w-0 items-center gap-2 sm:grid-cols-[minmax(0,min(10rem,45%))_minmax(0,1fr)]">
       <span className="min-w-0 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">
         {k}
       </span>
@@ -77,14 +77,14 @@ function PublicFactValue({ attachId, grantAttachId, k }: FactIdentity) {
           </span>
         )}
       </code>
+      <span className="size-8 shrink-0" aria-hidden />
       {value === undefined ? (
-        <span className="size-8 shrink-0" aria-hidden />
+        <span className={`h-9 shrink-0 ${valueActionWidth}`} aria-hidden />
       ) : (
         <CopyButton
-          className="size-8 shrink-0"
+          className={`h-9 shrink-0 ${valueActionWidth}`}
           value={value}
-          label={`Copy ${k}`}
-          iconOnly
+          label="Copy"
         />
       )}
     </div>
