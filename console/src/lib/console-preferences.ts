@@ -28,3 +28,22 @@ export function saveChartTimeZone(value: ChartTimeZone) {
     // The current view still uses the chosen time zone.
   }
 }
+
+const editorWordWrapKey = "groundplane-editor-word-wrap";
+
+export function readEditorWordWrap(): boolean | undefined {
+  try {
+    const value = localStorage.getItem(editorWordWrapKey);
+    if (value === "on" || value === "off") return value === "on";
+  } catch {
+    return undefined;
+  }
+}
+
+export function saveEditorWordWrap(wrap: boolean) {
+  try {
+    localStorage.setItem(editorWordWrapKey, wrap ? "on" : "off");
+  } catch {
+    // The current editor still uses the selected setting.
+  }
+}

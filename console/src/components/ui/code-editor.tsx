@@ -2,6 +2,10 @@ import { submitOwnedForm } from "./form-submit-shortcut";
 import { useWorkspaceFullscreen } from "@/components/common/use-workspace-fullscreen";
 import { registerEditorDraft } from "@/lib/editor-draft-value";
 import { createEditorSearchPanel } from "./editor-search-panel";
+import {
+  readEditorWordWrap,
+  saveEditorWordWrap,
+} from "@/lib/console-preferences";
 import { useEffect, useRef, useState } from "react";
 import { Compartment, EditorState } from "@codemirror/state";
 import {
@@ -19,7 +23,7 @@ import {
   closeSearchPanel,
   searchPanelOpen,
 } from "@codemirror/search";
-import { Search, Maximize, Minimize } from "lucide-react";
+import { Search, Maximize, Minimize, WrapText } from "lucide-react";
 import {
   HighlightStyle,
   syntaxHighlighting,
@@ -131,6 +135,9 @@ export function CodeEditor({
   const latest = useRef({ value, onValueChange });
   const editable = useRef(new Compartment());
   const attributes = useRef(new Compartment());
+  const wrapping = useRef(new Compartment());
+  const [wrapPreference, setWrapPreference] = useState(readEditorWordWrap);
+  const wordWrap = wrapPreference ?? language !== "shell";
   const [preview, setPreview] = useState(false);
   const [formatting, setFormatting] = useState(false);
   const [folding, setFolding] = useState(false);
@@ -175,7 +182,7 @@ export function CodeEditor({
         ]),
         syntaxHighlighting(highlightStyle),
         editorTheme,
-        EditorView.lineWrapping,
+        wrapping.current.of([]),
         language === "yaml"
           ? yaml()
           : language === "json"
@@ -197,6 +204,14 @@ export function CodeEditor({
       view.current = null;
     };
   }, [language]);
+
+  useEffect(() => {
+    view.current?.dispatch({
+      effects: wrapping.current.reconfigure(
+        wordWrap ? EditorView.lineWrapping : [],
+      ),
+    });
+  }, [language, wordWrap]);
 
   useEffect(() => {
     const instance = view.current;
@@ -347,6 +362,19 @@ export function CodeEditor({
           {label} <span className="ml-2 font-mono uppercase">{language}</span>
         </span>
         <div className="flex flex-wrap gap-1">
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            aria-pressed={wordWrap}
+            className="aria-pressed:bg-accent aria-pressed:text-primary"
+            onClick={() => {
+              setWrapPreference(!wordWrap);
+              saveEditorWordWrap(!wordWrap);
+            }}
+          >
+            <WrapText aria-hidden="true" /> Word wrap
+          </Button>
           <Button
             type="button"
             size="xs"
