@@ -168,16 +168,29 @@ export function LogStream({ target }: { target: LogTarget }) {
     // A new target owns a new stream; filters never restart it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target.kind, target.id]);
+  const search = query.toLowerCase();
+  const matchesSearch = useMemo(() => {
+    if (!search) return undefined;
+    // Retained events keep their identity, and discarded events can be freed.
+    const matches = new WeakMap<TransientLogEvent, boolean>();
+    return (event: TransientLogEvent) => {
+      const cached = matches.get(event);
+      if (cached !== undefined) return cached;
+      const match = event.line.toLowerCase().includes(search);
+      matches.set(event, match);
+      return match;
+    };
+  }, [search]);
   const visible = useMemo(() => {
-    const search = query.toLowerCase();
-    if (!search && container === "all" && stream === "all") return events;
+    if (!matchesSearch && container === "all" && stream === "all")
+      return events;
     return events.filter(
       (event) =>
         (container === "all" || event.container_id === container) &&
         (stream === "all" || event.stream === stream) &&
-        (!search || event.line.toLowerCase().includes(search)),
+        (matchesSearch?.(event) ?? true),
     );
-  }, [events, container, stream, query]);
+  }, [events, container, stream, matchesSearch]);
   const containers = useMemo(
     () => [
       ...new Map(
