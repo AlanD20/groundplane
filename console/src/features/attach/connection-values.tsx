@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FactRow } from "./environment-facts";
+import { FactRow } from "./fact-row";
 import { Badge } from "@/components/ui/badge";
 import type { Attach, Environment } from "@/lib/types";
 

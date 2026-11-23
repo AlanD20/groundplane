@@ -1,8 +1,7 @@
-import { RevealValue } from "@/components/common/reveal-value";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useStore } from "@/lib/store";
 import type { Environment, Service } from "@/lib/types";
 import { Database } from "lucide-react";
+import { FactRow } from "./fact-row";
 import { ConnectionInspection } from "./connection-inspection";
 
 export function FactsCard({
@@ -86,32 +85,5 @@ export function FactsCard({
         </ConnectionInspection>
       </CardContent>
     </Card>
-  );
-}
-
-export function FactRow({
-  attachId,
-  grantAttachId,
-  k,
-  secret,
-}: {
-  attachId: string;
-  grantAttachId?: string;
-  k: string;
-  secret: boolean;
-}) {
-  const store = useStore();
-  return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,min(10rem,45%))_minmax(0,1fr)] items-center gap-2">
-      <span className="min-w-0 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">
-        {k}
-      </span>
-      <RevealValue
-        key={`${attachId}/${grantAttachId ?? ""}/${k}`}
-        label={k}
-        sensitive={secret}
-        loadValue={() => store.revealAttachFact(attachId, k, grantAttachId)}
-      />
-    </div>
   );
 }

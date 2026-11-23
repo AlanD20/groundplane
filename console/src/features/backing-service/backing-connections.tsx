@@ -1,9 +1,10 @@
+import { InspectionWorkspace } from "@/components/common/inspection-workspace";
 import { Disclosure } from "@/components/common/disclosure";
 import { describeHealthcheck } from "@/features/service/healthcheck";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
-  CollectionToolbar,
+  ListToolbar,
   TablePagination,
   useTableView,
 } from "@/components/common/table-controls";
@@ -50,6 +51,7 @@ export function ConnectionsTab({
     (svc.adapter !== "valkey" || svc.authentication === "username_password");
 
   const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string>();
   const [tenant, setTenant] = useState("");
   const [project, setProject] = useState("");
   const [environment, setEnvironment] = useState("");
@@ -89,14 +91,13 @@ export function ConnectionsTab({
     "asc",
     JSON.stringify([query, tenant, project, environment]),
   );
+  const selected =
+    table.rows.find((consumer) => consumer.attachId === selectedId) ??
+    table.rows[0];
   return (
     <>
       <ResourcePanel title="Consumer connections">
-        <CollectionToolbar
-          query={query}
-          onQueryChange={setQuery}
-          label="Consumers"
-        >
+        <div className="flex flex-wrap items-center gap-2">
           <SearchableSelect
             aria-label="Filter consumers by tenant"
             className="w-full sm:w-44"
@@ -158,153 +159,157 @@ export function ConnectionsTab({
               Clear filters
             </Button>
           )}
-        </CollectionToolbar>
-        <div className="space-y-3">
-          {table.rows.map((c) => (
-            <Disclosure
-              key={c.attachId}
-              className="rounded-lg border border-border bg-card p-4"
-              summary={
-                <span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3">
-                  <span className="min-w-0">
-                    <strong className="block break-words text-sm">
-                      {c.service}
-                    </strong>
-                    <span className="text-xs text-muted-foreground">
-                      {c.tenant} / {c.project} / {c.environment}
-                    </span>
-                  </span>
-                  <span className="text-xs font-mono">
-                    {c.database || "Network access"}
-                  </span>
-                </span>
-              }
-            >
-              <div className="mt-4 space-y-3">
-                <Link
-                  className="text-xs text-primary hover:underline"
-                  to={`/t/${c.tenant}/${c.project}/${encodeURIComponent(c.environment)}?view=network&panel=attaches`}
-                >
-                  Open Environment connections
-                </Link>
-                <div
-                  key={`${c.environment}-${c.service}-${c.attachId}`}
-                  className="min-w-0 border-t border-border pt-4"
-                >
-                  <div className="flex min-w-0 flex-col gap-3">
-                    <span className="min-w-0 font-mono text-sm [overflow-wrap:anywhere]">
-                      {c.project} / {c.environment}{" "}
-                      <span className="text-muted-foreground">
-                        · {c.service}
-                      </span>
-                    </span>
-                    {!adapter?.custom && (
-                      <div className="min-w-0 space-y-1.5">
-                        <p className="text-xs text-muted-foreground">
-                          Connection string
-                        </p>
-                        <ConsumerConnectionActions
-                          consumer={c}
-                          authentication={svc.authentication}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  {adapter?.custom ? (
-                    <div className="mt-2 flex flex-col gap-1.5 text-sm">
-                      <Row
-                        label="Access"
-                        value={
-                          svc.hooks?.attach
-                            ? "network access and custom provisioning"
-                            : "network-only, no provisioning"
-                        }
-                        mono
-                      />
-                      <Row
-                        label="Declared facts"
-                        value={
-                          svc.hooks?.facts
-                            ?.map((fact) => fact.key)
-                            .join(", ") || "none"
-                        }
-                        mono
-                      />
-                      <Row
-                        label="Reach at"
-                        value={`${svc.serviceName ?? svc.name} on the network`}
-                        mono
-                      />
-                    </div>
-                  ) : (
-                    <div className="mt-2 flex flex-col gap-1.5 text-sm">
-                      <Row label="Service" value={c.service} mono />
-                      {adapter?.requires.database && (
-                        <Row label="Database" value={c.database} mono />
-                      )}
-                      {exposesRole && <Row label="Role" value={c.role} mono />}
-                      <Row
-                        label="Host"
-                        value={`${svc.serviceName}:${adapter?.urlScheme === "redis" ? 6379 : adapter?.urlScheme === "mysql" ? 3306 : 5432}`}
-                        mono
-                      />
-                    </div>
-                  )}
-                  {!adapter?.custom && (
-                    <Disclosure
-                      className="mt-2"
-                      summaryClassName="cursor-pointer text-xs text-primary"
-                      summary={
-                        <>procedure the Agent runs · {provision.length} steps</>
-                      }
-                    >
-                      <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
-                        {authenticationUnavailable ? (
-                          <p className="text-xs text-muted-foreground">
-                            Mode-specific provisioning is unavailable until the
-                            Controller returns the authentication mode.
-                          </p>
-                        ) : (
-                          provision.length === 0 && (
-                            <p className="text-xs text-muted-foreground">
-                              No credential procedure; the Attach joins the
-                              network and publishes credential-free facts.
-                            </p>
-                          )
-                        )}
-                        {provision.map((op) => (
-                          <div
-                            key={op.op}
-                            className="flex items-baseline gap-2.5 text-xs"
-                          >
-                            <span className="size-1.5 shrink-0 translate-y-[-2px] rounded-full bg-success" />
-                            <span className="w-32 shrink-0 font-mono text-primary">
-                              {op.op}
-                            </span>
-                            <span className="break-all font-mono text-muted-foreground">
-                              {op.detail
-                                .replaceAll("<db>", c.database)
-                                .replaceAll("<role>", c.role)
-                                .replaceAll("<generated>", "••••••")}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </Disclosure>
-                  )}
-                </div>
-              </div>
-            </Disclosure>
-          ))}
         </div>
-        {!rows.length && (
-          <p className="py-5 text-xs text-muted-foreground">
-            {g.consumers?.length
-              ? "No matching consumers."
-              : "No consumer Attaches yet."}
+        {consumers.length ? (
+          <InspectionWorkspace
+            title="Consumer list"
+            selectionLabel="Select consumer"
+            detailsLabel="Selected consumer connection"
+            emptyMessage="No consumers match your filters."
+            selectedId={selected?.attachId}
+            onSelect={setSelectedId}
+            items={table.rows.map((c) => ({
+              id: c.attachId,
+              label: c.service,
+              description: `${c.tenant} / ${c.project} / ${c.environment}`,
+            }))}
+            toolbar={
+              <ListToolbar
+                label="consumers"
+                query={query}
+                onQueryChange={setQuery}
+                sort={table}
+                fields={[
+                  { value: "service", label: "Service" },
+                  { value: "environment", label: "Environment" },
+                  { value: "database", label: "Database" },
+                ]}
+              />
+            }
+            footer={
+              table.pages > 1 && (
+                <TablePagination table={table} label="Consumers" />
+              )
+            }
+          >
+            {selected && (
+              <div key={selected.attachId} className="min-w-0 space-y-4">
+                <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
+                  <div className="min-w-0 space-y-1">
+                    <h3 className="break-words text-sm font-semibold">
+                      {selected.service}
+                    </h3>
+                    <p className="break-words text-xs text-muted-foreground">
+                      {selected.tenant} / {selected.project} / {selected.environment}
+                    </p>
+                  </div>
+                  <Link
+                    className="text-xs text-primary hover:underline"
+                    to={`/t/${selected.tenant}/${selected.project}/${encodeURIComponent(selected.environment)}?view=network&panel=attaches`}
+                  >
+                    Open Environment connections
+                  </Link>
+                </header>
+                {!adapter?.custom && (
+                  <div className="min-w-0 space-y-1.5">
+                    <p className="text-xs text-muted-foreground">
+                      Connection string
+                    </p>
+                    <ConsumerConnectionActions
+                      consumer={selected}
+                      authentication={svc.authentication}
+                    />
+                  </div>
+                )}
+                {adapter?.custom ? (
+                  <div className="mt-2 flex flex-col gap-1.5 text-sm">
+                    <Row
+                      label="Access"
+                      value={
+                        svc.hooks?.attach
+                          ? "network access and custom provisioning"
+                          : "network-only, no provisioning"
+                      }
+                      mono
+                    />
+                    <Row
+                      label="Declared facts"
+                      value={
+                        svc.hooks?.facts?.map((fact) => fact.key).join(", ") ||
+                        "none"
+                      }
+                      mono
+                    />
+                    <Row
+                      label="Reach at"
+                      value={`${svc.serviceName ?? svc.name} on the network`}
+                      mono
+                    />
+                  </div>
+                ) : (
+                  <div className="mt-2 flex flex-col gap-1.5 text-sm">
+                    <Row label="Service" value={selected.service} mono />
+                    {adapter?.requires.database && (
+                      <Row label="Database" value={selected.database} mono />
+                    )}
+                    {exposesRole && <Row label="Role" value={selected.role} mono />}
+                    <Row
+                      label="Host"
+                      value={`${svc.serviceName}:${adapter?.urlScheme === "redis" ? 6379 : adapter?.urlScheme === "mysql" ? 3306 : 5432}`}
+                      mono
+                    />
+                  </div>
+                )}
+                {!adapter?.custom && (
+                  <Disclosure
+                    className="mt-2"
+                    summaryClassName="cursor-pointer text-xs text-primary"
+                    summary={
+                      <>procedure the Agent runs · {provision.length} steps</>
+                    }
+                  >
+                    <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
+                      {authenticationUnavailable ? (
+                        <p className="text-xs text-muted-foreground">
+                          Mode-specific provisioning is unavailable until the
+                          Controller returns the authentication mode.
+                        </p>
+                      ) : (
+                        provision.length === 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            No credential procedure; the Attach joins the
+                            network and publishes credential-free facts.
+                          </p>
+                        )
+                      )}
+                      {provision.map((op) => (
+                        <div
+                          key={op.op}
+                          className="flex items-baseline gap-2.5 text-xs"
+                        >
+                          <span className="size-1.5 shrink-0 translate-y-[-2px] rounded-full bg-success" />
+                          <span className="w-32 shrink-0 font-mono text-primary">
+                            {op.op}
+                          </span>
+                          <span className="break-all font-mono text-muted-foreground">
+                            {op.detail
+                              .replaceAll("<db>", selected.database)
+                              .replaceAll("<role>", selected.role)
+                              .replaceAll("<generated>", "••••••")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </Disclosure>
+                )}
+              </div>
+            )}
+          </InspectionWorkspace>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No consumer connections yet.
           </p>
         )}
-        <TablePagination table={table} label="Consumers" />
       </ResourcePanel>
       {adapter && (
         <AdvancedDetails
