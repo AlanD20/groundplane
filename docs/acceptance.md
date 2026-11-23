@@ -2042,6 +2042,52 @@ full authentication/callback processing, workload interruption or arm64 runtime.
 The earlier QA-only binary repair is not normal-update qualification; the later
 Controller update used the normal protected path.
 
+## Scoped monitoring and Console handoff
+
+**H127 — selected monitoring variants, 2026-11-23.** On an amd64 QA guest
+running Controller `269c4c154`, 24 independently timed kernel observations
+were compared with five Host monitoring samples. Memory and root filesystem
+capacity matched exactly through the API and CLI. The root device and physical
+interface classification also matched. The largest difference in the aligned
+CPU comparison was 0.10 cores. The Console preview at `6411525e0` showed the measured
+Host memory capacity and rendered real history. Workload and Backing telemetry
+on a matching installed Controller and Agent remain unqualified.
+
+Separate local checks exercised Environment aggregation with real SQLite
+history and supplied observations. Both Service pages returned the same
+10-core total for three owned Services and excluded a 50-core sibling.
+Browser tests used the Console with delayed and failed responses to verify that
+pausing, changing range, returning from a hidden tab and paging Project details
+preserved the intended chart and refresh state. Those checks did not exercise
+all installed pagination surfaces.
+
+A local Docker fixture on `6411525e0` used the production monitoring reader
+and Controller collector with supplied authority and transport. The same-ID
+restart changed the process start time and withheld the first CPU rate.
+A simulated transport interruption reported unavailable, followed by a real
+sampling gap that withheld the first resumed rate. The next sample resumed
+normal rates. The fixture was removed. Later local regressions on `b3ad54f0f`
+and `1ab6f5f3b` covered writable-layer attribution after replacement and the
+actual timestamp of each retained Volume reading. Real installed restart,
+replacement, transport and storage-cadence variants remain open.
+
+**H128 — selected independent Console continuity, 2026-11-22–23.** Separate
+activations on the QA installation selected Controller `269c4c154`, then
+Agent and Console artifacts published from `1dddee315`. They preserved eight
+monitored runtime identities and their mounts. The independent
+probe made 209 HTTP, DNS and Valkey checks each and received 211 frames over a
+held WebSocket, with no observed errors. The installed Controller and Agent
+provenance differed at the end of this check, so it did not establish resumed
+workload telemetry.
+
+The locally packaged Console bundle from `804c897ba` staged and activated
+through the production release store with the exact matching OpenAPI document.
+Before activation the old HTML still served. The store refused a wrong source
+commit and an incompatible API hash. The same HTTP dispatcher completed a
+held API request, served the new HTML and entry asset, and continued to serve
+the previous fingerprinted asset. This was an in-process fixture, so it did
+not exercise installed Task scheduling or a coordinated All update.
+
 ## Interpretation limit
 
 No row establishes current production readiness, current host health, full CI,
