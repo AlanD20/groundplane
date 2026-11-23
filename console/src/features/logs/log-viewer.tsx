@@ -279,14 +279,35 @@ export function LogStream({ target }: { target: LogTarget }) {
           {error}
         </p>
       ) : null}
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span role="status">{status}</span>
-        <span>
-          {events.length > 0 && replaceLogSnapshot.current && "Previous read · "}
-          {visible.length} shown · {events.length.toLocaleString()} retained ·{" "}
-          {received.toLocaleString()} received
-          {received > events.length && " · oldest lines discarded"}
-        </span>
+      <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span role="status">{status}</span>
+          <span>
+            {events.length > 0 &&
+              replaceLogSnapshot.current &&
+              "Previous read · "}
+            {visible.length} shown · {events.length.toLocaleString()} retained ·{" "}
+            {received.toLocaleString()} received
+            {received > events.length && " · oldest lines discarded"}
+          </span>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={atEnd}
+          className={atEnd ? "invisible" : undefined}
+          onClick={() => {
+            pinnedToEnd.current = true;
+            setAtEnd(true);
+            const output = outputRef.current;
+            if (output) {
+              output.scrollTop = output.scrollHeight;
+              output.focus({ preventScroll: true });
+            }
+          }}
+        >
+          Jump to latest
+        </Button>
       </div>
       {container !== "all" &&
         events.find((event) => event.container_id === container) && (
@@ -297,21 +318,6 @@ export function LogStream({ target }: { target: LogTarget }) {
             />
           </div>
         )}
-      {!atEnd && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="self-end"
-          onClick={() => {
-            pinnedToEnd.current = true;
-            setAtEnd(true);
-            if (outputRef.current)
-              outputRef.current.scrollTop = outputRef.current.scrollHeight;
-          }}
-        >
-          Jump to latest
-        </Button>
-      )}
       <div
         ref={outputRef}
         tabIndex={0}
@@ -333,9 +339,9 @@ export function LogStream({ target }: { target: LogTarget }) {
                 ? "No matching log lines"
                 : status === "Connecting"
                   ? "Opening log stream"
-                : status === "Streaming"
-                  ? "Waiting for container output"
-                  : "No log output yet"
+                  : status === "Streaming"
+                    ? "Waiting for container output"
+                    : "No log output yet"
             }
             description={
               events.length
