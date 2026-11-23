@@ -60,6 +60,7 @@ export function LogStream({ target }: { target: LogTarget }) {
   const [follow, setFollow] = useState(true);
   const [events, setEvents] = useState<TransientLogEvent[]>([]);
   const [received, setReceived] = useState(0);
+  const [snapshotVersion, setSnapshotVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<
     | "Connecting"
@@ -87,6 +88,8 @@ export function LogStream({ target }: { target: LogTarget }) {
     if (batch.length > 0) {
       const replace = replaceLogSnapshot.current;
       replaceLogSnapshot.current = false;
+      // Sequence numbers are only unique within one Controller log request.
+      if (replace) setSnapshotVersion((version) => version + 1);
       setEvents((current) =>
         (replace ? batch : [...current, ...batch]).slice(-1000),
       );
@@ -351,6 +354,7 @@ export function LogStream({ target }: { target: LogTarget }) {
           />
         ) : (
           <LogRows
+            key={snapshotVersion}
             events={visible}
             wrap={wrap}
             showSource={container === "all"}
