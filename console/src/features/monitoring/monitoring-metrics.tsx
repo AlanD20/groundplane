@@ -12,8 +12,8 @@ import {
   saveChartTimeZone,
 } from "@/lib/console-preferences";
 import { formatTimestamp } from "@/lib/format-timestamp";
-import { Activity, Maximize, Minimize, Pause, Play } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { Maximize, Minimize, Pause, Play } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MonitoringRange, MonitoringResponse } from "./api";
 import {
   formatMetric,
@@ -53,12 +53,34 @@ export function MonitoringMetrics({
     response.environment ??
     response.service ??
     response.backing?.runtime;
-  const history = subject?.history;
+  const historyUnavailable = response.history_status !== "available";
+  const scopeKey = `${response.scope.kind}/${response.scope.id}`;
+  const historyKey = `${scopeKey}/${response.window.range}`;
+  const availableHistory = historyUnavailable ? undefined : subject?.history;
+  const [lastHistory, setLastHistory] = useState<{
+    key: string;
+    buckets: NonNullable<typeof availableHistory>;
+    window: MonitoringResponse["window"];
+  }>();
+  useEffect(() => {
+    if (availableHistory) {
+      setLastHistory({
+        key: historyKey,
+        buckets: availableHistory,
+        window: response.window,
+      });
+    }
+  }, [availableHistory, historyKey, response.window]);
+  const retainedHistory =
+    historyUnavailable && lastHistory?.key === historyKey
+      ? lastHistory
+      : undefined;
+  const history = retainedHistory?.buckets ?? availableHistory;
   const series = useMemo(
     () => metricSeries(history ?? [], selected),
     [history, selected],
   );
-  const { start, end } = response.window;
+  const { start, end } = retainedHistory?.window ?? response.window;
   const chartWindow = useMemo(
     () => ({ from: Date.parse(start), to: Date.parse(end) }),
     [start, end],
@@ -82,7 +104,6 @@ export function MonitoringMetrics({
   const owners = live.coverage.eligible_resources;
   const reporting = live.coverage.sampled_resources;
   const refreshError = query.pageMatches ? query.error : undefined;
-  const historyUnavailable = response.history_status !== "available";
   const rangeControls = (
     <>
       <Select
@@ -146,7 +167,7 @@ export function MonitoringMetrics({
         )}
       </section>
 
-      {live.status !== "unavailable" && <LiveSummary values={live.values} />}
+      <LiveSummary values={live.status === "unavailable" ? {} : live.values} />
 
       <div
         className={
@@ -207,33 +228,25 @@ export function MonitoringMetrics({
               {refreshError}
             </p>
           )}
+          <MonitoringChart
+            scopeKey={scopeKey}
+            scopedLabel={response.scope.name}
+            rangeLabel={response.window.range}
+            window={chartWindow}
+            series={series}
+            timeZone={timeZone}
+            height={
+              fullscreen
+                ? "max(280px, calc(100dvh - 13rem - var(--terminal-dock-height, 0px)))"
+                : undefined
+            }
+          />
           {historyUnavailable && (
             <p role="status" className="text-xs text-warning">
-              Historical storage is unavailable. Current evidence continues to
-              refresh independently.
+              {retainedHistory?.buckets.length
+                ? "Historical storage is unavailable. Showing the last available history."
+                : "Historical storage is unavailable."}
             </p>
-          )}
-          {series.length ? (
-            <MonitoringChart
-              scopeKey={`${response.scope.kind}/${response.scope.id}`}
-              scopedLabel={response.scope.name}
-              rangeLabel={response.window.range}
-              window={chartWindow}
-              series={series}
-              timeZone={timeZone}
-              height={
-                fullscreen
-                  ? "max(280px, calc(100dvh - 13rem - var(--terminal-dock-height, 0px)))"
-                  : undefined
-              }
-            />
-          ) : (
-            <EmptyState
-              embedded
-              icon={<Activity />}
-              title={`No ${selected.label.toLowerCase()} history`}
-              description="No samples were recorded in this time range."
-            />
           )}
         </ResourcePanel>
       </div>

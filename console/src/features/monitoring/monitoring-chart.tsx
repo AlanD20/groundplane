@@ -337,17 +337,22 @@ export const MonitoringChart = memo(function MonitoringChart({
     });
   };
 
+  const rootStyle = { height, minHeight: 280 } satisfies CSSProperties;
   if (!reference || !latestBucket) {
     return (
       <div
-        role="status"
         className={cn(
-          "flex min-h-56 items-center justify-center rounded-lg border border-dashed border-border bg-surface/40",
-          "text-sm text-muted-foreground",
+          "rounded-lg border border-dashed border-border bg-surface/40",
           className,
         )}
       >
-        No samples were recorded in this window.
+        <div
+          role="status"
+          className="grid place-items-center px-4 text-center text-sm text-muted-foreground"
+          style={rootStyle}
+        >
+          No samples are available for this window.
+        </div>
       </div>
     );
   }
@@ -355,7 +360,6 @@ export const MonitoringChart = memo(function MonitoringChart({
   const selectedX = selected
     ? chartX(pointCenter(selected), displayedWindow)
     : null;
-  const rootStyle = { height, minHeight: 280 } satisfies CSSProperties;
 
   return (
     <div

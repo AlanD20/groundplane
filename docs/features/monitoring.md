@@ -93,7 +93,10 @@ The Controller keeps this derived history in
 application Volumes. The database has a 256 MiB page ceiling and a 16 MiB WAL
 checkpoint target; the latter is not a hard transient file-size limit. History
 failure leaves live collection available and preserves a corrupt file for
-diagnosis. If the page ceiling blocks maintenance, the Controller removes
+diagnosis. If the last successful history response matches the current view
+and time range, the Console keeps that chart visible and marks it as the last
+available history.
+If the page ceiling blocks maintenance, the Controller removes
 already-expired derived samples before retrying rollup. This can leave gaps
 where expired samples were removed before rollup.
 
