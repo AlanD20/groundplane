@@ -5,26 +5,22 @@ import {
   TablePagination,
   useTableView,
 } from "@/components/common/table-controls";
-import { buttonVariants } from "@/components/ui/button";
 ("use client");
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { ChevronRight, Plus, Workflow } from "lucide-react";
+import { Plus, Workflow } from "lucide-react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useRequiredParams } from "@/lib/router";
 import type { Environment } from "@/lib/types";
+import { ReleaseGroupControls } from "./release-group-controls";
 import { ReleaseGroupFormDrawer } from "./release-group-form-drawer";
 import {
-  releaseGroupPath,
   releaseGroupPolicyLabel,
   releaseGroupTag,
 } from "./release-group-projections";
 
 export function ReleaseGroupsPanel({ env }: { env: Environment }) {
-  const params = useRequiredParams("tenant", "project", "env");
   const [adding, setAdding] = useState(false);
   const [selectedId, setSelectedId] = useState<string>();
   const [query, setQuery] = useState("");
@@ -118,55 +114,53 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
             }
           >
             {selected && (
-              <div className="space-y-4">
-                <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
-                  <div className="min-w-0 space-y-1">
-                    <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
-                      {selected.name}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {releaseGroupPolicyLabel(selected.onFailure)}
-                    </p>
+              <ReleaseGroupControls
+                key={selected.id}
+                env={env}
+                group={selected}
+              >
+                {({ actions, forms }) => (
+                  <div className="space-y-4">
+                    <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
+                      <div className="min-w-0 space-y-1">
+                        <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
+                          {selected.name}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {releaseGroupPolicyLabel(selected.onFailure)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {actions}
+                      </div>
+                    </header>
+                    {forms}
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="text-sm font-semibold">Release order</h4>
+                        <Badge variant="primary">
+                          {releaseGroupTag(env, selected)}
+                        </Badge>
+                      </div>
+                      <ol className="divide-y divide-border rounded-lg border border-border">
+                        {selected.order.map((service, index) => (
+                          <li
+                            key={service}
+                            className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm"
+                          >
+                            <span className="min-w-6 text-xs tabular-nums text-muted-foreground">
+                              {index + 1}
+                            </span>
+                            <span className="min-w-0 [overflow-wrap:anywhere]">
+                              {service}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
                   </div>
-                  <Link
-                    className={buttonVariants({
-                      variant: "outline",
-                      size: "sm",
-                    })}
-                    to={releaseGroupPath(
-                      params.tenant,
-                      params.project,
-                      params.env,
-                      selected.id,
-                    )}
-                  >
-                    Open group <ChevronRight aria-hidden className="size-3.5" />
-                  </Link>
-                </header>
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-sm font-semibold">Release order</h4>
-                    <Badge variant="primary">
-                      {releaseGroupTag(env, selected)}
-                    </Badge>
-                  </div>
-                  <ol className="divide-y divide-border rounded-lg border border-border">
-                    {selected.order.map((service, index) => (
-                      <li
-                        key={service}
-                        className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm"
-                      >
-                        <span className="min-w-6 text-xs tabular-nums text-muted-foreground">
-                          {index + 1}
-                        </span>
-                        <span className="min-w-0 [overflow-wrap:anywhere]">
-                          {service}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              </div>
+                )}
+              </ReleaseGroupControls>
             )}
           </InspectionWorkspace>
         )}
