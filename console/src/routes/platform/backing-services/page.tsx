@@ -19,11 +19,7 @@ import {
 
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
-import {
-  ResourcePanel,
-  SummaryStrip,
-  SummaryItem,
-} from "@/components/common/resource-panel";
+import { ResourcePanel } from "@/components/common/resource-panel";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -524,39 +520,9 @@ export default function PlatformBackingServicesPage() {
           description="Create a shared instance, then attach consumer Services to it."
         />
       ) : (
-        <div className="space-y-6">
-          <SummaryStrip>
-            <SummaryItem label="Shared instances">
-              {store.backingProjects.length}
-            </SummaryItem>
-            <SummaryItem label="Consumer connections">
-              {store.backingProjects.reduce(
-                (n, p) => n + (p.consumers?.length || 0),
-                0,
-              )}
-            </SummaryItem>
-            <SummaryItem label="Adapters">
-              {[
-                ...new Set(
-                  visibleEnvironments.flatMap((environment) =>
-                    environment.services.map(
-                      (service) =>
-                        store.adapters.find(
-                          (adapter) => adapter.key === service.adapter,
-                        )?.label ??
-                        service.adapter ??
-                        "Custom",
-                    ),
-                  ),
-                ),
-              ].join(" · ") || "None"}
-            </SummaryItem>
-            <SummaryItem label="Ownership">Platform</SummaryItem>
-          </SummaryStrip>
-          <ResourcePanel title="Shared instances">
-            <BackingServicesTable now={observationRefresh.now} />
-          </ResourcePanel>
-        </div>
+        <ResourcePanel title="Shared instances">
+          <BackingServicesTable now={observationRefresh.now} />
+        </ResourcePanel>
       )}
     </div>
   );
