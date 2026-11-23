@@ -28,26 +28,33 @@ export function TaskNotifications() {
   const store = useStore();
   const notifications = useAcceptedTasks();
   const [open, setOpen] = useState(false);
+  const [focusedToast, setFocusedToast] = useState<string>();
   const [updates, setUpdates] = useState<Record<string, TaskUpdate>>({});
   const trigger = useRef<HTMLButtonElement>(null);
   const unread = notifications.filter((item) => item.unread).length;
   const now = Date.now();
-  const toasts = notifications
-    .filter((item) => (item.toastUntil ?? 0) > now)
-    .slice(0, 3);
+  const activeToasts = notifications.filter(
+    ({ id, toastUntil }) =>
+      toastUntil !== undefined && (toastUntil > now || id === focusedToast),
+  );
+  const toasts = activeToasts.slice(0, 3);
+  const focused = activeToasts.find(({ id }) => id === focusedToast);
+  if (focused && !toasts.includes(focused)) toasts[2] = focused;
   const nextExpiry = Math.min(
-    ...notifications.flatMap(({ toastUntil }) => toastUntil ?? []),
+    ...notifications.flatMap(({ id, toastUntil }) =>
+      id === focusedToast ? [] : (toastUntil ?? []),
+    ),
   );
 
   useEffect(() => {
     if (!Number.isFinite(nextExpiry)) return;
-    const expire = () => expireTaskToasts(Date.now());
+    const expire = () => expireTaskToasts(Date.now(), focusedToast);
     const timer = window.setTimeout(
       expire,
       Math.max(0, nextExpiry - Date.now()),
     );
     return () => window.clearTimeout(timer);
-  }, [nextExpiry]);
+  }, [nextExpiry, focusedToast]);
 
   useEffect(() => {
     if (open && unread) markTaskNotificationsRead();
@@ -138,15 +145,28 @@ export function TaskNotifications() {
             toasts.map(({ id }) => (
               <div
                 key={id}
+                onFocus={() => setFocusedToast(id)}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget))
+                    setFocusedToast((current) =>
+                      current === id ? undefined : current,
+                    );
+                }}
                 className="pointer-events-auto flex items-start gap-1 rounded-xl border border-border bg-card p-1.5 shadow-lg motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2"
               >
-                {notificationLink(id, () => readTaskNotification(id))}
+                {notificationLink(id, () => {
+                  trigger.current?.focus({ preventScroll: true });
+                  readTaskNotification(id);
+                })}
                 <Button
                   variant="ghost"
                   size="icon-xs"
                   className="mt-2 shrink-0"
-                  aria-label="Dismiss notification"
-                  onClick={() => dismissAcceptedTask(id)}
+                  aria-label="Dismiss Task popup"
+                  onClick={() => {
+                    trigger.current?.focus({ preventScroll: true });
+                    dismissAcceptedTask(id);
+                  }}
                 >
                   <X className="size-3.5" />
                 </Button>

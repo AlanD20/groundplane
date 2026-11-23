@@ -181,6 +181,10 @@ a fresh Task snapshot. A diagnostic-storage failure is reported as incomplete
 details, never as a successful stage. The authoritative Task outcome, not a quiet
 stream or completed-stage count, determines whether the action finished.
 
+Task popups expire after five seconds unless keyboard focus is inside the
+popup. **Dismiss Task popup** returns focus to the notification bell. Accepted
+Tasks remain in the session's notification drawer after their popups close.
+
 ## Logs
 
 The Console keeps the newest 1,000 received lines in a rolling buffer. Incoming

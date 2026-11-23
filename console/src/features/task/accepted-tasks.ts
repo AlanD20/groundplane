@@ -64,9 +64,11 @@ export function markTaskNotificationsRead() {
   listeners.forEach((listener) => listener());
 }
 
-export function expireTaskToasts(now: number) {
+export function expireTaskToasts(now: number, focused?: string) {
   accepted = accepted.map((item) =>
-    item.toastUntil !== undefined && item.toastUntil <= now
+    item.id !== focused &&
+    item.toastUntil !== undefined &&
+    item.toastUntil <= now
       ? { ...item, toastUntil: undefined }
       : item,
   );
