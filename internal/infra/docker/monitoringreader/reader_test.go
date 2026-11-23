@@ -62,7 +62,12 @@ func (engine *sampleEngine) ContainerStats(
 	engine.reads++
 	return client.ContainerStatsResult{Body: engine.body}, nil
 }
-func (engine *sampleEngine) VolumeInspect(context.Context, string, client.VolumeInspectOptions) (client.VolumeInspectResult, error) {
+
+func (engine *sampleEngine) VolumeInspect(
+	context.Context,
+	string,
+	client.VolumeInspectOptions,
+) (client.VolumeInspectResult, error) {
 	return client.VolumeInspectResult{Volume: engine.volume}, nil
 }
 

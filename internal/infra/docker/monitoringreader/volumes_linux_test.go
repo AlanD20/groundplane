@@ -36,8 +36,13 @@ func TestMonitoringMeasuresOwnedBindVolumeWithoutDockerUsageData(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(device, "sentinel"), []byte("test payload"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	target := &agentpb.MonitoringVolumeTarget{VolumeId: "vol_" + suffix, EnvironmentId: scope.EnvironmentID,
-		ComposeProject: "gp-env_" + strings.ToLower(suffix), VolumeKey: "data", DockerName: "gp_vol_vol_" + strings.ToLower(suffix)}
+	target := &agentpb.MonitoringVolumeTarget{
+		VolumeId:       "vol_" + suffix,
+		EnvironmentId:  scope.EnvironmentID,
+		ComposeProject: "gp-env_" + strings.ToLower(suffix),
+		VolumeKey:      "data",
+		DockerName:     "gp_vol_vol_" + strings.ToLower(suffix),
+	}
 	request.IncludeStorage = true
 	request.Volumes = []*agentpb.MonitoringVolumeTarget{target}
 	engine.volume = volume.Volume{

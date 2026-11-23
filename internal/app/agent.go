@@ -318,7 +318,12 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	if err := client.SetVolumeExecutor(volumeExecutor); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
-	runtimeResources.dockerReads, err = agentplatform.ConfigureDockerReads(ctx, client, componentActions, cfg.Storage.VolumeRoot)
+	runtimeResources.dockerReads, err = agentplatform.ConfigureDockerReads(
+		ctx,
+		client,
+		componentActions,
+		cfg.Storage.VolumeRoot,
+	)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
