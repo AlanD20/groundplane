@@ -2071,6 +2071,13 @@ and `1ab6f5f3b` covered writable-layer attribution after replacement and the
 actual timestamp of each retained Volume reading. Real installed restart,
 replacement, transport and storage-cadence variants remain open.
 
+On `c4477b31e`, the local Host sampler and SQLite store hit `SQLITE_FULL`
+at a controlled 128 KiB page ceiling. A new live observation remained fresh
+after the failed history write, and cancellation joined the sampler. Maintenance
+expired 223 old rows. A recent sample remained readable, and the store accepted
+a new Host sample. This exercise did not include installed workload
+coordination or an installed Controller shutdown.
+
 **H128 — selected independent Console continuity, 2026-11-22–23.** Separate
 activations on the QA installation selected Controller `269c4c154`, then
 Agent and Console artifacts published from `1dddee315`. They preserved eight
