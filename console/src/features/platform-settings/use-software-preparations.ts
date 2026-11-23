@@ -112,6 +112,8 @@ export function useSoftwarePreparations(active: boolean) {
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -135,54 +137,55 @@ export function useSoftwarePreparations(active: boolean) {
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     const current = ++generation.current;
+    const isCurrent = () => !signal?.aborted && current === generation.current;
     setLoading(true);
-    try {
-      const page = await controllerRequest<SoftwarePreparationPage>(
-        "/software/preparations?limit=100",
-        200,
-        { signal },
-      );
-      if (signal?.aborted || current !== generation.current) return;
-      setItems((existing) =>
-        olderLoaded.current
-          ? merge(page.items ?? [], existing)
-          : (page.items ?? []),
-      );
-      if (!olderLoaded.current) setNextCursor(page.next_cursor ?? null);
-      const task = sessionStorage.getItem(activationKey);
-      if (task && /^task_[0-9A-HJKMNP-TV-Z]{26}$/.test(task)) {
-        const detail = await requestTask(task, signal);
-        if (signal?.aborted || current !== generation.current) return;
+    async function readHistory() {
+      try {
+        const page = await controllerRequest<SoftwarePreparationPage>(
+          "/software/preparations?limit=100",
+          200,
+          { signal },
+        );
+        if (!isCurrent()) return;
+        setItems((existing) =>
+          olderLoaded.current
+            ? merge(page.items ?? [], existing)
+            : (page.items ?? []),
+        );
+        if (!olderLoaded.current) setNextCursor(page.next_cursor ?? null);
+        setLoaded(true);
+        setHistoryError(null);
+      } catch (cause) {
+        if (isCurrent()) setHistoryError(message(cause));
+      } finally {
+        if (isCurrent()) setLoading(false);
+      }
+    }
+    async function trackAcceptedTask() {
+      try {
+        const activationId = sessionStorage.getItem(activationKey);
+        const task = activationId ?? sessionStorage.getItem(preparationKey);
+        if (!task || !/^task_[0-9A-HJKMNP-TV-Z]{26}$/.test(task)) return;
         setAcceptedTaskId(task);
+        setAcceptedKind(activationId ? "apply" : "prepare");
+        const detail = await requestTask(task, signal);
+        if (!isCurrent()) return;
         setAcceptedStatus(detail.task.status);
-        setAcceptedKind("apply");
-        if (detail.work.items.length > 0) {
-          const result = await controllerRequest<SoftwareActivation>(
+        if (activationId && detail.work.items.length > 0) {
+          const progress = await controllerRequest<SoftwareActivation>(
             `/software/activations/${task}`,
             200,
             { signal },
           );
-          if (!signal?.aborted && current === generation.current)
-            setActivation(result);
-        } else setActivation(null);
-      } else {
-        const preparation = sessionStorage.getItem(preparationKey);
-        if (preparation && /^task_[0-9A-HJKMNP-TV-Z]{26}$/.test(preparation)) {
-          const detail = await requestTask(preparation, signal);
-          if (signal?.aborted || current !== generation.current) return;
-          setAcceptedTaskId(preparation);
-          setAcceptedStatus(detail.task.status);
-          setAcceptedKind("prepare");
+          if (!isCurrent()) return;
+          setActivation(progress);
         }
+        setTrackingError(null);
+      } catch (cause) {
+        if (isCurrent()) setTrackingError(message(cause));
       }
-      setLoaded(true);
-      setError(null);
-    } catch (cause) {
-      if (!signal?.aborted && current === generation.current)
-        setError(message(cause));
-    } finally {
-      if (!signal?.aborted && current === generation.current) setLoading(false);
     }
+    await Promise.all([readHistory(), trackAcceptedTask()]);
   }, []);
 
   // Poll only while this workspace is visible. Revalidation keeps the form and
@@ -234,9 +237,11 @@ export function useSoftwarePreparations(active: boolean) {
         setAcceptedTaskId(accepted.task_id);
         setAcceptedKind(intent.kind);
         setAcceptedStatus(null);
+        setActivation(null);
+        setTrackingError(null);
         sessionStorage.removeItem(pendingKey);
         setPending(null);
-        await refresh();
+        void refresh();
         return accepted.task_id;
       } catch (cause) {
         if (controllerUpdateRejected(cause)) {
@@ -283,8 +288,9 @@ export function useSoftwarePreparations(active: boolean) {
       olderLoaded.current = true;
       setItems((existing) => merge(existing, page.items ?? []));
       setNextCursor(page.next_cursor ?? null);
+      setHistoryError(null);
     } catch (cause) {
-      setError(message(cause));
+      setHistoryError(message(cause));
     } finally {
       setLoading(false);
     }
@@ -294,6 +300,8 @@ export function useSoftwarePreparations(active: boolean) {
     loaded,
     loading,
     error,
+    historyError,
+    trackingError,
     publishing,
     pending,
     nextCursor,

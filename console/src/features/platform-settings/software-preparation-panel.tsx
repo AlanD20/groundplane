@@ -246,6 +246,11 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
               ? work.acceptedStatus.replaceAll("_", " ")
               : "Accepted"}
           </p>
+          {work.trackingError && (
+            <p role="status" className="text-sm text-muted-foreground">
+              Could not refresh this Task. Checking again… {work.trackingError}
+            </p>
+          )}
           {work.acceptedKind === "prepare" &&
             !["failed", "cancelled", "superseded"].includes(
               work.acceptedStatus ?? "",
@@ -347,6 +352,11 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
           </Button>
         }
       >
+        {work.historyError && (
+          <p role="alert" className="text-sm text-destructive">
+            Could not refresh preparations. {work.historyError}
+          </p>
+        )}
         {!work.loaded && work.loading ? (
           <p className="text-sm text-muted-foreground">Loading preparations…</p>
         ) : (
