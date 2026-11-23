@@ -86,8 +86,7 @@ export function BlueprintWorkspace({
   serviceName?: string;
 }) {
   const store = useStore();
-  const getBlueprint = store.getBlueprint;
-  const { getTask, watchTaskEvents } = store;
+  const { getBlueprint, getTask, watchTaskEvents } = store;
   const fileInput = useRef<HTMLInputElement>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<BlueprintDocumentResponse | null>(
