@@ -2,7 +2,6 @@
 
 import { useId, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { AnimatedSection } from "./animated-section";
 import { CopyButton } from "./copy-button";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -52,6 +51,7 @@ export function RevealValue({
     file ||
     (loadedValue?.includes("\n") ?? false) ||
     (loadedValue?.length ?? 0) > 160;
+  const showInlineValue = revealed && !expanded;
 
   async function reveal(): Promise<boolean> {
     setError(null);
@@ -77,34 +77,38 @@ export function RevealValue({
   }
 
   return (
-    <AnimatedSection>
-      <div
-        className={cn("flex min-w-0 max-w-full items-start gap-1", className)}
-      >
-        {((revealed && !expanded) || (!revealed && sensitive && !file)) && (
-          <code
-            className={cn(
-              "min-h-9 min-w-0 max-h-40 flex-1 overflow-y-auto rounded-md bg-muted px-3 py-2 font-mono text-sm",
-              revealed && !expanded
-                ? "whitespace-pre-wrap [overflow-wrap:anywhere]"
-                : "whitespace-nowrap",
-            )}
-          >
-            {revealed && !expanded ? (
-              displayedValue === "" ? (
-                <span className="font-sans italic text-muted-foreground">
-                  Empty value
-                </span>
-              ) : (
-                displayedValue
-              )
+    <div className={cn("min-w-0 max-w-full space-y-1", className)}>
+      <div className="flex min-w-0 items-center gap-1">
+        {!file && (
+          <>
+            <code
+              className={cn(
+                "h-9 min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2 font-mono text-sm whitespace-pre",
+                (showInlineValue || sensitive) && "bg-muted",
+              )}
+              aria-hidden={!showInlineValue && !sensitive ? true : undefined}
+            >
+              {showInlineValue ? (
+                displayedValue === "" ? (
+                  <span className="font-sans italic text-muted-foreground">
+                    Empty value
+                  </span>
+                ) : (
+                  displayedValue
+                )
+              ) : sensitive ? (
+                <span aria-label="Hidden secret">{"•".repeat(12)}</span>
+              ) : null}
+            </code>
+            {showInlineValue ? (
+              <CopyButton
+                className="size-8 shrink-0"
+                value={displayedValue ?? ""}
+              />
             ) : (
-              <span aria-label="Hidden secret">{"•".repeat(12)}</span>
+              <span className="size-8 shrink-0" aria-hidden />
             )}
-          </code>
-        )}
-        {revealed && !expanded && (
-          <CopyButton className="shrink-0" value={displayedValue ?? ""} />
+          </>
         )}
         <Button
           variant="ghost"
@@ -118,7 +122,10 @@ export function RevealValue({
               setOpen(true);
             } else void reveal();
           }}
-          className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className={cn(
+            "h-9 shrink-0 gap-1 rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+            file ? "w-24" : "w-20",
+          )}
           aria-label={
             revealed
               ? "Hide value"
@@ -146,78 +153,80 @@ export function RevealValue({
                   ? "Reveal"
                   : "Show"}
         </Button>
-        {error && (
-          <span className="min-w-0 text-xs text-destructive [overflow-wrap:anywhere]">
-            {error}
-          </span>
-        )}
-
-        <Dialog
-          open={revealed && expanded}
-          onOpenChange={(next) => {
-            if (!next) hide();
-          }}
-        >
-          <DialogContent className="max-w-5xl" submitOnEnter={false}>
-            <DialogHeader>
-              <DialogTitle>{label ?? "Secret value"}</DialogTitle>
-              <DialogDescription>
-                {file ? "File contents" : sensitive ? "Secret value" : "Value"}{" "}
-                · Read only
-              </DialogDescription>
-            </DialogHeader>
-            {revealed && expanded && (
-              <CodeEditor
-                id={viewerId}
-                label={label ?? "Secret value"}
-                value={displayedValue ?? ""}
-                readOnly
-                className="max-h-[60dvh] overflow-auto"
-              />
-            )}
-            <DialogFooter>
-              <CopyButton value={displayedValue ?? ""} />
-              <Button variant="outline" onClick={hide}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Reveal {label ?? "secret"}</DialogTitle>
-              <DialogDescription>Type to reveal this secret.</DialogDescription>
-            </DialogHeader>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="reveal-confirm">Confirmation</Label>
-              <Input
-                id="reveal-confirm"
-                autoFocus
-                value={typed}
-                onChange={(e) => setTyped(e.target.value)}
-                placeholder={confirmWord}
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                disabled={typed !== confirmWord || loading}
-                onClick={() => {
-                  void reveal().then((success) => {
-                    if (success) setOpen(false);
-                  });
-                }}
-              >
-                {loading ? "Revealing…" : "Reveal value"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
-    </AnimatedSection>
+      {error && (
+        <p
+          role="alert"
+          className="text-xs text-destructive [overflow-wrap:anywhere]"
+        >
+          {error}
+        </p>
+      )}
+      <Dialog
+        open={revealed && expanded}
+        onOpenChange={(next) => {
+          if (!next) hide();
+        }}
+      >
+        <DialogContent className="max-w-5xl" submitOnEnter={false}>
+          <DialogHeader>
+            <DialogTitle>{label ?? "Secret value"}</DialogTitle>
+            <DialogDescription>
+              {file ? "File contents" : sensitive ? "Secret value" : "Value"} ·
+              Read only
+            </DialogDescription>
+          </DialogHeader>
+          {revealed && expanded && (
+            <CodeEditor
+              id={viewerId}
+              label={label ?? "Secret value"}
+              value={displayedValue ?? ""}
+              readOnly
+              className="max-h-[60dvh] overflow-auto"
+            />
+          )}
+          <DialogFooter>
+            <CopyButton value={displayedValue ?? ""} />
+            <Button variant="outline" onClick={hide}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reveal {label ?? "secret"}</DialogTitle>
+            <DialogDescription>Type to reveal this secret.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="reveal-confirm">Confirmation</Label>
+            <Input
+              id="reveal-confirm"
+              autoFocus
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder={confirmWord}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={typed !== confirmWord || loading}
+              onClick={() => {
+                void reveal().then((success) => {
+                  if (success) setOpen(false);
+                });
+              }}
+            >
+              {loading ? "Revealing…" : "Reveal value"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

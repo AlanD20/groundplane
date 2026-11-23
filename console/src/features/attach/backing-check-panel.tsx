@@ -21,43 +21,31 @@ export function BackingAccessCheck({
   grants: { id: string; name: string }[];
   disabled?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const [grantId, setGrantId] = useState("");
   return (
-    <Disclosure
-      summary={
-        <span className="flex items-center gap-2 text-xs font-medium">
-          <PlugZap className="size-3.5" />
-          Test access
-        </span>
-      }
-      open={open}
-      onOpenChange={setOpen}
-    >
-      <div className="pt-3 space-y-3">
-        {grants.length > 0 && (
-          <Select
-            value={grantId || "own"}
-            aria-label="Database to check"
-            onValueChange={(value) => setGrantId(value === "own" ? "" : value)}
-            options={[
-              { value: "own", label: "Own database" },
-              ...grants.map((grant) => ({
-                value: grant.id,
-                label: grant.name,
-              })),
-            ]}
-          />
-        )}
-        <BackingCheckPanel
-          environmentId={environmentId}
-          attachId={attachId}
-          grantId={grantId}
-          open={open}
-          disabled={disabled}
+    <div className="space-y-3 border-t border-border pt-3">
+      {grants.length > 0 && (
+        <Select
+          value={grantId || "own"}
+          aria-label="Database to check"
+          onValueChange={(value) => setGrantId(value === "own" ? "" : value)}
+          options={[
+            { value: "own", label: "Own database" },
+            ...grants.map((grant) => ({
+              value: grant.id,
+              label: grant.name,
+            })),
+          ]}
         />
-      </div>
-    </Disclosure>
+      )}
+      <BackingCheckPanel
+        environmentId={environmentId}
+        attachId={attachId}
+        grantId={grantId}
+        open
+        disabled={disabled}
+      />
+    </div>
   );
 }
 

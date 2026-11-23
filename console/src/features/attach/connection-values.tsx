@@ -1,5 +1,3 @@
-import { Disclosure } from "@/components/common/disclosure";
-import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import { Link } from "react-router-dom";
 import { FactRow } from "./environment-facts";
 import { Badge } from "@/components/ui/badge";
@@ -16,22 +14,28 @@ export function ConnectionValues({
     (item) => item.id === attach.serviceId || item.name === attach.service,
   );
   return (
-    <Disclosure
-      className="group border-t border-border pt-3"
-      summaryClassName="cursor-pointer text-sm font-medium"
-      summary={<>Connection values & usage</>}
+    <section
+      aria-label="Connection values and usage"
+      className="space-y-3 border-t border-border pt-3"
     >
-      <div className="mt-4 space-y-5">
+      <h3 className="text-sm font-semibold">Connection values &amp; usage</h3>
+      <div className="space-y-4">
         {!attach.factSets.some((set) => set.facts.length) && (
           <p className="text-sm text-muted-foreground">
             Values will appear when this connection is ready.
           </p>
         )}
         {attach.factSets.map((set) => (
-          <section key={set.grantAttachId ?? "own"} className="space-y-4">
+          <div
+            key={set.grantAttachId ?? "own"}
+            className="divide-y divide-border"
+          >
             {set.grantAttachId && (
               <p className="text-sm text-muted-foreground">
-                Shared credentials · {set.grantAttachId}
+                Shared credentials ·{" "}
+                {env.attaches.find(
+                  (candidate) => candidate.id === set.grantAttachId,
+                )?.name ?? set.grantAttachId}
               </p>
             )}
             {set.facts.map((fact) => {
@@ -53,17 +57,14 @@ export function ConnectionValues({
               if (set.grantAttachId)
                 query.set("connectionGrant", set.grantAttachId);
               return (
-                <div
-                  key={fact.key}
-                  className={workspaceSectionClassName(false, "space-y-3")}
-                >
+                <div key={fact.key} className="space-y-2 py-2.5">
                   <FactRow
                     attachId={attach.id}
                     grantAttachId={set.grantAttachId}
                     k={fact.key}
                     secret={fact.secret}
                   />
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     {usedBy.length ? (
                       <>
                         Used by{" "}
@@ -88,9 +89,9 @@ export function ConnectionValues({
                 </div>
               );
             })}
-          </section>
+          </div>
         ))}
       </div>
-    </Disclosure>
+    </section>
   );
 }

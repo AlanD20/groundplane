@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import { SearchableChecklist } from "@/components/common/searchable-checklist";
 import { TaskLink } from "@/components/common/task-link";
 import { StatusBadge } from "@/components/common/status-badge";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -131,11 +132,15 @@ export function TaskRunAfterSelector({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-medium">Execution timing</h3>
-        <div className="flex gap-1 rounded-lg border border-border p-1">
+        <div
+          role="group"
+          aria-label="When to start"
+          className="flex flex-wrap gap-1 rounded-lg border border-border p-1"
+        >
           <Button
             type="button"
             size="sm"
-            variant={!choosing ? "secondary" : "ghost"}
+            variant={!choosing ? "default" : "ghost"}
             aria-pressed={!choosing}
             disabled={loading}
             onClick={() => {
@@ -145,17 +150,25 @@ export function TaskRunAfterSelector({
               onChange([]);
             }}
           >
+            <Check
+              aria-hidden
+              className={choosing ? "invisible size-3" : "size-3"}
+            />
             Start immediately
           </Button>
           <Button
             type="button"
             size="sm"
-            variant={choosing ? "secondary" : "ghost"}
+            variant={choosing ? "default" : "ghost"}
             aria-pressed={choosing}
             onClick={() => {
               setWaitForTasks(true);
             }}
           >
+            <Check
+              aria-hidden
+              className={choosing ? "size-3" : "invisible size-3"}
+            />
             Wait for Tasks{value.length > 0 ? ` · ${value.length}` : ""}
           </Button>
         </div>

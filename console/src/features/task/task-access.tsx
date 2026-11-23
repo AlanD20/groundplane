@@ -189,8 +189,7 @@ export function TaskNotifications() {
       )}
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerContent
-          blurBackdrop={false}
-          className="max-w-md gap-4 duration-150"
+          className="max-w-md gap-4"
           initialFocus={drawerTitle}
           finalFocus={trigger}
         >
