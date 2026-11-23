@@ -28,11 +28,14 @@ export function LogRows({
   });
   const longest = useMemo(
     () =>
-      events.reduce(
-        (line, event) => (event.line.length > line.length ? event.line : line),
-        "",
-      ),
-    [events],
+      wrap
+        ? ""
+        : events.reduce(
+            (line, event) =>
+              event.line.length > line.length ? event.line : line,
+            "",
+          ),
+    [events, wrap],
   );
   useEffect(() => {
     rows.measure();

@@ -168,16 +168,16 @@ export function LogStream({ target }: { target: LogTarget }) {
     // A new target owns a new stream; filters never restart it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target.kind, target.id]);
-  const visible = useMemo(
-    () =>
-      events.filter(
-        (event) =>
-          (container === "all" || event.container_id === container) &&
-          (stream === "all" || event.stream === stream) &&
-          event.line.toLowerCase().includes(query.toLowerCase()),
-      ),
-    [events, container, stream, query],
-  );
+  const visible = useMemo(() => {
+    const search = query.toLowerCase();
+    if (!search && container === "all" && stream === "all") return events;
+    return events.filter(
+      (event) =>
+        (container === "all" || event.container_id === container) &&
+        (stream === "all" || event.stream === stream) &&
+        (!search || event.line.toLowerCase().includes(search)),
+    );
+  }, [events, container, stream, query]);
   const containers = useMemo(
     () => [
       ...new Map(
@@ -239,12 +239,14 @@ export function LogStream({ target }: { target: LogTarget }) {
         </Button>
         <CopyButton
           label="Copy visible logs"
-          value={visible
-            .map(
-              (event) =>
-                `${event.timestamp} ${event.container_name} ${event.stream} ${event.line}${event.truncated ? " [truncated]" : ""}`,
-            )
-            .join("\n")}
+          value={() =>
+            visible
+              .map(
+                (event) =>
+                  `${event.timestamp} ${event.container_name} ${event.stream} ${event.line}${event.truncated ? " [truncated]" : ""}`,
+              )
+              .join("\n")
+          }
         />
       </div>
       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">

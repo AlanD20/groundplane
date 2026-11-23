@@ -52,7 +52,7 @@ export function CopyButton({
   children,
   iconOnly = false,
 }: {
-  value: string;
+  value: string | (() => string);
   className?: string;
   label?: string;
   children?: ReactNode;
@@ -81,7 +81,7 @@ export function CopyButton({
         clearTimeout(timer.current);
         setStatus("copying");
         try {
-          await copyText(value);
+          await copyText(typeof value === "function" ? value() : value);
           setStatus("copied");
           timer.current = setTimeout(() => setStatus("idle"), 1400);
         } catch {
