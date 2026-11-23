@@ -16,6 +16,7 @@ import { useStore } from "@/lib/store";
 import { newULID } from "@/lib/utils";
 import type { Environment } from "@/lib/types";
 import type { RecoveryPointGroup } from "./recovery-point-groups";
+import { createTaskDetailRefresh } from "@/features/task/task-detail-refresh";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { backupSourceLabel } from "./environment-backup-projection";
 
@@ -34,6 +35,7 @@ export function RecoveryGroupDeleteDialog({
   const [after, setAfter] = useState<string[]>([]);
   const [afterLoading, setAfterLoading] = useState(false);
   const [error, setError] = useState("");
+  const [statusUnavailable, setStatusUnavailable] = useState(false);
   const [tasks, setTasks] = useState<
     { point: string; id: string; status: string }[]
   >([]);
@@ -54,37 +56,39 @@ export function RecoveryGroupDeleteDialog({
   useEffect(() => {
     if (!taskIds) return;
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    async function refresh() {
-      try {
-        const details = await Promise.all(
-          taskIds.split(",").map((id) => getTask(id, controller.signal)),
-        );
-        if (controller.signal.aborted) return;
-        setTasks((prior) =>
-          prior.map((item) => ({
-            ...item,
-            status:
-              details.find((detail) => detail.task.id === item.id)?.task
-                .status ?? item.status,
-          })),
-        );
-        if (details.some((detail) => !detail.task.finished_at))
-          timer = setTimeout(() => void refresh(), 1500);
-        else await loadRecoveryPoints(env.id);
-      } catch (cause) {
-        if (!controller.signal.aborted)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Unable to refresh deletion Tasks",
-          );
+    const pending = new Set(taskIds.split(","));
+    const refresh = createTaskDetailRefresh(async () => {
+      const details = await Promise.allSettled(
+        Array.from(pending, (id) => getTask(id, controller.signal)),
+      );
+      if (controller.signal.aborted) return;
+      const statuses = new Map<string, string>();
+      for (const result of details) {
+        if (result.status === "fulfilled") {
+          const { task } = result.value;
+          statuses.set(task.id, task.status);
+          if (task.finished_at) pending.delete(task.id);
+        }
       }
-    }
-    void refresh();
+      setTasks((prior) =>
+        prior.map((item) => {
+          const status = statuses.get(item.id);
+          return status === undefined ? item : { ...item, status };
+        }),
+      );
+      setStatusUnavailable(
+        details.some((result) => result.status === "rejected"),
+      );
+      if (pending.size === 0) {
+        refresh.stop();
+        // The Recovery Points list owns its refresh error and Retry action.
+        await loadRecoveryPoints(env.id).catch(() => undefined);
+      }
+    }, 1500);
+    void refresh.start();
     return () => {
+      refresh.stop();
       controller.abort();
-      if (timer) clearTimeout(timer);
     };
   }, [taskIds, getTask, loadRecoveryPoints, env.id]);
 
@@ -198,6 +202,11 @@ export function RecoveryGroupDeleteDialog({
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
+          </p>
+        )}
+        {statusUnavailable && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Some deletion statuses are temporarily unavailable. Checking again…
           </p>
         )}
         <DialogFooter>
