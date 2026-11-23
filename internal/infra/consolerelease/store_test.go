@@ -7,15 +7,93 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func TestActivateReclaimsExpiredConsoleSlotsAtCapacity(t *testing.T) {
+	t.Parallel()
+	api := []byte(`{"openapi":"3.1.0"}`)
+	root := filepath.Join(t.TempDir(), "console")
+	bootstrap := fstest.MapFS{
+		"index.html":             &fstest.MapFile{Data: []byte("bootstrap")},
+		"assets/old-11111111.js": &fstest.MapFile{Data: []byte("old-js")},
+	}
+	store, err := New(root, bootstrap, "console/v0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(10, 0).UTC()
+	store.now = func() time.Time { return now }
+	if err := store.BindAPIDocument(api); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := store.Current()
+	const currentAsset = "assets/current-22222222.js"
+	stage := func(index int) Artifact {
+		t.Helper()
+		version := fmt.Sprintf("console/v0.1.%d", index)
+		assets := fstest.MapFS{
+			"index.html": &fstest.MapFile{Data: []byte(version)},
+			currentAsset: &fstest.MapFile{Data: []byte("previous-current")},
+		}
+		if index == maximumRetired+1 {
+			delete(assets, currentAsset)
+		}
+		artifact, err := store.stageFS(assets, version, strings.Repeat("a", 40), APIHash(api))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return artifact
+	}
+	for index := range maximumRetired + 1 {
+		if err := store.Activate(stage(index)); err != nil {
+			t.Fatalf("fill retention at release %d: %v", index, err)
+		}
+	}
+	current, _ := store.Current()
+	candidate := stage(maximumRetired + 1)
+	if kind, _ := errs.KindOf(store.Activate(candidate)); kind != errs.KindResourceInUse {
+		t.Fatalf("active retention window must enforce capacity, got error kind %v", kind)
+	}
+	if retained, _ := store.Current(); retained != current {
+		t.Fatal("rejected activation changed the selected Console")
+	}
+	now = now.Add(retiredAssetWindow)
+	if err := store.Activate(candidate); err != nil {
+		t.Fatalf("expired bundles left activation blocked at capacity: %v", err)
+	}
+	reopened, err := New(root, bootstrap, "console/v0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.BindAPIDocument(api); err != nil {
+		t.Fatal(err)
+	}
+	assets, err := reopened.Assets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertTestAsset(t, assets, "index.html", candidate.Release)
+	assertTestAsset(t, assets, currentAsset, "previous-current")
+	if _, err := fs.ReadFile(assets, "assets/old-11111111.js"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("expired asset should be unavailable, got %v", err)
+	}
+	if _, err := os.Stat(store.releasePath(first.ManifestSHA256)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expired release directory should be reclaimed, got %v", err)
+	}
+}
 
 // Rationale: All upgrades stage a future Console while the predecessor API is
 // live. The new Controller must keep its API online with Console gated, then

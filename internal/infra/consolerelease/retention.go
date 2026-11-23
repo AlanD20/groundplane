@@ -8,6 +8,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -30,28 +31,18 @@ func deduplicateRetired(retired []retiredRelease, active Artifact, predecessor *
 	return result
 }
 
-func (store *Store) collectExpired() error {
-	cutoff := store.now().UTC().Add(-retiredAssetWindow)
-	next := store.receipt
-	kept := next.Retired[:0]
-	var expired []Artifact
-	for _, retired := range next.Retired {
+func splitExpiredRetired(releases []retiredRelease, cutoff time.Time) (kept []retiredRelease, expired []Artifact) {
+	for _, retired := range releases {
 		if retired.RetiredAt.After(cutoff) {
 			kept = append(kept, retired)
 			continue
 		}
 		expired = append(expired, retired.Artifact)
 	}
-	next.Retired = kept
-	if len(next.Retired) == len(store.receipt.Retired) {
-		return nil
-	}
-	if err := store.writeReceipt(next); err != nil {
-		return err
-	}
-	if err := store.loadReceipt(next); err != nil {
-		return err
-	}
+	return kept, expired
+}
+
+func (store *Store) removeExpired(expired []Artifact) error {
 	for _, artifact := range expired {
 		if err := os.RemoveAll(store.releasePath(artifact.ManifestSHA256)); err != nil {
 			return errs.Wrap(errs.KindInternal, err)

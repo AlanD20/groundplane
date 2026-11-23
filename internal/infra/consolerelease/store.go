@@ -251,7 +251,9 @@ func (store *Store) Activate(artifact Artifact) error {
 	}
 	previous := next.Active
 	next.Schema, next.Active, next.Predecessor, next.ActivatedAt = 1, artifact, &previous, at
-	next.Retired = deduplicateRetired(next.Retired, next.Active, next.Predecessor)
+	retired := deduplicateRetired(next.Retired, next.Active, next.Predecessor)
+	kept, expired := splitExpiredRetired(retired, at.Add(-retiredAssetWindow))
+	next.Retired = kept
 	if len(next.Retired) > maximumRetired {
 		return errs.New(
 			errs.KindResourceInUse,
@@ -265,7 +267,8 @@ func (store *Store) Activate(artifact Artifact) error {
 		_ = store.writeReceipt(store.receipt)
 		return err
 	}
-	return store.collectExpired()
+	// Release directories remain available until the replacement receipt commits.
+	return store.removeExpired(expired)
 }
 
 func (store *Store) stageFS(source fs.FS, release, commit, apiHash string) (Artifact, error) {
