@@ -36,36 +36,44 @@ export function WorkInspection({
   revision,
   targetName,
   onChanged,
+  inline = false,
 }: {
   taskId: string;
   work: TaskWork;
   revision: number;
   targetName?: string;
   onChanged?: () => void;
+  inline?: boolean;
 }) {
   return (
     <section
       id={`task-work-${work.id}`}
-      className="min-w-0 space-y-4 rounded-lg border border-border p-4"
+      className={
+        inline
+          ? "min-w-0 space-y-4 py-3"
+          : "min-w-0 space-y-4 rounded-lg border border-border p-4"
+      }
     >
-      <header className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 space-y-1">
-          <h3 className="break-words text-sm font-medium">
-            {targetName || operationLabel(work.operation)}
-          </h3>
-          {targetName && (
+      {!inline && (
+        <header className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 space-y-1">
+            <h3 className="break-words text-sm font-medium">
+              {targetName || operationLabel(work.operation)}
+            </h3>
+            {targetName && (
+              <p className="text-xs text-muted-foreground">
+                {operationLabel(work.operation)}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
-              {operationLabel(work.operation)}
+              {work.placement.executor === "agent"
+                ? "Runs on the managed host"
+                : "Runs in the Controller"}
             </p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            {work.placement.executor === "agent"
-              ? "Runs on the managed host"
-              : "Runs in the Controller"}
-          </p>
-        </div>
-        <StatusBadge status={work.outcome || work.phase} />
-      </header>
+          </div>
+          <StatusBadge status={work.outcome || work.phase} />
+        </header>
+      )}
       {work.preparation && (
         <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
           <p className="font-medium">
@@ -172,6 +180,14 @@ export function WorkInspection({
           <p className="text-xs text-muted-foreground">
             Operation: {work.operation}
           </p>
+          {inline && (
+            <p className="text-xs text-muted-foreground">
+              Executor:{" "}
+              {work.placement.executor === "agent"
+                ? "Managed host"
+                : "Controller"}
+            </p>
+          )}
         </div>
       </Disclosure>
     </section>

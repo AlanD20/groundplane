@@ -27,9 +27,10 @@ requires independent application or database instrumentation.
 
 CPU usage shows busy time in cores. The Host CPU utilization chart shows that
 busy time as a percentage of all logical CPUs. One busy core on a four-core Host
-is 25% utilization. Utilization against a workload allocation needs an actual
-configured limit. Memory working set removes
-reported inactive file cache from raw usage and remains distinct from the limit.
+is 25% utilization. The live summary pairs cores with a percentage of host
+capacity or the reported workload limit. A workload percentage is available
+when Groundplane can report its total CPU limit. Memory working set removes
+reported inactive file cache from raw usage.
 Whole-host memory and filesystem capacity are separate measurements.
 
 Service readings cover the selected serving workload replicas. Retained releases,
@@ -65,8 +66,9 @@ Deploy Task proves current health.
 
 ## Inspect a chart
 
-Select **Fullscreen** to expand the chart inside the Console tab while keeping
-the time range, metric and live refresh controls available. Press Escape to exit.
+Choose the time range and control live refresh from the chart header. Select
+**Fullscreen** to expand the chart inside the Console tab with these controls.
+Press Escape to exit.
 
 Charts default to UTC. Use the time zone control to display times in your browser's
 local zone. Groundplane remembers this choice in the browser. Hover a point to

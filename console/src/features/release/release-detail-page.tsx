@@ -190,7 +190,10 @@ export function ReleaseDetails({
           }
         />
       )}
-      <ReleaseTaskLog taskId={release.originating_task_id} />
+      <ReleaseTaskLog
+        taskId={release.originating_task_id}
+        serviceId={release.service_id}
+      />
       <Disclosure
         summary="Deployment details"
         summaryClassName="text-sm font-medium"

@@ -160,9 +160,6 @@ export function MonitoringMetrics({
               {query.paused ? " · live refresh paused" : ""}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {!fullscreen && rangeControls}
-          </div>
         </div>
         {refreshError && (
           <p role="alert" className="mt-3 text-xs text-warning">
@@ -184,7 +181,6 @@ export function MonitoringMetrics({
           title={`${selected.label} history`}
           actions={
             <>
-              {fullscreen && rangeControls}
               <Select
                 aria-label="Monitoring metric"
                 className="w-44"
@@ -226,6 +222,7 @@ export function MonitoringMetrics({
                   { value: "local", label: "Local time" },
                 ]}
               />
+              {rangeControls}
               <Button
                 ref={fullscreenButton}
                 variant="outline"
@@ -282,9 +279,11 @@ export function MonitoringMetrics({
 
 function LiveSummary({ values }: { values: MonitoringValues }) {
   const cpuCores = metricAverage(values, "cpu_cores");
-  const ratio = metricAverage(values, "cpu_utilization_ratio");
-  const cpu = cpuCores ?? ratio;
-  const cpuUnit = cpuCores !== null ? "cores" : "%";
+  const hostRatio = metricAverage(values, "cpu_utilization_ratio");
+  const limit = metricAverage(values, "cpu_limit_cores");
+  const limitRatio =
+    cpuCores !== null && limit !== null && limit > 0 ? cpuCores / limit : null;
+  const ratio = hostRatio ?? limitRatio;
   const workingSet = metricAverage(values, "memory_working_set_bytes");
   const memory = workingSet ?? metricAverage(values, "memory_used_bytes");
   const volumeUsage = metricAverage(values, "persistent_volume_used_bytes");
@@ -305,10 +304,20 @@ function LiveSummary({ values }: { values: MonitoringValues }) {
     <SummaryStrip>
       <SummaryItem
         label={
-          cpuCores !== null || ratio === null ? "CPU used" : "CPU utilization"
+          cpuCores !== null || ratio === null ? "CPU usage" : "CPU utilization"
         }
       >
-        {formatMetric(cpu, cpuUnit)}
+        {cpuCores === null
+          ? formatMetric(ratio, "%")
+          : formatMetric(cpuCores, "cores")}
+        {cpuCores !== null && ratio !== null && (
+          <span className="mt-0.5 block text-xs font-normal tracking-normal text-muted-foreground">
+            {formatMetric(ratio, "%")}{" "}
+            {hostRatio !== null
+              ? "of host capacity"
+              : `of limit (${formatMetric(limit, "cores")})`}
+          </span>
+        )}
       </SummaryItem>
       <SummaryItem
         label={workingSet !== null ? "Memory working set" : "Memory used"}

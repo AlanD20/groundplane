@@ -139,13 +139,12 @@ export function FactRow({
 }) {
   const store = useStore();
   return (
-    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start">
-      <span className="min-w-0 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere] sm:w-40 sm:shrink-0">
+    <div className="grid min-w-0 grid-cols-[minmax(0,min(10rem,45%))_minmax(0,1fr)] items-center gap-2">
+      <span className="min-w-0 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">
         {k}
       </span>
       <RevealValue
         key={`${attachId}/${grantAttachId ?? ""}/${k}`}
-        className="flex-1"
         label={k}
         sensitive={secret}
         loadValue={() => store.revealAttachFact(attachId, k, grantAttachId)}
