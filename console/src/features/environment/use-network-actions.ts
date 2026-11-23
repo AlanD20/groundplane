@@ -1,5 +1,5 @@
 import { requireTaskId } from "@/features/task/journal-model";
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import type { Zone, Route } from "@/lib/types";
 import { controllerRequest } from "@/lib/controller-json-request";
 import {
@@ -73,28 +73,31 @@ export function useNetworkActions({
     new Map<string, { envId: string; zoneId: string }>(),
   );
 
-  const reconcileZoneRemoval = (taskId: string, task: TaskResponse) => {
-    const pending = pendingZoneRemovals.current.get(taskId);
-    if (pending && task.task.finished_at) {
-      pendingZoneRemovals.current.delete(taskId);
-      if (task.task.status === "succeeded") {
-        update((draft) => {
-          const environment = findEnvironment(draft, pending.envId);
-          if (!environment) return;
-          const zone = environment.zones.find(
-            (candidate) => candidate.id === pending.zoneId,
-          );
-          if (!zone) return;
-          environment.zones = environment.zones.filter(
-            (candidate) => candidate.id !== pending.zoneId,
-          );
-          environment.services.forEach((service) => {
-            service.zones = service.zones.filter((name) => name !== zone.name);
+  const reconcileZoneRemoval = useCallback(
+    (taskId: string, task: TaskResponse) => {
+      const pending = pendingZoneRemovals.current.get(taskId);
+      if (pending && task.task.finished_at) {
+        pendingZoneRemovals.current.delete(taskId);
+        if (task.task.status === "succeeded") {
+          update((draft) => {
+            const environment = findEnvironment(draft, pending.envId);
+            if (!environment) return;
+            const zone = environment.zones.find(
+              (candidate) => candidate.id === pending.zoneId,
+            );
+            if (!zone) return;
+            environment.zones = environment.zones.filter(
+              (candidate) => candidate.id !== pending.zoneId,
+            );
+            environment.services.forEach((service) => {
+              service.zones = service.zones.filter((name) => name !== zone.name);
+            });
           });
-        });
+        }
       }
-    }
-  };
+    },
+    [update],
+  );
   const actions: NetworkActions = {
     addZone: async (envId, input) => {
       assertEnvironmentMutable(envId, "Zone mutation");
