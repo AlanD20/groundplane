@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { TaskResponse } from "@/features/task/api";
 import { TaskExecution } from "@/features/task/task-execution";
+import { createTaskDetailRefresh } from "@/features/task/task-detail-refresh";
 import { useStore } from "@/lib/store";
 import type { TaskType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -126,15 +127,8 @@ export function TaskRunnerDialog({
   useEffect(() => {
     if (!open || !taskId) return;
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let polling = false;
-    let finished = false;
     let stopEvents = () => {};
-    const poll = async () => {
-      if (finished || polling || controller.signal.aborted) return;
-      if (timer !== undefined) clearTimeout(timer);
-      timer = undefined;
-      polling = true;
+    const refresh = createTaskDetailRefresh(async () => {
       try {
         const response = await getTask(taskId, controller.signal);
         if (controller.signal.aborted) return;
@@ -152,7 +146,7 @@ export function TaskRunnerDialog({
           onCommitRef.current?.();
         }
         if (task.finished_at) {
-          finished = true;
+          refresh.stop();
           stopEvents();
           if (settledTaskId.current !== task.id) {
             settledTaskId.current = task.id;
@@ -174,22 +168,19 @@ export function TaskRunnerDialog({
             ? cause.message
             : "Task status is temporarily unavailable",
         );
-      } finally {
-        polling = false;
       }
-      timer = setTimeout(() => void poll(), 1000);
-    };
+    }, 1000);
     stopEvents = watchTaskEvents(
       taskId,
-      () => void poll(),
+      refresh.invalidate,
       // Brief stream disconnects are covered by the authoritative fallback read.
       () => {},
     );
-    void poll();
+    void refresh.start();
     return () => {
+      refresh.stop();
       controller.abort();
       stopEvents();
-      if (timer) clearTimeout(timer);
     };
   }, [getTask, open, target, type, taskId, watchTaskEvents]);
 

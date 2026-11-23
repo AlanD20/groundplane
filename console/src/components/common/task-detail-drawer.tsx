@@ -12,6 +12,7 @@ import { Disclosure } from "@/components/common/disclosure";
 import { taskFromAPI } from "@/features/task/journal-model";
 import { taskPresentation } from "@/features/task/task-overview";
 import { taskDuration } from "@/features/task/task-duration";
+import { createTaskDetailRefresh } from "@/features/task/task-detail-refresh";
 import { useStore } from "@/lib/store";
 import { Link } from "react-router-dom";
 import type {
@@ -47,61 +48,43 @@ export function TaskDetailDrawer({
   }, [id]);
   useEffect(() => {
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
     let stopEvents = () => {};
-    let polling = false;
-    let finished = false;
-    let eventRefreshScheduled = false;
-    const schedule = (delay: number) => {
-      if (timer !== undefined) clearTimeout(timer);
-      timer = setTimeout(() => void poll(), delay);
-    };
-    const poll = async () => {
-      timer = undefined;
-      eventRefreshScheduled = false;
-      if (polling || finished || controller.signal.aborted) return;
-      polling = true;
-      try {
-        const response = await requestTask(id, controller.signal, {
-          limit: 25,
-          ...page,
-        });
-        if (controller.signal.aborted) return;
-        setDetail(response);
-        setError(null);
-        finished = !!response.task.finished_at;
-        if (finished) stopEvents();
-      } catch (cause) {
-        if (!controller.signal.aborted)
-          setError(
-            cause instanceof Error ? cause.message : "Unable to load Task",
-          );
-      } finally {
-        polling = false;
-        if (!controller.signal.aborted) setLoading(false);
-      }
-      if (!controller.signal.aborted && !finished && !page.revision)
-        schedule(2000);
-    };
+    const refresh = createTaskDetailRefresh(
+      async () => {
+        try {
+          const response = await requestTask(id, controller.signal, {
+            limit: 25,
+            ...page,
+          });
+          if (controller.signal.aborted) return;
+          setDetail(response);
+          setError(null);
+          if (response.task.finished_at) {
+            refresh.stop();
+            stopEvents();
+          }
+        } catch (cause) {
+          if (!controller.signal.aborted)
+            setError(
+              cause instanceof Error ? cause.message : "Unable to load Task",
+            );
+        } finally {
+          if (!controller.signal.aborted) setLoading(false);
+        }
+      },
+      page.revision ? undefined : 2000,
+    );
     setLoading(true);
     if (!page.revision) {
-      stopEvents = watchTaskEvents(
-        id,
-        () => {
-          if (polling || finished || eventRefreshScheduled) return;
-          eventRefreshScheduled = true;
-          schedule(200);
-        },
-        () => {
-          // Keep the current detail visible. The fallback read handles disconnects.
-        },
-      );
+      stopEvents = watchTaskEvents(id, refresh.invalidate, () => {
+        // Keep the current detail visible. The fallback read handles disconnects.
+      });
     }
-    void poll();
+    void refresh.start();
     return () => {
+      refresh.stop();
       controller.abort();
       stopEvents();
-      if (timer) clearTimeout(timer);
     };
   }, [id, page, reload, watchTaskEvents]);
   const task = detail?.task.id === id ? detail.task : null;
