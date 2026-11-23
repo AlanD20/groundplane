@@ -9,6 +9,7 @@ import {
 } from "@/components/common/table-controls";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Badge } from "@/components/ui/badge";
+import { CodeEditor } from "@/components/ui/code-editor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRequiredParams } from "@/lib/router";
@@ -227,9 +228,15 @@ export function ScriptsCard({ env }: { env: Environment }) {
                         " This hook runs automatically during Deploy."}
                     </p>
                   )}
-                  <pre className="overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs">
-                    <code>{selected.body}</code>
-                  </pre>
+                  {editing?.id !== selected.id && (
+                    <CodeEditor
+                      id={`script-preview-${selected.id}`}
+                      label="Script source"
+                      language="shell"
+                      value={selected.body}
+                      readOnly
+                    />
+                  )}
                 </div>
               )}
             </InspectionWorkspace>
