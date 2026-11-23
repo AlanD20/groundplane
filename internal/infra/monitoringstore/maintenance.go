@@ -2,12 +2,16 @@ package monitoringstore
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/monitoring"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 type MaintenanceResult struct {
@@ -25,6 +29,26 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 	if store == nil || store.database == nil || now.IsZero() {
 		return MaintenanceResult{}, errs.New(errs.KindInternal, "monitoring maintenance input is invalid")
 	}
+	result, err := store.maintain(ctx, now)
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) || sqliteErr.Code() != sqlite3.SQLITE_FULL {
+		return result, err
+	}
+	// Rollups normally precede expiry. At the page ceiling, reclaim only
+	// already-expired rows in a separate transaction before retrying rollups.
+	expired, expiryErr := store.expireAtCapacity(ctx, now)
+	if expiryErr != nil {
+		return result, expiryErr
+	}
+	if expired == 0 {
+		return result, err
+	}
+	result, err = store.maintain(ctx, now)
+	result.ExpiredRows += expired
+	return result, err
+}
+
+func (store *Store) maintain(ctx context.Context, now time.Time) (MaintenanceResult, error) {
 	tx, err := store.database.BeginTx(ctx, nil)
 	if err != nil {
 		return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, err)
@@ -100,6 +124,43 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 		result.RolledVolumeRows += volumeRows
 		result.RolledHostRows += hostRows
 	}
+	result.ExpiredRows, err = expireHistory(ctx, tx, now)
+	if err != nil {
+		return MaintenanceResult{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, err)
+	}
+	if _, err = store.database.ExecContext(ctx, `PRAGMA incremental_vacuum(256)`); err != nil {
+		return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, err)
+	}
+	if _, err = store.database.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, err)
+	}
+	if err = secureFiles(store.path); err != nil {
+		return MaintenanceResult{}, err
+	}
+	return result, nil
+}
+
+func (store *Store) expireAtCapacity(ctx context.Context, now time.Time) (int64, error) {
+	tx, err := store.database.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, errs.Wrap(errs.KindStorageUnavailable, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	expired, err := expireHistory(ctx, tx, now)
+	if err != nil {
+		return 0, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, errs.Wrap(errs.KindStorageUnavailable, err)
+	}
+	return expired, nil
+}
+
+func expireHistory(ctx context.Context, tx *sql.Tx, now time.Time) (int64, error) {
+	var total int64
 	for _, expiry := range []struct {
 		resolution time.Duration
 		retention  time.Duration
@@ -122,28 +183,16 @@ func (store *Store) Maintain(ctx context.Context, now time.Time) (MaintenanceRes
 				int64(expiry.resolution/time.Second), cutoff,
 			)
 			if executeErr != nil {
-				return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, executeErr)
+				return 0, errs.Wrap(errs.KindStorageUnavailable, executeErr)
 			}
 			expiredRows, rowsErr := rowsAffected(expired)
 			if rowsErr != nil {
-				return MaintenanceResult{}, rowsErr
+				return 0, rowsErr
 			}
-			result.ExpiredRows += expiredRows
+			total += expiredRows
 		}
 	}
-	if err = tx.Commit(); err != nil {
-		return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, err)
-	}
-	if _, err = store.database.ExecContext(ctx, `PRAGMA incremental_vacuum(256)`); err != nil {
-		return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, err)
-	}
-	if _, err = store.database.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
-		return MaintenanceResult{}, errs.Wrap(errs.KindStorageUnavailable, err)
-	}
-	if err = secureFiles(store.path); err != nil {
-		return MaintenanceResult{}, err
-	}
-	return result, nil
+	return total, nil
 }
 
 func scopeRollupSQL(table scopeTable) string {

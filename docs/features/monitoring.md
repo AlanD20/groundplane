@@ -93,7 +93,9 @@ The Controller keeps this derived history in
 application Volumes. The database has a 256 MiB page ceiling and a 16 MiB WAL
 checkpoint target; the latter is not a hard transient file-size limit. History
 failure leaves live collection available and preserves a corrupt file for
-diagnosis. It does not authorize resetting application or coordination data.
+diagnosis. If the page ceiling blocks maintenance, the Controller removes
+already-expired derived samples before retrying rollup. This can leave gaps
+where expired samples were removed before rollup.
 
 Collection and queries are bounded. A collection page has at most 512 Services;
 when a larger inventory needs continuation, GP withholds a purported complete
