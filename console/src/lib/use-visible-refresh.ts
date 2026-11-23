@@ -21,12 +21,25 @@ export function useVisibleRefresh(
     if (!enabled) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let deadline = Infinity;
     let running = false;
     let pending = false;
+    const cancelTimer = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+      deadline = Infinity;
+    };
     const schedule = (delay: number) => {
-      if (timer) clearTimeout(timer);
-      if (!controller.signal.aborted)
-        timer = setTimeout(() => void run(), delay);
+      if (controller.signal.aborted || document.hidden) return;
+      const nextDeadline = performance.now() + delay;
+      // New events can bring the read forward, but a burst cannot postpone it.
+      if (nextDeadline >= deadline) return;
+      cancelTimer();
+      deadline = nextDeadline;
+      timer = setTimeout(() => {
+        cancelTimer();
+        void run();
+      }, delay);
     };
     const run = async () => {
       if (controller.signal.aborted || document.hidden) return;
@@ -46,19 +59,24 @@ export function useVisibleRefresh(
       }
     };
     const invalidate = () => {
+      if (document.hidden) return;
       if (running) pending = true;
       else schedule(100);
     };
+    const visibility = () => {
+      if (document.hidden) cancelTimer();
+      else invalidate();
+    };
     const unsubscribe = subscribeResourceChanges(invalidate);
-    document.addEventListener("visibilitychange", invalidate);
+    document.addEventListener("visibilitychange", visibility);
     window.addEventListener("focus", invalidate);
     window.addEventListener("online", invalidate);
     void run();
     return () => {
       controller.abort();
-      if (timer) clearTimeout(timer);
+      cancelTimer();
       unsubscribe();
-      document.removeEventListener("visibilitychange", invalidate);
+      document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("focus", invalidate);
       window.removeEventListener("online", invalidate);
     };
