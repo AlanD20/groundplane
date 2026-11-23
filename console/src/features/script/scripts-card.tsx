@@ -234,7 +234,9 @@ export function ScriptsCard({ env }: { env: Environment }) {
                       label="Script source"
                       language="shell"
                       value={selected.body}
+                      className="[--editor-toolbar-top:-1rem]"
                       readOnly
+                      scrollWithParent
                     />
                   )}
                 </div>

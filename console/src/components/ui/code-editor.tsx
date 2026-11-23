@@ -51,6 +51,7 @@ type CodeEditorProps = {
   language?: CodeLanguage;
   readOnly?: boolean;
   disabled?: boolean;
+  scrollWithParent?: boolean;
   className?: string;
   "aria-describedby"?: string;
   "aria-invalid"?: boolean;
@@ -123,6 +124,7 @@ export function CodeEditor({
   language = "text",
   readOnly = false,
   disabled = false,
+  scrollWithParent = false,
   className,
   ...aria
 }: CodeEditorProps) {
@@ -130,6 +132,7 @@ export function CodeEditor({
     () => view.current?.requestMeasure(),
     () => view.current?.focus(),
   );
+  const parentScroll = scrollWithParent && !fullscreen;
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const latest = useRef({ value, onValueChange });
@@ -335,6 +338,21 @@ export function CodeEditor({
   return (
     <section
       data-draft-editor
+      onFocusCapture={(event) => {
+        if (!parentScroll || !(event.target instanceof HTMLElement)) return;
+        const field = event.target;
+        if (!field.closest(".cm-panels")) return;
+        const toolbar = event.currentTarget.firstElementChild;
+        requestAnimationFrame(() => {
+          if (
+            document.activeElement === field &&
+            toolbar &&
+            field.getBoundingClientRect().top <
+              toolbar.getBoundingClientRect().bottom
+          )
+            field.scrollIntoView({ block: "center" });
+        });
+      }}
       onKeyDown={(event) => {
         if (event.key === "Escape" && fullscreen && !event.defaultPrevented) {
           event.preventDefault();
@@ -351,13 +369,19 @@ export function CodeEditor({
           );
       }}
       className={cn(
-        "overflow-hidden rounded-xl border border-input bg-card focus-within:border-primary",
+        "rounded-xl border border-input bg-card focus-within:border-primary",
+        parentScroll ? "overflow-clip" : "overflow-hidden",
         className,
         fullscreen && "workspace-fullscreen flex flex-col rounded-none",
       )}
       aria-label={label}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface px-3 py-2">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface px-3 py-2",
+          parentScroll && "sticky top-[var(--editor-toolbar-top,0px)] z-10",
+        )}
+      >
         <span className="text-xs text-muted-foreground">
           {label} <span className="ml-2 font-mono uppercase">{language}</span>
         </span>
@@ -474,7 +498,9 @@ export function CodeEditor({
         className={
           fullscreen
             ? "min-h-0 flex-1 overflow-auto [&_.cm-editor]:min-h-full"
-            : "max-h-[65vh] overflow-auto"
+            : parentScroll
+              ? undefined
+              : "max-h-[65vh] overflow-auto"
         }
       />
       <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-xs text-muted-foreground">
