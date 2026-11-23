@@ -81,6 +81,9 @@ matching artifacts before Controller replacement and activates the matching Cons
 after the new API is available. If Console compatibility fails at boot, the API
 remains available for recovery while UI requests fail closed.
 
+If a retained preparation lacks the Controller API fingerprint, prepare the
+release again from a bundle that includes its OpenAPI document before applying it.
+
 A first upgrade from an embedded-only installation initializes the verified Console
 store from its trusted embedded assets. Later updates use its durable selection;
 there is no arbitrary asset-directory override. Previously loaded fingerprinted

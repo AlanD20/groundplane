@@ -121,8 +121,18 @@ func (service *Service) validateConsoleCompatibility(prepared preparationrecord.
 		}
 		return service.console.Compatible(result.Console.Artifact)
 	}
-	if !selection.IncludesController() || result.Controller == nil || result.Controller.APISHA256 == "" {
+	if !selection.IncludesController() {
 		return nil
+	}
+	if result.Controller == nil || result.Controller.APISHA256 == "" {
+		return errs.New(
+			errs.KindStateConflict,
+			"Prepared Controller has no verified API fingerprint. Prepare it again from a bundle that includes OpenAPI.",
+		)
+	}
+	if service.console == nil {
+		return errs.New(errs.KindStateConflict,
+			"Controller API compatibility cannot be checked without the installed Console store")
 	}
 	if selection == preparation.SelectionAll {
 		if result.Console == nil || result.Console.Artifact.APISHA256 != result.Controller.APISHA256 {
@@ -132,12 +142,6 @@ func (service *Service) validateConsoleCompatibility(prepared preparationrecord.
 			)
 		}
 		return nil
-	}
-	if service.console == nil {
-		return errs.New(
-			errs.KindStateConflict,
-			"Controller API compatibility cannot be checked without the installed Console store",
-		)
 	}
 	current, found := service.console.Current()
 	if !found || current.APISHA256 != result.Controller.APISHA256 {
