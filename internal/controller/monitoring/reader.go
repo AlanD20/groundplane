@@ -171,6 +171,9 @@ func livePoint(point metrics.MetricPoint, summaries metrics.MetricSummaries,
 	} else if now.Before(at) || now.Sub(at) >= 3*LiveInterval {
 		status = "stale"
 	}
+	if summaries.CPUUtilizationRatio.Valid == 0 {
+		summaries.CPUUtilizationRatio = workloadCPUUtilization(summaries.CPUCores, summaries.CPULimitCores, 1)
+	}
 	return api.MonitoringLive{Status: status, ObservedAt: &at,
 		Values: PublicValues(summaries), Coverage: PublicCoverage(coverage)}
 }

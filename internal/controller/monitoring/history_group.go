@@ -29,7 +29,7 @@ var hostHistoryFields = historyFields{
 }
 
 var serviceHistoryFields = historyFields{
-	CPU: true, CPULimit: true, MemoryWorking: true, MemoryLimit: true,
+	CPU: true, CPURatio: true, CPULimit: true, MemoryWorking: true, MemoryLimit: true,
 	NetworkReceive: true, NetworkTransmit: true, WritableLayer: true,
 	BlockRead: true, BlockWrite: true, BlockReadOperations: true, BlockWriteOperations: true,
 	PersistentVolume: true,
@@ -60,6 +60,12 @@ func groupHistory(window Window, rows []historyRow, fields historyFields) ([]api
 		}
 		previous = row.Bucket.Start
 		index := int(row.Bucket.Start.Sub(window.Public.Start) / width)
+		if fields.CPULimit && row.Summaries.CPUUtilizationRatio.Valid == 0 {
+			row.Summaries.CPUUtilizationRatio = workloadCPUUtilization(
+				row.Summaries.CPUCores, row.Summaries.CPULimitCores,
+				uint32(window.SourceResolution/metrics.SampleInterval),
+			)
+		}
 		grouped[index] = append(grouped[index], row.Summaries)
 		if last[index].IsZero() || row.Bucket.Start.After(last[index]) {
 			coverage[index], last[index] = row.Coverage, row.Bucket.Start

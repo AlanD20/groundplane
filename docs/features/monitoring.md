@@ -31,6 +31,11 @@ is 25% utilization. The live summary pairs cores with a percentage of host
 capacity or the reported workload limit. A workload percentage is available
 when Groundplane can report its total CPU limit. Memory working set removes
 reported inactive file cache from raw usage.
+
+The CPU utilization chart is available at every monitoring scope. Host
+percentages use host capacity. Workload percentages use the recorded CPU limit
+for the same samples. A historical interval has no workload percentage if its
+retained data cannot pair usage with a known limit.
 Whole-host memory and filesystem capacity are separate measurements.
 
 Service readings cover the selected serving workload replicas. Retained releases,

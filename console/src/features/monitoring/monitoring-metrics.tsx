@@ -168,7 +168,10 @@ export function MonitoringMetrics({
         )}
       </section>
 
-      <LiveSummary values={live.status === "unavailable" ? {} : live.values} />
+      <LiveSummary
+        host={response.scope.kind === "host"}
+        values={live.status === "unavailable" ? {} : live.values}
+      />
 
       <div
         className={
@@ -186,15 +189,10 @@ export function MonitoringMetrics({
                 className="w-44"
                 value={selected.id}
                 onValueChange={setMetric}
-                options={metricGroups
-                  .filter(
-                    (group) =>
-                      group.id !== "cpu-utilization" || !!response.host,
-                  )
-                  .map((group) => ({
-                    value: group.id,
-                    label: group.label,
-                  }))}
+                options={metricGroups.map((group) => ({
+                  value: group.id,
+                  label: group.label,
+                }))}
               />
               {canSelectUnits && (
                 <Select
@@ -248,7 +246,9 @@ export function MonitoringMetrics({
           )}
           {selected.description && (
             <p className="text-xs text-muted-foreground">
-              {selected.description}
+              {selected.id === "cpu-utilization" && !response.host
+                ? "CPU usage as a percentage of the workload’s configured limit. Gaps appear when the recorded usage and limits cannot establish a percentage."
+                : selected.description}
             </p>
           )}
           <MonitoringChart
@@ -277,13 +277,19 @@ export function MonitoringMetrics({
   );
 }
 
-function LiveSummary({ values }: { values: MonitoringValues }) {
+function LiveSummary({
+  values,
+  host,
+}: {
+  values: MonitoringValues;
+  host: boolean;
+}) {
   const cpuCores = metricAverage(values, "cpu_cores");
-  const hostRatio = metricAverage(values, "cpu_utilization_ratio");
+  const measuredRatio = metricAverage(values, "cpu_utilization_ratio");
   const limit = metricAverage(values, "cpu_limit_cores");
   const limitRatio =
     cpuCores !== null && limit !== null && limit > 0 ? cpuCores / limit : null;
-  const ratio = hostRatio ?? limitRatio;
+  const ratio = measuredRatio ?? (host ? null : limitRatio);
   const workingSet = metricAverage(values, "memory_working_set_bytes");
   const memory = workingSet ?? metricAverage(values, "memory_used_bytes");
   const volumeUsage = metricAverage(values, "persistent_volume_used_bytes");
@@ -313,7 +319,7 @@ function LiveSummary({ values }: { values: MonitoringValues }) {
         {cpuCores !== null && ratio !== null && (
           <span className="mt-0.5 block text-xs font-normal tracking-normal text-muted-foreground">
             {formatMetric(ratio, "%")}{" "}
-            {hostRatio !== null
+            {host
               ? "of host capacity"
               : `of limit (${formatMetric(limit, "cores")})`}
           </span>
