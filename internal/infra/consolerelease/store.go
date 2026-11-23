@@ -132,6 +132,18 @@ func (store *Store) Verify(artifact Artifact) error {
 	return err
 }
 
+// VerifyActivation checks staged bytes and retention capacity without changing
+// the selection. All may stage a Console for the incoming Controller's API.
+func (store *Store) VerifyActivation(artifact Artifact) error {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	if _, err := store.openRelease(artifact); err != nil {
+		return err
+	}
+	_, _, err := planActivation(store.receipt, artifact, store.now().UTC().Truncate(time.Second))
+	return err
+}
+
 // Compatible proves that an already verified release targets the API served by
 // this process. Future paired releases may be staged under their predecessor,
 // but they cannot activate until the matching Controller is running.
@@ -241,24 +253,12 @@ func (store *Store) Activate(artifact Artifact) error {
 	if _, err := store.openRelease(artifact); err != nil {
 		return err
 	}
-	next := store.receipt
-	if next.Active == artifact {
+	if store.receipt.Active == artifact {
 		return nil
 	}
-	at := store.now().UTC().Truncate(time.Second)
-	if next.Predecessor != nil && *next.Predecessor != artifact {
-		next.Retired = append(next.Retired, retiredRelease{Artifact: *next.Predecessor, RetiredAt: at})
-	}
-	previous := next.Active
-	next.Schema, next.Active, next.Predecessor, next.ActivatedAt = 1, artifact, &previous, at
-	retired := deduplicateRetired(next.Retired, next.Active, next.Predecessor)
-	kept, expired := splitExpiredRetired(retired, at.Add(-retiredAssetWindow))
-	next.Retired = kept
-	if len(next.Retired) > maximumRetired {
-		return errs.New(
-			errs.KindResourceInUse,
-			"Console retention is full; wait for the old-asset window before another activation",
-		)
+	next, expired, err := planActivation(store.receipt, artifact, store.now().UTC().Truncate(time.Second))
+	if err != nil {
+		return err
 	}
 	if err := store.writeReceipt(next); err != nil {
 		return err

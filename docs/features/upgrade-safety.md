@@ -88,8 +88,9 @@ A first upgrade from an embedded-only installation initializes the verified Cons
 store from its trusted embedded assets. Later updates use its durable selection;
 there is no arbitrary asset-directory override. Previously loaded fingerprinted
 assets are retained for a bounded period so open tabs can load their old chunks.
-An activation that reaches the retention limit can proceed once the oldest
-retired bundles reach the end of that period.
+Apply checks Console retention capacity during staging, before any component
+is replaced. If the retention window is full, retry after the oldest retired
+bundles expire.
 Console source-ref preparation is unavailable; use a published Console release.
 
 ## Admission and activation

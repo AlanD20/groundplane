@@ -64,6 +64,9 @@ func TestActivateReclaimsExpiredConsoleSlotsAtCapacity(t *testing.T) {
 	}
 	current, _ := store.Current()
 	candidate := stage(maximumRetired + 1)
+	if kind, _ := errs.KindOf(store.VerifyActivation(candidate)); kind != errs.KindResourceInUse {
+		t.Fatalf("staging must reject full retention before handoff, got error kind %v", kind)
+	}
 	if kind, _ := errs.KindOf(store.Activate(candidate)); kind != errs.KindResourceInUse {
 		t.Fatalf("active retention window must enforce capacity, got error kind %v", kind)
 	}
@@ -71,6 +74,15 @@ func TestActivateReclaimsExpiredConsoleSlotsAtCapacity(t *testing.T) {
 		t.Fatal("rejected activation changed the selected Console")
 	}
 	now = now.Add(retiredAssetWindow)
+	if err := store.VerifyActivation(candidate); err != nil {
+		t.Fatalf("expired bundles left staging blocked at capacity: %v", err)
+	}
+	if retained, _ := store.Current(); retained != current {
+		t.Fatal("staging changed the selected Console")
+	}
+	if _, err := os.Stat(store.releasePath(first.ManifestSHA256)); err != nil {
+		t.Fatalf("staging reclaimed a release before activation: %v", err)
+	}
 	if err := store.Activate(candidate); err != nil {
 		t.Fatalf("expired bundles left activation blocked at capacity: %v", err)
 	}
@@ -131,6 +143,9 @@ func TestPairedAPIMigrationStagesBeforeBootAndActivatesAfterBoot(t *testing.T) {
 	}
 	if err := oldStore.Compatible(artifact); err == nil {
 		t.Fatal("future Console unexpectedly compatible with old API")
+	}
+	if err := oldStore.VerifyActivation(artifact); err != nil {
+		t.Fatalf("future Console could not be verified before handoff: %v", err)
 	}
 
 	newStore, err := New(root, bootstrap, "console/v0.0.2")

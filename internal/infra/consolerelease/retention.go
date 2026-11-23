@@ -42,6 +42,27 @@ func splitExpiredRetired(releases []retiredRelease, cutoff time.Time) (kept []re
 	return kept, expired
 }
 
+func planActivation(current activeReceipt, artifact Artifact, at time.Time) (activeReceipt, []Artifact, error) {
+	if current.Active == artifact {
+		return current, nil, nil
+	}
+	retired := slices.Clone(current.Retired)
+	if current.Predecessor != nil && *current.Predecessor != artifact {
+		retired = append(retired, retiredRelease{Artifact: *current.Predecessor, RetiredAt: at})
+	}
+	previous := current.Active
+	retired = deduplicateRetired(retired, artifact, &previous)
+	kept, expired := splitExpiredRetired(retired, at.Add(-retiredAssetWindow))
+	if len(kept) > maximumRetired {
+		return activeReceipt{}, nil, errs.New(
+			errs.KindResourceInUse,
+			"Console retention is full; wait for the old-asset window before another activation",
+		)
+	}
+	next := activeReceipt{Schema: 1, Active: artifact, Predecessor: &previous, Retired: kept, ActivatedAt: at}
+	return next, expired, nil
+}
+
 func (store *Store) removeExpired(expired []Artifact) error {
 	for _, artifact := range expired {
 		if err := os.RemoveAll(store.releasePath(artifact.ManifestSHA256)); err != nil {
