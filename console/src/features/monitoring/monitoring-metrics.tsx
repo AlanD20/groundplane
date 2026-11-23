@@ -244,7 +244,7 @@ export function MonitoringMetrics({
 function LiveSummary({ values }: { values: MonitoringValues }) {
   const cpuCores = metricAverage(values, "cpu_cores");
   const ratio = metricAverage(values, "cpu_utilization_ratio");
-  const cpu = cpuCores ?? (ratio === null ? null : ratio * 100);
+  const cpu = cpuCores ?? ratio;
   const cpuUnit = cpuCores !== null ? "cores" : "%";
   const workingSet = metricAverage(values, "memory_working_set_bytes");
   const memory = workingSet ?? metricAverage(values, "memory_used_bytes");

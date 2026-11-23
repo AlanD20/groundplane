@@ -23,7 +23,8 @@ export type MetricGroup = {
   metrics: readonly MetricDefinition[];
 };
 
-const mib = 1024 * 1024;
+const kib = 1024;
+const mib = kib * kib;
 
 const metric = (
   key: MetricKey,
@@ -222,6 +223,10 @@ export function formatMetric(
   if (unit === "%") return `${(value * 100).toFixed(1)}%`;
   if (unit === "cores") return `${value.toFixed(2)} cores`;
   if (unit === "ops/s") return `${value.toFixed(1)} ops/s`;
-  const scaled = value / mib;
-  return `${scaled.toFixed(scaled >= 100 ? 0 : 1)} MiB${unit === "bytes/s" ? "/s" : ""}`;
+  const suffix = unit === "bytes/s" ? "/s" : "";
+  if (value > 0 && value < 0.1) return `<0.1 B${suffix}`;
+  const [scale, symbol] =
+    value >= mib ? [mib, "MiB"] : value >= kib ? [kib, "KiB"] : [1, "B"];
+  const scaled = value / scale;
+  return `${scaled.toFixed(scaled >= 100 || value === 0 ? 0 : 1)} ${symbol}${suffix}`;
 }
