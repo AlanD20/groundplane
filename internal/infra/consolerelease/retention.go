@@ -31,9 +31,11 @@ func deduplicateRetired(retired []retiredRelease, active Artifact, predecessor *
 	return result
 }
 
-func splitExpiredRetired(releases []retiredRelease, cutoff time.Time) (kept []retiredRelease, expired []Artifact) {
+func splitExpiredRetired(
+	releases []retiredRelease, cutoff time.Time, keepIdentity string,
+) (kept []retiredRelease, expired []Artifact) {
 	for _, retired := range releases {
-		if retired.RetiredAt.After(cutoff) {
+		if retired.RetiredAt.After(cutoff) || retired.Artifact.ManifestSHA256 == keepIdentity {
 			kept = append(kept, retired)
 			continue
 		}
@@ -52,7 +54,7 @@ func planActivation(current activeReceipt, artifact Artifact, at time.Time) (act
 	}
 	previous := current.Active
 	retired = deduplicateRetired(retired, artifact, &previous)
-	kept, expired := splitExpiredRetired(retired, at.Add(-retiredAssetWindow))
+	kept, expired := splitExpiredRetired(retired, at.Add(-retiredAssetWindow), artifact.ManifestSHA256)
 	if len(kept) > maximumRetired {
 		return activeReceipt{}, nil, errs.New(
 			errs.KindResourceInUse,
@@ -61,6 +63,38 @@ func planActivation(current activeReceipt, artifact Artifact, at time.Time) (act
 	}
 	next := activeReceipt{Schema: 1, Active: artifact, Predecessor: &previous, Retired: kept, ActivatedAt: at}
 	return next, expired, nil
+}
+
+func (store *Store) admitArchive(identity string, incoming, ceiling int64) error {
+	err := store.admit(identity, incoming, ceiling)
+	if kind, _ := errs.KindOf(err); kind != errs.KindResourceInUse {
+		return err
+	}
+	next := store.receipt
+	cutoff := store.now().UTC().Add(-retiredAssetWindow)
+	kept, expired := splitExpiredRetired(next.Retired, cutoff, identity)
+	if len(expired) == 0 {
+		return err
+	}
+	next.Retired = kept
+	if err := store.commitReceipt(next); err != nil {
+		return err
+	}
+	if err := store.removeExpired(expired); err != nil {
+		return err
+	}
+	return store.admit(identity, incoming, ceiling)
+}
+
+func (store *Store) commitReceipt(next activeReceipt) error {
+	if err := store.writeReceipt(next); err != nil {
+		return err
+	}
+	if err := store.loadReceipt(next); err != nil {
+		_ = store.writeReceipt(store.receipt)
+		return err
+	}
+	return nil
 }
 
 func (store *Store) removeExpired(expired []Artifact) error {

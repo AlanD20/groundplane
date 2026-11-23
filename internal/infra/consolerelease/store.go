@@ -223,7 +223,7 @@ func (store *Store) StageArchive(
 			"Console release source commit differs from captured authority",
 		)
 	}
-	if err := store.admit(manifestHash, size); err != nil {
+	if err := store.admitArchive(manifestHash, size, maximumStoreBytes); err != nil {
 		return Artifact{}, err
 	}
 	destination := store.releasePath(manifestHash)
@@ -260,11 +260,7 @@ func (store *Store) Activate(artifact Artifact) error {
 	if err != nil {
 		return err
 	}
-	if err := store.writeReceipt(next); err != nil {
-		return err
-	}
-	if err := store.loadReceipt(next); err != nil {
-		_ = store.writeReceipt(store.receipt)
+	if err := store.commitReceipt(next); err != nil {
 		return err
 	}
 	// Release directories remain available until the replacement receipt commits.
@@ -535,7 +531,7 @@ func syncDirectory(directory string) error {
 	return nil
 }
 
-func (store *Store) admit(identity string, incoming int64) error {
+func (store *Store) admit(identity string, incoming, ceiling int64) error {
 	entries, err := os.ReadDir(filepath.Join(store.root, "releases"))
 	if err != nil {
 		return errs.Wrap(errs.KindInternal, err)
@@ -568,7 +564,7 @@ func (store *Store) admit(identity string, incoming int64) error {
 			return errs.Wrap(errs.KindInternal, err)
 		}
 	}
-	if total+incoming > maximumStoreBytes {
+	if total+incoming > ceiling {
 		return errs.New(
 			errs.KindResourceInUse,
 			"Console release store is full; retained active or old-tab assets were not deleted",
