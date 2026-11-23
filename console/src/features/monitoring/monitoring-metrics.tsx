@@ -81,6 +81,7 @@ export function MonitoringMetrics({
   const live = subject.live;
   const owners = live.coverage.eligible_resources;
   const reporting = live.coverage.sampled_resources;
+  const refreshError = query.pageMatches ? query.error : undefined;
   const historyUnavailable = response.history_status !== "available";
   const rangeControls = (
     <>
@@ -138,9 +139,9 @@ export function MonitoringMetrics({
             {!fullscreen && rangeControls}
           </div>
         </div>
-        {query.error && (
+        {refreshError && (
           <p role="alert" className="mt-3 text-xs text-warning">
-            Showing the last response; refresh failed: {query.error}
+            Showing the last response. Refresh failed: {refreshError}
           </p>
         )}
       </section>
@@ -201,9 +202,9 @@ export function MonitoringMetrics({
               Loading the selected range…
             </p>
           )}
-          {fullscreen && query.error && (
+          {fullscreen && refreshError && (
             <p role="alert" className="text-xs text-warning">
-              {query.error}
+              {refreshError}
             </p>
           )}
           {historyUnavailable && (

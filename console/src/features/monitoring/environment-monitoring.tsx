@@ -27,7 +27,10 @@ import { Link, useSearchParams } from "react-router-dom";
 import { HealthOverview } from "./health-overview";
 import { monitoringHealth } from "./health-summary";
 import type { MonitoringRange } from "./api";
-import { MonitoringCursorPagination } from "./scoped-monitoring";
+import {
+  MonitoringCursorPagination,
+  MonitoringPagePending,
+} from "./scoped-monitoring";
 import { MonitoringMetrics } from "./monitoring-metrics";
 import {
   useMonitoringCursor,
@@ -96,17 +99,29 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
     next.set("serviceTab", "monitoring");
     return `?${next}`;
   };
+  const metrics = response && monitoring.value ? (
+    <MonitoringMetrics
+      query={monitoring}
+      response={monitoring.value}
+      range={range}
+      onRangeChange={setRange}
+    />
+  ) : (
+    <EmptyState
+      embedded
+      icon={<Activity />}
+      loading={monitoring.loading}
+      error={!!monitoring.error}
+      title={
+        monitoring.loading ? "Loading resource usage" : "Resource usage unavailable"
+      }
+      description={monitoring.error}
+    />
+  );
   if (summary.total === 0)
     return (
       <div className="space-y-5">
-        {response && monitoring.value && (
-          <MonitoringMetrics
-            query={monitoring}
-            response={monitoring.value}
-            range={range}
-            onRangeChange={setRange}
-          />
-        )}
+        {metrics}
         <EmptyState
           icon={<Activity />}
           title="No services in this environment"
@@ -117,14 +132,7 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
   return (
     <div className="space-y-5">
       <HealthOverview summary={summary} />
-      {response && monitoring.value && (
-        <MonitoringMetrics
-          query={monitoring}
-          response={monitoring.value}
-          range={range}
-          onRangeChange={setRange}
-        />
-      )}
+      {metrics}
       <section
         aria-labelledby="monitoring-services-title"
         className="space-y-4"
@@ -148,11 +156,6 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
             </span>
           </div>
         </div>
-        {monitoring.error && (
-          <p role="alert" className="text-xs text-warning">
-            Showing the last available Service observations: {monitoring.error}
-          </p>
-        )}
         <CollectionToolbar
           query={query}
           onQueryChange={setQuery}
@@ -185,7 +188,12 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
             ]}
           />
         </CollectionToolbar>
-        {table.total === 0 ? (
+        {response && !monitoring.pageMatches ? (
+          <MonitoringPagePending
+            error={monitoring.error}
+            page={monitoringPage}
+          />
+        ) : table.total === 0 ? (
           <EmptyState
             embedded
             title="No matching Services"
@@ -310,7 +318,7 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
             {!response && <TablePagination table={table} label="Services" />}
           </>
         )}
-        {response && (
+        {response && monitoring.pageMatches && (
           <MonitoringCursorPagination
             label="Services"
             page={monitoringPage}

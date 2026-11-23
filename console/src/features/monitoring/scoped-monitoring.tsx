@@ -91,14 +91,22 @@ export function ScopedMonitoring({
         range={range}
         onRangeChange={setRange}
       />
-      <ScopeDetails
-        response={response}
-        linkFor={linkFor}
-        now={query.now}
-        loading={query.loading}
-        page={page}
-        consumerPage={consumerPage}
-      />
+      {query.pageMatches ? (
+        <ScopeDetails
+          response={response}
+          linkFor={linkFor}
+          now={query.now}
+          loading={query.loading}
+          page={page}
+          consumerPage={consumerPage}
+        />
+      ) : (
+        <MonitoringPagePending
+          error={query.error}
+          page={page}
+          consumerPage={consumerPage}
+        />
+      )}
     </div>
   );
 }
@@ -362,6 +370,43 @@ function ServiceDetails({
 }
 
 type MonitoringCursor = ReturnType<typeof useMonitoringCursor>;
+
+export function MonitoringPagePending({
+  error,
+  page,
+  consumerPage,
+}: {
+  error?: string;
+  page: MonitoringCursor;
+  consumerPage?: MonitoringCursor;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
+      <p
+        role={error ? "alert" : "status"}
+        className="text-sm text-muted-foreground"
+      >
+        {error
+          ? `Could not load this monitoring page. ${error}`
+          : "Loading monitoring details…"}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {page.canPrevious && (
+          <Button variant="outline" size="sm" onClick={page.previous}>
+            {consumerPage?.canPrevious
+              ? "Previous resource page"
+              : "Previous page"}
+          </Button>
+        )}
+        {consumerPage?.canPrevious && (
+          <Button variant="outline" size="sm" onClick={consumerPage.previous}>
+            Previous consumer page
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function MonitoringCursorPagination({
   label,

@@ -80,11 +80,16 @@ function errorMessage(error: unknown): string {
 
 export function useMonitoringQuery(request: MonitoringRequest) {
   const key = monitoringKey(request);
+  const pageKey = [
+    request.scope,
+    request.id,
+    request.cursor,
+    request.consumerCursor,
+  ].join("/");
   const initial = cached(key);
-  const [value, setValue] = useState<MonitoringResponse | undefined>(
-    initial?.value,
-  );
-  const [readAt, setReadAt] = useState<number | undefined>(initial?.readAt);
+  const [snapshot, setSnapshot] = useState<
+    (CacheEntry & { pageKey: string }) | undefined
+  >(() => initial && { ...initial, pageKey });
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(!initial);
   const [paused, setPaused] = useState(false);
@@ -99,18 +104,12 @@ export function useMonitoringQuery(request: MonitoringRequest) {
     const prior = previousRequest.current;
     previousRequest.current = request;
     selectionPending.current = !entry || monitoringKey(prior) !== key;
-    const sameScopeAndPage =
-      prior.scope === request.scope &&
-      prior.id === request.id &&
-      prior.cursor === request.cursor &&
-      prior.consumerCursor === request.consumerCursor;
-    if (entry || !sameScopeAndPage) {
-      setValue(entry?.value);
-      setReadAt(entry?.readAt);
-    }
+    if (entry) setSnapshot({ ...entry, pageKey });
+    else if (prior.scope !== request.scope || prior.id !== request.id)
+      setSnapshot(undefined);
     setError(undefined);
     setLoading(!entry);
-  }, [key, request]);
+  }, [key, pageKey, request]);
 
   const refresh = useCallback(
     async (lifetime: AbortSignal) => {
@@ -125,8 +124,7 @@ export function useMonitoringQuery(request: MonitoringRequest) {
         if (controller.signal.aborted) return;
         const observed = Date.now();
         remember(key, { value: next, readAt: observed });
-        setValue(next);
-        setReadAt(observed);
+        setSnapshot({ value: next, readAt: observed, pageKey });
         setNow(observed);
         setError(undefined);
       } catch (cause) {
@@ -139,7 +137,7 @@ export function useMonitoringQuery(request: MonitoringRequest) {
         }
       }
     },
-    [key, request],
+    [key, pageKey, request],
   );
 
   useVisibleRefresh(refresh, { key, interval: 5_000, enabled: !paused });
@@ -190,8 +188,9 @@ export function useMonitoringQuery(request: MonitoringRequest) {
   }, [key]);
 
   return {
-    value,
-    readAt,
+    value: snapshot?.value,
+    readAt: snapshot?.readAt,
+    pageMatches: snapshot?.pageKey === pageKey,
     error,
     loading,
     paused,
