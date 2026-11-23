@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { Disclosure } from "@/components/common/disclosure";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -62,12 +63,19 @@ export function SummaryStrip({ children }: { children: ReactNode }) {
 export function SummaryItem({
   label,
   children,
+  className,
 }: {
   label: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="min-w-0 rounded-xl border border-border bg-card p-5">
+    <div
+      className={cn(
+        "min-w-0 rounded-xl border border-border bg-card p-5",
+        className,
+      )}
+    >
       <dt className="mb-1 text-xs text-muted-foreground">{label}</dt>
       <dd className="min-w-0 break-words text-lg font-medium tracking-tight tabular-nums">
         {children}

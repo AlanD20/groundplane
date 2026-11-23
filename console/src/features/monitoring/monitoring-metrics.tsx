@@ -1,9 +1,5 @@
 import { EmptyState } from "@/components/common/empty-state";
-import {
-  ResourcePanel,
-  SummaryItem,
-  SummaryStrip,
-} from "@/components/common/resource-panel";
+import { ResourcePanel, SummaryItem } from "@/components/common/resource-panel";
 import { useWorkspaceFullscreen } from "@/components/common/use-workspace-fullscreen";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -24,6 +20,8 @@ import {
   metricSeries,
   type MonitoringValues,
 } from "./metric-projection";
+import { HealthOverview } from "./health-overview";
+import type { monitoringHealth } from "./health-summary";
 import { MonitoringChart } from "./monitoring-chart";
 import { MonitoringStatusBadge } from "./monitoring-status";
 import type { useMonitoringQuery } from "./use-monitoring-query";
@@ -33,11 +31,13 @@ export function MonitoringMetrics({
   response,
   range,
   onRangeChange,
+  health,
 }: {
   query: ReturnType<typeof useMonitoringQuery>;
   response: MonitoringResponse;
   range: MonitoringRange;
   onRangeChange: (range: MonitoringRange) => void;
+  health?: ReturnType<typeof monitoringHealth>;
 }) {
   const [chartTimeZone, setChartTimeZone] = useState(readChartTimeZone);
   const [metric, setMetric] = useState("cpu");
@@ -98,10 +98,13 @@ export function MonitoringMetrics({
   );
   if (!subject?.live)
     return (
-      <EmptyState
-        title="Resource usage unavailable"
-        description="The Controller returned no resource measurements for this view."
-      />
+      <div className="space-y-3">
+        {health && <HealthOverview summary={health} />}
+        <EmptyState
+          title="Resource usage unavailable"
+          description="The Controller returned no resource measurements for this view."
+        />
+      </div>
     );
 
   const live = subject.live;
@@ -136,42 +139,36 @@ export function MonitoringMetrics({
   return (
     <div className="space-y-5">
       <section
-        aria-label={`${response.scope.name} monitoring status`}
-        className="rounded-xl border border-primary/25 bg-linear-to-r from-primary/8 via-card to-card p-5 shadow-sm"
+        aria-label={`${response.scope.name} monitoring summary`}
+        className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
       >
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Resource usage
+        {health && <HealthOverview summary={health} embedded />}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Resource usage</span>
+          <MonitoringStatusBadge live={live} now={query.now} />
+          {owners > 0 && response.scope.kind !== "host" && (
+            <span>
+              {reporting}/{owners} {owners === 1 ? "service" : "services"}{" "}
+              reporting
+            </span>
+          )}
+          <span>
+            {live.observed_at
+              ? `Observed ${formatTimestamp(live.observed_at, "Unavailable", { seconds: true })}`
+              : "No current sample"}
+          </span>
+          {query.paused && <span>Live refresh paused</span>}
+          {refreshError && (
+            <p role="alert" className="w-full text-warning">
+              Showing the last response. Refresh failed: {refreshError}
             </p>
-            <div className="flex items-center gap-2">
-              <MonitoringStatusBadge live={live} now={query.now} />
-              {owners > 0 && response.scope.kind !== "host" && (
-                <span className="text-xs text-muted-foreground">
-                  {reporting} of {owners}{" "}
-                  {owners === 1 ? "service" : "services"} reporting
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {live.observed_at
-                ? `Observed ${formatTimestamp(live.observed_at, "Unavailable", { seconds: true })}`
-                : "No current sample"}
-              {query.paused ? " · live refresh paused" : ""}
-            </p>
-          </div>
+          )}
         </div>
-        {refreshError && (
-          <p role="alert" className="mt-3 text-xs text-warning">
-            Showing the last response. Refresh failed: {refreshError}
-          </p>
-        )}
+        <LiveSummary
+          host={response.scope.kind === "host"}
+          values={live.status === "unavailable" ? {} : live.values}
+        />
       </section>
-
-      <LiveSummary
-        host={response.scope.kind === "host"}
-        values={live.status === "unavailable" ? {} : live.values}
-      />
 
       <div
         className={
@@ -247,7 +244,17 @@ export function MonitoringMetrics({
           {selected.description && (
             <p className="text-xs text-muted-foreground">
               {selected.id === "cpu-utilization" && !response.host
-                ? "CPU usage as a percentage of the workload’s configured limit. Gaps appear when the recorded usage and limits cannot establish a percentage."
+                ? history?.some(
+                    (bucket) =>
+                      metricAverage(bucket.values, "cpu_cores") !== null,
+                  ) &&
+                  !history.some(
+                    (bucket) =>
+                      (metricAverage(bucket.values, "cpu_limit_cores") ?? 0) >
+                      0,
+                  )
+                  ? "CPU usage is recorded for this window, but no configured CPU limit was reported. Select CPU usage to see cores."
+                  : "CPU usage as a percentage of the workload’s configured limit. Gaps appear when the recorded usage and limits cannot establish a percentage."
                 : selected.description}
             </p>
           )}
@@ -307,8 +314,9 @@ function LiveSummary({
           ? "Writable layers"
           : "Storage";
   return (
-    <SummaryStrip>
+    <dl className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
       <SummaryItem
+        className="rounded-none border-0 px-4 py-3"
         label={
           cpuCores !== null || ratio === null ? "CPU usage" : "CPU utilization"
         }
@@ -326,19 +334,26 @@ function LiveSummary({
         )}
       </SummaryItem>
       <SummaryItem
+        className="rounded-none border-0 px-4 py-3"
         label={workingSet !== null ? "Memory working set" : "Memory used"}
       >
         {formatMetric(memory, "bytes")}
       </SummaryItem>
-      <SummaryItem label="Network receive">
+      <SummaryItem
+        className="rounded-none border-0 px-4 py-3"
+        label="Network receive"
+      >
         {formatMetric(
           metricAverage(values, "network_receive_bytes_per_second"),
           "bytes/s",
         )}
       </SummaryItem>
-      <SummaryItem label={storageLabel}>
+      <SummaryItem
+        className="rounded-none border-0 px-4 py-3"
+        label={storageLabel}
+      >
         {formatMetric(storage, "bytes")}
       </SummaryItem>
-    </SummaryStrip>
+    </dl>
   );
 }

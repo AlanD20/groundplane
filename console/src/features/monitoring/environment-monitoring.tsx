@@ -99,25 +99,29 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
     next.set("serviceTab", "monitoring");
     return `?${next}`;
   };
-  const metrics = response && monitoring.value ? (
-    <MonitoringMetrics
-      query={monitoring}
-      response={monitoring.value}
-      range={range}
-      onRangeChange={setRange}
-    />
-  ) : (
-    <EmptyState
-      embedded
-      icon={<Activity />}
-      loading={monitoring.loading}
-      error={!!monitoring.error}
-      title={
-        monitoring.loading ? "Loading resource usage" : "Resource usage unavailable"
-      }
-      description={monitoring.error}
-    />
-  );
+  const metrics =
+    response && monitoring.value ? (
+      <MonitoringMetrics
+        query={monitoring}
+        response={monitoring.value}
+        range={range}
+        onRangeChange={setRange}
+        health={summary.total ? summary : undefined}
+      />
+    ) : (
+      <EmptyState
+        embedded
+        icon={<Activity />}
+        loading={monitoring.loading}
+        error={!!monitoring.error}
+        title={
+          monitoring.loading
+            ? "Loading resource usage"
+            : "Resource usage unavailable"
+        }
+        description={monitoring.error}
+      />
+    );
   if (summary.total === 0)
     return (
       <div className="space-y-5">
@@ -131,7 +135,7 @@ export function EnvironmentMonitoring({ env }: { env: Environment }) {
     );
   return (
     <div className="space-y-5">
-      <HealthOverview summary={summary} />
+      {!response && <HealthOverview summary={summary} />}
       {metrics}
       <section
         aria-labelledby="monitoring-services-title"
