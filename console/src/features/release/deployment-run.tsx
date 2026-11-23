@@ -8,6 +8,14 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { TaskLink } from "@/components/common/task-link";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requestTask, type TaskResponse } from "@/features/task/api";
 import { taskFromAPI } from "@/features/task/journal-model";
@@ -205,6 +213,72 @@ export function DeploymentRun({
               ))}
             </ul>
           )}
+          <Card>
+            <CardHeader>
+              <CardTitle id="deployment-service-releases">
+                Service releases
+              </CardTitle>
+            </CardHeader>
+            <Table
+              aria-labelledby="deployment-service-releases"
+              className="table-fixed"
+            >
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-2/5 px-3 sm:px-5">Service</TableHead>
+                  <TableHead className="w-1/3 px-3 sm:px-5">
+                    Image tag
+                  </TableHead>
+                  <TableHead className="px-3 sm:px-5">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {releaseList.map((release) => (
+                  <TableRow
+                    key={release.id}
+                    className="even:bg-muted/35 even:hover:bg-muted/60"
+                  >
+                    <TableCell className="px-3 py-3 sm:px-5">
+                      <ContextLink
+                        to={`${basePath}/releases/${release.id}${serviceId ? `?service=${serviceId}` : ""}`}
+                        returnLabel="deployment run"
+                        className="inline-flex max-w-full items-center gap-1 rounded-sm font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring aria-current:bg-accent"
+                        aria-current={
+                          release.id === releaseId ? "true" : undefined
+                        }
+                      >
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
+                          {release.service}
+                        </span>
+                        <ChevronRight
+                          aria-hidden
+                          className="size-3.5 shrink-0"
+                        />
+                      </ContextLink>
+                    </TableCell>
+                    <TableCell className="px-3 py-3 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere] sm:px-5">
+                      {release.tag || "—"}
+                    </TableCell>
+                    <TableCell className="px-3 py-3 sm:px-5">
+                      <StatusBadge
+                        status={
+                          release.status === "active"
+                            ? "succeeded"
+                            : release.state
+                        }
+                        label={
+                          release.status === "active"
+                            ? "Serving"
+                            : release.state.replaceAll("_", " ")
+                        }
+                        className="items-baseline whitespace-normal [overflow-wrap:anywhere] [&>span]:shrink-0"
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
           {error && (
             <div
               role="alert"
@@ -346,43 +420,6 @@ export function DeploymentRun({
             ) : (
               <TaskExecution detail={detail} onChanged={loadLatest} />
             ))}
-          <Card>
-            <CardHeader>
-              <CardTitle>Service releases</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              {releaseList.map((release) => (
-                <ContextLink
-                  key={release.id}
-                  to={`${basePath}/releases/${release.id}${serviceId ? `?service=${serviceId}` : ""}`}
-                  returnLabel="deployment run"
-                  className="flex min-w-0 items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring aria-current:bg-accent"
-                  aria-current={release.id === releaseId ? "true" : undefined}
-                >
-                  <span className="min-w-0 flex-1 break-words font-medium">
-                    {release.service}
-                  </span>
-                  <span className="min-w-0 break-words text-xs text-muted-foreground">
-                    {release.tag}
-                  </span>
-                  <StatusBadge
-                    status={
-                      release.status === "active" ? "succeeded" : release.state
-                    }
-                    label={
-                      release.status === "active"
-                        ? "Serving"
-                        : release.state.replaceAll("_", " ")
-                    }
-                  />
-                  <ChevronRight
-                    aria-hidden
-                    className="size-4 shrink-0 text-muted-foreground"
-                  />
-                </ContextLink>
-              ))}
-            </CardContent>
-          </Card>
         </>
       )}
     </div>
