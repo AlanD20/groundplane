@@ -187,6 +187,14 @@
     z-index: 30;
     background: var(--background);
   }
+  /* Covered page controls stay mounted but leave the tab order. */
+  .console-page:has(.workspace-fullscreen) {
+    visibility: hidden;
+  }
+  .console-page:has(.workspace-fullscreen)
+    :is(.workspace-fullscreen, .form-actions[data-viewport-actions]) {
+    visibility: visible;
+  }
   .workspace-fullscreen {
     position: fixed;
     z-index: 25;
