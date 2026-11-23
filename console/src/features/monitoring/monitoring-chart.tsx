@@ -409,25 +409,26 @@ export const MonitoringChart = memo(function MonitoringChart({
             {timeZone} · Line average · Band min–max
           </span>
         </div>
-        <div className="relative min-h-0 flex-1">
+        <div className="grid min-h-0 flex-1 grid-cols-[max-content_minmax(0,1fr)] gap-2 pl-3 pr-5">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 left-0 w-12 text-right text-xs tabular-nums text-muted-foreground"
+            className="pointer-events-none grid whitespace-nowrap text-right text-xs tabular-nums text-muted-foreground"
           >
             {valueTicks.map(({ value, y }) => (
-              <span
-                className="absolute right-0 -translate-y-1/2"
-                style={{ top: `${(y / viewBoxHeight) * 100}%` }}
-                key={y}
-              >
-                {axisValueFormatter.format(value)}
-              </span>
+              <div className="col-start-1 row-start-1" key={y}>
+                <span
+                  className="relative inline-block -translate-y-1/2"
+                  style={{ top: `${(y / viewBoxHeight) * 100}%` }}
+                >
+                  {axisValueFormatter.format(value)}
+                </span>
+              </div>
             ))}
           </div>
-          <div className="absolute inset-y-0 left-14 right-5">
+          <div className="relative min-h-0">
             <svg
               ref={plot}
-              className="size-full"
+              className="absolute inset-0 size-full"
               viewBox={`${chartPlot.left} 0 ${plotWidth} ${viewBoxHeight}`}
               preserveAspectRatio="none"
               aria-hidden="true"
