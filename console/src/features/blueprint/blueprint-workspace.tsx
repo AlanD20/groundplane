@@ -12,6 +12,7 @@ import {
 } from "./service-document";
 
 import { Input } from "@/components/ui/input";
+import { createTaskDetailRefresh } from "@/features/task/task-detail-refresh";
 import { subscribeTerminalTasks } from "@/features/task/task-observation";
 import {
   workspaceSectionClassName,
@@ -86,7 +87,7 @@ export function BlueprintWorkspace({
 }) {
   const store = useStore();
   const getBlueprint = store.getBlueprint;
-  const getTask = store.getTask;
+  const { getTask, watchTaskEvents } = store;
   const fileInput = useRef<HTMLInputElement>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<BlueprintDocumentResponse | null>(
@@ -113,6 +114,7 @@ export function BlueprintWorkspace({
   const [confirmRefresh, setConfirmRefresh] = useState(false);
   const [recovery, setRecovery] = useState(readBlueprintApplyRecovery);
   const pendingApply = recovery.pending;
+  const pendingTaskId = pendingApply?.taskId;
   const applyBlocked = pendingApply !== null || recovery.error !== "";
   const refreshRecovery = useCallback(
     () => setRecovery(readBlueprintApplyRecovery()),
@@ -122,40 +124,43 @@ export function BlueprintWorkspace({
   const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
-    if (!pendingApply?.taskId) return;
-    let active = true;
-    let polling = false;
-    const timer = window.setInterval(() => {
-      if (polling) return;
-      polling = true;
-      void getTask(pendingApply.taskId!)
-        .then((task) => {
-          if (!active) return;
-          if (task.task.id !== pendingApply.taskId)
-            throw new Error("Controller returned a different Task.");
-          setResolveError("");
-          if (task.task.finished_at) {
-            settleBlueprintApply(task.task.id);
-            refreshRecovery();
-          }
-        })
-        .catch((cause: unknown) => {
-          if (active)
-            setResolveError(
-              cause instanceof Error
-                ? cause.message
-                : "Task status is unavailable.",
-            );
-        })
-        .finally(() => {
-          polling = false;
-        });
+    if (!pendingTaskId) return;
+    const controller = new AbortController();
+    const refresh = createTaskDetailRefresh(async () => {
+      try {
+        const { task } = await getTask(pendingTaskId, controller.signal);
+        if (controller.signal.aborted) return;
+        if (task.id !== pendingTaskId)
+          throw new Error("Controller returned a different Task.");
+        setResolveError("");
+        if (task.finished_at) {
+          settleBlueprintApply(task.id);
+          refresh.stop();
+          stopEvents();
+          refreshRecovery();
+        }
+      } catch (cause) {
+        if (!controller.signal.aborted)
+          setResolveError(
+            cause instanceof Error
+              ? cause.message
+              : "Task status is unavailable.",
+          );
+      }
     }, 2000);
+    // The fallback read also covers a quiet or disconnected event stream.
+    const stopEvents = watchTaskEvents(
+      pendingTaskId,
+      refresh.invalidate,
+      () => {},
+    );
+    void refresh.start();
     return () => {
-      active = false;
-      window.clearInterval(timer);
+      refresh.stop();
+      controller.abort();
+      stopEvents();
     };
-  }, [getTask, pendingApply, refreshRecovery]);
+  }, [getTask, pendingTaskId, refreshRecovery, watchTaskEvents]);
 
   async function resolveApply() {
     setResolving(true);
