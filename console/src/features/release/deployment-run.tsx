@@ -1,10 +1,16 @@
-import { ArrowLeft, ChevronRight, History } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, History } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { InspectionWorkspace } from "@/components/common/inspection-workspace";
+import {
+  CollectionToolbar,
+  TablePagination,
+  useTableView,
+} from "@/components/common/table-controls";
 import { ContextLink } from "@/components/common/context-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
-import { StatusBadge } from "@/components/common/status-badge";
+import { StatusBadge, statusLabel } from "@/components/common/status-badge";
 import { TaskLink } from "@/components/common/task-link";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -17,7 +23,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { requestTask, type TaskResponse } from "@/features/task/api";
+import type { TaskResponse } from "@/features/task/api";
+import { requestDeploymentRun } from "./deployment-run-api";
 import { taskFromAPI } from "@/features/task/journal-model";
 import { operationLabel } from "@/features/task/operation-label";
 import { TaskDependencyStatus } from "@/features/task/task-dependency-status";
@@ -34,8 +41,6 @@ import {
   deploymentRunLink,
 } from "./deployment-run-navigation";
 
-type WorkPage = { after?: string; revision?: number };
-
 export function DeploymentRun({
   taskId,
   env,
@@ -50,13 +55,11 @@ export function DeploymentRun({
   const { watchTaskEvents } = useStore();
   const [detail, setDetail] = useState<TaskResponse>();
   const [error, setError] = useState<string>();
-  const [pages, setPages] = useState<WorkPage[]>([{}]);
+  const [operationQuery, setOperationQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [shownPage, setShownPage] = useState(1);
   const [reload, setReload] = useState(0);
   const [selectedId, setSelectedId] = useState<string>();
   const backLink = useRef<HTMLAnchorElement>(null);
-  const page = pages[pages.length - 1];
   const releases = env.deploys.filter((release) => release.taskId === taskId);
   const releaseId = search.get(deploymentReleaseParam);
   const linkedRun = releases.some(
@@ -76,69 +79,82 @@ export function DeploymentRun({
     if (!linkedRun) return;
     const controller = new AbortController();
     let stopEvents = () => {};
-    const refresh = createTaskDetailRefresh(
-      async () => {
-        try {
-          const next = await requestTask(taskId, controller.signal, {
-            limit: 25,
-            ...page,
-          });
-          if (controller.signal.aborted) return;
-          setDetail(next);
-          setShownPage(pages.length);
-          setError(undefined);
-          if (next.task.finished_at) {
-            refresh.stop();
-            stopEvents();
-          }
-        } catch (cause) {
-          if (!controller.signal.aborted) {
-            setError(
-              cause instanceof Error
-                ? cause.message
-                : "Unable to load deployment execution",
-            );
-          }
-        } finally {
-          if (!controller.signal.aborted) setLoading(false);
+    const refresh = createTaskDetailRefresh(async () => {
+      try {
+        const next = await requestDeploymentRun(taskId, controller.signal);
+        if (controller.signal.aborted) return;
+        setDetail(next);
+        setError(undefined);
+        if (next.task.finished_at) {
+          refresh.stop();
+          stopEvents();
         }
-      },
-      page.revision ? undefined : 2000,
-    );
-    if (!page.revision) {
-      stopEvents = watchTaskEvents(taskId, refresh.invalidate, () => {
-        // Keep the last snapshot visible while fallback reads reconnect.
-      });
-    }
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Unable to load deployment execution",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 2000);
+    stopEvents = watchTaskEvents(taskId, refresh.invalidate, () => {
+      // Keep the last snapshot visible while fallback reads reconnect.
+    });
     void refresh.start();
     return () => {
       controller.abort();
       refresh.stop();
       stopEvents();
     };
-  }, [linkedRun, page, pages.length, reload, taskId, watchTaskEvents]);
-
-  function changePage(next: WorkPage[]) {
-    setLoading(true);
-    setError(undefined);
-    setSelectedId(undefined);
-    setPages(next);
-  }
+  }, [linkedRun, reload, taskId, watchTaskEvents]);
 
   const task = detail?.task;
   const work = detail?.work.items ?? [];
+  const searchTerms = operationQuery.trim().toLowerCase().split(/\s+/);
+  const operations = useTableView(
+    work.filter((item) => {
+      const haystack = [
+        item.target_name,
+        item.target_id,
+        operationLabel(item.operation),
+        statusLabel(item.outcome || item.phase),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return searchTerms.every((term) => haystack.includes(term));
+    }),
+    { created: (item) => `${Date.parse(item.created_at) || 0}/${item.id}` },
+    "created",
+    "asc",
+    `${taskId}/${operationQuery}`,
+  );
   const selected =
-    work.find((item) => item.id === selectedId) ??
-    work.find(
+    operations.rows.find((item) => item.id === selectedId) ??
+    operations.rows.find(
       (item) => item.outcome === "failed" || item.phase === "attention",
     ) ??
-    work.find((item) => serviceId && item.target_id === serviceId) ??
-    work.find(
+    operations.rows.find((item) => serviceId && item.target_id === serviceId) ??
+    operations.rows.find(
       (item) => item.phase === "running" || item.phase === "assigned",
     ) ??
-    work[0];
+    operations.rows[0];
+  const operationIndex = operations.sortedRows.findIndex(
+    (item) => item.id === selected?.id,
+  );
+  function stepOperation(offset: number) {
+    const index = operationIndex + offset;
+    const item = operations.sortedRows[index];
+    if (!item) return;
+    operations.setPage(Math.floor(index / operations.pageSize));
+    setSelectedId(item.id);
+  }
+
   function loadLatest() {
-    changePage([{}]);
+    setError(undefined);
     setReload((value) => value + 1);
   }
 
@@ -225,11 +241,16 @@ export function DeploymentRun({
             >
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-2/5 px-3 sm:px-5">Service</TableHead>
-                  <TableHead className="w-1/3 px-3 sm:px-5">
+                  <TableHead className="w-[30%] px-2 sm:px-5">
+                    Service
+                  </TableHead>
+                  <TableHead className="w-[27%] px-2 sm:px-5">
                     Image tag
                   </TableHead>
-                  <TableHead className="px-3 sm:px-5">Status</TableHead>
+                  <TableHead className="w-[22%] px-2 sm:px-5">
+                    Strategy
+                  </TableHead>
+                  <TableHead className="px-2 sm:px-5">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -238,7 +259,7 @@ export function DeploymentRun({
                     key={release.id}
                     className="even:bg-muted/35 even:hover:bg-muted/60"
                   >
-                    <TableCell className="px-3 py-3 sm:px-5">
+                    <TableCell className="px-2 py-3 sm:px-5">
                       <ContextLink
                         to={`${basePath}/releases/${release.id}${serviceId ? `?service=${serviceId}` : ""}`}
                         returnLabel="deployment run"
@@ -256,10 +277,13 @@ export function DeploymentRun({
                         />
                       </ContextLink>
                     </TableCell>
-                    <TableCell className="px-3 py-3 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere] sm:px-5">
+                    <TableCell className="px-2 py-3 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere] sm:px-5">
                       {release.tag || "—"}
                     </TableCell>
-                    <TableCell className="px-3 py-3 sm:px-5">
+                    <TableCell className="px-2 py-3 text-xs capitalize [overflow-wrap:anywhere] sm:px-5">
+                      {release.strategy}
+                    </TableCell>
+                    <TableCell className="px-2 py-3 sm:px-5">
                       <StatusBadge
                         status={
                           release.status === "active"
@@ -303,121 +327,97 @@ export function DeploymentRun({
               <p className="text-sm text-muted-foreground">
                 Execution details are no longer retained.
               </p>
-            ) : selected && !detail.preparation ? (
+            ) : work.length > 0 && !detail.preparation ? (
               <>
                 <TaskDependencyStatus task={task} />
-                <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(15rem,19rem)_minmax(0,1fr)]">
-                  <Card className="min-w-0 gap-0">
-                    <CardHeader>
-                      <CardTitle>Operations</CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-2 py-2">
-                      <Select
-                        className="lg:hidden"
-                        aria-label="Select operation"
-                        value={selected.id}
-                        onValueChange={setSelectedId}
-                        options={work.map((item) => ({
-                          value: item.id,
-                          label: [
-                            item.target_name,
-                            operationLabel(item.operation),
-                          ]
-                            .filter(Boolean)
-                            .join(" · "),
-                        }))}
+                <InspectionWorkspace
+                  title="Operations"
+                  selectionLabel="Select operation"
+                  detailsLabel="Selected operation"
+                  emptyMessage="No operations match your search."
+                  selectedId={selected?.id}
+                  onSelect={setSelectedId}
+                  items={operations.rows.map((item) => ({
+                    id: item.id,
+                    label: item.target_name || operationLabel(item.operation),
+                    description: item.target_name
+                      ? operationLabel(item.operation)
+                      : undefined,
+                    status: (
+                      <StatusBadge
+                        status={item.outcome || item.phase}
+                        className="shrink-0"
                       />
-                      <ul
-                        aria-label="Deployment operations"
-                        className="hidden space-y-1 lg:block"
+                    ),
+                  }))}
+                  toolbar={
+                    <CollectionToolbar
+                      query={operationQuery}
+                      onQueryChange={setOperationQuery}
+                      label="operations"
+                    >
+                      <Select
+                        aria-label="Operation order"
+                        value={operations.direction}
+                        options={[
+                          { value: "asc", label: "Oldest first" },
+                          { value: "desc", label: "Newest first" },
+                        ]}
+                        onValueChange={(direction) => {
+                          if (direction !== operations.direction)
+                            operations.sortBy("created");
+                        }}
+                      />
+                    </CollectionToolbar>
+                  }
+                  footer={
+                    operations.pages > 1 && (
+                      <TablePagination label="Operations" table={operations} />
+                    )
+                  }
+                >
+                  {selected && (
+                    <>
+                      <nav
+                        aria-label="Operation navigation"
+                        className="flex flex-wrap items-center gap-2 border-b border-border pb-2"
                       >
-                        {work.map((item) => (
-                          <li key={item.id}>
-                            <button
-                              type="button"
-                              aria-pressed={item.id === selected.id}
-                              onClick={() => setSelectedId(item.id)}
-                              className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring aria-pressed:border-border aria-pressed:bg-accent"
-                            >
-                              <span className="min-w-0 space-y-1 [overflow-wrap:anywhere]">
-                                <span className="block font-medium">
-                                  {item.target_name ||
-                                    operationLabel(item.operation)}
-                                </span>
-                                {item.target_name && (
-                                  <span className="block text-xs text-muted-foreground">
-                                    {operationLabel(item.operation)}
-                                  </span>
-                                )}
-                              </span>
-                              <StatusBadge
-                                status={item.outcome || item.phase}
-                              />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                      {(page.revision || detail.work.more) && (
-                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border px-2 pt-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={loading || pages.length === 1}
-                            onClick={() => changePage(pages.slice(0, -1))}
-                          >
-                            Previous
-                          </Button>
-                          <span className="text-xs text-muted-foreground">
-                            Page {shownPage}
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={loading || !detail.work.more}
-                            onClick={() =>
-                              changePage([
-                                ...pages.map((entry) => ({
-                                  ...entry,
-                                  revision: detail.work.revision,
-                                })),
-                                {
-                                  after: detail.work.after,
-                                  revision: detail.work.revision,
-                                },
-                              ])
-                            }
-                          >
-                            Next
-                          </Button>
-                        </div>
-                      )}
-                      {page.revision && (
-                        <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2 text-xs text-muted-foreground">
-                          <span>Fixed snapshot</span>
-                          <Button size="sm" variant="link" onClick={loadLatest}>
-                            Show latest
-                          </Button>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                  <section
-                    key={selected.id}
-                    aria-label="Selected operation"
-                    tabIndex={0}
-                    className="h-[clamp(20rem,65dvh,42rem)] min-w-0 space-y-3 overflow-y-auto overscroll-y-contain rounded-xl border border-border bg-card p-4 [scrollbar-gutter:stable] focus-visible:outline-2 focus-visible:outline-ring"
-                  >
-                    <WorkInspection
-                      className="rounded-none border-0 p-0"
-                      taskId={taskId}
-                      work={selected}
-                      revision={detail.work.revision}
-                      targetName={selected.target_name}
-                      onChanged={loadLatest}
-                    />
-                    <WorkCheckEvidence task={task} work={selected} />
-                  </section>
-                </div>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Previous operation"
+                          disabled={operationIndex === 0}
+                          onClick={() => stepOperation(-1)}
+                        >
+                          <ChevronLeft aria-hidden />
+                        </Button>
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {operationIndex + 1} of {operations.total}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Next operation"
+                          disabled={operationIndex + 1 >= operations.total}
+                          onClick={() => stepOperation(1)}
+                        >
+                          <ChevronRight aria-hidden />
+                        </Button>
+                      </nav>
+                      <div key={selected.id} className="space-y-3">
+                        <WorkInspection
+                          className="rounded-none border-0 p-0"
+                          taskId={taskId}
+                          work={selected}
+                          revision={detail.work.revision}
+                          targetName={selected.target_name}
+                          onChanged={loadLatest}
+                        />
+                        <WorkCheckEvidence task={task} work={selected} />
+                      </div>
+                    </>
+                  )}
+                </InspectionWorkspace>
               </>
             ) : (
               <TaskExecution detail={detail} onChanged={loadLatest} />

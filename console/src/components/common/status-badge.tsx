@@ -78,6 +78,10 @@ const MAP: Record<string, { label: string; dot: string; text: string }> = {
   },
 };
 
+export function statusLabel(status: string) {
+  return (MAP[status] ?? MAP.unknown).label;
+}
+
 export function StatusDot({
   status,
   className,
