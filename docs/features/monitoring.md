@@ -49,6 +49,10 @@ Persistent-volume usage and writable container layers are distinct. Shared Volum
 count once in parent totals. Each Volume shows its own observation time because
 storage is measured less frequently than CPU, memory and I/O. After container
 replacement, writable-layer usage stays unavailable until the next storage sample.
+For managed persistent Volumes, the Agent totals the apparent size of regular
+files in the verified Volume directory. It counts hard links once and skips
+symbolic links. A scan that exceeds its time or traversal budget yields an
+unavailable reading.
 
 Health remains separate from usage and runtime intent. Running without a
 healthcheck does not prove application readiness. A deliberately stopped Service

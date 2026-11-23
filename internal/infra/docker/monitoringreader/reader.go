@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/monitoringwire"
 	"github.com/AlanD20/groundplane/internal/common/serviceobservation"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,19 +20,23 @@ type Engine interface {
 	ContainerList(context.Context, client.ContainerListOptions) (client.ContainerListResult, error)
 	ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error)
 	ContainerStats(context.Context, string, client.ContainerStatsOptions) (client.ContainerStatsResult, error)
-	DiskUsage(context.Context, client.DiskUsageOptions) (client.DiskUsageResult, error)
+	VolumeInspect(context.Context, string, client.VolumeInspectOptions) (client.VolumeInspectResult, error)
 }
 
 type Reader struct {
-	engine Engine
-	now    func() time.Time
+	engine     Engine
+	volumeRoot string
+	now        func() time.Time
 }
 
-func New(engine Engine, now func() time.Time) (*Reader, error) {
+func New(engine Engine, volumeRoot string, now func() time.Time) (*Reader, error) {
 	if engine == nil || now == nil {
 		return nil, errs.New(errs.KindValidationFailed, "monitoring engine and clock are required")
 	}
-	return &Reader{engine: engine, now: now}, nil
+	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
+		return nil, err
+	}
+	return &Reader{engine: engine, volumeRoot: volumeRoot, now: now}, nil
 }
 
 func (reader *Reader) Collect(

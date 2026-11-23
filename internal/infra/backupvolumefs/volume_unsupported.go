@@ -44,6 +44,7 @@ type Journal interface {
 func Open(context.Context, string, string, string) (*Volume, error) { return nil, unsupported() }
 func (*Volume) Close() error                                        { return nil }
 func (*Volume) Snapshot(context.Context) (Tree, error)              { return Tree{}, unsupported() }
+func (*Volume) ApparentSize(context.Context) (uint64, error)        { return 0, unsupported() }
 func (*Volume) Capture(context.Context, io.Writer,
 	func([]backupvolume.Entry) ([]backupvolume.ManifestEntryBytes, error),
 ) (Tree, []backupvolume.ManifestEntryBytes, backupvolume.ArtifactEvidence, error) {

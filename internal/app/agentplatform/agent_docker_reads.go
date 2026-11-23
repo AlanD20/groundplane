@@ -2,6 +2,7 @@ package agentplatform
 
 import (
 	"context"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/agent/componentaction"
@@ -12,7 +13,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/docker/workloadimages"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/moby/moby/client"
-	"time"
 )
 
 // ConfigureDockerReads returns the owned Docker connection even when later wiring
@@ -21,6 +21,7 @@ func ConfigureDockerReads(
 	ctx context.Context,
 	target *agent.Client,
 	componentActions *componentaction.Runtime,
+	volumeRoot string,
 ) (*client.Client, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -50,7 +51,7 @@ func ConfigureDockerReads(
 	if err := target.SetServiceObserver(observer); err != nil {
 		return engine, err
 	}
-	monitoring, err := monitoringreader.New(engine, time.Now)
+	monitoring, err := monitoringreader.New(engine, volumeRoot, time.Now)
 	if err != nil {
 		return engine, err
 	}

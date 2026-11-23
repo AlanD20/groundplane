@@ -5,6 +5,8 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Measure persistent storage for Groundplane's bind-backed Volumes in live
+  monitoring and history.
 - Give Host, Tenant and Project their own Monitoring views. Keep chart axes
   visible during bucket inspection and show a single empty state when a range
   contains no samples.

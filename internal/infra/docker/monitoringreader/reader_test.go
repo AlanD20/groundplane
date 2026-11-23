@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/volume"
 	"github.com/moby/moby/client"
 )
 
@@ -26,6 +28,7 @@ type sampleEngine struct {
 	changedStartedAt   bool
 	reads, inspections int
 	body               *sampleBody
+	volume             volume.Volume
 }
 
 func (engine *sampleEngine) ContainerList(
@@ -59,8 +62,8 @@ func (engine *sampleEngine) ContainerStats(
 	engine.reads++
 	return client.ContainerStatsResult{Body: engine.body}, nil
 }
-func (*sampleEngine) DiskUsage(context.Context, client.DiskUsageOptions) (client.DiskUsageResult, error) {
-	return client.DiskUsageResult{}, nil
+func (engine *sampleEngine) VolumeInspect(context.Context, string, client.VolumeInspectOptions) (client.VolumeInspectResult, error) {
+	return client.VolumeInspectResult{Volume: engine.volume}, nil
 }
 
 func sampleFixture(t *testing.T) (*Reader, *sampleEngine, *agentpb.CollectMonitoringSamples) {
@@ -85,7 +88,7 @@ func sampleFixture(t *testing.T) (*Reader, *sampleEngine, *agentpb.CollectMonito
 		State:      &container.State{Status: "running", StartedAt: "2026-11-22T11:59:00Z"},
 		HostConfig: &container.HostConfig{Resources: container.Resources{Memory: 2048, NanoCPUs: 500_000_000}},
 	}, body: &sampleBody{Reader: strings.NewReader(string(data))}}
-	reader, err := New(engine, func() time.Time { return now })
+	reader, err := New(engine, environmentpath.DefaultVolumeRoot, func() time.Time { return now })
 	if err != nil {
 		t.Fatal(err)
 	}
