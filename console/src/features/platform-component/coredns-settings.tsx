@@ -244,13 +244,13 @@ export function CoreDnsSettings({
             <Button
               variant="outline"
               size="sm"
-              disabled={!managedCorefile || managedConfigLoading}
+              disabled={!managedCorefile}
               onClick={() => void copyRenderedCorefile()}
             >
               <Copy className="size-4" /> {copied ? "Copied" : "Copy"}
             </Button>
           </div>
-          {managedConfigLoading ? (
+          {managedConfigLoading && !managedCorefile ? (
             <p className="text-xs text-muted-foreground" role="status">
               Loading rendered Corefile…
             </p>
@@ -269,7 +269,7 @@ export function CoreDnsSettings({
               </Button>
             </div>
           ) : null}
-          {!managedConfigLoading && !managedConfigError && managedCorefile ? (
+          {managedCorefile ? (
             <CodeEditor
               id="rendered-corefile"
               label="Controller-rendered Corefile"

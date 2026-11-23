@@ -128,9 +128,6 @@ export function useSecretRefresh(
     async (signal?: AbortSignal) => {
       const loadGeneration = reusableSecretLoadGeneration.current + 1;
       reusableSecretLoadGeneration.current = loadGeneration;
-      update((draft) => {
-        draft.reusableSecretsLoading = true;
-      });
       try {
         const projectIds = reusableSecretProjectIds
           ? reusableSecretProjectIds.split(",")
@@ -142,7 +139,11 @@ export function useSecretRefresh(
         const pages = await Promise.all(
           scopes.map((scope) => listReusableSecretScope(scope, signal)),
         );
-        if (reusableSecretLoadGeneration.current !== loadGeneration) return;
+        if (
+          signal?.aborted ||
+          reusableSecretLoadGeneration.current !== loadGeneration
+        )
+          return;
         update((draft) => {
           draft.reusableSecrets = pages.flat();
           draft.reusableSecretsLoading = false;

@@ -80,7 +80,7 @@ export function ReusableSecretOwnerList({
   );
   return (
     <>
-      {loading && (
+      {loading && secrets.length === 0 && (
         <p role="status" className="py-3 text-xs text-muted-foreground">
           Loading configuration…
         </p>

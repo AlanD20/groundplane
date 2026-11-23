@@ -3,8 +3,13 @@ import { ServiceMetadata } from "@/features/service/service-metadata";
 import { ServiceStorage } from "@/features/service/service-storage";
 import { PageHeader } from "@/components/common/page-header";
 import { ResourcePanel } from "@/components/common/resource-panel";
+import {
+  TablePagination,
+  useTableView,
+} from "@/components/common/table-controls";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { ServiceSettings } from "@/features/service/service-settings";
 import {
   DropdownMenu,
@@ -65,17 +70,26 @@ export function ServiceWorkspace({
   const [search, setSearch] = useSearchParams();
   const [detail, setDetail] = useState<Service>();
   const [reload, setReload] = useState(0);
+  const releases = env.deploys.filter(
+    (release) => release.serviceId === summary.id,
+  );
   const service = {
     ...summary,
     nativeCompose: detail?.nativeCompose,
-    releaseLedger: detail?.releaseLedger ?? summary.releaseLedger,
+    releaseLedger: releases,
   };
   const servingReleaseId =
     summary.observation.state === "unavailable"
       ? undefined
       : summary.observation.servingReleaseId;
   const [detailError, setDetailError] = useState<string>();
-  const [loading, setLoading] = useState(true);
+  const deployments = useTableView(
+    releases,
+    { when: (release) => Date.parse(release.when) || 0 },
+    "when",
+    "desc",
+    summary.id,
+  );
   const [operation, setOperation] = useState<ServiceOperation | null>(null);
   const [releaseAction, setReleaseAction] = useState<
     "deploy" | "rollback" | null
@@ -108,14 +122,15 @@ export function ServiceWorkspace({
   };
 
   useEffect(() => {
+    if (tab !== "configuration") return;
     let current = true;
-    setDetail(undefined);
-    setLoading(true);
-    setDetailError(undefined);
     void store
       .getService(summary.id)
       .then((detail) => {
-        if (current) setDetail(detail);
+        if (current) {
+          setDetail(detail);
+          setDetailError(undefined);
+        }
       })
       .catch((error: unknown) => {
         if (current)
@@ -124,14 +139,11 @@ export function ServiceWorkspace({
               ? error.message
               : "Unable to load Service details",
           );
-      })
-      .finally(() => {
-        if (current) setLoading(false);
       });
     return () => {
       current = false;
     };
-  }, [summary.id, servingReleaseId, reload, store.getService]);
+  }, [summary.id, servingReleaseId, reload, store.getService, tab]);
 
   return (
     <>
@@ -225,7 +237,7 @@ export function ServiceWorkspace({
         )}
 
         <ServiceMetadata service={service} now={now} />
-        {detailError && (
+        {tab === "configuration" && detailError && (
           <p
             role="alert"
             className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive"
@@ -247,7 +259,11 @@ export function ServiceWorkspace({
             </div>
           )}
           {tab === "monitoring" && (
-            <ServiceMonitoring service={service} now={now} onOpenLogs={() => selectTab("logs")} />
+            <ServiceMonitoring
+              service={service}
+              now={now}
+              onOpenLogs={() => selectTab("logs")}
+            />
           )}
           {tab === "logs" && (
             <div className="space-y-4 pt-5">
@@ -260,32 +276,46 @@ export function ServiceWorkspace({
               <ResourcePanel
                 title="Deployments"
                 actions={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={releaseAction !== null}
-                    onClick={() => setReleaseAction("rollback")}
-                  >
-                    <History className="size-3.5" />
-                    Rollback
-                  </Button>
+                  <>
+                    <Select
+                      aria-label="Deployment order"
+                      className="w-36"
+                      value={deployments.direction}
+                      onValueChange={(direction) => {
+                        if (direction !== deployments.direction)
+                          deployments.sortBy("when");
+                      }}
+                      options={[
+                        { value: "desc", label: "Newest first" },
+                        { value: "asc", label: "Oldest first" },
+                      ]}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={releaseAction !== null}
+                      onClick={() => setReleaseAction("rollback")}
+                    >
+                      <History className="size-3.5" />
+                      Rollback
+                    </Button>
+                  </>
                 }
               >
-                {service.releaseLedger?.length ? (
+                {deployments.total ? (
                   <div className="space-y-3">
-                    {service.releaseLedger.map((release) => (
+                    {deployments.rows.map((release) => (
                       <ReleaseHistoryRow
                         key={release.id}
                         release={release}
                         env={env}
                       />
                     ))}
+                    <TablePagination table={deployments} label="Deployments" />
                   </div>
                 ) : (
                   <p role="status" className="text-sm text-muted-foreground">
-                    {loading
-                      ? "Loading deployment history…"
-                      : "No deployments yet."}
+                    No deployments yet.
                   </p>
                 )}
               </ResourcePanel>

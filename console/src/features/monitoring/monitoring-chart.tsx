@@ -147,10 +147,7 @@ function selectionIdentity(
   series: readonly MonitoringChartSeries[],
 ): string {
   return `${scopeKey}\u0000${scopedLabel}\u0000${rangeLabel}\u0000${series
-    .map(
-      (item) =>
-        `${item.id}\u0000${item.label}\u0000${item.unit}\u0000${item.color}`,
-    )
+    .map((item) => `${item.id}\u0000${item.label}\u0000${item.color}`)
     .join("\u0001")}`;
 }
 
@@ -187,15 +184,11 @@ export const MonitoringChart = memo(function MonitoringChart({
   const reference = displayedSeries.find((item) => item.points.length > 0);
   const scale = useMemo(() => {
     const maximum = chartDomainMaximum(displayedSeries);
-    const unit = displayedSeries[0]?.unit;
-    const useGiB =
-      maximum >= 1024 && displayedSeries.every((item) => item.unit === "MiB");
-    const factor = useGiB ? 1024 : 1;
-    const { top, labels } = readableAxis(maximum / factor);
+    const { top, labels } = readableAxis(maximum);
     return {
-      unit: useGiB ? "GiB" : unit,
-      maximum: top * factor,
+      maximum: top,
       labels,
+      detailPlaces: Math.min(12, Math.max(2, 3 - Math.floor(Math.log10(top)))),
     };
   }, [displayedSeries]);
   const valueTicks = scale.labels.map((value, index) => ({
@@ -254,12 +247,17 @@ export const MonitoringChart = memo(function MonitoringChart({
         plotFraction * (activeWindow.to - activeWindow.from);
       const index = bucketIndexAtTime(activeReference.points, time);
       if (index === null) return;
-      setInteraction((current) => ({
-        index,
-        pinned: pinned ?? current?.pinned ?? false,
-        series: current?.series ?? frozenSeries(series),
-        window: current?.window ?? { ...window },
-      }));
+      setInteraction((current) => {
+        const nextPinned = pinned ?? current?.pinned ?? false;
+        if (current?.index === index && current.pinned === nextPinned)
+          return current;
+        return {
+          index,
+          pinned: nextPinned,
+          series: current?.series ?? frozenSeries(series),
+          window: current?.window ?? { ...window },
+        };
+      });
     },
     [interaction?.series, interaction?.window, series, window],
   );
@@ -373,7 +371,7 @@ export const MonitoringChart = memo(function MonitoringChart({
     >
       <div
         className={cn(
-          "relative min-w-0 overflow-hidden",
+          "relative flex min-w-0 flex-col overflow-hidden",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         )}
         style={rootStyle}
@@ -388,7 +386,7 @@ export const MonitoringChart = memo(function MonitoringChart({
           if (!interaction?.pinned) dismiss();
         }}
       >
-        <div className="absolute left-3 right-3 top-2 z-10 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 pt-2 text-xs">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             {displayedSeries.map((item, index) => (
               <span key={item.id} className="inline-flex items-center gap-1.5">
@@ -411,114 +409,115 @@ export const MonitoringChart = memo(function MonitoringChart({
             {timeZone} · Line average · Band min–max
           </span>
         </div>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 w-12 text-right text-xs tabular-nums text-muted-foreground"
-        >
-          <span className="absolute right-0 top-[10%]">{scale.unit}</span>
-          {valueTicks.map(({ value, y }) => (
-            <span
-              className="absolute right-0 -translate-y-1/2"
-              style={{ top: `${(y / viewBoxHeight) * 100}%` }}
-              key={y}
-            >
-              {axisValueFormatter.format(value)}
-            </span>
-          ))}
-        </div>
-        <div className="absolute inset-y-0 left-14 right-5">
-          <svg
-            ref={plot}
-            className="size-full"
-            viewBox={`${chartPlot.left} 0 ${plotWidth} ${viewBoxHeight}`}
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            {valueTicks.map(({ y }) => (
-              <line
-                key={y}
-                x1={chartPlot.left}
-                x2={chartPlot.right}
-                y1={y}
-                y2={y}
-                stroke="var(--border)"
-                strokeDasharray="3 5"
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-            {geometry.map(({ item, dash, band, average }) => (
-              <g key={item.id}>
-                {band && <path d={band} fill={item.color} opacity={0.1} />}
-                {average && (
-                  <path
-                    d={average}
-                    fill="none"
-                    stroke={item.color}
-                    strokeWidth={2}
-                    strokeDasharray={dash}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                )}
-              </g>
-            ))}
-            {selectedX !== null && (
-              <g>
-                <line
-                  x1={selectedX}
-                  x2={selectedX}
-                  y1={chartPlot.top}
-                  y2={chartPlot.bottom}
-                  stroke="var(--foreground)"
-                  strokeDasharray="3 4"
-                  opacity={0.55}
-                  vectorEffect="non-scaling-stroke"
-                />
-                {displayedSeries.map((item) => {
-                  const point = selected
-                    ? pointForTime(item, pointCenter(selected))
-                    : null;
-                  if (point?.average === null || point?.average === undefined)
-                    return null;
-                  return (
-                    <circle
-                      key={item.id}
-                      cx={selectedX}
-                      cy={chartY(point.average, scale.maximum)}
-                      r={4}
-                      fill={item.color}
-                      stroke="var(--card)"
-                      strokeWidth={2}
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  );
-                })}
-              </g>
-            )}
-          </svg>
+        <div className="relative min-h-0 flex-1">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-[89%] whitespace-nowrap text-xs tabular-nums text-muted-foreground"
+            className="pointer-events-none absolute inset-y-0 left-0 w-12 text-right text-xs tabular-nums text-muted-foreground"
           >
-            {timeTicks.map(({ time, label, fraction }, index) => (
+            {valueTicks.map(({ value, y }) => (
               <span
-                key={time}
-                className={cn("absolute", index % 2 === 1 && "max-sm:hidden")}
-                style={{
-                  left: `${fraction * 100}%`,
-                  transform: `translateX(${fraction < 0.07 ? 0 : fraction > 0.93 ? -100 : -50}%)`,
-                }}
+                className="absolute right-0 -translate-y-1/2"
+                style={{ top: `${(y / viewBoxHeight) * 100}%` }}
+                key={y}
               >
-                {label}
+                {axisValueFormatter.format(value)}
               </span>
             ))}
           </div>
+          <div className="absolute inset-y-0 left-14 right-5">
+            <svg
+              ref={plot}
+              className="size-full"
+              viewBox={`${chartPlot.left} 0 ${plotWidth} ${viewBoxHeight}`}
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              {valueTicks.map(({ y }) => (
+                <line
+                  key={y}
+                  x1={chartPlot.left}
+                  x2={chartPlot.right}
+                  y1={y}
+                  y2={y}
+                  stroke="var(--border)"
+                  strokeDasharray="3 5"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+              {geometry.map(({ item, dash, band, average }) => (
+                <g key={item.id}>
+                  {band && <path d={band} fill={item.color} opacity={0.1} />}
+                  {average && (
+                    <path
+                      d={average}
+                      fill="none"
+                      stroke={item.color}
+                      strokeWidth={2}
+                      strokeDasharray={dash}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+                </g>
+              ))}
+              {selectedX !== null && (
+                <g>
+                  <line
+                    x1={selectedX}
+                    x2={selectedX}
+                    y1={chartPlot.top}
+                    y2={chartPlot.bottom}
+                    stroke="var(--foreground)"
+                    strokeDasharray="3 4"
+                    opacity={0.55}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  {displayedSeries.map((item) => {
+                    const point = selected
+                      ? pointForTime(item, pointCenter(selected))
+                      : null;
+                    if (point?.average === null || point?.average === undefined)
+                      return null;
+                    return (
+                      <circle
+                        key={item.id}
+                        cx={selectedX}
+                        cy={chartY(point.average, scale.maximum)}
+                        r={4}
+                        fill={item.color}
+                        stroke="var(--card)"
+                        strokeWidth={2}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    );
+                  })}
+                </g>
+              )}
+            </svg>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-[89%] whitespace-nowrap text-xs tabular-nums text-muted-foreground"
+            >
+              {timeTicks.map(({ time, label, fraction }, index) => (
+                <span
+                  key={time}
+                  className={cn("absolute", index % 2 === 1 && "max-sm:hidden")}
+                  style={{
+                    left: `${fraction * 100}%`,
+                    transform: `translateX(${fraction < 0.07 ? 0 : fraction > 0.93 ? -100 : -50}%)`,
+                  }}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <p className="sr-only">
+            Lines show bucket averages. Shaded bands show recorded minimum and
+            maximum values. Missing buckets are gaps, not zero values.
+          </p>
         </div>
-        <p className="sr-only">
-          Lines show bucket averages. Shaded bands show recorded minimum and
-          maximum values. Missing buckets are gaps, not zero values.
-        </p>
       </div>
       <MonitoringBucketDetails
         id={detailsId}
@@ -533,6 +532,7 @@ export const MonitoringChart = memo(function MonitoringChart({
         }
         pinned={interaction?.pinned ?? false}
         timeZone={timeZone}
+        decimalPlaces={scale.detailPlaces}
       />
     </div>
   );

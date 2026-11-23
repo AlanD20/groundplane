@@ -32,7 +32,7 @@ export function DeploymentGroupRow({
         if (!signal.aborted) setUnavailable(true);
       }
     },
-    { key: group.taskId },
+    { key: group.taskId, enabled: !task?.finishedAt },
   );
   const count = new Set(group.releases.map((release) => release.service)).size;
   const serving = group.releases.filter(

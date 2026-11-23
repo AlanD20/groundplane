@@ -4,10 +4,7 @@ import {
   type MonitoringChartBucketPoint,
   type MonitoringChartSeries,
 } from "./monitoring-chart-geometry";
-
-const valueFormatter = new Intl.NumberFormat(undefined, {
-  maximumSignificantDigits: 4,
-});
+import { useMemo } from "react";
 
 const timestampFormat = {
   day: "2-digit",
@@ -20,9 +17,15 @@ const timestampFormat = {
   timeZoneName: "shortOffset",
 } satisfies Intl.DateTimeFormatOptions;
 
-function formatValue(value: number | null, unit: string): string {
+function formatValue(
+  value: number | null,
+  unit: string,
+  formatter: Intl.NumberFormat,
+  resolution: number,
+): string {
   if (value === null || !Number.isFinite(value)) return "Unavailable";
-  return `${valueFormatter.format(value)} ${unit}`;
+  const tiny = value > 0 && value < resolution / 2;
+  return `${tiny ? "<" : ""}${formatter.format(tiny ? resolution : value)} ${unit}`;
 }
 
 function formatCoverage(valid: number, expected: number): string {
@@ -37,6 +40,7 @@ export function MonitoringBucketDetails({
   label,
   pinned,
   timeZone,
+  decimalPlaces,
 }: {
   readonly id: string;
   readonly series: readonly MonitoringChartSeries[];
@@ -44,8 +48,25 @@ export function MonitoringBucketDetails({
   readonly label: string;
   readonly pinned: boolean;
   readonly timeZone: string;
+  readonly decimalPlaces: number;
 }) {
   const time = pointCenter(bucket);
+  const formatter = useMemo(
+    () =>
+      new Intl.NumberFormat(undefined, {
+        minimumFractionDigits: decimalPlaces,
+        maximumFractionDigits: decimalPlaces,
+      }),
+    [decimalPlaces],
+  );
+  const clock = useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, {
+        ...timestampFormat,
+        timeZone,
+      }),
+    [timeZone],
+  );
   return (
     <div id={id} className="min-w-0 border-t border-border bg-card px-3 py-2">
       <div className="flex min-w-0 items-center gap-2 text-xs">
@@ -54,20 +75,17 @@ export function MonitoringBucketDetails({
           className="min-w-0 truncate text-muted-foreground"
           dateTime={new Date(bucket.from).toISOString()}
         >
-          {new Intl.DateTimeFormat(undefined, {
-            ...timestampFormat,
-            timeZone,
-          }).formatRange(bucket.from, bucket.to)}
+          {clock.formatRange(bucket.from, bucket.to)}
         </time>
         <span className="ml-auto hidden shrink-0 text-muted-foreground sm:inline">
           {pinned ? "Enter to unpin" : "Enter to pin"}
         </span>
       </div>
       <div className="mt-1 overflow-x-auto">
-        <table className="w-full min-w-[31rem] text-left text-xs tabular-nums">
+        <table className="w-full min-w-[40rem] table-fixed text-left text-xs tabular-nums">
           <thead className="text-muted-foreground">
             <tr>
-              <th scope="col" className="py-1 font-medium">
+              <th scope="col" className="w-1/5 py-1 font-medium">
                 Series
               </th>
               {["Average", "Min", "Max", "Samples", "Contributors"].map(
@@ -102,7 +120,12 @@ export function MonitoringBucketDetails({
                             key={index}
                             className="whitespace-nowrap px-1 py-1"
                           >
-                            {formatValue(value, item.unit)}
+                            {formatValue(
+                              value,
+                              item.unit,
+                              formatter,
+                              10 ** -decimalPlaces,
+                            )}
                           </td>
                         ),
                       )}

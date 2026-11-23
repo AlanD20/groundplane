@@ -17,6 +17,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { MonitoringRange, MonitoringResponse } from "./api";
 import {
   formatMetric,
+  byteUnits,
+  type ByteUnit,
   metricAverage,
   metricGroups,
   metricSeries,
@@ -39,12 +41,14 @@ export function MonitoringMetrics({
 }) {
   const [chartTimeZone, setChartTimeZone] = useState(readChartTimeZone);
   const [metric, setMetric] = useState("cpu");
+  const [byteUnit, setByteUnit] = useState<ByteUnit>("Auto");
   const fullscreenButton = useRef<HTMLButtonElement>(null);
   const [fullscreen, setFullscreen] = useWorkspaceFullscreen(undefined, () =>
     fullscreenButton.current?.focus({ preventScroll: true }),
   );
   const selected =
     metricGroups.find((group) => group.id === metric) ?? metricGroups[0];
+  const canSelectUnits = selected.metrics[0]?.unit.startsWith("MiB");
 
   const subject =
     response.host ??
@@ -77,8 +81,8 @@ export function MonitoringMetrics({
       : undefined;
   const history = retainedHistory?.buckets ?? availableHistory;
   const series = useMemo(
-    () => metricSeries(history ?? [], selected),
-    [history, selected],
+    () => metricSeries(history ?? [], selected, byteUnit),
+    [history, selected, byteUnit],
   );
   const { start, end } = retainedHistory?.window ?? response.window;
   const chartWindow = useMemo(
@@ -186,11 +190,28 @@ export function MonitoringMetrics({
                 className="w-44"
                 value={selected.id}
                 onValueChange={setMetric}
-                options={metricGroups.map((group) => ({
-                  value: group.id,
-                  label: group.label,
-                }))}
+                options={metricGroups
+                  .filter(
+                    (group) =>
+                      group.id !== "cpu-utilization" || !!response.host,
+                  )
+                  .map((group) => ({
+                    value: group.id,
+                    label: group.label,
+                  }))}
               />
+              {canSelectUnits && (
+                <Select
+                  aria-label="Chart units"
+                  className="w-24"
+                  value={byteUnit}
+                  onValueChange={(value) => setByteUnit(value as ByteUnit)}
+                  options={byteUnits.map((unit) => ({
+                    value: unit,
+                    label: unit,
+                  }))}
+                />
+              )}
               <Select
                 aria-label="Chart time zone"
                 className="w-32"
@@ -228,8 +249,13 @@ export function MonitoringMetrics({
               {refreshError}
             </p>
           )}
+          {selected.description && (
+            <p className="text-xs text-muted-foreground">
+              {selected.description}
+            </p>
+          )}
           <MonitoringChart
-            scopeKey={scopeKey}
+            scopeKey={`${scopeKey}/${selected.id}/${byteUnit}`}
             scopedLabel={response.scope.name}
             rangeLabel={response.window.range}
             window={chartWindow}

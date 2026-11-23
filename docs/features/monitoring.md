@@ -25,8 +25,10 @@ requires independent application or database instrumentation.
 
 ## Read the measurements
 
-CPU consumption uses cores. Utilization against an allocation needs an actual
-configured limit; an absent limit is not zero capacity. Memory working set removes
+CPU usage shows busy time in cores. The Host CPU utilization chart shows that
+busy time as a percentage of all logical CPUs. One busy core on a four-core Host
+is 25% utilization. Utilization against a workload allocation needs an actual
+configured limit. Memory working set removes
 reported inactive file cache from raw usage and remains distinct from the limit.
 Whole-host memory and filesystem capacity are separate measurements.
 
@@ -35,6 +37,8 @@ Scripts and GP runtime helpers are not added to that workload total; their host
 footprint remains part of whole-host utilization.
 
 Network RX/TX and disk read/write rates come from consecutive cumulative counters.
+Disk throughput counts bytes transferred per second. Disk operations count
+completed reads and writes per second, regardless of the amount transferred.
 Replacement, restart, reset or a long sampling gap begins a new segment. First
 readings and unsupported runtime counters remain unavailable. Summed container
 traffic is not host internet egress. Host totals use physical interfaces, while
@@ -71,6 +75,9 @@ sample counts and available contributor coverage. The line represents averages;
 the band represents recorded extrema. Missing buckets are gaps rather than zero.
 A parent total's extrema come from aligned total measurements, not the sum of
 independent child minima or maxima.
+
+Memory, storage, network and disk throughput charts offer Auto, B, KiB, MiB
+and GiB. Charts for rates display those units per second.
 
 Click or press Enter to pin an interval, use arrow keys to inspect adjacent
 intervals, and press Escape to dismiss it. Inspection freezes the displayed

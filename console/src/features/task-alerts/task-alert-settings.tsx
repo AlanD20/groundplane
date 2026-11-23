@@ -194,17 +194,22 @@ function ScopedSettings({ scope }: { scope: string }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`alerts-console-${scope}`}>
-              Console URL{" "}
+              Console address for Task links{" "}
               <span className="text-muted-foreground">(optional)</span>
             </Label>
             <Input
               id={`alerts-console-${scope}`}
+              aria-describedby={`alerts-console-help-${scope}`}
               value={current.consoleURL}
               placeholder="https://gp.example.com"
               onChange={(event) => edit({ consoleURL: event.target.value })}
             />
-            <p className="text-xs text-muted-foreground">
-              Adds a direct Task link to notifications.
+            <p
+              id={`alerts-console-help-${scope}`}
+              className="text-xs text-muted-foreground"
+            >
+              Use the Groundplane address that recipients can open. Leave this
+              blank to send Discord alerts without a Task link.
             </p>
           </div>
         </SettingsDraft>

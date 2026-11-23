@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { useStore } from "@/lib/store";
 import { useVisibleRefresh } from "@/lib/use-visible-refresh";
 import type { ActivityEntry } from "@/lib/types";
-import { Bell, X } from "lucide-react";
+import { Bell, Check, CheckCheck, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
@@ -31,6 +31,7 @@ export function TaskNotifications() {
   const [focusedToast, setFocusedToast] = useState<string>();
   const [updates, setUpdates] = useState<Record<string, TaskUpdate>>({});
   const trigger = useRef<HTMLButtonElement>(null);
+  const drawerTitle = useRef<HTMLHeadingElement>(null);
   const unread = notifications.filter((item) => item.unread).length;
   const now = Date.now();
   const activeToasts = notifications.filter(
@@ -55,10 +56,6 @@ export function TaskNotifications() {
     );
     return () => window.clearTimeout(timer);
   }, [nextExpiry, focusedToast]);
-
-  useEffect(() => {
-    if (open && unread) markTaskNotificationsRead();
-  }, [open, unread]);
 
   // New acceptances queue refreshes without canceling reads already in flight.
   useVisibleRefresh(
@@ -177,14 +174,58 @@ export function TaskNotifications() {
       )}
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerContent className="max-w-md gap-4" finalFocus={trigger}>
-          <DialogHeader className="pr-8">
-            <DialogTitle>Task notifications</DialogTitle>
+          <DialogHeader className="flex-row flex-wrap items-center justify-between gap-2 pr-8">
+            <DialogTitle ref={drawerTitle} tabIndex={-1}>
+              Task notifications
+            </DialogTitle>
+            {!!unread && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  drawerTitle.current?.focus({ preventScroll: true });
+                  markTaskNotificationsRead();
+                }}
+              >
+                <CheckCheck className="size-4" /> Mark all as read
+              </Button>
+            )}
           </DialogHeader>
           {notifications.length ? (
             <ul className="divide-y divide-border rounded-xl border border-border">
-              {notifications.map(({ id }) => (
-                <li key={id} className="flex">
-                  {notificationLink(id, () => setOpen(false))}
+              {notifications.map(({ id, unread }) => (
+                <li key={id} className="flex items-start gap-1 px-1">
+                  {unread && (
+                    <span
+                      aria-label="Unread"
+                      role="img"
+                      className="mt-4 size-2 shrink-0 rounded-full bg-primary"
+                    />
+                  )}
+                  {notificationLink(id, () => {
+                    readTaskNotification(id);
+                    setOpen(false);
+                  })}
+                  {unread && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="mt-1.5 shrink-0"
+                      aria-label="Mark notification as read"
+                      title="Mark as read"
+                      onClick={(event) => {
+                        event.currentTarget
+                          .closest("li")
+                          ?.querySelector("a")
+                          ?.focus({ preventScroll: true });
+                        readTaskNotification(id);
+                      }}
+                    >
+                      <Check className="size-4" />
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>

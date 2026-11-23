@@ -81,28 +81,28 @@ export function RevealValue({
       <div
         className={cn("flex min-w-0 max-w-full items-start gap-1", className)}
       >
-        <code
-          className={cn(
-            "min-h-9 min-w-0 max-h-40 flex-1 overflow-y-auto rounded-md bg-muted px-3 py-2 font-mono text-sm",
-            revealed && !expanded
-              ? "whitespace-pre-wrap [overflow-wrap:anywhere]"
-              : "whitespace-nowrap",
-          )}
-        >
-          {revealed && !expanded ? (
-            displayedValue === "" ? (
-              <span className="font-sans italic text-muted-foreground">
-                Empty value
-              </span>
+        {((revealed && !expanded) || (!revealed && sensitive && !file)) && (
+          <code
+            className={cn(
+              "min-h-9 min-w-0 max-h-40 flex-1 overflow-y-auto rounded-md bg-muted px-3 py-2 font-mono text-sm",
+              revealed && !expanded
+                ? "whitespace-pre-wrap [overflow-wrap:anywhere]"
+                : "whitespace-nowrap",
+            )}
+          >
+            {revealed && !expanded ? (
+              displayedValue === "" ? (
+                <span className="font-sans italic text-muted-foreground">
+                  Empty value
+                </span>
+              ) : (
+                displayedValue
+              )
             ) : (
-              displayedValue
-            )
-          ) : sensitive ? (
-            "•".repeat(12)
-          ) : (
-            "not loaded"
-          )}
-        </code>
+              <span aria-label="Hidden secret">{"•".repeat(12)}</span>
+            )}
+          </code>
+        )}
         {revealed && !expanded && (
           <CopyButton className="shrink-0" value={displayedValue ?? ""} />
         )}
@@ -162,7 +162,8 @@ export function RevealValue({
             <DialogHeader>
               <DialogTitle>{label ?? "Secret value"}</DialogTitle>
               <DialogDescription>
-                {file ? "File contents" : "Secret value"} · Read only
+                {file ? "File contents" : sensitive ? "Secret value" : "Value"}{" "}
+                · Read only
               </DialogDescription>
             </DialogHeader>
             {revealed && expanded && (

@@ -273,6 +273,7 @@ export function releaseForServiceName(
         : "recreate";
   return {
     id: release.id,
+    serviceId: release.service_id,
     taskId: release.originating_task_id,
     operationKind: release.operation_kind,
     service: serviceName,

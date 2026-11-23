@@ -62,8 +62,9 @@ export function ReleasesCard({ env }: { env: Environment }) {
             { value: "services", label: "Service count" },
           ]}
         />
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Select
+            className="col-span-2 min-w-0 sm:col-span-1"
             searchable
             aria-label="Filter deployments by Service"
             value={service}
@@ -76,6 +77,7 @@ export function ReleasesCard({ env }: { env: Environment }) {
             ]}
           />
           <Select
+            className="min-w-0"
             aria-label="Filter Service release state"
             value={state}
             onValueChange={setState}
@@ -89,6 +91,7 @@ export function ReleasesCard({ env }: { env: Environment }) {
             ]}
           />
           <Select
+            className="min-w-0"
             aria-label="Filter deployment strategy"
             value={strategy}
             onValueChange={setStrategy}
@@ -100,13 +103,6 @@ export function ReleasesCard({ env }: { env: Environment }) {
               })),
             ]}
           />
-          <span className="text-xs text-muted-foreground">
-            {table.field === "when"
-              ? table.direction === "desc"
-                ? "Newest first"
-                : "Oldest first"
-              : "Sorted by " + table.field}
-          </span>
         </div>
         <div className="space-y-3">
           {table.rows.map((group) => (

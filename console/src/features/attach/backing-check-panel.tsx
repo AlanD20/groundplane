@@ -111,7 +111,7 @@ export function BackingCheckPanel({
       className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">Consumer access check</h3>
+        <h3 className="text-sm font-medium">Connection check</h3>
         {attachId && !taskId && (
           <Button
             type="button"
@@ -135,6 +135,12 @@ export function BackingCheckPanel({
           </Button>
         )}
       </div>
+      <p className="text-xs text-muted-foreground">
+        Checks whether the running Service can reach the backing endpoint and
+        authenticate if required. Groundplane runs <code>SELECT 1</code> for
+        PostgreSQL and MySQL or <code>PING</code> for Valkey. The check leaves
+        application data unchanged.
+      </p>
       {attachId && !taskId && (
         <fieldset disabled={check.sending || check.active || check.uncertain}>
           <TaskRunAfterSelector
@@ -174,12 +180,6 @@ export function BackingCheckPanel({
         >
           Refresh result
         </Button>
-      )}
-      {!check.taskId && !check.loading && (
-        <p className="text-xs text-muted-foreground">
-          Uses the deployed consumer's network and configured credentials. Runs
-          a read-only query; does not change or deploy anything.
-        </p>
       )}
       {result && (
         <>
@@ -300,10 +300,6 @@ export function BackingCheckPanel({
               Clean up helper — do not rerun check
             </Button>
           )}
-          <p className="text-xs text-muted-foreground">
-            Verifies access at this time, not all application permissions or
-            container health.
-          </p>
         </>
       )}
     </section>

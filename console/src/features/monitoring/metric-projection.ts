@@ -20,11 +20,21 @@ type MetricDefinition = {
 export type MetricGroup = {
   id: string;
   label: string;
+  description?: string;
   metrics: readonly MetricDefinition[];
 };
 
 const kib = 1024;
 const mib = kib * kib;
+export const byteUnits = ["Auto", "B", "KiB", "MiB", "GiB"] as const;
+export type ByteUnit = (typeof byteUnits)[number];
+const byteScale = { B: 1, KiB: kib, MiB: mib, GiB: mib * kib };
+
+function autoByteUnit(value: number): Exclude<ByteUnit, "Auto"> {
+  if (value >= byteScale.GiB) return "GiB";
+  if (value >= mib) return "MiB";
+  return value >= kib ? "KiB" : "B";
+}
 
 const metric = (
   key: MetricKey,
@@ -37,7 +47,9 @@ const metric = (
 export const metricGroups: readonly MetricGroup[] = [
   {
     id: "cpu",
-    label: "CPU",
+    label: "CPU usage",
+    description:
+      "CPU time used, expressed in cores. One core is the equivalent of one fully busy logical CPU.",
     metrics: [
       metric("cpu_cores", "Used", "cores", 1, "var(--chart-1)"),
       metric("cpu_limit_cores", "Limit", "cores", 1, "var(--chart-5)"),
@@ -46,6 +58,8 @@ export const metricGroups: readonly MetricGroup[] = [
   {
     id: "cpu-utilization",
     label: "CPU utilization",
+    description:
+      "Percentage of the host’s total logical CPU capacity that was busy.",
     metrics: [
       metric(
         "cpu_utilization_ratio",
@@ -128,7 +142,8 @@ export const metricGroups: readonly MetricGroup[] = [
   },
   {
     id: "disk-io",
-    label: "Disk I/O",
+    label: "Disk throughput",
+    description: "How much data was read or written per second.",
     metrics: [
       metric(
         "block_read_bytes_per_second",
@@ -149,6 +164,8 @@ export const metricGroups: readonly MetricGroup[] = [
   {
     id: "disk-ops",
     label: "Disk operations",
+    description:
+      "How many read or write operations finished per second. Each operation can transfer a different amount of data.",
     metrics: [
       metric(
         "block_read_operations_per_second",
@@ -175,12 +192,28 @@ function scaled(value: number | null | undefined, scale: number) {
 export function metricSeries(
   buckets: readonly MonitoringBucket[],
   group: MetricGroup,
+  preferredUnit: ByteUnit = "Auto",
 ): MonitoringChartSeries[] {
+  const byteMetric = group.metrics[0]?.unit.startsWith("MiB");
+  let unit = preferredUnit;
+  if (byteMetric && preferredUnit === "Auto") {
+    let peak = 0;
+    for (const { values } of buckets) {
+      for (const { key } of group.metrics) {
+        const point = values[key];
+        peak = Math.max(peak, point?.maximum ?? 0, point?.average ?? 0);
+      }
+    }
+    unit = autoByteUnit(peak);
+  }
+  const bytes = byteMetric && unit !== "Auto" ? unit : undefined;
   return group.metrics
     .map((definition) => ({
       id: definition.key,
       label: definition.label,
-      unit: definition.unit,
+      unit: bytes
+        ? bytes + (definition.unit.endsWith("/s") ? "/s" : "")
+        : definition.unit,
       color: definition.color,
       points: buckets.map((bucket): MonitoringChartBucketPoint => {
         const value = bucket.values[definition.key] as
@@ -188,9 +221,18 @@ export function metricSeries(
         return {
           from: Date.parse(bucket.start),
           to: Date.parse(bucket.end),
-          average: scaled(value?.average, definition.scale),
-          minimum: scaled(value?.minimum, definition.scale),
-          maximum: scaled(value?.maximum, definition.scale),
+          average: scaled(
+            value?.average,
+            bytes ? byteScale[bytes] : definition.scale,
+          ),
+          minimum: scaled(
+            value?.minimum,
+            bytes ? byteScale[bytes] : definition.scale,
+          ),
+          maximum: scaled(
+            value?.maximum,
+            bytes ? byteScale[bytes] : definition.scale,
+          ),
           validSamples: value?.valid_samples ?? 0,
           expectedSamples: value?.expected_samples ?? 0,
           validContributions: value?.valid_contributions ?? 0,
@@ -225,8 +267,7 @@ export function formatMetric(
   if (unit === "ops/s") return `${value.toFixed(1)} ops/s`;
   const suffix = unit === "bytes/s" ? "/s" : "";
   if (value > 0 && value < 0.1) return `<0.1 B${suffix}`;
-  const [scale, symbol] =
-    value >= mib ? [mib, "MiB"] : value >= kib ? [kib, "KiB"] : [1, "B"];
-  const scaled = value / scale;
+  const symbol = autoByteUnit(value);
+  const scaled = value / byteScale[symbol];
   return `${scaled.toFixed(scaled >= 100 || value === 0 ? 0 : 1)} ${symbol}${suffix}`;
 }
