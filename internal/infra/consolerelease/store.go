@@ -150,12 +150,27 @@ func (store *Store) VerifyActivation(artifact Artifact) error {
 func (store *Store) Compatible(artifact Artifact) error {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
-	if store.apiHash == "" || artifact.APISHA256 != store.apiHash {
-		return errs.Newf(errs.KindStateConflict,
-			"Console release requires API %s but this Controller provides %s", artifact.APISHA256, store.apiHash)
+	if err := checkAPICompatibility(store.apiHash, artifact.APISHA256); err != nil {
+		return err
 	}
 	_, err := store.openRelease(artifact)
 	return err
+}
+
+// CheckAPICompatibility compares the candidate's API with this process. The
+// candidate need not be active, and archive health is verified separately.
+func (store *Store) CheckAPICompatibility(artifact Artifact) error {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	return checkAPICompatibility(store.apiHash, artifact.APISHA256)
+}
+
+func checkAPICompatibility(current, required string) error {
+	if current == "" || required != current {
+		return errs.Newf(errs.KindStateConflict,
+			"Console release requires API %s but this Controller provides %s", required, current)
+	}
+	return nil
 }
 
 // StageArchive authenticates the archive bytes against already captured release
@@ -246,9 +261,8 @@ func (store *Store) StageArchive(
 func (store *Store) Activate(artifact Artifact) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	if artifact.APISHA256 != store.apiHash {
-		return errs.Newf(errs.KindStateConflict,
-			"Console release requires API %s but this Controller provides %s", artifact.APISHA256, store.apiHash)
+	if err := checkAPICompatibility(store.apiHash, artifact.APISHA256); err != nil {
+		return err
 	}
 	if _, err := store.openRelease(artifact); err != nil {
 		return err

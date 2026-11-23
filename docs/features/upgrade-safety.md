@@ -80,6 +80,8 @@ with the installed Console; choose All for a matching API/UI change. All stages
 matching artifacts before Controller replacement and activates the matching Console
 after the new API is available. If Console compatibility fails at boot, the API
 remains available for recovery while UI requests fail closed.
+If the running API differs from the prepared Console, the Console step records
+a failure. Use the CLI or API to prepare and apply a matching Console release.
 
 If a retained preparation lacks the Controller API fingerprint, prepare the
 release again from a bundle that includes its OpenAPI document before applying it.

@@ -186,6 +186,15 @@ func (service *Service) Prepare(ctx context.Context, taskID, workID string) erro
 			return errs.New(errs.KindStateConflict, "Console activation has no verified bundle store")
 		}
 		desired := record.Record.Input.Preparation.Progress.Result.Console.Artifact
+		if err := service.console.CheckAPICompatibility(desired); err != nil {
+			return service.rejectUnit(
+				ctx,
+				view,
+				record,
+				stageProof,
+				"The running Controller API differs from the prepared Console. Prepare and apply a Console release that matches the running API.",
+			)
+		}
 		if current, found := service.console.Current(); found && current == desired {
 			return service.rejectUnit(ctx, view, record, stageProof,
 				"The Console already serves the selected prepared bundle. Prepare a different Console release.")

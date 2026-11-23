@@ -144,6 +144,9 @@ func TestPairedAPIMigrationStagesBeforeBootAndActivatesAfterBoot(t *testing.T) {
 	if err := oldStore.Compatible(artifact); err == nil {
 		t.Fatal("future Console unexpectedly compatible with old API")
 	}
+	if kind, _ := errs.KindOf(oldStore.CheckAPICompatibility(artifact)); kind != errs.KindStateConflict {
+		t.Fatalf("future Console must fail the running API check, got error kind %v", kind)
+	}
 	if err := oldStore.VerifyActivation(artifact); err != nil {
 		t.Fatalf("future Console could not be verified before handoff: %v", err)
 	}
@@ -157,6 +160,9 @@ func TestPairedAPIMigrationStagesBeforeBootAndActivatesAfterBoot(t *testing.T) {
 	}
 	if _, err := newStore.Assets(); err == nil {
 		t.Fatal("mismatched predecessor Console was served")
+	}
+	if err := newStore.CheckAPICompatibility(artifact); err != nil {
+		t.Fatalf("matching Console refused after Controller handoff: %v", err)
 	}
 	if err := newStore.Activate(artifact); err != nil {
 		t.Fatalf("activate matching Console: %v", err)
