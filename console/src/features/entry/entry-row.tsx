@@ -132,6 +132,7 @@ export function EntryRow({
               size="sm"
               onClick={onEdit}
               aria-label={`Edit ${label}`}
+              aria-expanded={editing}
             >
               <Pencil className="size-3.5" /> Edit
             </Button>

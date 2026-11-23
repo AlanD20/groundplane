@@ -293,14 +293,14 @@ export function ServiceStorage({
       title="Storage"
       actions={
         <CreationButton
-          active={!!draft}
+          active={!!draft && !draft.original}
           variant="outline"
           size="sm"
-          disabled={!!draft}
+          disabled={saving || !!draft?.original}
           ref={(node) => {
             editButtons.current.add = node;
           }}
-          onClick={() => edit(null)}
+          onOpenChange={(open) => (open ? edit(null) : close())}
         >
           <Plus className="size-3.5" /> Add mount
         </CreationButton>
@@ -310,16 +310,13 @@ export function ServiceStorage({
         {draft && !draft.original && editor}
       </AnimatedSection>
       <div className="space-y-2">
-        {mounts.map((mount) => (
-          <InlineEditorRegion
-            key={mount.mount}
-            editing={!!draft?.original && sameMount(mount, draft.original)}
-          >
-            {draft?.original && sameMount(mount, draft.original) ? (
-              <div key={mount.mount}>{editor}</div>
-            ) : (
+        {mounts.map((mount) => {
+          const selected =
+            !!draft?.original && sameMount(mount, draft.original);
+          const editing = selected && !draft?.removing;
+          return (
+            <InlineEditorRegion key={mount.mount} editing={selected}>
               <div
-                key={mount.mount}
                 className={workspaceSectionClassName(
                   false,
                   "flex flex-wrap items-center justify-between gap-3",
@@ -352,12 +349,13 @@ export function ServiceStorage({
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={!!draft}
+                    disabled={saving || (!!draft && !editing)}
+                    aria-expanded={editing}
                     aria-label={`Edit mount ${mount.mount}`}
                     ref={(node) => {
                       editButtons.current[mount.mount] = node;
                     }}
-                    onClick={() => edit(mount)}
+                    onClick={() => (editing ? close() : edit(mount))}
                   >
                     <Pencil className="size-3.5" /> Edit
                   </Button>
@@ -372,9 +370,10 @@ export function ServiceStorage({
                   </Button>
                 </div>
               </div>
-            )}
-          </InlineEditorRegion>
-        ))}
+              {selected && editor}
+            </InlineEditorRegion>
+          );
+        })}
         {draft?.original &&
           !mounts.some((mount) => sameMount(mount, draft.original!)) &&
           editor}

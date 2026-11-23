@@ -202,7 +202,12 @@ export default function PlatformBackingServicesPage() {
         title="Backing services"
         icon={<Database />}
         actions={
-          <CreationButton active={createOpen} onClick={openCreate}>
+          <CreationButton
+            active={createOpen}
+            onOpenChange={(open) =>
+              open ? openCreate() : setCreateOpen(false)
+            }
+          >
             <Plus className="size-4" /> New backing service
           </CreationButton>
         }

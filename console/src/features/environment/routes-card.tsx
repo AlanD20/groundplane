@@ -38,32 +38,8 @@ export function RoutesCard({ env }: { env: Environment }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
-  const [editing, setEditing] = useState<Route | null>(null);
   const [removing, setRemoving] = useState<Route | null>(null);
-  const [exposure, setExposure] = useState<Route["exposure"]>("internal");
-  const [editAfter, setEditAfter] = useState<string[]>([]);
-  const [editAfterLoading, setEditAfterLoading] = useState(false);
-  const [editSubmitting, setEditSubmitting] = useState(false);
-  const [editError, setEditError] = useState<string>();
 
-  const saveExposure = async () => {
-    if (!editing) return;
-    setEditSubmitting(true);
-    setEditError(undefined);
-    try {
-      await store.updateRoute(env.id, editing.id, {
-        exposure,
-        after: editAfter,
-      });
-      setEditing(null);
-    } catch (error) {
-      setEditError(
-        error instanceof Error ? error.message : "Unable to edit Route",
-      );
-    } finally {
-      setEditSubmitting(false);
-    }
-  };
   const rows = env.routes.map((route) => ({
     route,
     address: `${route.host || "internal"}${route.path}`,
@@ -88,65 +64,6 @@ export function RoutesCard({ env }: { env: Environment }) {
   );
   const selected =
     table.rows.find(({ route }) => route.id === selectedId) ?? table.rows[0];
-  const editor = (
-    <ResourceForm
-      inline={false}
-      open={!!editing}
-      onOpenChange={(next) => {
-        if (!next) {
-          setEditing(null);
-          setEditError(undefined);
-        }
-      }}
-    >
-      <DialogHeader>
-        <DialogTitle>
-          Edit route ·{" "}
-          {editing ? `${editing.host || "internal"}${editing.path}` : ""}
-        </DialogTitle>
-      </DialogHeader>
-      <div className="flex max-w-lg flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="route-edit-exposure">Exposure</Label>
-          <Select
-            id="route-edit-exposure"
-            value={exposure}
-            onValueChange={(value) => setExposure(value as Route["exposure"])}
-            options={[
-              {
-                value: "public",
-                label: "public — needs ingress component",
-              },
-              { value: "internal", label: "internal — no host port" },
-            ]}
-          />
-        </div>
-
-        {editError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {editError}
-          </p>
-        ) : null}
-      </div>
-      <TaskRunAfterSelector
-        value={editAfter}
-        onChange={setEditAfter}
-        onBusyChange={setEditAfterLoading}
-      />
-      <DialogFooter>
-        <Button variant="outline" onClick={() => setEditing(null)}>
-          Cancel
-        </Button>
-        <Button
-          data-action-id="route.edit"
-          disabled={editSubmitting || editAfterLoading}
-          onClick={() => void saveExposure()}
-        >
-          {editSubmitting ? "Saving..." : "Save exposure"}
-        </Button>
-      </DialogFooter>
-    </ResourceForm>
-  );
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
@@ -157,7 +74,7 @@ export function RoutesCard({ env }: { env: Environment }) {
           active={open}
           variant="outline"
           size="sm"
-          onClick={() => setOpen(true)}
+          onOpenChange={setOpen}
         >
           <Plus className="size-3.5" /> Add Route
         </CreationButton>
@@ -210,19 +127,12 @@ export function RoutesCard({ env }: { env: Environment }) {
                 key={selected.route.id}
                 env={env}
                 route={selected.route}
-                onEdit={() => {
-                  setEditAfter([]);
-                  setExposure(selected.route.exposure);
-                  setEditError(undefined);
-                  setEditing(selected.route);
-                }}
                 onRemove={() => setRemoving(selected.route)}
               />
             )}
           </InspectionWorkspace>
         )}
       </CardContent>
-      {editor}
       <TaskRunnerDialog
         runAfter
         open={!!removing}
@@ -246,14 +156,19 @@ export function RoutesCard({ env }: { env: Environment }) {
 function SelectedRoute({
   env,
   route,
-  onEdit,
   onRemove,
 }: {
   env: Environment;
   route: Route;
-  onEdit: () => void;
   onRemove: () => void;
 }) {
+  const { updateRoute } = useStore();
+  const [editing, setEditing] = useState(false);
+  const [exposure, setExposure] = useState(route.exposure);
+  const [after, setAfter] = useState<string[]>([]);
+  const [afterLoading, setAfterLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string>();
   const [detail, setDetail] = useState<Route>();
   const [error, setError] = useState<string>();
   useEffect(() => {
@@ -274,6 +189,34 @@ function SelectedRoute({
     return () => controller.abort();
   }, [route.id, route.status, route.exposure]);
   const detailRoute = detail ?? route;
+
+  function toggleEditor() {
+    if (saving) return;
+    if (editing) {
+      setEditing(false);
+      return;
+    }
+    setExposure(detailRoute.exposure);
+    setAfter([]);
+    setEditError(undefined);
+    setEditing(true);
+  }
+
+  async function saveExposure() {
+    setSaving(true);
+    setEditError(undefined);
+    try {
+      await updateRoute(env.id, route.id, { exposure, after });
+      setEditing(false);
+    } catch (cause) {
+      setEditError(
+        cause instanceof Error ? cause.message : "Unable to edit route",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
@@ -282,14 +225,79 @@ function SelectedRoute({
           {route.path}
         </h3>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onEdit}>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-expanded={editing}
+            disabled={saving}
+            onClick={toggleEditor}
+          >
             <Pencil className="size-3.5" /> Edit exposure
           </Button>
-          <Button variant="ghost" size="sm" onClick={onRemove}>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={editing}
+            onClick={onRemove}
+          >
             <Trash2 className="size-3.5" /> Remove route
           </Button>
         </div>
       </header>
+      <ResourceForm
+        open={editing}
+        onOpenChange={(open) => {
+          if (!open && !saving) setEditing(false);
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Edit exposure</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <Label htmlFor="route-edit-exposure">Exposure</Label>
+          <Select
+            id="route-edit-exposure"
+            value={exposure}
+            disabled={saving}
+            onValueChange={(value) => setExposure(value as Route["exposure"])}
+            options={[
+              {
+                value: "public",
+                label: "Public · requires an ingress component",
+              },
+              { value: "internal", label: "Internal · no host port" },
+            ]}
+          />
+        </div>
+        {editError && (
+          <p role="alert" className="text-sm text-destructive">
+            {editError}
+          </p>
+        )}
+        <fieldset disabled={saving}>
+          <TaskRunAfterSelector
+            value={after}
+            onChange={setAfter}
+            onBusyChange={setAfterLoading}
+          />
+        </fieldset>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={saving}
+            onClick={() => setEditing(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            data-action-id="route.edit"
+            disabled={saving || afterLoading}
+            onClick={() => void saveExposure()}
+          >
+            {saving ? "Saving…" : "Save exposure"}
+          </Button>
+        </DialogFooter>
+      </ResourceForm>
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}

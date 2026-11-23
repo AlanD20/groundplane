@@ -1,9 +1,7 @@
+import { InspectionWorkspace } from "@/components/common/inspection-workspace";
 import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
-import { InlineEditorRegion } from "@/components/common/inline-editor-region";
-import { AnimatedSection } from "@/components/common/animated-section";
 import { ResourceForm } from "@/components/common/resource-form";
-import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import {
   ListToolbar,
   TablePagination,
@@ -27,6 +25,7 @@ export function ScriptsCard({ env }: { env: Environment }) {
   const [editing, setEditing] = useState<Script | null>(null);
   const [removing, setRemoving] = useState<Script | null>(null);
   const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string>();
   const [running, setRunning] = useState<Script | null>(null);
   const table = useTableView(
     env.scripts.filter((script) =>
@@ -52,10 +51,38 @@ export function ScriptsCard({ env }: { env: Environment }) {
       .filter((release) => release.status === "active")
       .map((release) => release.service),
   );
-  // Keep the keyed editor mounted when a filter or page changes around a draft.
-  const pinnedEditor =
-    editing && !table.rows.some((row) => row.id === editing.id);
-  const visibleRows = pinnedEditor ? [editing, ...table.rows] : table.rows;
+  const selected =
+    editing ??
+    table.rows.find((script) => script.id === selectedId) ??
+    table.rows[0];
+  const visibleScripts =
+    editing && !table.rows.some((script) => script.id === editing.id)
+      ? [editing, ...table.rows]
+      : table.rows;
+  const runReview = (
+    <TaskRunnerDialog
+      runAfter
+      open={!!selected && running?.id === selected.id}
+      onOpenChange={(open) => {
+        if (!open) setRunning(null);
+      }}
+      variant="inline"
+      title={`Run script · ${running?.slug ?? ""}`}
+      description="Run this Script once against the serving deployment selected after prerequisite Tasks settle."
+      type="script"
+      target={running?.id ?? env.id}
+      workspace={params.tenant}
+      startLabel="Run Script"
+      startDisabled={(after) =>
+        !running ||
+        (!servingServices.has(running.service) && after.length === 0)
+      }
+      onDispatch={async (after) => {
+        if (!running) throw new Error("No Script selected");
+        return store.runScript(running.id, after);
+      }}
+    />
+  );
 
   const editor = (
     <ResourceForm
@@ -90,154 +117,131 @@ export function ScriptsCard({ env }: { env: Environment }) {
             <Terminal className="size-4 text-muted-foreground" /> Scripts
           </CardTitle>
           <CreationButton
-            active={addOpen || !!editing}
+            active={addOpen}
+            disabled={!!editing}
             variant="outline"
             size="sm"
-            onClick={() => {
+            onOpenChange={(open) => {
               setEditing(null);
-              setAddOpen(true);
+              setAddOpen(open);
             }}
           >
             <Plus className="size-3.5" /> Add Script
           </CreationButton>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <AnimatedSection open={addOpen}>{addOpen && editor}</AnimatedSection>
-          <ListToolbar
-            label="Scripts"
-            query={query}
-            onQueryChange={setQuery}
-            sort={table}
-            fields={[
-              { value: "name", label: "Name" },
-              { value: "order", label: "Order" },
-              { value: "service", label: "Service" },
-            ]}
-          />
-
-          {pinnedEditor && null}
-          {visibleRows.map((script) => (
-            <InlineEditorRegion key={script.id} editing={false}>
-              <div
-                key={script.id}
-                className={workspaceSectionClassName(
-                  false,
-                  "flex flex-wrap items-center justify-between gap-3",
-                )}
-              >
-                <div className="flex min-w-0 flex-col">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="break-all font-mono text-sm">
-                      {script.slug}
-                    </span>
-                    <Badge
-                      variant={script.when === "manual" ? "default" : "primary"}
-                    >
-                      {script.when}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      order {script.order} ·{" "}
-                      {script.execution.mode === "explicit"
-                        ? "Separate container"
-                        : "Service configuration"}
-                    </span>
-                  </div>
-                  <span className="truncate font-mono text-xs text-muted-foreground">
-                    {script.body.split("\n")[0]}
-                    {script.body.split("\n").length > 1
-                      ? ` · +${script.body.split("\n").length - 1} lines`
-                      : ""}
-                  </span>
-                  {!servingServices.has(script.service) && (
-                    <span className="text-xs text-muted-foreground">
-                      Deploy {script.service} first, or choose its pending
+          {addOpen && editor}
+          {env.scripts.length ? (
+            <InspectionWorkspace
+              title="Script list"
+              selectionLabel="Select script"
+              detailsLabel="Selected script"
+              emptyMessage="No scripts match your search."
+              selectedId={selected?.id}
+              onSelect={setSelectedId}
+              selectionDisabled={!!editing}
+              items={visibleScripts.map((script) => ({
+                id: script.id,
+                label: script.slug,
+                description: script.service,
+                status: <Badge variant="outline">{script.when}</Badge>,
+              }))}
+              toolbar={
+                <ListToolbar
+                  label="scripts"
+                  query={query}
+                  onQueryChange={setQuery}
+                  sort={table}
+                  fields={[
+                    { value: "name", label: "Name" },
+                    { value: "order", label: "Order" },
+                    { value: "service", label: "Service" },
+                  ]}
+                />
+              }
+              footer={
+                table.pages > 1 && (
+                  <TablePagination table={table} label="Scripts" />
+                )
+              }
+            >
+              {selected && (
+                <div className="space-y-4">
+                  <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
+                        {selected.slug}
+                      </h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {selected.service} · {selected.when} · Order{" "}
+                        {selected.order}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {selected.execution.mode === "explicit"
+                          ? "Separate container"
+                          : "Service configuration"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-expanded={running?.id === selected.id}
+                        onClick={() =>
+                          setRunning(
+                            running?.id === selected.id ? null : selected,
+                          )
+                        }
+                      >
+                        <Terminal className="size-3.5" /> Run
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-expanded={editing?.id === selected.id}
+                        onClick={() => {
+                          setAddOpen(false);
+                          setEditing(
+                            editing?.id === selected.id ? null : selected,
+                          );
+                        }}
+                      >
+                        <Pencil className="size-3.5" /> Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setRemoving(selected)}
+                      >
+                        <Trash2 className="size-3.5" /> Remove script
+                      </Button>
+                    </div>
+                  </header>
+                  {editing?.id === selected.id && editor}
+                  {runReview}
+                  {!servingServices.has(selected.service) && (
+                    <p className="text-xs text-muted-foreground">
+                      Deploy {selected.service} first, or choose its pending
                       Deploy Task as a prerequisite for a manual run.
-                      {script.when === "pre-deploy" &&
+                      {selected.when === "pre-deploy" &&
                         " This hook runs automatically during Deploy."}
-                    </span>
+                    </p>
                   )}
+                  <pre className="overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs">
+                    <code>{selected.body}</code>
+                  </pre>
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    → {script.service}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRunning(script)}
-                  >
-                    <Terminal className="size-3.5" /> Run
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    title="Edit script"
-                    aria-label={`Edit script ${script.slug}`}
-                    onClick={() => {
-                      setAddOpen(false);
-                      setEditing(script);
-                    }}
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="text-muted-foreground hover:text-destructive"
-                    title="Remove script"
-                    aria-label={`Remove script ${script.slug}`}
-                    onClick={() => setRemoving(script)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-                <AnimatedSection
-                  className="w-full basis-full"
-                  open={editing?.id === script.id}
-                >
-                  {editing?.id === script.id && editor}
-                </AnimatedSection>
-              </div>
-            </InlineEditorRegion>
-          ))}
-          {!table.total && (
+              )}
+            </InspectionWorkspace>
+          ) : (
             <EmptyState
               embedded
-              title={
-                env.scripts.length ? "No matching Scripts" : "No Scripts yet"
-              }
-              description={
-                env.scripts.length
-                  ? "Try another search."
-                  : "Add a Script to run manually or as a deployment hook."
-              }
+              title="No scripts yet"
+              description="Add a Script to run manually or as a deployment hook."
             />
           )}
-          <TablePagination table={table} label="Scripts" />
         </CardContent>
       </Card>
-      <TaskRunnerDialog
-        runAfter
-        open={!!running}
-        onOpenChange={(open) => {
-          if (!open) setRunning(null);
-        }}
-        variant="inline"
-        title={`Run script · ${running?.slug ?? ""}`}
-        description="Run this Script once against the serving deployment selected after prerequisite Tasks settle."
-        type="script"
-        target={running?.id ?? env.id}
-        workspace={params.tenant}
-        startLabel="Run Script"
-        startDisabled={(after) =>
-          !running ||
-          (!servingServices.has(running.service) && after.length === 0)
-        }
-        onDispatch={async (after) => {
-          if (!running) throw new Error("No Script selected");
-          return store.runScript(running.id, after);
-        }}
-      />
       <TaskRunnerDialog
         runAfter
         open={!!removing}

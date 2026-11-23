@@ -142,12 +142,12 @@ export function EnvironmentDNSPanel({ env }: { env: Environment }) {
           </p>
         </div>
         <CreationButton
-          active={!!editor}
-          disabled={!dns.view || dns.saving}
-          onClick={() => {
+          active={!!editor && !editor.record}
+          disabled={!dns.view || dns.saving || !!editor?.record}
+          onOpenChange={(open) => {
             if (dns.view) {
               setRemoval(null);
-              setEditor({ revision: dns.view.revision });
+              setEditor(open ? { revision: dns.view.revision } : null);
             }
           }}
         >

@@ -163,7 +163,7 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
           <CreationButton
             active={createOpen}
             size="sm"
-            onClick={() => setCreateOpen(true)}
+            onOpenChange={setCreateOpen}
           >
             <Plus className="size-3.5" /> Add destination
           </CreationButton>
@@ -263,8 +263,14 @@ export function EnvironmentConnectorManager({ env }: { env: Environment }) {
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      disabled={editingId !== null}
-                      onClick={() => loadEdit(connector.id)}
+                      aria-expanded={editingId === connector.id}
+                      disabled={
+                        editingId !== null && editingId !== connector.id
+                      }
+                      onClick={() => {
+                        if (editingId === connector.id) closeEdit();
+                        else loadEdit(connector.id);
+                      }}
                       aria-label={`Edit destination ${connector.name}`}
                       title="Edit destination"
                     >

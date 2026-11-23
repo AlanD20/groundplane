@@ -277,6 +277,33 @@ export function ServiceSettings({
                 ) : null}
               </div>
               <div className="min-w-0 space-y-4 border-t border-border pt-4 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
+                <div className="flex min-w-0 items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">
+                    {row.value}
+                  </div>
+                  {row.section === "workload" && imageAction ? (
+                    imageAction
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Edit ${row.label.toLowerCase()}`}
+                      aria-expanded={editing === row.section}
+                      disabled={editing !== null && editing !== row.section}
+                      ref={(node) => {
+                        editButtons.current[row.section] = node;
+                      }}
+                      onClick={() => {
+                        setSaved(null);
+                        setEditing(
+                          editing === row.section ? null : row.section,
+                        );
+                      }}
+                    >
+                      Edit
+                    </Button>
+                  )}
+                </div>
                 <InlineEditorRegion editing={editing === row.section}>
                   {editing === row.section ? (
                     editing === "process" || editing === "relationships" ? (
@@ -320,32 +347,7 @@ export function ServiceSettings({
                         }}
                       />
                     )
-                  ) : (
-                    <div className="flex min-w-0 items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">
-                        {row.value}
-                      </div>
-                      {row.section === "workload" && imageAction ? (
-                        imageAction
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          aria-label={`Edit ${row.label.toLowerCase()}`}
-                          disabled={editing !== null}
-                          ref={(node) => {
-                            editButtons.current[row.section] = node;
-                          }}
-                          onClick={() => {
-                            setSaved(null);
-                            setEditing(row.section);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                      )}
-                    </div>
-                  )}
+                  ) : null}
                 </InlineEditorRegion>
                 {saved === row.section && editing !== row.section && (
                   <p role="status" className="text-xs text-success">

@@ -105,7 +105,7 @@ export default function TenantPage() {
           </>
         }
         actions={
-          <CreationButton active={open} onClick={() => setOpen(true)}>
+          <CreationButton active={open} onOpenChange={setOpen}>
             <Plus className="size-4" /> New project
           </CreationButton>
         }

@@ -53,6 +53,19 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const workspace = useWorkspace(pathname);
   const hasLocalNavigation = hasWorkspaceNavigation(pathname);
   const navigate = useNavigate();
+  function toggleTenantForm() {
+    const overview = "/platform/overview";
+    if (
+      pathname === overview &&
+      new URLSearchParams(search).get("create") === "tenant"
+    ) {
+      const next = new URLSearchParams(search);
+      next.delete("create");
+      navigate({ pathname, search: next.toString() }, { replace: true });
+    } else {
+      navigate(`${overview}?create=tenant`);
+    }
+  }
   const { tenantProjects, resourceRefreshErrors, retryResourceRefresh } =
     useStore();
   const projectSlug = useProjectSlug(
@@ -126,9 +139,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                       <div className="min-w-0 flex-1">
                         <WorkspaceSwitcher
                           workspace={workspace}
-                          onNewTenant={() =>
-                            navigate("/platform/overview?create=tenant")
-                          }
+                          onNewTenant={toggleTenantForm}
                         />
                       </div>
                     )}
@@ -190,7 +201,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                           workspace={workspace}
                           onNewTenant={() => {
                             setMobileOpen(false);
-                            navigate("/platform/overview?create=tenant");
+                            toggleTenantForm();
                           }}
                         />
                       </div>

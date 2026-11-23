@@ -150,7 +150,7 @@ export default function TenantProjectPage() {
                 <KeyRound className="size-4" /> Configuration
               </Button>
             </Link>
-            <CreationButton active={open} onClick={() => setOpen(true)}>
+            <CreationButton active={open} onOpenChange={setOpen}>
               <Plus className="size-4" /> New environment
             </CreationButton>
           </>

@@ -1,15 +1,13 @@
+import { InspectionWorkspace } from "@/components/common/inspection-workspace";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { EmptyState } from "@/components/common/empty-state";
 import { CreationButton } from "@/components/common/creation-button";
-import { InlineEditorRegion } from "@/components/common/inline-editor-region";
-import { AnimatedSection } from "@/components/common/animated-section";
 import {
   ResourceForm,
   ResourceFormHeader as DialogHeader,
   ResourceFormTitle as DialogTitle,
   ResourceFormFooter as DialogFooter,
 } from "@/components/common/resource-form";
-import { workspaceSectionClassName } from "@/components/common/workspace-section";
 ("use client");
 
 import {
@@ -25,14 +23,14 @@ import { Label } from "@/components/ui/label";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
 import type { Environment, VolumeDeletionImpactPage } from "@/lib/types";
-import { Database, Eye, Pencil, Plus, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Database, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 export function EnvironmentVolumeManager({ env }: { env: Environment }) {
   const store = useStore();
   const params = useRequiredParams("tenant");
   const [open, setOpen] = useState(false);
-  const detailRequest = useRef(0);
+  const [selectedId, setSelectedId] = useState<string>();
   const [detailError, setDetailError] = useState<string>();
   const [detailLoading, setDetailLoading] = useState(false);
   const [slug, setSlug] = useState("");
@@ -46,9 +44,9 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
     null,
   );
   const [editSlug, setEditSlug] = useState("");
-  const [viewing, setViewing] = useState<Environment["volumes"][number] | null>(
-    null,
-  );
+  const [resolvedVolume, setResolvedVolume] = useState<
+    Environment["volumes"][number] | null
+  >(null);
   const [removing, setRemoving] = useState<
     Environment["volumes"][number] | null
   >(null);
@@ -69,6 +67,38 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
     "asc",
     `${env.id}/${query}`,
   );
+
+  const selected =
+    table.rows.find((volume) => volume.id === selectedId) ?? table.rows[0];
+  const volume =
+    selected && resolvedVolume?.id === selected.id ? resolvedVolume : selected;
+  const loadVolume = useEffectEvent((id: string) => store.getVolume(id));
+  useEffect(() => {
+    const id = selected?.id;
+    setResolvedVolume(null);
+    setDetailError(undefined);
+    setDetailLoading(!!id);
+    if (!id) return;
+    let current = true;
+    void loadVolume(id)
+      .then(
+        (detail) => {
+          if (current) setResolvedVolume(detail);
+        },
+        (cause: unknown) => {
+          if (current)
+            setDetailError(
+              cause instanceof Error ? cause.message : "Unable to load volume",
+            );
+        },
+      )
+      .finally(() => {
+        if (current) setDetailLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [selected?.id, selected?.slug, selected?.state, selected?.currentTaskId]);
 
   useEffect(() => {
     if (!removing) {
@@ -238,57 +268,6 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
       </DialogFooter>
     </ResourceForm>
   );
-  const details = (
-    <ResourceForm
-      editing={false}
-      open={!!viewing}
-      onOpenChange={(next) => !next && setViewing(null)}
-    >
-      <DialogHeader>
-        <DialogTitle>Volume · {viewing?.slug}</DialogTitle>
-      </DialogHeader>
-      {detailLoading && (
-        <p role="status" className="text-xs text-muted-foreground">
-          Refreshing volume details…
-        </p>
-      )}
-      {detailError && (
-        <p role="alert" className="text-sm text-destructive">
-          {detailError}
-        </p>
-      )}
-      {viewing && (
-        <div className="grid gap-3 sm:grid-cols-2 text-xs">
-          <VolumeDetailCell label="Slug" value={viewing.slug} />
-          <VolumeDetailCell label="Immutable key" value={viewing.key} />
-          <VolumeDetailCell label="State" value={viewing.state ?? "unknown"} />
-          <VolumeDetailCell
-            label="Path"
-            value={viewing.path ?? "not assigned"}
-          />
-          <VolumeDetailCell label="ID" value={viewing.id} />
-          <VolumeDetailCell label="Environment" value={viewing.environmentId} />
-          {viewing.currentTaskId && (
-            <VolumeDetailCell
-              label="Current task"
-              value={viewing.currentTaskId}
-            />
-          )}
-        </div>
-      )}
-      <DialogFooter>
-        <Button
-          variant="outline"
-          onClick={() => {
-            detailRequest.current++;
-            setViewing(null);
-          }}
-        >
-          Close
-        </Button>
-      </DialogFooter>
-    </ResourceForm>
-  );
   const editor = (
     <ResourceForm
       open={!!editing}
@@ -359,125 +338,133 @@ export function EnvironmentVolumeManager({ env }: { env: Environment }) {
           active={open}
           variant="outline"
           size="sm"
-          onClick={() => setOpen(true)}
+          onOpenChange={setOpen}
         >
           <Plus className="size-3.5" /> Add Volume
         </CreationButton>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {createForm}
-        <ListToolbar
-          label="Volumes"
-          query={query}
-          onQueryChange={setQuery}
-          sort={table}
-          fields={[
-            { value: "slug", label: "Name" },
-            { value: "key", label: "Compose key" },
-          ]}
-        />
-        {table.rows.map((v) => (
-          <InlineEditorRegion key={v.id} editing={false}>
-            <div className={workspaceSectionClassName()}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex min-w-0 max-w-full flex-col">
-                  <span className="break-all font-mono text-sm">{v.slug}</span>
-                  <span className="break-all font-mono text-xs text-muted-foreground">
-                    key: {v.key}
-                  </span>
-                  {v.path && (
-                    <span className="max-w-56 truncate font-mono text-xs text-muted-foreground">
-                      {v.path}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground">
-                    {v.state ?? "unknown"}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    title="Toggle volume details"
-                    aria-label={`Show volume ${v.slug}`}
-                    aria-expanded={viewing?.id === v.id}
-                    onClick={async () => {
-                      const request = ++detailRequest.current;
-                      if (viewing?.id === v.id) {
-                        setViewing(null);
-                        return;
-                      }
-                      setViewing(v);
-                      setDetailError(undefined);
-                      setDetailLoading(true);
-                      try {
-                        const volume = await store.getVolume(v.id);
-                        if (request === detailRequest.current)
-                          setViewing(volume);
-                      } catch (cause: unknown) {
-                        if (request === detailRequest.current)
-                          setDetailError(
-                            cause instanceof Error
-                              ? cause.message
-                              : "Unable to load volume",
-                          );
-                      } finally {
-                        if (request === detailRequest.current)
-                          setDetailLoading(false);
-                      }
-                    }}
-                  >
-                    <Eye className="size-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    title="Edit volume slug"
-                    onClick={() => {
-                      detailRequest.current++;
-                      setViewing(null);
-                      setSaveError(null);
-                      setEditAfter([]);
-                      setEditSlug(v.slug);
-                      setEditing(v);
-                    }}
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="text-muted-foreground hover:text-destructive"
-                    title="Remove volume"
-                    onClick={() => setRemoving(v)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
+        {env.volumes.length ? (
+          <InspectionWorkspace
+            title="Volume list"
+            selectionLabel="Select volume"
+            detailsLabel="Selected volume"
+            emptyMessage="No volumes match your search."
+            selectedId={selected?.id}
+            onSelect={setSelectedId}
+            items={table.rows.map((item) => ({
+              id: item.id,
+              label: item.slug,
+              description: item.key === item.slug ? undefined : item.key,
+              status: (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {item.state ?? "Unknown"}
+                </span>
+              ),
+            }))}
+            toolbar={
+              <ListToolbar
+                label="volumes"
+                query={query}
+                onQueryChange={setQuery}
+                sort={table}
+                fields={[
+                  { value: "slug", label: "Name" },
+                  { value: "key", label: "Compose key" },
+                ]}
+              />
+            }
+            footer={
+              table.pages > 1 && (
+                <TablePagination table={table} label="Volumes" />
+              )
+            }
+          >
+            {volume && (
+              <div className="space-y-4">
+                <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
+                  <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
+                    {volume.slug}
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Edit volume ${volume.slug}`}
+                      aria-expanded={editing?.id === volume.id}
+                      disabled={saving}
+                      onClick={() => {
+                        if (editing?.id === volume.id) {
+                          setEditing(null);
+                          return;
+                        }
+                        setSaveError(null);
+                        setEditAfter([]);
+                        setEditSlug(volume.slug);
+                        setEditing(volume);
+                      }}
+                    >
+                      <Pencil className="size-3.5" /> Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={editing?.id === volume.id}
+                      onClick={() => setRemoving(volume)}
+                    >
+                      <Trash2 className="size-3.5" /> Remove volume
+                    </Button>
+                  </div>
+                </header>
+                {editing?.id === volume.id && editor}
+                {detailLoading && (
+                  <p role="status" className="text-xs text-muted-foreground">
+                    Refreshing volume details…
+                  </p>
+                )}
+                {detailError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {detailError}
+                  </p>
+                )}
+                {volume && (
+                  <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                    <VolumeDetailCell
+                      label="Immutable key"
+                      value={volume.key}
+                    />
+                    <VolumeDetailCell
+                      label="State"
+                      value={volume.state ?? "unknown"}
+                    />
+                    <VolumeDetailCell
+                      label="Path"
+                      value={volume.path ?? "not assigned"}
+                    />
+                    <VolumeDetailCell label="ID" value={volume.id} />
+                    <VolumeDetailCell
+                      label="Environment"
+                      value={volume.environmentId}
+                    />
+                    {volume.currentTaskId && (
+                      <VolumeDetailCell
+                        label="Current task"
+                        value={volume.currentTaskId}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
-              <AnimatedSection open={viewing?.id === v.id}>
-                {viewing?.id === v.id && details}
-              </AnimatedSection>
-              <AnimatedSection open={editing?.id === v.id}>
-                {editing?.id === v.id && editor}
-              </AnimatedSection>
-            </div>
-          </InlineEditorRegion>
-        ))}
-        {table.total === 0 && (
+            )}
+          </InspectionWorkspace>
+        ) : (
           <EmptyState
             embedded
-            title={
-              env.volumes.length ? "No matching Volumes" : "No Volumes yet"
-            }
-            description={
-              env.volumes.length
-                ? "Try another search."
-                : "Create a Volume to keep Service data between deployments."
-            }
+            title="No volumes yet"
+            description="Create a volume to keep Service data between deployments."
           />
         )}
-        <TablePagination table={table} label="Volumes" />
       </CardContent>
 
       <TaskRunnerDialog

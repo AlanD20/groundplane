@@ -264,7 +264,7 @@ export default function EnvironmentPage() {
                     active={search.get("create") === "service"}
                     variant="outline"
                     disabled={deleting}
-                    onClick={() => setAddingService(true)}
+                    onOpenChange={setAddingService}
                   >
                     <Plus className="size-3.5" /> Add Service
                   </CreationButton>

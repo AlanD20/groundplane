@@ -60,7 +60,7 @@ export function Topology({ env, now }: { env: Environment; now: number }) {
             active={zoneOpen}
             variant="outline"
             size="sm"
-            onClick={() => setZoneOpen(true)}
+            onOpenChange={setZoneOpen}
           >
             <Plus className="size-3.5" /> Add Zone
           </CreationButton>

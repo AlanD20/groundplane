@@ -100,7 +100,8 @@ export function BackupsCard({ env }: { env: Environment }) {
                 policyState.saving ||
                 Boolean(policyState.loadError)
               }
-              onClick={() => setPolicyOpen(true)}
+              aria-expanded={policyOpen}
+              onClick={() => setPolicyOpen((open) => !open)}
             >
               Edit policy
             </Button>

@@ -48,6 +48,8 @@ function runnerStatus(runner: Runner) {
 
 export function RunnerInventory({
   expandedId,
+  editingId,
+  saving,
   editor,
   runners,
   tenantCount,
@@ -59,6 +61,8 @@ export function RunnerInventory({
   onRemove,
 }: {
   expandedId?: string;
+  editingId?: string;
+  saving: boolean;
   editor?: ReactNode;
   runners: Runner[];
   tenantCount: number;
@@ -98,8 +102,10 @@ export function RunnerInventory({
       <Button
         variant="outline"
         size="sm"
+        aria-expanded={editingId === runner.id}
         disabled={
-          !!expandedId ||
+          saving ||
+          (!!expandedId && editingId !== runner.id) ||
           runner.lifecycle === "provisioning" ||
           runner.lifecycle === "deleting"
         }

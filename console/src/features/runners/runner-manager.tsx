@@ -138,9 +138,10 @@ export default function RunnerManager({
     <CreationButton
       active={creating}
       disabled={store.runnersLoading || runners.length >= 5}
-      onClick={() => {
+      onOpenChange={(open) => {
+        setCreating(open);
+        if (!open) return;
         setCreateOwner(owner === "all" ? "tenant" : owner);
-        setCreating(true);
         setCreateAfter([]);
         setCreateError(null);
       }}
@@ -548,6 +549,8 @@ export default function RunnerManager({
 
       <RunnerInventory
         expandedId={editing?.id ?? retrying?.id}
+        editingId={editing?.id}
+        saving={saving}
         editor={rowEditor}
         runners={visibleRunners}
         tenantCount={runners.length}
@@ -569,6 +572,10 @@ export default function RunnerManager({
               : { scope: "Tenant", name: tenant.slug }
         }
         onEdit={(runner) => {
+          if (editing?.id === runner.id) {
+            setEditing(null);
+            return;
+          }
           setEditing(runner);
           setSlug(runner.slug);
           setEditAutoUpdate(runner.autoUpdate);

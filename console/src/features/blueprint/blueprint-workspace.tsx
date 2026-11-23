@@ -244,6 +244,12 @@ export function BlueprintWorkspace({
     }
   }
 
+  function cancelEdit() {
+    setDraft(savedDocument);
+    setEditing(false);
+    setError("");
+  }
+
   function exportDocument() {
     if (!snapshot) return;
     const url = URL.createObjectURL(
@@ -420,16 +426,15 @@ export function BlueprintWorkspace({
               >
                 <RefreshCw /> Refresh
               </Button>
-              {!editing && (
-                <Button
-                  size="sm"
-                  disabled={!snapshot || loading}
-                  onClick={() => setEditing(true)}
-                >
-                  <Pencil />{" "}
-                  {serviceName ? "Edit Service Blueprint" : "Edit Blueprint"}
-                </Button>
-              )}
+              <Button
+                size="sm"
+                aria-expanded={editing}
+                disabled={!snapshot || loading || working}
+                onClick={() => (editing ? cancelEdit() : setEditing(true))}
+              >
+                <Pencil />{" "}
+                {serviceName ? "Edit Service Blueprint" : "Edit Blueprint"}
+              </Button>
             </div>
           </div>
           {savedChanged && (
@@ -480,20 +485,13 @@ export function BlueprintWorkspace({
                   onBusyChange={setAfterLoading}
                 />
                 <FormActions
-                  onDiscard={() => {
-                    setDraft(savedDocument);
-                    setEditing(false);
-                  }}
+                  onDiscard={cancelEdit}
                   className={`${editorFooterClassName} flex flex-wrap justify-end gap-2`}
                 >
                   <Button
                     variant="outline"
                     disabled={working}
-                    onClick={() => {
-                      setDraft(savedDocument);
-                      setEditing(false);
-                      setError("");
-                    }}
+                    onClick={cancelEdit}
                   >
                     Cancel
                   </Button>

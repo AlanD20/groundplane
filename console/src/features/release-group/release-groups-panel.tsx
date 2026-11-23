@@ -1,5 +1,11 @@
 import { CreationButton } from "@/components/common/creation-button";
-import { workspaceSectionClassName } from "@/components/common/workspace-section";
+import { InspectionWorkspace } from "@/components/common/inspection-workspace";
+import {
+  ListToolbar,
+  TablePagination,
+  useTableView,
+} from "@/components/common/table-controls";
+import { buttonVariants } from "@/components/ui/button";
 ("use client");
 
 import { useState } from "react";
@@ -20,6 +26,27 @@ import {
 export function ReleaseGroupsPanel({ env }: { env: Environment }) {
   const params = useRequiredParams("tenant", "project", "env");
   const [adding, setAdding] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>();
+  const [query, setQuery] = useState("");
+  const table = useTableView(
+    env.releaseGroups.filter((group) =>
+      [
+        group.name,
+        ...group.order,
+        releaseGroupTag(env, group),
+        releaseGroupPolicyLabel(group.onFailure),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+    ),
+    { name: (group) => group.name, members: (group) => group.order.length },
+    "name",
+    "asc",
+    `${env.id}/${query}`,
+  );
+  const selected =
+    table.rows.find((group) => group.id === selectedId) ?? table.rows[0];
 
   return (
     <Card>
@@ -32,7 +59,7 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
         </div>
         <CreationButton
           active={adding}
-          onClick={() => setAdding(true)}
+          onOpenChange={setAdding}
           disabled={env.services.length < 2}
         >
           <Plus className="size-4" /> Add group
@@ -60,54 +87,88 @@ export function ReleaseGroupsPanel({ env }: { env: Environment }) {
             description="Deploy Services in a declared order under one Task and failure policy."
           />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {env.releaseGroups.map((group) => (
-              <Link
-                key={group.id}
-                to={releaseGroupPath(
-                  params.tenant,
-                  params.project,
-                  params.env,
-                  group.id,
-                )}
-                className={workspaceSectionClassName(
-                  false,
-                  "group hover:border-primary/40 hover:bg-muted/40",
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium group-hover:text-primary">
-                      {group.name}
-                    </p>
-                    <p className="mt-1 font-mono text-xs text-muted-foreground">
-                      {group.id}
+          <InspectionWorkspace
+            title="Group list"
+            selectionLabel="Select deployment group"
+            detailsLabel="Selected deployment group"
+            emptyMessage="No deployment groups match your search."
+            selectedId={selected?.id}
+            onSelect={setSelectedId}
+            items={table.rows.map((group) => ({
+              id: group.id,
+              label: group.name,
+              description: `${group.order.length} ${group.order.length === 1 ? "service" : "services"}`,
+            }))}
+            toolbar={
+              <ListToolbar
+                label="deployment groups"
+                query={query}
+                onQueryChange={setQuery}
+                sort={table}
+                fields={[
+                  { value: "name", label: "Name" },
+                  { value: "members", label: "Service count" },
+                ]}
+              />
+            }
+            footer={
+              table.pages > 1 && (
+                <TablePagination table={table} label="Deployment groups" />
+              )
+            }
+          >
+            {selected && (
+              <div className="space-y-4">
+                <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
+                  <div className="min-w-0 space-y-1">
+                    <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
+                      {selected.name}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {releaseGroupPolicyLabel(selected.onFailure)}
                     </p>
                   </div>
-                  <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </div>
-                <div className="mt-4 flex flex-wrap items-center gap-1.5">
-                  {group.order.map((service, index) => (
-                    <span key={service} className="flex items-center gap-1.5">
-                      <Badge variant="outline">
-                        <span className="text-muted-foreground">
+                  <Link
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                    })}
+                    to={releaseGroupPath(
+                      params.tenant,
+                      params.project,
+                      params.env,
+                      selected.id,
+                    )}
+                  >
+                    Open group <ChevronRight aria-hidden className="size-3.5" />
+                  </Link>
+                </header>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-semibold">Release order</h4>
+                    <Badge variant="primary">
+                      {releaseGroupTag(env, selected)}
+                    </Badge>
+                  </div>
+                  <ol className="divide-y divide-border rounded-lg border border-border">
+                    {selected.order.map((service, index) => (
+                      <li
+                        key={service}
+                        className="flex min-w-0 items-center gap-2 px-3 py-2 text-sm"
+                      >
+                        <span className="min-w-6 text-xs tabular-nums text-muted-foreground">
                           {index + 1}
-                        </span>{" "}
-                        {service}
-                      </Badge>
-                      {index < group.order.length - 1 && (
-                        <ChevronRight className="size-3 text-muted-foreground/50" />
-                      )}
-                    </span>
-                  ))}
+                        </span>
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
+                          {service}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <Badge variant="primary">{releaseGroupTag(env, group)}</Badge>
-                  <span>{releaseGroupPolicyLabel(group.onFailure)}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
+              </div>
+            )}
+          </InspectionWorkspace>
         )}
       </CardContent>
     </Card>

@@ -51,7 +51,7 @@ export function AttachesCard({
           active={open}
           variant="outline"
           size="sm"
-          onClick={() => setOpen(true)}
+          onOpenChange={setOpen}
         >
           <Plus className="size-3.5" /> Connect backing service
         </CreationButton>
@@ -93,7 +93,7 @@ export function AttachesCard({
                   </p>
                 </div>
                 <StatusBadge status={attach.status} />
-                <RenameAttach env={env} attach={attach} />
+                <RenameAttach env={env} attach={attach} inline />
                 <DetachAttach env={env} attach={attach} />
               </header>
               {attach.factLoadError && (
@@ -149,7 +149,14 @@ export function RenameAttach({
         variant="ghost"
         size="icon-xs"
         title={`Rename ${attach.name}`}
+        aria-label={`Rename ${attach.name}`}
+        aria-expanded={open}
+        disabled={saving}
         onClick={() => {
+          if (open) {
+            setOpen(false);
+            return;
+          }
           setName(attach.name);
           setError(undefined);
           setOpen(true);

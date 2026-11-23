@@ -1,10 +1,20 @@
 import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 
-/** A collection has one creation entry point; its open form owns submission. */
 export function CreationButton({
   active,
+  onOpenChange,
   ...props
-}: ComponentProps<typeof Button> & { active: boolean }) {
-  return active ? null : <Button type="button" {...props} />;
+}: Omit<ComponentProps<typeof Button>, "onClick"> & {
+  active: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Button
+      type="button"
+      aria-expanded={active}
+      onClick={() => onOpenChange(!active)}
+      {...props}
+    />
+  );
 }

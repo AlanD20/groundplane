@@ -473,41 +473,54 @@ export function RouterCard({ env }: { env: Environment }) {
                         unavailable="Installed identity not reported by the Controller"
                       />
                     </div>
-                    {!(
-                      configuring && operation?.component.id === component.id
-                    ) && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openConfig(component)}
-                        >
-                          Configure
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            setOperation({ component, action: "update" })
-                          }
-                        >
-                          Reapply configuration
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={
-                            component.enabled ? "destructive" : "default"
-                          }
-                          onClick={() =>
-                            component.enabled
-                              ? setOperation({ component, action: "disable" })
-                              : openConfig(component, "enable")
-                          }
-                        >
-                          {component.enabled ? "Disable" : "Enable"}
-                        </Button>
-                      </div>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-expanded={
+                          configuring &&
+                          operation?.component.id === component.id
+                        }
+                        onClick={() => {
+                          if (
+                            configuring &&
+                            operation?.component.id === component.id
+                          )
+                            setOperation(null);
+                          else openConfig(component);
+                        }}
+                      >
+                        Configure
+                      </Button>
+                      {!(
+                        configuring && operation?.component.id === component.id
+                      ) && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setOperation({ component, action: "update" })
+                            }
+                          >
+                            Reapply configuration
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={
+                              component.enabled ? "destructive" : "default"
+                            }
+                            onClick={() =>
+                              component.enabled
+                                ? setOperation({ component, action: "disable" })
+                                : openConfig(component, "enable")
+                            }
+                          >
+                            {component.enabled ? "Disable" : "Enable"}
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
                   {component.kind !== "cloudflare-tunnel" ? (
                     <div className="grid gap-3 border-t border-border pt-4 text-sm text-muted-foreground [overflow-wrap:anywhere] sm:grid-cols-2">
@@ -530,7 +543,9 @@ export function RouterCard({ env }: { env: Environment }) {
                     <div className="grid gap-3 border-t border-border pt-4 text-sm text-muted-foreground [overflow-wrap:anywhere] sm:grid-cols-2">
                       <span>
                         Token reference:{" "}
-                        {component.config?.token_entry ? component.config.token_entry + " · Environment" : component.config?.secret_id || "not configured"}
+                        {component.config?.token_entry
+                          ? component.config.token_entry + " · Environment"
+                          : component.config?.secret_id || "not configured"}
                       </span>
                       <span>
                         Networks:{" "}

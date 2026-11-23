@@ -59,7 +59,9 @@ export default function ReleaseGroupDetailPage() {
         resource="Deployment group"
         loading={store.tenantsLoading || store.projectsLoading}
         error={
-          store.tenantError ?? store.projectError ?? environment?.resourceLoadError
+          store.tenantError ??
+          store.projectError ??
+          environment?.resourceLoadError
         }
         description={`${params.id} does not exist in ${params.tenant}/${params.project}/${params.env}.`}
         action={
@@ -104,7 +106,11 @@ export default function ReleaseGroupDetailPage() {
         }
         actions={
           <>
-            <Button variant="outline" onClick={() => setEditing(true)}>
+            <Button
+              variant="outline"
+              aria-expanded={editing}
+              onClick={() => setEditing((current) => !current)}
+            >
               <Pencil className="size-4" /> Edit
             </Button>
             <Button onClick={() => setDeploying(true)}>

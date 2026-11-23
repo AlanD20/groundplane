@@ -115,7 +115,7 @@ export default function ProjectSecretsPage() {
             <CreationButton
               active={open}
               disabled={bulkKind !== null}
-              onClick={() => setOpen(true)}
+              onOpenChange={setOpen}
             >
               <Plus className="size-4" /> Add configuration
             </CreationButton>

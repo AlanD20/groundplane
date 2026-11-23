@@ -472,7 +472,11 @@ export function EnvVarsCard({
         value={entry.secret ? undefined : (literal ?? "Resolved on apply")}
         copyValue={!entry.secret ? literal : undefined}
         loadValue={entry.secret || entry.encryption === "age" ? () => store.revealEntry(entry.id) : undefined}
-        onEdit={() => startEdit(entry)}
+        onEdit={() => {
+          if (saving) return;
+          if (editing?.id === entry.id) closeDrawer();
+          else startEdit(entry);
+        }}
         onRemove={() => setRemoving(entry)}
       />
     );
@@ -494,10 +498,11 @@ export function EnvVarsCard({
               setBulkOpen(true);
             }} />
             <CreationButton
-              active={open || bulkOpen}
+              active={open && !editing}
+              disabled={bulkOpen || !!editing || saving}
               variant="outline"
               size="sm"
-              onClick={() => setOpen(true)}
+              onOpenChange={(open) => (open ? setOpen(true) : closeDrawer())}
             >
               <Plus className="size-3.5" /> Add configuration
             </CreationButton>
