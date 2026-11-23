@@ -1,4 +1,8 @@
 import {
+  deploymentRunParam,
+  deploymentReleaseParam,
+} from "@/features/release/deployment-run-navigation";
+import {
   settingsDestinations,
   settingsDestination,
 } from "@/features/platform-settings/workspace-navigation";
@@ -98,7 +102,7 @@ export function Sidebar({
     parent = service
       ? {
           label: `${env.name} · Environment`,
-          href: `${envPath}?${new URLSearchParams([...search].filter(([key]) => key !== "service" && key !== "serviceTab"))}`,
+          href: `${envPath}?${new URLSearchParams([...search].filter(([key]) => key !== "service" && key !== "serviceTab" && key !== deploymentRunParam && key !== deploymentReleaseParam))}`,
         }
       : { label: `${project!.name} · Project`, href: projectPath };
     if (service) {
@@ -108,6 +112,8 @@ export function Sidebar({
           items: serviceDestinations.map((entry) => {
             const next = new URLSearchParams(search);
             next.set("serviceTab", entry.key);
+            next.delete(deploymentRunParam);
+            next.delete(deploymentReleaseParam);
             return {
               label: entry.label,
               icon: entry.icon,

@@ -1,6 +1,8 @@
-import { Disclosure } from "@/components/common/disclosure";
 import type { Environment } from "@/lib/types";
-import { ReleaseTaskLog } from "./release-task-log";
+import {
+  deploymentRunLink,
+  deploymentRunParam,
+} from "./deployment-run-navigation";
 import { subscribeTerminalTasks } from "@/features/task/task-observation";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import { CompactReference } from "@/components/common/compact-reference";
@@ -13,7 +15,7 @@ import { MetaPill } from "@/components/common/meta-pill";
 import { PageHeader } from "@/components/common/page-header";
 import { TaskLink } from "@/components/common/task-link";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
@@ -36,6 +38,13 @@ export default function ReleaseDetailPage() {
     (service) => service.id === search.get("service"),
   );
   const basePath = `/t/${params.tenant}/${params.project}/${encodeURIComponent(params.env)}`;
+  const returnTo = search.get("returnTo");
+  const fromRun =
+    search.get("returnLabel") === "deployment run" &&
+    returnTo?.startsWith(`${basePath}?`) &&
+    new URLSearchParams(returnTo.slice(basePath.length)).has(
+      deploymentRunParam,
+    );
   const listPath = originService
     ? `${basePath}?view=overview&service=${originService.id}&serviceTab=releases`
     : `${basePath}?view=operations&panel=releases`;
@@ -59,22 +68,23 @@ export default function ReleaseDetailPage() {
       environment={environment}
       listPath={listPath}
       originName={originService?.name}
+      fromRun={Boolean(fromRun)}
     />
   );
 }
 
-export function ReleaseDetails({
+function ReleaseDetails({
   id,
   environment,
-  listPath = "",
+  listPath,
   originName,
-  inline = false,
+  fromRun,
 }: {
   id: string;
-  environment?: Environment;
-  listPath?: string;
+  environment: Environment;
+  listPath: string;
   originName?: string;
-  inline?: boolean;
+  fromRun: boolean;
 }) {
   const [release, setRelease] = useState<ReleaseDetailResponse | null>(null);
   const [error, setError] = useState<{
@@ -110,15 +120,15 @@ export function ReleaseDetails({
     };
     refresh();
     const unsubscribe = subscribeTerminalTasks(({ task }) => {
-      if (task.scope.environment_id === environment?.id) refresh();
+      if (task.scope.environment_id === environment.id) refresh();
     });
     return () => {
       controller.abort();
       unsubscribe();
     };
-  }, [id, environment?.id]);
+  }, [id, environment.id]);
 
-  if (!environment || (error && !release)) {
+  if (error && !release) {
     return (
       <ResourceLookupState
         icon={<History />}
@@ -126,21 +136,18 @@ export function ReleaseDetails({
         error={error && !error.notFound ? error.message : undefined}
         description={error?.message ?? `${id} is outside this environment.`}
         action={
-          !inline && (
-            <Link to={listPath}>
-              <Button variant="outline">
-                <ArrowLeft className="size-4" /> Back to releases
-              </Button>
-            </Link>
-          )
+          <Link
+            to={listPath}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <ArrowLeft aria-hidden className="size-4" /> Back to deployments
+          </Link>
         }
       />
     );
   }
   if (!release)
-    return (
-      <EmptyState loading icon={<History />} title="Loading release" />
-    );
+    return <EmptyState loading icon={<History />} title="Loading release" />;
   if (release.environment_id !== environment.id) {
     return (
       <EmptyState
@@ -148,26 +155,35 @@ export function ReleaseDetails({
         title="Release not found"
         description={`${id} is outside this environment.`}
         action={
-          !inline && (
-            <Link to={listPath}>
-              <Button variant="outline">
-                <ArrowLeft className="size-4" /> Back to releases
-              </Button>
-            </Link>
-          )
+          <Link
+            to={listPath}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <ArrowLeft aria-hidden className="size-4" /> Back to deployments
+          </Link>
         }
       />
     );
   }
+  const [path, query] = listPath.split("?");
+  const runPath =
+    path +
+    deploymentRunLink(
+      new URLSearchParams(query),
+      release.originating_task_id,
+      originName ? release.id : undefined,
+    );
   const service =
     environment.services.find(
       (candidate) => candidate.id === release.service_id,
     )?.name ?? release.service_id;
   return (
     <div className="flex flex-col gap-6">
-      {!inline && (
-        <PageHeader
-          eyebrow={
+      <PageHeader
+        eyebrow={
+          fromRun ? (
+            "Service release"
+          ) : (
             <Link
               to={listPath}
               className="inline-flex items-center gap-1 hover:text-foreground"
@@ -175,96 +191,95 @@ export function ReleaseDetails({
               <ArrowLeft className="size-3" /> {originName ?? environment.name}{" "}
               deployments
             </Link>
-          }
-          title={service}
-          icon={<History />}
-          meta={
-            <>
-              <MetaPill>
-                <ImageReference value={release.tag} />
-              </MetaPill>
-              <MetaPill>{release.state}</MetaPill>
-              <MetaPill>{release.strategy}</MetaPill>
-              <MetaPill>{release.operation_kind}</MetaPill>
-            </>
-          }
-        />
-      )}
-      <ReleaseTaskLog
-        taskId={release.originating_task_id}
-        serviceId={release.service_id}
+          )
+        }
+        title={service}
+        icon={<History />}
+        meta={
+          <>
+            <MetaPill>
+              <ImageReference value={release.tag} />
+            </MetaPill>
+            <MetaPill>{release.state}</MetaPill>
+            <MetaPill>{release.strategy}</MetaPill>
+            <MetaPill>{release.operation_kind}</MetaPill>
+          </>
+        }
+        actions={
+          !fromRun && (
+            <Link
+              to={runPath}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              View deployment run
+            </Link>
+          )
+        }
       />
-      <Disclosure
-        summary="Deployment details"
-        summaryClassName="text-sm font-medium"
-      >
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Image & configuration</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-0 divide-y divide-border text-sm [&>p]:py-4 [&>div]:py-4">
-              <p>
-                <span className="text-muted-foreground">Image</span>
-                <br />
-                <span className="break-all font-mono text-xs">
-                  {release.image}
-                </span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Digest</span>
-                <br />
-                <span className="break-all font-mono text-xs">
-                  {release.digest || "tag resolved without registry digest"}
-                </span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Render input</span>
-                <br />
-                <span className="break-all font-mono text-xs">
-                  {release.render_input_digest}
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Execution</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-0 divide-y divide-border text-sm [&>p]:py-4 [&>div]:py-4">
-              <div className="flex gap-2">
-                <Badge variant={release.serving ? "success" : "outline"}>
-                  {release.serving ? "serving" : "not serving"}
-                </Badge>
-                <Badge
-                  variant={release.current_successful ? "success" : "outline"}
-                >
-                  {release.current_successful
-                    ? "rollback source"
-                    : "historical"}
-                </Badge>
-              </div>
-              <p>
-                <span className="text-muted-foreground">Operation</span>
-                <br />
-                <span className="break-all font-mono text-xs">
-                  {release.operation_id}
-                </span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Originating task</span>
-                <br />
-                <TaskLink taskId={release.originating_task_id}>
-                  Inspect Task
-                </TaskLink>
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-        <div className={workspaceSectionClassName(false, "space-y-3")}>
-          <CompactReference value={release.id} />
-        </div>
-      </Disclosure>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Image & configuration</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-0 divide-y divide-border text-sm [&>p]:py-4 [&>div]:py-4">
+            <p>
+              <span className="text-muted-foreground">Image</span>
+              <br />
+              <span className="break-all font-mono text-xs">
+                {release.image}
+              </span>
+            </p>
+            <p>
+              <span className="text-muted-foreground">Digest</span>
+              <br />
+              <span className="break-all font-mono text-xs">
+                {release.digest || "tag resolved without registry digest"}
+              </span>
+            </p>
+            <p>
+              <span className="text-muted-foreground">Render input</span>
+              <br />
+              <span className="break-all font-mono text-xs">
+                {release.render_input_digest}
+              </span>
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Execution</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-0 divide-y divide-border text-sm [&>p]:py-4 [&>div]:py-4">
+            <div className="flex gap-2">
+              <Badge variant={release.serving ? "success" : "outline"}>
+                {release.serving ? "serving" : "not serving"}
+              </Badge>
+              <Badge
+                variant={release.current_successful ? "success" : "outline"}
+              >
+                {release.current_successful ? "rollback source" : "historical"}
+              </Badge>
+            </div>
+            <p>
+              <span className="text-muted-foreground">Operation</span>
+              <br />
+              <span className="break-all font-mono text-xs">
+                {release.operation_id}
+              </span>
+            </p>
+            <p>
+              <span className="text-muted-foreground">Originating task</span>
+              <br />
+              <TaskLink taskId={release.originating_task_id}>
+                Inspect Task
+              </TaskLink>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+      <div className={workspaceSectionClassName(false, "space-y-3")}>
+        <CompactReference value={release.id} />
+      </div>
       {error && (
         <p role="alert" className="text-sm text-destructive">
           Showing the last loaded deployment. Refresh failed: {error.message}

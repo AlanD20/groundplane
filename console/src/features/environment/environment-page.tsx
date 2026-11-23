@@ -1,3 +1,7 @@
+import {
+  deploymentReleaseParam,
+  deploymentRunParam,
+} from "@/features/release/deployment-run-navigation";
 import { formatCount } from "@/lib/format-count";
 import { EnvironmentMonitoring } from "@/features/monitoring/environment-monitoring";
 import { CreationButton } from "@/components/common/creation-button";
@@ -68,11 +72,14 @@ export default function EnvironmentPage() {
         next.set("create", "service");
         next.delete("service");
         next.delete("serviceTab");
+        next.delete(deploymentRunParam);
+        next.delete(deploymentReleaseParam);
       } else next.delete("create");
       return next;
     });
   }
   const { section, panel } = environmentNavigation(search);
+  const showingRun = panel.key === "releases" && search.has(deploymentRunParam);
   const showingMonitoring =
     panel.key === "monitoring" && !search.has("service");
   const backingEnvironments = store.backingProjects.flatMap(
@@ -216,6 +223,8 @@ export default function EnvironmentPage() {
                 const next = new URLSearchParams(current);
                 next.delete("service");
                 next.delete("serviceTab");
+                next.delete(deploymentRunParam);
+                next.delete(deploymentReleaseParam);
                 return next;
               })
             }
@@ -225,76 +234,78 @@ export default function EnvironmentPage() {
     );
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader
-        title={
-          showingMonitoring ? (
-            "Monitoring"
-          ) : (
-            <span className="flex flex-wrap items-center gap-3">
-              {env.name}
-              {env.services.length > 0 && (
+      {!showingRun && (
+        <PageHeader
+          title={
+            showingMonitoring ? (
+              "Monitoring"
+            ) : (
+              <span className="flex flex-wrap items-center gap-3">
+                {env.name}
+                {env.services.length > 0 && (
+                  <StatusBadge
+                    status={runtime}
+                    label={runtime === "healthy" ? "Operational" : runtime}
+                  />
+                )}
+              </span>
+            )
+          }
+          eyebrow={
+            showingMonitoring
+              ? `Environment · ${env.name}`
+              : `${params.tenant} / ${project.name} / Environment`
+          }
+          actions={
+            showingMonitoring ? undefined : (
+              <>
+                {panel.key === "overview" && (
+                  <CreationButton
+                    active={search.get("create") === "service"}
+                    variant="outline"
+                    disabled={deleting}
+                    onClick={() => setAddingService(true)}
+                  >
+                    <Plus className="size-3.5" /> Add Service
+                  </CreationButton>
+                )}
+                <LogViewer
+                  target={{ kind: "environment", id: env.id }}
+                  label="Logs"
+                />
+                <DeployControls
+                  env={env}
+                  disabled={deleting || releaseAction !== null}
+                  onDeploy={() => setReleaseAction("deploy")}
+                  onRollback={() => setReleaseAction("rollback")}
+                />
+              </>
+            )
+          }
+          meta={
+            <>
+              <span className="inline-flex items-center gap-1.5">
+                <Boxes className="size-3.5" />
+                {formatCount(env.services.length, "service")}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Network className="size-3.5" />
+                {formatCount(env.zones.length, "zone")}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Plug className="size-3.5" />
+                {formatCount(env.routes.length, "route")}
+              </span>
+              {env.provisioningState !== "ready" && (
                 <StatusBadge
-                  status={runtime}
-                  label={runtime === "healthy" ? "Operational" : runtime}
+                  status={env.status}
+                  label={`Provisioning ${env.provisioningState}`}
                 />
               )}
-            </span>
-          )
-        }
-        eyebrow={
-          showingMonitoring
-            ? `Environment · ${env.name}`
-            : `${params.tenant} / ${project.name} / Environment`
-        }
-        actions={
-          showingMonitoring ? undefined : (
-            <>
-              {panel.key === "overview" && (
-                <CreationButton
-                  active={search.get("create") === "service"}
-                  variant="outline"
-                  disabled={deleting}
-                  onClick={() => setAddingService(true)}
-                >
-                  <Plus className="size-3.5" /> Add Service
-                </CreationButton>
-              )}
-              <LogViewer
-                target={{ kind: "environment", id: env.id }}
-                label="Logs"
-              />
-              <DeployControls
-                env={env}
-                disabled={deleting || releaseAction !== null}
-                onDeploy={() => setReleaseAction("deploy")}
-                onRollback={() => setReleaseAction("rollback")}
-              />
             </>
-          )
-        }
-        meta={
-          <>
-            <span className="inline-flex items-center gap-1.5">
-              <Boxes className="size-3.5" />
-              {formatCount(env.services.length, "service")}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Network className="size-3.5" />
-              {formatCount(env.zones.length, "zone")}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Plug className="size-3.5" />
-              {formatCount(env.routes.length, "route")}
-            </span>
-            {env.provisioningState !== "ready" && (
-              <StatusBadge
-                status={env.status}
-                label={`Provisioning ${env.provisioningState}`}
-              />
-            )}
-          </>
-        }
-      />
+          }
+        />
+      )}
       {deletionNotice}
       {refreshNotice}
       {!showingMonitoring && observation.refreshError && (

@@ -1,3 +1,9 @@
+import { useSearchParams } from "react-router-dom";
+import { DeploymentRun } from "./deployment-run";
+import {
+  deploymentRunLink,
+  deploymentRunParam,
+} from "./deployment-run-navigation";
 import { EmptyState } from "@/components/common/empty-state";
 import { DeploymentGroupRow } from "./deployment-group-row";
 import { groupDeployments } from "./deployment-groups";
@@ -15,6 +21,8 @@ import {
 } from "@/components/common/table-controls";
 
 export function ReleasesCard({ env }: { env: Environment }) {
+  const [search] = useSearchParams();
+  const run = search.get(deploymentRunParam);
   const [query, setQuery] = useState("");
   const [service, setService] = useState("all");
   const [state, setState] = useState("all");
@@ -44,6 +52,7 @@ export function ReleasesCard({ env }: { env: Environment }) {
     "desc",
     `${env.id}/${query}/${service}/${state}/${strategy}`,
   );
+  if (run) return <DeploymentRun key={run} taskId={run} env={env} />;
   return (
     <Card>
       <CardHeader>
@@ -106,7 +115,11 @@ export function ReleasesCard({ env }: { env: Environment }) {
         </div>
         <div className="space-y-3">
           {table.rows.map((group) => (
-            <DeploymentGroupRow key={group.taskId} group={group} env={env} />
+            <DeploymentGroupRow
+              key={group.taskId}
+              group={group}
+              to={deploymentRunLink(search, group.taskId)}
+            />
           ))}
           {!table.total && (
             <EmptyState

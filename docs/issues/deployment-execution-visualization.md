@@ -37,15 +37,19 @@ which operation needs attention, and where to find its recorded evidence.
   must use the Task's own timestamps. [Task API](../../openapi.json)
   [Recorded timing](../features/tasks-and-logs.md#follow-an-operation)
 
-## Recommended deployment view
+## Selected design
 
-Show the originating Task's action, target, status, and work counts above an
-in-flow list of visible operations. Each row should show its action, target, and
-status once. Expanding it shows the existing recorded blocker, attempts, stages,
-and diagnostics under that row. Use the same description and status model as
-Task inspection. Keep a visible full-Task link for pagination and investigation.
-Use keyboard-operable disclosure controls with visible expanded state.
-[Disclosure accessibility pattern](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/)
+Option A answers how to scan a deployment and inspect one operation without
+expanding nested records. Environment and Service history open a dedicated run
+with the Task summary above an operations list and one evidence panel. Failed
+operations and operations needing attention take priority in the initial
+selection. On narrow screens an operation picker sits above the evidence.
+Paged operations use a fixed Task revision. Service release metadata and the
+full Task are reachable from the run.
+[Console workspace](../../console/src/features/release/deployment-run.tsx)
+
+The comparison prototype is archived on the local
+`prototype/deployment-execution` branch.
 
 A separate dependency view would be valuable when investigating parallel Blueprint
 work. It needs a complete graph tied to the execution revision before it can show

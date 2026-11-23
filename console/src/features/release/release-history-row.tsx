@@ -1,57 +1,50 @@
-import { Disclosure } from "@/components/common/disclosure";
-import { ImageReference } from "@/components/common/image-reference";
+import { ChevronRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import { workspaceSectionClassName } from "@/components/common/workspace-section";
 import { Badge } from "@/components/ui/badge";
 import { formatTimestamp } from "@/lib/format-timestamp";
-import type { DeployRecord, Environment } from "@/lib/types";
-import { ReleaseDetails } from "./release-detail-page";
+import type { DeployRecord } from "@/lib/types";
 
 export function ReleaseHistoryRow({
   release,
-  env,
+  to,
 }: {
   release: DeployRecord;
-  env: Environment;
+  to: string;
 }) {
   return (
-    <Disclosure
-      className={workspaceSectionClassName(false)}
-      summaryClassName="gap-3"
-      summary={
-        <span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3">
-          <span className="min-w-0 space-y-1">
-            <span className="block break-all text-sm font-medium">
-              {release.service}
-            </span>
-            <span className="block text-xs">
-              <ImageReference value={release.tag} />
-            </span>
-            <span className="block text-xs text-muted-foreground">
-              {formatTimestamp(release.when, "Time unavailable")} |{" "}
-              {release.strategy}
-            </span>
-          </span>
-          <Badge
-            variant={
-              release.status === "active"
-                ? "success"
-                : ["failed", "timed_out", "recovery_required"].includes(
-                      release.state,
-                    )
-                  ? "danger"
-                  : "outline"
-            }
-          >
-            {release.status === "active"
-              ? "Serving"
-              : release.state.replaceAll("_", " ")}
-          </Badge>
-        </span>
-      }
+    <Link
+      to={to}
+      className={`${workspaceSectionClassName(false)} flex items-center gap-3 transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring`}
     >
-      <div className="mt-4 min-w-0 border-t border-border pt-4">
-        <ReleaseDetails id={release.id} environment={env} inline />
-      </div>
-    </Disclosure>
+      <span className="min-w-0 flex-1 space-y-1">
+        <span className="block break-words text-sm font-medium">
+          {release.tag || release.service}
+        </span>
+        <span className="block text-xs text-muted-foreground">
+          {formatTimestamp(release.when, "Time unavailable")} ·{" "}
+          {release.strategy}
+        </span>
+      </span>
+      <Badge
+        variant={
+          release.status === "active"
+            ? "success"
+            : ["failed", "timed_out", "recovery_required"].includes(
+                  release.state,
+                )
+              ? "danger"
+              : "outline"
+        }
+      >
+        {release.status === "active"
+          ? "Serving"
+          : release.state.replaceAll("_", " ")}
+      </Badge>
+      <ChevronRight
+        aria-hidden
+        className="size-4 shrink-0 text-muted-foreground"
+      />
+    </Link>
   );
 }

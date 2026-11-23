@@ -4,11 +4,11 @@ The Environment Deploy action selects either one Service or a deployment group.
 Group deployment uses its configured member order and each Service's release
 strategy. Environment deployment history groups Service releases by the Task
 that triggered them, newest first, including unfinished or failed attempts.
-Expand a deployment to inspect each Service's image, strategy and release result,
-or open its Task for execution details and the overall outcome. Filters match
-Service releases while retaining the complete matching Task group; pagination
-counts groups rather than individual releases. A Service's own history remains
-an individual release list.
+Open a deployment to see its Task's overall result and choose an operation to
+inspect its attempts, steps and recorded evidence. Service releases link to their
+image, strategy and release result. Filters match Service releases while retaining
+the complete matching Task group, and pagination counts groups. A Service's own
+history lists its releases and opens the same run with that Service in context.
 
 A Service is an Environment's declared workload. Saving its configuration changes
 desired state; it does not prove that the workload has been deployed. A Release

@@ -1,3 +1,9 @@
+import { DeploymentRun } from "@/features/release/deployment-run";
+import {
+  deploymentReleaseParam,
+  deploymentRunLink,
+  deploymentRunParam,
+} from "@/features/release/deployment-run-navigation";
 import { ReleaseHistoryRow } from "@/features/release/release-history-row";
 import { ServiceMetadata } from "@/features/service/service-metadata";
 import { ServiceStorage } from "@/features/service/service-storage";
@@ -104,6 +110,8 @@ export function ServiceWorkspace({
   const selectTab = (nextTab: ServiceDestination) =>
     setSearch((current) => {
       const next = new URLSearchParams(current);
+      next.delete(deploymentRunParam);
+      next.delete(deploymentReleaseParam);
       if (nextTab === "overview") next.delete("serviceTab");
       else next.set("serviceTab", nextTab);
       return next;
@@ -115,6 +123,8 @@ export function ServiceWorkspace({
     }
     setSearch((current) => {
       const next = new URLSearchParams(current);
+      next.delete(deploymentRunParam);
+      next.delete(deploymentReleaseParam);
       next.delete("service");
       next.delete("serviceTab");
       return next;
@@ -144,6 +154,13 @@ export function ServiceWorkspace({
       current = false;
     };
   }, [summary.id, servingReleaseId, reload, store.getService, tab]);
+
+  const run = search.get(deploymentRunParam);
+  if (tab === "releases" && run) {
+    return (
+      <DeploymentRun key={run} taskId={run} env={env} serviceId={summary.id} />
+    );
+  }
 
   return (
     <>
@@ -308,7 +325,11 @@ export function ServiceWorkspace({
                       <ReleaseHistoryRow
                         key={release.id}
                         release={release}
-                        env={env}
+                        to={deploymentRunLink(
+                          search,
+                          release.taskId,
+                          release.id,
+                        )}
                       />
                     ))}
                     <TablePagination table={deployments} label="Deployments" />
