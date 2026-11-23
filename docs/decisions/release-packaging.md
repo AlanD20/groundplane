@@ -314,9 +314,10 @@ keeps the same HTTP listener and API ownership; Console activation switches asse
 without replacing a process. Embedded assets seed only the first selection.
 
 The software preparation and activation owners handle Console-only and All through
-the same durable Tasks as other software. All stages the future matching bundle
-before the Controller handoff. The new API can start with its predecessor Console
-gated until the matching asset selection completes; a UI mismatch cannot prevent
-API recovery. Invalid or unverifiable storage remains a startup error. Controller
+the same durable Tasks as other software. Controller staging rechecks the copied
+OpenAPI document against the prepared fingerprint. All stages the future
+matching bundle before the Controller handoff. The new API can start with its
+predecessor Console gated until the matching asset selection completes. The API
+remains available for recovery. Invalid or unverifiable storage remains a startup error. Controller
 admission prevents an incompatible unpaired update. Bounded retired assets support
 already-open tabs without creating unbounded storage history.

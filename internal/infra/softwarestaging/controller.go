@@ -55,6 +55,12 @@ func (stager *Stager) Stage(
 		return upgrade.Release{}, errs.New(errs.KindStateConflict, "software preparation is not completely verified")
 	}
 	selected := record.Progress.Result.Controller
+	if selected.APISHA256 == "" {
+		return upgrade.Release{}, errs.New(
+			errs.KindStateConflict,
+			"prepared Controller has no verified API fingerprint",
+		)
+	}
 	registry := registryimages.Local{}
 	plan, err := registry.Resolve(ctx, selected.Artifact.Reference)
 	if err != nil {
@@ -107,28 +113,8 @@ func (stager *Stager) Stage(
 		return upgrade.Release{}, err
 	}
 	defer func() { resultErr = errors.Join(resultErr, os.RemoveAll(workspace)) }()
-	for _, file := range []struct {
-		name    string
-		maximum int64
-		digest  string
-	}{
-		{"controller-release.json", upgrade.MaxManifestBytes, selected.MetadataSHA256},
-		{"controller", controllerrelease.MaximumBinaryBytes, selected.BinarySHA256},
-		{"groundplane", controllerrelease.MaximumBinaryBytes, selected.CLISHA256},
-	} {
-		copied, err := engine.CopyFromContainer(
-			ctx,
-			created.ID,
-			client.CopyFromContainerOptions{SourcePath: "/" + file.name},
-		)
-		if err != nil {
-			return upgrade.Release{}, errs.Wrap(errs.KindInternal, err)
-		}
-		err = copyPayloadFile(ctx, copied.Content, workspace, file.name, file.maximum, file.digest)
-		closeErr := copied.Content.Close()
-		if err != nil || closeErr != nil {
-			return upgrade.Release{}, errors.Join(err, closeErr)
-		}
+	if err := copyControllerPayload(ctx, engine, created.ID, workspace, *selected); err != nil {
+		return upgrade.Release{}, err
 	}
 	metadata, err := os.ReadFile(filepath.Join(workspace, "controller-release.json"))
 	if err != nil {
@@ -183,6 +169,35 @@ func (stager *Stager) Stage(
 	}
 	defer binary.Close()
 	return stager.store.Stage(ctx, metadata, binary, agentImage)
+}
+
+func copyControllerPayload(
+	ctx context.Context,
+	engine *client.Client,
+	containerID, workspace string,
+	selected preparation.ControllerResult,
+) error {
+	for _, file := range []struct {
+		name    string
+		maximum int64
+		digest  string
+	}{
+		{"controller-release.json", upgrade.MaxManifestBytes, selected.MetadataSHA256},
+		{"openapi.json", preparation.MaxOpenAPIBytes, selected.APISHA256},
+		{"controller", controllerrelease.MaximumBinaryBytes, selected.BinarySHA256},
+		{"groundplane", controllerrelease.MaximumBinaryBytes, selected.CLISHA256},
+	} {
+		copied, err := engine.CopyFromContainer(ctx, containerID,
+			client.CopyFromContainerOptions{SourcePath: "/" + file.name})
+		if err != nil {
+			return errs.Wrap(errs.KindInternal, err)
+		}
+		err = copyPayloadFile(ctx, copied.Content, workspace, file.name, file.maximum, file.digest)
+		if err := errors.Join(err, copied.Content.Close()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (stager *Stager) workspace(taskID string) (string, error) {
@@ -258,7 +273,7 @@ func copyPayloadFile(
 		return errs.Wrap(errs.KindInternal, err)
 	}
 	if fmt.Sprintf("sha256:%x", hash.Sum(nil)) != expected {
-		return errs.New(errs.KindValidationFailed, "Controller bundle payload digest changed")
+		return errs.Newf(errs.KindValidationFailed, "Controller bundle payload digest changed for %s", name)
 	}
 	if _, err := reader.Next(); err != io.EOF {
 		return errs.New(errs.KindValidationFailed, "Controller bundle payload has unexpected archive members")

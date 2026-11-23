@@ -23,6 +23,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+const MaxOpenAPIBytes = 16 << 20
+
 type controllerDigests struct {
 	binary   string
 	metadata string
@@ -323,7 +325,7 @@ func validateControllerPayload(
 	if err != nil {
 		return controllerDigests{}, err
 	}
-	api, err := boundedFile(filepath.Join(directory, "openapi.json"), 16<<20)
+	api, err := boundedFile(filepath.Join(directory, "openapi.json"), MaxOpenAPIBytes)
 	if err != nil {
 		return controllerDigests{}, err
 	}
