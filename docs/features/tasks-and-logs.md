@@ -188,8 +188,10 @@ lines replace the oldest ones; reaching the limit does not stop live streaming.
 The counters distinguish received, retained and filtered lines. Search and copy
 use all retained matching lines, while only rows near the viewport are rendered.
 Scroll away from the bottom to read older output; **Jump to latest** resumes
-following the end. Pause stops the current stream; Resume / reload starts a new
-read using the selected per-container tail.
+following the end. **Pause** stops the current stream. **Resume live** opens a
+new stream using the selected per-container tail. With **Live on reload** off,
+**Read recent logs** reads the tail and closes the stream. A replacement read
+marks retained lines as previous output until it receives new lines or completes.
 
 Service and Environment log actions read workload stdout/stderr through the
 Controller, including provisioned Backing Service containers. During deployment,

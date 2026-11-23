@@ -8,7 +8,7 @@ export type LogTarget =
 
 export async function watchTransientLogs(
   target: LogTarget,
-  options: { tail: number; follow: boolean; signal: AbortSignal },
+  options: { tail: number; follow: boolean; signal: AbortSignal; onOpen?: () => void },
   onEvent: (event: TransientLogEvent) => void,
 ): Promise<void> {
   if (!Number.isSafeInteger(options.tail) || options.tail < 0 || options.tail > 1000) {
@@ -34,29 +34,32 @@ export async function watchTransientLogs(
   const reader = response.body.getReader()
   const decoder = new TextDecoder('utf-8', { fatal: false })
   let pending = ''
-  while (true) {
-    const result = await reader.read()
-    pending += decoder.decode(result.value, { stream: !result.done })
-    let boundary = findEventBoundary(pending)
-    while (boundary !== null) {
-      const frame = pending.slice(0, boundary.index).replaceAll('\r\n', '\n')
-      pending = pending.slice(boundary.index + boundary.length)
-      const lines = frame.split('\n')
-      if (lines.every((line) => line.startsWith(':'))) {
+  try {
+    options.onOpen?.()
+    while (true) {
+      const result = await reader.read()
+      pending += decoder.decode(result.value, { stream: !result.done })
+      let boundary = findEventBoundary(pending)
+      while (boundary !== null) {
+        const frame = pending.slice(0, boundary.index).replaceAll('\r\n', '\n')
+        pending = pending.slice(boundary.index + boundary.length)
+        const lines = frame.split('\n')
+        if (!lines.every((line) => line.startsWith(':'))) {
+          if (lines[0] !== 'event: log' || lines.length !== 2 || !lines[1].startsWith('data: ')) {
+            throw new Error('Controller returned a malformed log event')
+          }
+          onEvent(parseLogEvent(JSON.parse(lines[1].slice(6))))
+        }
         boundary = findEventBoundary(pending)
-        continue
       }
-      if (lines[0] !== 'event: log' || lines.length !== 2 || !lines[1].startsWith('data: ')) {
-        throw new Error('Controller returned a malformed log event')
+      if (result.done) {
+        if (pending.trim() !== '') throw new Error('Controller ended with a partial log event')
+        return
       }
-      const event = parseLogEvent(JSON.parse(lines[1].slice(6)))
-      onEvent(event)
-      boundary = findEventBoundary(pending)
     }
-    if (result.done) {
-      if (pending.trim() !== '') throw new Error('Controller ended with a partial log event')
-      return
-    }
+  } finally {
+    await reader.cancel().catch(() => {})
+    reader.releaseLock()
   }
 }
 

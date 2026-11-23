@@ -41,7 +41,7 @@ import {
   type ReusableSecretState,
   type ReusableSecretActions,
 } from "@/features/secrets/secret-store";
-import { type LogTarget, type TransientLogEvent } from "./transient-logs";
+import type { watchTransientLogs } from "./transient-logs";
 import { useControllerPlatform } from "@/features/platform-controller/use-controller-platform";
 import {
   readDefaultTablePageSize,
@@ -162,11 +162,7 @@ export type StoreContext = State &
     retryResourceRefresh: () => void;
     adapters: typeof seedAdapters;
     platform: typeof seedPlatform;
-    watchLogs: (
-      target: LogTarget,
-      options: { tail: number; follow: boolean; signal: AbortSignal },
-      onEvent: (event: TransientLogEvent) => void,
-    ) => Promise<void>;
+    watchLogs: typeof watchTransientLogs;
     setRequireRevealConfirm: (v: boolean) => void;
     setShowEmptySecretBadges: (v: boolean) => void;
     setDefaultTablePageSize: (v: TablePageSize) => void;

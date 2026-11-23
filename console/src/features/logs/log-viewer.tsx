@@ -61,8 +61,15 @@ export function LogStream({ target }: { target: LogTarget }) {
   const [events, setEvents] = useState<TransientLogEvent[]>([]);
   const [received, setReceived] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [streaming, setStreaming] = useState(false);
-  const [started, setStarted] = useState(false);
+  const [status, setStatus] = useState<
+    | "Connecting"
+    | "Streaming"
+    | "Paused"
+    | "Read complete"
+    | "Stream closed"
+    | "Disconnected"
+  >("Connecting");
+  const busy = status === "Connecting" || status === "Streaming";
   const outputRef = useRef<HTMLDivElement>(null);
   const pinnedToEnd = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
@@ -91,7 +98,6 @@ export function LogStream({ target }: { target: LogTarget }) {
     abortRef.current?.abort();
     abortRef.current = null;
     flushEvents();
-    setStreaming(false);
   };
 
   const start = (newTarget = false) => {
@@ -99,30 +105,46 @@ export function LogStream({ target }: { target: LogTarget }) {
     const controller = new AbortController();
     abortRef.current = controller;
     replaceLogSnapshot.current = true;
-    setStarted(true);
+    setStatus("Connecting");
+    setError(null);
     if (newTarget) {
       setEvents([]);
       setReceived(0);
       pinnedToEnd.current = true;
       setAtEnd(true);
-      setError(null);
     }
-    setStreaming(true);
     void store
       .watchLogs(
         target,
-        { tail, follow, signal: controller.signal },
+        {
+          tail,
+          follow,
+          signal: controller.signal,
+          onOpen: () => {
+            if (!controller.signal.aborted) setStatus("Streaming");
+          },
+        },
         (event) => {
           if (controller.signal.aborted) return;
-          if (replaceLogSnapshot.current) setError(null);
           pendingEvents.current.push(event);
           if (flushTimer.current === null) {
             flushTimer.current = setTimeout(flushEvents, 50);
           }
         },
       )
+      .then(() => {
+        if (controller.signal.aborted) return;
+        flushEvents();
+        if (replaceLogSnapshot.current) {
+          replaceLogSnapshot.current = false;
+          setEvents([]);
+          setReceived(0);
+        }
+        setStatus(follow ? "Stream closed" : "Read complete");
+      })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
+          setStatus("Disconnected");
           setError(
             reason instanceof Error ? reason.message : "Log stream failed",
           );
@@ -132,7 +154,6 @@ export function LogStream({ target }: { target: LogTarget }) {
         if (abortRef.current === controller) {
           flushEvents();
           abortRef.current = null;
-          setStreaming(false);
         }
       });
   };
@@ -198,14 +219,20 @@ export function LogStream({ target }: { target: LogTarget }) {
           ]}
         />
         <Button
-          variant={streaming ? "default" : "outline"}
+          variant={busy ? "default" : "outline"}
           disabled={
-            !streaming &&
-            (!Number.isSafeInteger(tail) || tail < 0 || tail > 1000)
+            !busy && (!Number.isSafeInteger(tail) || tail < 0 || tail > 1000)
           }
-          onClick={streaming ? stop : () => start()}
+          onClick={() => {
+            if (busy) {
+              stop();
+              setStatus("Paused");
+            } else {
+              start();
+            }
+          }}
         >
-          {streaming ? "Pause live" : "Resume / reload"}
+          {busy ? "Pause" : follow ? "Resume live" : "Read recent logs"}
         </Button>
         <CopyButton
           label="Copy visible logs"
@@ -228,7 +255,7 @@ export function LogStream({ target }: { target: LogTarget }) {
         <label className="flex items-center gap-2">
           <Checkbox
             checked={follow}
-            disabled={streaming}
+            disabled={busy}
             onChange={(event) => setFollow(event.target.checked)}
           />
           Live on reload
@@ -242,7 +269,7 @@ export function LogStream({ target }: { target: LogTarget }) {
             min={0}
             max={1000}
             value={tail}
-            disabled={streaming}
+            disabled={busy}
             onChange={(event) => setTail(Number(event.target.value))}
           />
         </label>
@@ -253,16 +280,9 @@ export function LogStream({ target }: { target: LogTarget }) {
         </p>
       ) : null}
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span role="status">
-          {streaming
-            ? "Streaming"
-            : error
-              ? "Disconnected"
-              : started
-                ? "Stream closed"
-                : "Ready"}
-        </span>
+        <span role="status">{status}</span>
         <span>
+          {events.length > 0 && replaceLogSnapshot.current && "Previous read · "}
           {visible.length} shown · {events.length.toLocaleString()} retained ·{" "}
           {received.toLocaleString()} received
           {received > events.length && " · oldest lines discarded"}
@@ -307,20 +327,20 @@ export function LogStream({ target }: { target: LogTarget }) {
         {visible.length === 0 ? (
           <EmptyState
             embedded
-            loading={streaming && !events.length}
+            loading={busy && !events.length}
             title={
               events.length
                 ? "No matching log lines"
-                : streaming
+                : status === "Connecting"
+                  ? "Opening log stream"
+                : status === "Streaming"
                   ? "Waiting for container output"
                   : "No log output yet"
             }
             description={
               events.length
                 ? "Try another search or filter."
-                : !started
-                  ? "Open a stream to read container output."
-                  : "Containers may not have written output, or no workload is deployed."
+                : "Containers may not have written output, or no workload is deployed."
             }
           />
         ) : (

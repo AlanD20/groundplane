@@ -84,3 +84,32 @@ test('watchTransientLogs accepts CRLF-delimited log events', async () => {
     globalThis.fetch = originalFetch
   }
 })
+
+test('a malformed live event cancels the response body', async () => {
+  const originalFetch = globalThis.fetch
+  let canceled = false
+  globalThis.fetch = async () => new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('event: unexpected\ndata: {}\n\n'))
+    },
+    cancel() {
+      canceled = true
+    },
+  }), {
+    headers: { 'content-type': 'text/event-stream' },
+  })
+
+  try {
+    await assert.rejects(
+      watchTransientLogs(
+        { kind: 'service', id: 'svc_01ARZ3NDEKTSV4RRFFQ69G5FAV' },
+        { tail: 0, follow: true, signal: new AbortController().signal },
+        () => assert.fail('malformed events must be rejected'),
+      ),
+      /malformed log event/,
+    )
+    assert.equal(canceled, true)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
