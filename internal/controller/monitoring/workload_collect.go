@@ -117,9 +117,11 @@ func (collector *WorkloadCollector) collect(ctx context.Context) (collectionResu
 				continue
 			}
 			samples[index].StorageObservedAt = previous.StorageObservedAt
-			samples[index].Point.WritableLayerBytes = cloneUint64(previous.Point.WritableLayerBytes)
+			if sameStorageContainers(samples[index], previous) {
+				samples[index].Point.WritableLayerBytes = cloneUint64(previous.Point.WritableLayerBytes)
+				samples[index].Summaries.WritableLayerBytes = cloneMetricSummary(previous.Summaries.WritableLayerBytes)
+			}
 			samples[index].Point.PersistentVolumeUsedBytes = cloneUint64(previous.Point.PersistentVolumeUsedBytes)
-			samples[index].Summaries.WritableLayerBytes = cloneMetricSummary(previous.Summaries.WritableLayerBytes)
 			samples[index].Summaries.PersistentVolumeUsedBytes = cloneMetricSummary(
 				previous.Summaries.PersistentVolumeUsedBytes,
 			)
@@ -160,6 +162,13 @@ func (collector *WorkloadCollector) collect(ctx context.Context) (collectionResu
 	return collectionResult{
 		snapshot: cloneCollectionSnapshot(snapshot), measurements: measurements, storage: includeStorage,
 	}, nil
+}
+
+func sameStorageContainers(current, previous ServiceSample) bool {
+	return current.ContainersComplete && previous.ContainersComplete &&
+		slices.EqualFunc(current.Containers, previous.Containers, func(a, b ContainerSample) bool {
+			return a.ID == b.ID && a.Replica == b.Replica
+		})
 }
 
 func groupCaptured(captured []capturedService) [][]capturedService {

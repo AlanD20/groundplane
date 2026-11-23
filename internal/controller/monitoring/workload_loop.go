@@ -66,9 +66,11 @@ func preservePendingStorage(previous collectionResult, current *collectionResult
 		}
 		measurement := &current.measurements[currentIndex]
 		oldMeasurement := previous.measurements[previousIndex]
-		measurement.Point.WritableLayerBytes = cloneUint64(oldMeasurement.Point.WritableLayerBytes)
+		if sameStorageContainers(sample, old) {
+			measurement.Point.WritableLayerBytes = cloneUint64(oldMeasurement.Point.WritableLayerBytes)
+			measurement.Summaries.WritableLayerBytes = cloneMetricSummary(oldMeasurement.Summaries.WritableLayerBytes)
+		}
 		measurement.Point.PersistentVolumeUsedBytes = cloneUint64(oldMeasurement.Point.PersistentVolumeUsedBytes)
-		measurement.Summaries.WritableLayerBytes = cloneMetricSummary(oldMeasurement.Summaries.WritableLayerBytes)
 		measurement.Summaries.PersistentVolumeUsedBytes = cloneMetricSummary(
 			oldMeasurement.Summaries.PersistentVolumeUsedBytes,
 		)

@@ -403,6 +403,7 @@ type workloadTestChannel struct {
 	startedAt    atomic.Int64
 	storageCalls atomic.Uint64
 	containers   int
+	containerID  string
 	observedBase time.Time
 	observedNow  func() time.Time
 }
@@ -422,6 +423,10 @@ func (channel *workloadTestChannel) CollectMonitoring(
 	if count == 0 {
 		count = 1
 	}
+	id := channel.containerID
+	if id == "" {
+		id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	}
 	result := &agentpb.MonitoringSamplesResult{Services: make([]*agentpb.MonitoringServiceSample, len(targets))}
 	observedAt := time.Unix(0, int64(call)*int64(5*time.Second)).UTC()
 	if channel.observedNow != nil {
@@ -439,7 +444,7 @@ func (channel *workloadTestChannel) CollectMonitoring(
 				startedAt = 1
 			}
 			container := &agentpb.MonitoringContainerSample{
-				ContainerId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ContainerId: id,
 				Replica:     uint32(ordinal + 1), ObservedAtUnixNano: observedAt.UnixNano(),
 				RestartCount: channel.restart.Load(), StartedAtUnixNano: startedAt, CpuTotalNanoseconds: &cpu,
 				MemoryUsageBytes: &memory, MemoryInactiveFileBytes: &inactive,
