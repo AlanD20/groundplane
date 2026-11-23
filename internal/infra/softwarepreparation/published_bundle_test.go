@@ -2,6 +2,7 @@ package softwarepreparation
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
@@ -29,5 +30,12 @@ func TestPublishedControllerBundleAdmission(t *testing.T) {
 	}
 	if digests.binary == "" || digests.metadata == "" || digests.cli == "" {
 		t.Fatal("accepted Controller bundle did not retain its verified payload identities")
+	}
+	api, err := os.ReadFile(filepath.Join("..", "..", "..", "openapi.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := sha256Value(api); digests.api != want {
+		t.Fatalf("prepared Controller API digest = %q, want source API digest %q", digests.api, want)
 	}
 }
