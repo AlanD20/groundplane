@@ -56,6 +56,10 @@ export function DeploymentRun({
   const [detail, setDetail] = useState<TaskResponse>();
   const [error, setError] = useState<string>();
   const [operationQuery, setOperationQuery] = useState("");
+  const [releaseQuery, setReleaseQuery] = useState("");
+  const [releaseOrder, setReleaseOrder] = useState<"newest" | "oldest">(
+    "newest",
+  );
   const [loading, setLoading] = useState(true);
   const [reload, setReload] = useState(0);
   const [selectedId, setSelectedId] = useState<string>();
@@ -66,9 +70,26 @@ export function DeploymentRun({
     (release) => !serviceId || release.serviceId === serviceId,
   );
   const basePath = `/t/${params.tenant}/${params.project}/${encodeURIComponent(params.env)}`;
-  const releaseList = serviceId
-    ? releases.filter((release) => release.serviceId === serviceId)
-    : releases;
+  const releaseList = releases
+    .filter((release) => {
+      if (serviceId && release.serviceId !== serviceId) return false;
+      const status =
+        release.status === "active"
+          ? "Serving"
+          : release.state.replaceAll("_", " ");
+      return `${release.service} ${release.tag} ${release.strategy} ${status}`
+        .toLowerCase()
+        .includes(releaseQuery.trim().toLowerCase());
+    })
+    .sort((left, right) => {
+      const difference =
+        (Date.parse(right.when) || 0) - (Date.parse(left.when) || 0);
+      return (
+        (releaseOrder === "newest" ? difference : -difference) ||
+        left.service.localeCompare(right.service) ||
+        left.id.localeCompare(right.id)
+      );
+    });
 
   useEffect(() => {
     backLink.current?.scrollIntoView({ block: "start" });
@@ -234,74 +255,101 @@ export function DeploymentRun({
               <CardTitle id="deployment-service-releases">
                 Service releases
               </CardTitle>
+              <CollectionToolbar
+                query={releaseQuery}
+                onQueryChange={setReleaseQuery}
+                label="service releases"
+              >
+                <Select
+                  aria-label="Service release order"
+                  className="w-36"
+                  value={releaseOrder}
+                  options={[
+                    { value: "newest", label: "Newest first" },
+                    { value: "oldest", label: "Oldest first" },
+                  ]}
+                  onValueChange={(value) =>
+                    setReleaseOrder(value === "oldest" ? "oldest" : "newest")
+                  }
+                />
+              </CollectionToolbar>
             </CardHeader>
-            <Table
-              aria-labelledby="deployment-service-releases"
-              className="table-fixed"
-            >
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[30%] px-2 sm:px-5">
-                    Service
-                  </TableHead>
-                  <TableHead className="w-[27%] px-2 sm:px-5">
-                    Image tag
-                  </TableHead>
-                  <TableHead className="w-[22%] px-2 sm:px-5">
-                    Strategy
-                  </TableHead>
-                  <TableHead className="px-2 sm:px-5">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {releaseList.map((release) => (
-                  <TableRow
-                    key={release.id}
-                    className="even:bg-muted/35 even:hover:bg-muted/60"
-                  >
-                    <TableCell className="px-2 py-3 sm:px-5">
-                      <ContextLink
-                        to={`${basePath}/releases/${release.id}${serviceId ? `?service=${serviceId}` : ""}`}
-                        returnLabel="deployment run"
-                        className="inline-flex max-w-full items-center gap-1 rounded-sm font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring aria-current:bg-accent"
-                        aria-current={
-                          release.id === releaseId ? "true" : undefined
-                        }
-                      >
-                        <span className="min-w-0 [overflow-wrap:anywhere]">
-                          {release.service}
-                        </span>
-                        <ChevronRight
-                          aria-hidden
-                          className="size-3.5 shrink-0"
-                        />
-                      </ContextLink>
-                    </TableCell>
-                    <TableCell className="px-2 py-3 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere] sm:px-5">
-                      {release.tag || "—"}
-                    </TableCell>
-                    <TableCell className="px-2 py-3 text-xs capitalize [overflow-wrap:anywhere] sm:px-5">
-                      {release.strategy}
-                    </TableCell>
-                    <TableCell className="px-2 py-3 sm:px-5">
-                      <StatusBadge
-                        status={
-                          release.status === "active"
-                            ? "succeeded"
-                            : release.state
-                        }
-                        label={
-                          release.status === "active"
-                            ? "Serving"
-                            : release.state.replaceAll("_", " ")
-                        }
-                        className="items-baseline whitespace-normal [overflow-wrap:anywhere] [&>span]:shrink-0"
-                      />
-                    </TableCell>
+            {releaseList.length ? (
+              <Table
+                aria-labelledby="deployment-service-releases"
+                className="table-fixed"
+              >
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[30%] px-2 sm:px-5">
+                      Service
+                    </TableHead>
+                    <TableHead className="w-[27%] px-2 sm:px-5">
+                      Image tag
+                    </TableHead>
+                    <TableHead className="w-[22%] px-2 sm:px-5">
+                      Strategy
+                    </TableHead>
+                    <TableHead className="px-2 sm:px-5">Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {releaseList.map((release) => (
+                    <TableRow
+                      key={release.id}
+                      className="even:bg-muted/35 even:hover:bg-muted/60"
+                    >
+                      <TableCell className="px-2 py-3 sm:px-5">
+                        <ContextLink
+                          to={`${basePath}/releases/${release.id}${serviceId ? `?service=${serviceId}` : ""}`}
+                          returnLabel="deployment run"
+                          className="inline-flex max-w-full items-center gap-1 rounded-sm font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring aria-current:bg-accent"
+                          aria-current={
+                            release.id === releaseId ? "true" : undefined
+                          }
+                        >
+                          <span className="min-w-0 [overflow-wrap:anywhere]">
+                            {release.service}
+                          </span>
+                          <ChevronRight
+                            aria-hidden
+                            className="size-3.5 shrink-0"
+                          />
+                        </ContextLink>
+                      </TableCell>
+                      <TableCell className="px-2 py-3 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere] sm:px-5">
+                        {release.tag || "—"}
+                      </TableCell>
+                      <TableCell className="px-2 py-3 text-xs capitalize [overflow-wrap:anywhere] sm:px-5">
+                        {release.strategy}
+                      </TableCell>
+                      <TableCell className="px-2 py-3 sm:px-5">
+                        <StatusBadge
+                          status={
+                            release.status === "active"
+                              ? "succeeded"
+                              : release.state
+                          }
+                          label={
+                            release.status === "active"
+                              ? "Serving"
+                              : release.state.replaceAll("_", " ")
+                          }
+                          className="items-baseline whitespace-normal [overflow-wrap:anywhere] [&>span]:shrink-0"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p
+                role="status"
+                className="px-5 py-4 text-sm text-muted-foreground"
+              >
+                No service releases match your search.
+              </p>
+            )}
           </Card>
           {error && (
             <div
