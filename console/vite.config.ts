@@ -4,10 +4,28 @@
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
+
+function consoleVersion(): Plugin {
+  return {
+    name: 'groundplane-console-version',
+    generateBundle() {
+      const release = process.env.GP_CONSOLE_RELEASE
+      if (!release) return
+      if (!/^console\/v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(release)) {
+        this.error('GP_CONSOLE_RELEASE must be a published Console tag')
+      }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'console-version.json',
+        source: JSON.stringify({ release }),
+      })
+    },
+  }
+}
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), consoleVersion()],
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, './src') },
   },

@@ -38,7 +38,8 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
   const [ref, setRef] = useState("main");
   const [releases, setReleases] = useState<SoftwareReleaseCatalog["items"]>([]);
   const [releaseError, setReleaseError] = useState<string | null>(null);
-  const [loadingReleases, setLoadingReleases] = useState(false);
+  const [loadingReleases, setLoadingReleases] = useState(true);
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   const [review, setReview] = useState<string | null>(null);
   const [after, setAfter] = useState<string[]>([]);
   const [afterLoading, setAfterLoading] = useState(false);
@@ -76,8 +77,27 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
         if (!abort.signal.aborted) setLoadingReleases(false);
       });
     return () => abort.abort();
-  }, [active, source, selection]);
+  }, [active, source, selection, catalogAttempt]);
   const busy = work.publishing || work.pending !== null;
+  const manualRelease =
+    source === "release" &&
+    !loadingReleases &&
+    (releaseError !== null || releases.length === 0);
+  const tagPrefix =
+    selection === "all" || selection === "both" ? "v" : `${selection}/v`;
+  const target = ref.trim();
+  const canPrepare =
+    !busy &&
+    !afterLoading &&
+    (source === "source_ref"
+      ? Boolean(target)
+      : manualRelease
+        ? target.startsWith(tagPrefix) &&
+          /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(
+            target.slice(tagPrefix.length),
+          )
+        : !loadingReleases &&
+          releases.some((release) => release.ref === target));
   return (
     <div className="flex flex-col gap-5">
       <ResourcePanel title="Prepare software">
@@ -85,11 +105,11 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
           className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!busy && !afterLoading && ref.trim())
+            if (canPrepare)
               void work.prepare({
                 selection,
                 source_kind: source,
-                ref: ref.trim(),
+                ref: target,
                 after,
               });
           }}
@@ -114,6 +134,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                 onValueChange={(value) => {
                   const next = value as SoftwareRequest["selection"];
                   setSelection(next);
+                  setLoadingReleases(true);
                   if (next === "console" || next === "all") {
                     setSource("release");
                     setRef("");
@@ -141,17 +162,31 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                 onValueChange={(value) => {
                   setSource(value as SoftwareRequest["source_kind"]);
                   setRef(value === "source_ref" ? "main" : "");
+                  if (value === "release") setLoadingReleases(true);
                 }}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="software-ref">
-                {source === "source_ref" ? "Git ref" : "Release"}
+                {source === "source_ref"
+                  ? "Git ref"
+                  : manualRelease
+                    ? "Release tag"
+                    : "Release"}
               </Label>
               {source === "source_ref" ? (
                 <Input
                   id="software-ref"
                   value={ref}
+                  disabled={busy}
+                  onChange={(event) => setRef(event.target.value)}
+                  required
+                />
+              ) : manualRelease ? (
+                <Input
+                  id="software-ref"
+                  value={ref}
+                  placeholder={`${tagPrefix}0.0.1`}
                   disabled={busy}
                   onChange={(event) => setRef(event.target.value)}
                   required
@@ -182,9 +217,28 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
             </p>
           )}
           {releaseError && (
-            <p role="alert" className="text-sm text-destructive">
-              {releaseError}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p
+                role="alert"
+                title={releaseError}
+                className="text-sm text-muted-foreground"
+              >
+                The release list is unavailable. Enter a published tag to
+                continue.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  setLoadingReleases(true);
+                  setCatalogAttempt((attempt) => attempt + 1);
+                }}
+              >
+                Retry list
+              </Button>
+            </div>
           )}
           <fieldset disabled={busy}>
             <TaskRunAfterSelector
@@ -199,17 +253,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
             status="Prepare version"
             className={editorFooterClassName}
           >
-            <Button
-              type="submit"
-              disabled={
-                busy ||
-                afterLoading ||
-                !ref.trim() ||
-                (source === "release" &&
-                  (loadingReleases ||
-                    !(releases ?? []).some((release) => release.ref === ref)))
-              }
-            >
+            <Button type="submit" disabled={!canPrepare}>
               {work.publishing
                 ? "Submitting…"
                 : source === "source_ref"

@@ -19,6 +19,7 @@ SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 COMMIT = re.compile(r"[0-9a-f]{40}")
 MAX_FILE = 16 << 20
 MAX_TOTAL = 64 << 20
+VERSION_ASSET = "console-version.json"
 
 
 def canonical(value: dict) -> bytes:
@@ -77,14 +78,24 @@ def main() -> None:
     api = args.openapi.read_bytes()
     if not api or len(api) > MAX_FILE or args.openapi.is_symlink():
         raise ValueError("OpenAPI document is unavailable or unsafe")
+    release = f"console/v{args.version}"
+    version_asset = canonical({"release": release})
     files = console_files(args.dist)
+    supplied_version = next((value for name, value in files if name == VERSION_ASSET), None)
+    if supplied_version is not None and supplied_version != version_asset:
+        raise ValueError("Console version asset does not match the release")
+    if supplied_version is None:
+        files.append((VERSION_ASSET, version_asset))
+        files.sort()
+    if sum(len(value) for _, value in files) > MAX_TOTAL:
+        raise ValueError("Console dist exceeds the release size bound")
     inventory = [{"path": name, "size": len(value),
                   "sha256": "sha256:" + hashlib.sha256(value).hexdigest()} for name, value in files]
     manifest = canonical({
         "api_sha256": "sha256:" + hashlib.sha256(api).hexdigest(),
         "created_at": datetime.fromtimestamp(timestamp, timezone.utc).isoformat().replace("+00:00", "Z"),
         "files": inventory,
-        "release": f"console/v{args.version}",
+        "release": release,
         "schema": 1,
         "source_commit": commit,
     })

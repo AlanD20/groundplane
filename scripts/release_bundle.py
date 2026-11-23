@@ -110,6 +110,7 @@ def main() -> None:
     environment = deploy.build_environment() | {
         "GOMAXPROCS": "2", "CGO_ENABLED": "0", "GOFLAGS": "-p=2 -trimpath",
         "GOOS": "linux", "GOARCH": ARCHES[platform.machine()], "GOAMD64": "v1", "GOARM64": "v8.0",
+        "GP_CONSOLE_RELEASE": f"console/v{args.version}",
     }
     postgres_catalog, _ = load_catalog(Path(args.postgres16_release), published=True)
     environment["POSTGRES16_RELEASE_BASE64"] = base64.b64encode(postgres_catalog).decode("ascii")
