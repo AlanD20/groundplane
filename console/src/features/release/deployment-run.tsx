@@ -402,11 +402,13 @@ export function DeploymentRun({
                     </CardContent>
                   </Card>
                   <section
+                    key={selected.id}
                     aria-label="Selected operation"
-                    className="min-w-0 space-y-3 rounded-xl bg-card"
+                    tabIndex={0}
+                    className="h-[clamp(20rem,65dvh,42rem)] min-w-0 space-y-3 overflow-y-auto overscroll-y-contain rounded-xl border border-border bg-card p-4 [scrollbar-gutter:stable] focus-visible:outline-2 focus-visible:outline-ring"
                   >
                     <WorkInspection
-                      key={selected.id}
+                      className="rounded-none border-0 p-0"
                       taskId={taskId}
                       work={selected}
                       revision={detail.work.revision}

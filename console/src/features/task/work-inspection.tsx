@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -36,17 +37,22 @@ export function WorkInspection({
   revision,
   targetName,
   onChanged,
+  className,
 }: {
   taskId: string;
   work: TaskWork;
   revision: number;
   targetName?: string;
   onChanged?: () => void;
+  className?: string;
 }) {
   return (
     <section
       id={`task-work-${work.id}`}
-      className="min-w-0 space-y-4 rounded-lg border border-border p-4"
+      className={cn(
+        "min-w-0 space-y-4 rounded-lg border border-border p-4",
+        className,
+      )}
     >
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
