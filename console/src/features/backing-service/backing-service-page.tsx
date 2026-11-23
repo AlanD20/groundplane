@@ -35,6 +35,7 @@ import { ConnectionsTab } from "./backing-connections";
 import { DesiredStateTab } from "./backing-desired-state";
 
 type PlatformTab = (typeof backingDestinations)[number]["key"];
+const redeployLabel = "Redeploy";
 
 export default function BackingServiceDetailPage() {
   const params = useRequiredParams("id");
@@ -90,7 +91,7 @@ export default function BackingServiceDetailPage() {
   const runtimeRunning = svc.runtimeIntent === "running";
   const actionLabel =
     pendingAction === "deploy"
-      ? "Deploy saved configuration"
+      ? redeployLabel
       : pendingAction === "destroy"
         ? "Remove containers"
         : pendingAction === "stop"
@@ -154,7 +155,7 @@ export default function BackingServiceDetailPage() {
                 disabled={pendingAction !== null}
                 onClick={() => setPendingAction("deploy")}
               >
-                <ArrowUpCircle className="size-4" /> Deploy saved configuration
+                <ArrowUpCircle className="size-4" /> {redeployLabel}
               </Button>
             )}
           </>
@@ -427,7 +428,7 @@ export default function BackingServiceDetailPage() {
           title={`${actionLabel} · ${g.name}`}
           description={
             pendingAction === "deploy"
-              ? "Recreate the containers using the saved configuration and image. Persistent volumes are retained. Connected applications can lose access while the containers are replaced."
+              ? "Apply saved settings by replacing the containers. Persistent volumes are retained. Connected applications may lose access during replacement."
               : pendingAction === "destroy"
                 ? "Remove the containers, including files stored only inside them. Configuration, connections and persistent volumes are retained. Start recreates the containers."
                 : pendingAction === "stop"
