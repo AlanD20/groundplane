@@ -86,8 +86,21 @@ export function TaskNotifications() {
         for (const { id } of notifications) {
           if (current[id]) next[id] = current[id];
         }
-        for (const [id, update] of results) next[id] = update;
-        return next;
+        let changed = Object.keys(next).length !== Object.keys(current).length;
+        for (const [id, update] of results) {
+          const previous = current[id];
+          if (
+            previous &&
+            previous.error === update.error &&
+            previous.task?.updatedAt === update.task?.updatedAt &&
+            previous.task?.status === update.task?.status &&
+            previous.task?.finishedAt === update.task?.finishedAt
+          )
+            continue;
+          next[id] = update;
+          changed = true;
+        }
+        return changed ? next : current;
       });
     },
     { enabled: notifications.length > 0, interval: 2_000 },
@@ -96,9 +109,11 @@ export function TaskNotifications() {
   const notificationLink = (id: string, onClick: () => void) => {
     const update = updates[id];
     const task = update?.task;
-    const title = task
-      ? taskPresentation(task, store).title
-      : "Operation accepted";
+    const title = task?.targetName
+      ? task.title
+      : task
+        ? taskPresentation(task, store).title
+        : "Operation accepted";
     return (
       <TaskLink
         taskId={id}
@@ -173,7 +188,12 @@ export function TaskNotifications() {
         document.body,
       )}
       <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerContent className="max-w-md gap-4" finalFocus={trigger}>
+        <DrawerContent
+          blurBackdrop={false}
+          className="max-w-md gap-4 duration-150"
+          initialFocus={drawerTitle}
+          finalFocus={trigger}
+        >
           <DialogHeader className="flex-row flex-wrap items-center justify-between gap-2 pr-8">
             <DialogTitle ref={drawerTitle} tabIndex={-1}>
               Task notifications

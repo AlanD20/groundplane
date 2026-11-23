@@ -16,19 +16,28 @@ function DrawerContent({
   className,
   children,
   showClose = true,
+  blurBackdrop = true,
   onKeyDown,
   ...props
-}: DialogPrimitive.Popup.Props & { showClose?: boolean }) {
+}: DialogPrimitive.Popup.Props & {
+  showClose?: boolean;
+  blurBackdrop?: boolean;
+}) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm transition-all duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
+      <DialogPrimitive.Backdrop
+        className={cn(
+          "fixed inset-0 z-50 bg-background/70 transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+          blurBackdrop && "backdrop-blur-sm",
+        )}
+      />
       <DialogPrimitive.Popup
         initialFocus={true}
         data-form-owner
         data-slot="drawer-content"
         className={cn(
           "fixed inset-y-0 right-0 z-50 flex min-w-0 w-full max-w-2xl flex-col gap-5 overflow-y-auto [overflow-wrap:anywhere] [&>*]:min-w-0 border-l border-border bg-popover p-6 text-popover-foreground shadow-2xl outline-none",
-          "transition-all duration-200 ease-out data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full",
+          "transition-transform duration-200 ease-out motion-reduce:transition-none data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full",
           className,
         )}
         onKeyDown={(event) => {
