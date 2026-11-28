@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"time"
 
+	"github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -14,28 +15,42 @@ type observedConfiguration struct {
 	effectiveDigest      [sha512.Size]byte
 	imageDigest          [sha256.Size]byte
 	imageConfigAuthority [sha256.Size]byte
+	marked               bool
 }
 
-// CoreDNS notices atomically replaced files on its reload interval. Only valid
-// but absent or stale serving evidence is pending; ownership, bytes and malformed
-// evidence still fail immediately. The caller's proof deadline bounds the wait.
+// CoreDNS notices atomically replaced files on its reload interval. Missing
+// serving evidence is pending; invalid ownership or mounted configuration fails
+// immediately. The caller's proof deadline bounds the wait.
 func (executor *Executor) awaitConfiguration(ctx context.Context, request Request) (observedConfiguration, error) {
+	var marked bool
 	for {
 		if err := ctx.Err(); err != nil {
-			return observedConfiguration{}, errs.Wrap(errs.KindStateConflict, err)
+			return observedConfiguration{}, configurationWaitError(err, marked)
 		}
 		configuration, ready, err := executor.inspectConfiguration(ctx, request)
 		if err != nil || ready {
 			return configuration, err
 		}
+		marked = configuration.marked
 		timer := time.NewTimer(time.Second)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return observedConfiguration{}, errs.Wrap(errs.KindStateConflict, ctx.Err())
+			return observedConfiguration{}, configurationWaitError(ctx.Err(), marked)
 		case <-timer.C:
 		}
 	}
+}
+
+func configurationWaitError(err error, marked bool) error {
+	if marked {
+		return errs.WrapJoined(
+			errs.KindStateConflict,
+			errs.New(errs.KindStateConflict, "DNS resolver did not serve the captured configuration digest"),
+			err,
+		)
+	}
+	return errs.Wrap(errs.KindStateConflict, err)
 }
 
 func (executor *Executor) inspectConfiguration(
@@ -58,23 +73,49 @@ func (executor *Executor) inspectConfiguration(
 	if err != nil {
 		return result, false, err
 	}
-	metrics, err := executor.metrics.Read(ctx, request.MetricsURL)
+	digest, marked, err := dnsresolver.CorefileServingProof(runtime.artifact)
 	if err != nil {
-		return result, false, err
+		return result, false, errs.Wrap(errs.KindStateConflict, err)
 	}
-	defer clear(metrics)
-	metric, present, err := reloadMetricSHA512(metrics, request.ReloadMetric)
-	if err != nil {
-		return result, false, err
+	result.marked = marked
+	var ready bool
+	if marked {
+		ready = executor.observeServingDigest(ctx, request, digest)
+	} else {
+		ready, err = executor.inspectLegacyActivation(ctx, request, runtime, result.effectiveDigest)
 	}
-	// CoreDNS publishes this metric only after a reload, including failed ones.
-	// The successful instance-start log is always required; a metric alone can
-	// never establish serving authority. Fresh startup has no metric yet.
-	if runtime.servingConfiguration == nil || *runtime.servingConfiguration != result.effectiveDigest ||
-		(present && metric != result.effectiveDigest) {
-		return result, false, nil
+	if err != nil || !ready {
+		return result, false, err
 	}
 	result.imageDigest = runtime.verifiedImageDigest
 	result.imageConfigAuthority = runtime.imageConfigAuthority
 	return result, true, nil
+}
+
+func (executor *Executor) inspectLegacyActivation(
+	ctx context.Context,
+	request Request,
+	runtime runtimeEvidence,
+	expected [sha512.Size]byte,
+) (bool, error) {
+	if runtime.legacyServingDigest == nil {
+		return false, errs.New(errs.KindStateConflict, "DNS resolver startup log evidence is unavailable")
+	}
+	serving, err := runtime.legacyServingDigest(ctx)
+	if err != nil {
+		return false, err
+	}
+	metrics, err := executor.metrics.Read(ctx, request.MetricsURL)
+	if err != nil {
+		return false, err
+	}
+	defer clear(metrics)
+	metric, present, err := reloadMetricSHA512(metrics, request.ReloadMetric)
+	if err != nil {
+		return false, err
+	}
+	// CoreDNS publishes this metric only after a reload, including failed ones.
+	// Legacy files require the successful instance-start entry. Fresh startup
+	// may have no metric yet.
+	return serving != nil && *serving == expected && (!present || metric == expected), nil
 }

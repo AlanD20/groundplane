@@ -49,9 +49,9 @@ type Request struct {
 }
 
 type runtimeEvidence struct {
-	artifact             []byte
-	verifiedImageDigest  [sha256.Size]byte
-	servingConfiguration *[sha512.Size]byte
+	artifact            []byte
+	verifiedImageDigest [sha256.Size]byte
+	legacyServingDigest func(context.Context) (*[sha512.Size]byte, error)
 	// imageConfigAuthority is observed for classic Docker, or bound from the
 	// sealed catalog after verifying the selected child on containerd. It is
 	// never the child digest mislabeled as an independently observed config.
@@ -70,6 +70,7 @@ type metricsReader interface {
 type dnsProber interface {
 	Query(context.Context, string, string, agentpb.DNSQueryType) (*agentpb.DNSQueryProof, error)
 	QueryTCP(context.Context, string, string, agentpb.DNSQueryType) (*agentpb.DNSQueryProof, error)
+	MatchesServingDigest(context.Context, string, string) (bool, error)
 }
 
 type Executor struct {

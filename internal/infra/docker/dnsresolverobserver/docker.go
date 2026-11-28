@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"context"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -104,21 +105,19 @@ func (inspector *dockerRuntimeInspector) Inspect(ctx context.Context, request Re
 		clear(artifact)
 		return runtimeEvidence{}, errs.New(errs.KindStateConflict, "DNS resolver process start time is invalid")
 	}
-	logs, err := inspector.engine.ContainerLogs(ctx, container.ID, client.ContainerLogsOptions{
-		ShowStdout: true, ShowStderr: true, Since: container.State.StartedAt, Tail: "all",
-	})
-	if err != nil {
-		clear(artifact)
-		return runtimeEvidence{}, errs.Wrap(errs.KindInternal, err)
-	}
-	serving, err := readServingConfiguration(logs, container.Config.Tty)
-	if err != nil {
-		clear(artifact)
-		return runtimeEvidence{}, err
-	}
+	containerID, startedAt, tty := container.ID, container.State.StartedAt, container.Config.Tty
 	return runtimeEvidence{
 		artifact: artifact, verifiedImageDigest: digest,
-		imageConfigAuthority: configAuthority, servingConfiguration: serving,
+		imageConfigAuthority: configAuthority,
+		legacyServingDigest: func(ctx context.Context) (*[sha512.Size]byte, error) {
+			logs, err := inspector.engine.ContainerLogs(ctx, containerID, client.ContainerLogsOptions{
+				ShowStdout: true, ShowStderr: true, Since: startedAt, Tail: "all",
+			})
+			if err != nil {
+				return nil, errs.Wrap(errs.KindInternal, err)
+			}
+			return readServingConfiguration(logs, tty)
+		},
 	}, nil
 }
 

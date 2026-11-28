@@ -7,6 +7,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,16 +24,20 @@ type observerRuntimeStub struct{ evidence runtimeEvidence }
 func (runtime observerRuntimeStub) Inspect(context.Context, Request) (runtimeEvidence, error) {
 	evidence := runtime.evidence
 	evidence.artifact = append([]byte(nil), evidence.artifact...)
-	if evidence.servingConfiguration == nil {
+	if evidence.legacyServingDigest == nil {
 		digest, err := effectiveConfigSHA512("/etc/coredns/Corefile", evidence.artifact)
 		if err != nil {
 			return runtimeEvidence{}, err
 		}
-		evidence.servingConfiguration = &digest
+		evidence.legacyServingDigest = fixedLegacyServingDigest(digest)
 	}
 	return evidence, nil
 }
 func (observerRuntimeStub) Close() error { return nil }
+
+func fixedLegacyServingDigest(digest [sha512.Size]byte) func(context.Context) (*[sha512.Size]byte, error) {
+	return func(context.Context) (*[sha512.Size]byte, error) { return &digest, nil }
+}
 
 type observerMetricsStub struct {
 	mu     sync.Mutex
@@ -52,6 +57,10 @@ func (metrics *observerMetricsStub) Read(context.Context, string) ([]byte, error
 type observerDNSStub struct {
 	mu    sync.Mutex
 	calls []string
+}
+
+func (*observerDNSStub) MatchesServingDigest(context.Context, string, string) (bool, error) {
+	return false, errors.New("unexpected serving digest query")
 }
 
 func (dns *observerDNSStub) QueryTCP(ctx context.Context, endpoint, name string,
@@ -80,6 +89,10 @@ type observerDNSFunc func(
 	string,
 	agentpb.DNSQueryType,
 ) (*agentpb.DNSQueryProof, error)
+
+func (observerDNSFunc) MatchesServingDigest(context.Context, string, string) (bool, error) {
+	return false, errors.New("unexpected serving digest query")
+}
 
 func (query observerDNSFunc) Query(
 	ctx context.Context,

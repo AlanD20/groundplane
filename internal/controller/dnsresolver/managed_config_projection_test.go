@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"net/netip"
+	"strings"
 	"testing"
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
@@ -42,7 +43,7 @@ type previewRenderer struct{ input componentdns.RenderInput }
 
 func (renderer *previewRenderer) Render(input componentdns.RenderInput) ([]byte, error) {
 	renderer.input = componentdns.CloneRenderInput(input)
-	return []byte("controller-rendered Corefile\n"), nil
+	return []byte(strings.Replace(input.CorefileTemplate, "{groundplane}", "controller-rendered Corefile", 1)), nil
 }
 
 func (*previewRenderer) Digest(componentdns.RenderInput) ([sha256.Size]byte, error) {
@@ -79,7 +80,8 @@ func TestManagedConfigProjectorUsesOnlyDurableReadInputs(t *testing.T) {
 		t.Fatalf("ProjectManagedConfigFiles() error = %v", err)
 	}
 	if baselines.reads != 1 || len(files) != 1 || files[0].Path != "/etc/groundplane/coredns/Corefile" ||
-		files[0].Template != template || files[0].Rendered != "controller-rendered Corefile\n" {
+		files[0].Template != template || files[0].Rendered != ". {\n    controller-rendered Corefile\n}\n" ||
+		files[0].GeneratedDirectives != "controller-rendered Corefile\n" {
 		t.Fatalf("ProjectManagedConfigFiles() = %#v, baseline reads = %d", files, baselines.reads)
 	}
 	if len(renderer.input.CatchAll) != 1 || renderer.input.CatchAll[0].Address.String() != "1.1.1.1" {

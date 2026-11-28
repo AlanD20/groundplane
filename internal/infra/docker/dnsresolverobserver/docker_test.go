@@ -44,6 +44,7 @@ type imageIdentityEngine struct {
 	descriptor          *ocispec.Descriptor
 	containerDescriptor *ocispec.Descriptor
 	platform            ocispec.Platform
+	logError            error
 }
 
 func (engine imageIdentityEngine) ContainerList(
@@ -75,6 +76,9 @@ func (engine imageIdentityEngine) ContainerLogs(
 	string,
 	client.ContainerLogsOptions,
 ) (client.ContainerLogsResult, error) {
+	if engine.logError != nil {
+		return nil, engine.logError
+	}
 	return io.NopCloser(bytes.NewReader([]byte("runtime log\n"))), nil
 }
 

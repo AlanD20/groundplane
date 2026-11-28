@@ -2,6 +2,8 @@ package coredns
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/netip"
 	"slices"
 	"strings"
@@ -121,8 +123,8 @@ func TestPlanPinsServingImageAndObservationAction(t *testing.T) {
 }
 
 // QA: DNS-02; pure exact Corefile expansion only, not persisted configuration or DNS answers.
-// Rationale: the canonical operator template must preserve the historical
-// Corefile shape while expanding only the Controller-owned marker.
+// Rationale: the default profile binds the loaded rule to every pre-existing
+// managed directive, while retaining the same DNS intent.
 func TestRendererExpandsCanonicalTemplateExactly(t *testing.T) {
 	t.Parallel()
 	rendered, err := (Renderer{}).Render(dnsresolver.RenderInput{
@@ -135,8 +137,10 @@ func TestRendererExpandsCanonicalTemplateExactly(t *testing.T) {
 	want := []byte(
 		". {\n    bind 127.0.0.1\n    forward . 1.1.1.1\n    reload\n    prometheus 127.0.0.1:9153\n    log\n    errors\n}\n",
 	)
-	if !bytes.Equal(rendered, want) {
-		t.Fatalf("Render() = %q, want %q", rendered, want)
+	expected := sha256.Sum256(want)
+	digest, marked, err := dnsresolver.CorefileServingProof(rendered)
+	if err != nil || !marked || digest != hex.EncodeToString(expected[:]) {
+		t.Fatalf("Render() serving proof = %q, %v, %v", digest, marked, err)
 	}
 }
 

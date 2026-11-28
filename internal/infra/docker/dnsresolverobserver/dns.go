@@ -74,42 +74,9 @@ func (prober networkDNSProber) query(
 	} else if queryType != agentpb.DNSQueryType_DNS_QUERY_TYPE_A {
 		return nil, errs.New(errs.KindValidationFailed, "DNS query type is invalid")
 	}
-	dnsName, err := dnsmessage.NewName(absoluteName(name))
-	if err != nil {
-		return nil, errs.New(errs.KindValidationFailed, "DNS query name is invalid")
-	}
-	var idBytes [2]byte
-	if _, err := rand.Read(idBytes[:]); err != nil {
-		return nil, errs.Wrap(errs.KindInternal, err)
-	}
-	id := binary.BigEndian.Uint16(idBytes[:])
-	query := dnsmessage.Message{
-		Header:    dnsmessage.Header{ID: id, RecursionDesired: true},
-		Questions: []dnsmessage.Question{{Name: dnsName, Type: messageType, Class: dnsmessage.ClassINET}},
-	}
-	encoded, err := query.Pack()
-	if err != nil {
-		return nil, errs.Wrap(errs.KindInternal, err)
-	}
-	response, err := prober.exchangeMessage(ctx, endpoint, encoded, tcp)
+	parsed, usedTCP, err := prober.roundTrip(ctx, endpoint, name, messageType, tcp, true)
 	if err != nil {
 		return nil, err
-	}
-	parsed := dnsmessage.Message{}
-	if !unpackExactDNSResponse(&parsed, response, id, query.Questions[0], !tcp) {
-		return nil, errs.New(errs.KindRequestFailed, "DNS response is invalid")
-	}
-	usedTCP := tcp
-	if parsed.Header.Truncated {
-		response, err = prober.exchangeMessage(ctx, endpoint, encoded, true)
-		if err != nil {
-			return nil, err
-		}
-		parsed = dnsmessage.Message{}
-		if !unpackExactDNSResponse(&parsed, response, id, query.Questions[0], false) {
-			return nil, errs.New(errs.KindRequestFailed, "DNS TCP response is invalid")
-		}
-		usedTCP = true
 	}
 	proof := &agentpb.DNSQueryProof{
 		Name: absoluteName(name), Type: queryType, LocalRcode: uint32(parsed.Header.RCode),
@@ -139,6 +106,52 @@ func (prober networkDNSProber) query(
 	return proof, nil
 }
 
+func (prober networkDNSProber) roundTrip(
+	ctx context.Context,
+	endpoint, name string,
+	messageType dnsmessage.Type,
+	tcp, recursive bool,
+) (dnsmessage.Message, bool, error) {
+	dnsName, err := dnsmessage.NewName(absoluteName(name))
+	if err != nil {
+		return dnsmessage.Message{}, false, errs.New(errs.KindValidationFailed, "DNS query name is invalid")
+	}
+	var idBytes [2]byte
+	if _, err := rand.Read(idBytes[:]); err != nil {
+		return dnsmessage.Message{}, false, errs.Wrap(errs.KindInternal, err)
+	}
+	id := binary.BigEndian.Uint16(idBytes[:])
+	question := dnsmessage.Question{Name: dnsName, Type: messageType, Class: dnsmessage.ClassINET}
+	query := dnsmessage.Message{
+		Header:    dnsmessage.Header{ID: id, RecursionDesired: recursive},
+		Questions: []dnsmessage.Question{question},
+	}
+	encoded, err := query.Pack()
+	if err != nil {
+		return dnsmessage.Message{}, false, errs.Wrap(errs.KindInternal, err)
+	}
+	response, err := prober.exchangeMessage(ctx, endpoint, encoded, tcp)
+	if err != nil {
+		return dnsmessage.Message{}, false, err
+	}
+	var parsed dnsmessage.Message
+	if !unpackExactDNSResponse(&parsed, response, id, question, !tcp) {
+		return dnsmessage.Message{}, false, errs.New(errs.KindRequestFailed, "DNS response is invalid")
+	}
+	if !parsed.Header.Truncated {
+		return parsed, tcp, nil
+	}
+	response, err = prober.exchangeMessage(ctx, endpoint, encoded, true)
+	if err != nil {
+		return dnsmessage.Message{}, false, err
+	}
+	parsed = dnsmessage.Message{}
+	if !unpackExactDNSResponse(&parsed, response, id, question, false) {
+		return dnsmessage.Message{}, false, errs.New(errs.KindRequestFailed, "DNS TCP response is invalid")
+	}
+	return parsed, true, nil
+}
+
 func unpackExactDNSResponse(
 	parsed *dnsmessage.Message,
 	response []byte,
@@ -147,7 +160,8 @@ func unpackExactDNSResponse(
 	allowTruncated bool,
 ) bool {
 	if len(response) == 0 || len(response) > 65535 || parsed.Unpack(response) != nil ||
-		!parsed.Header.Response || parsed.Header.ID != id || (!allowTruncated && parsed.Header.Truncated) ||
+		!parsed.Header.Response || parsed.Header.ID != id || parsed.Header.OpCode != 0 ||
+		(!allowTruncated && parsed.Header.Truncated) ||
 		len(parsed.Questions) != 1 || parsed.Questions[0] != question ||
 		len(parsed.Answers) > maximumDNSSectionRecords ||
 		len(parsed.Authorities) > maximumDNSSectionRecords ||

@@ -152,9 +152,11 @@ place. Removing DNS restores the captured predecessor resolver configuration.
 
 A configuration Task owns the resolver until application or recovery settles.
 The Console links that Task, disables conflicting edits and refreshes ownership
-automatically. Observation checks the mounted file, the live reload fingerprint
-and serving probes; it does not depend on an old reload message remaining in the
-query log tail.
+automatically. The Agent checks the mounted file and sends probes to the
+running resolver. The default managed Corefile answers a private TXT probe with
+its loaded configuration digest. Previously captured Corefiles and custom
+profiles use the successful startup or reload fingerprint from the resolver
+log. Upgrading Groundplane alone leaves the serving configuration in place.
 
 An unresolved failure is recorded without disconnecting the Agent. The resolver
 stays locked because restoration has not been proved; unrelated Tasks can proceed.

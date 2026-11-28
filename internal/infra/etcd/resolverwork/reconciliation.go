@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"slices"
 
+	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/resolverexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
@@ -64,6 +65,8 @@ func (request Request) validate() error {
 
 // fingerprint excludes new Task/attempt/artifact identities. It includes exact
 // desired configuration, DNS bindings and the actual applied predecessor.
+// The serving proof does not change DNS intent. Ignore its bytes here so
+// activating new software alone cannot schedule a resolver reload.
 func fingerprint(input resolverexecution.Input, capture Capture, predecessor int64) (string, error) {
 	desired, err := DesiredDigest(capture.Desired)
 	if err != nil {
@@ -72,6 +75,13 @@ func fingerprint(input resolverexecution.Input, capture Capture, predecessor int
 	file, image := "", ""
 	if input.Candidate != nil {
 		file = hex.EncodeToString(input.Candidate.Apply.ArtifactDigest)
+		semanticDigest, marked, err := componentdns.CorefileServingProof(input.Candidate.Corefile)
+		if err != nil {
+			return "", invalid("CoreDNS reconciliation contains an invalid serving proof")
+		}
+		if marked {
+			file = semanticDigest
+		}
 		image = input.Candidate.Runtime.Services[0].ImageReference
 	}
 	raw, err := json.Marshal(struct {

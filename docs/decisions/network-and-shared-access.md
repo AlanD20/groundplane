@@ -207,6 +207,15 @@ The [Zone resolver decision](../../internal/common/zonedns/configuration.go)
 and [typed CoreDNS input](../../component-sdk/dnsresolver/types.go) define the
 selected topology; compilation is not connectivity qualification.
 
+The default managed Corefile serves a digest of its configuration to a fresh
+loopback TXT probe. The Agent verifies that the running resolver answered
+locally, after checking the exact captured file and image. A reload metric can
+refer to a failed reload, and a damaged Docker JSON log can hide a successful
+one. Previously captured and custom Corefiles still use the successful startup
+log as their serving evidence. Automatic reconciliation compares the DNS
+configuration without the proof rule, so software activation alone does not
+publish a resolver change. Task capture and recovery retain the full files.
+
 ## Runner registry resolution
 
 Host DNS ownership must include its existing writers. On dhcpcd hosts, a passive

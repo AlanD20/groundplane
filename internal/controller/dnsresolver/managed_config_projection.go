@@ -2,13 +2,14 @@ package dnsresolver
 
 import (
 	"context"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
-	resolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"net/netip"
+	"strings"
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/core"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	resolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -130,15 +131,14 @@ func (projector *ManagedConfigProjector) ProjectManagedConfigFiles(
 	}
 	renderedText := string(rendered)
 	clear(rendered)
-	// Use the same renderer with only its insertion marker to expose the exact
-	// generated directives; the Console must not reconstruct DNS configuration.
-	input.CorefileTemplate = "{groundplane}\n"
-	directives, err := projector.renderer.Render(input)
-	if err != nil {
-		return nil, errs.Wrap(errs.KindInternal, err)
+	// The inserted proof depends on the full file, so slice the same render
+	// shown to the operator instead of re-rendering an isolated placeholder.
+	prefix, suffix, marked := strings.Cut(config.CorefileTemplate, "{groundplane}")
+	if !marked || len(renderedText) < len(prefix)+len(suffix) ||
+		!strings.HasPrefix(renderedText, prefix) || !strings.HasSuffix(renderedText, suffix) {
+		return nil, errs.New(errs.KindInternal, "CoreDNS rendering does not match the preview template")
 	}
-	generated := string(directives)
-	clear(directives)
+	generated := renderedText[len(prefix):len(renderedText)-len(suffix)] + "\n"
 	return []apiTypes.ManagedConfigFile{{
 		Path: projector.path, Template: config.CorefileTemplate, Rendered: renderedText,
 		GeneratedDirectives: generated,

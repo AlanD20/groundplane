@@ -38,7 +38,7 @@ func TestAwaitConfigurationAcrossReload(t *testing.T) {
 	t.Run("fresh startup without reload metric", func(t *testing.T) {
 		executor := &Executor{
 			runtime: observerRuntimeStub{
-				evidence: runtimeEvidence{artifact: artifact, servingConfiguration: &effective},
+				evidence: runtimeEvidence{artifact: artifact, legacyServingDigest: fixedLegacyServingDigest(effective)},
 			},
 			metrics: &observerMetricsStub{values: [][]byte{forwardMetrics(nil, 0, 0)}},
 		}
@@ -49,7 +49,9 @@ func TestAwaitConfigurationAcrossReload(t *testing.T) {
 	})
 	t.Run("reload metric cannot prove a failed candidate is serving", func(t *testing.T) {
 		executor := &Executor{
-			runtime: observerRuntimeStub{evidence: runtimeEvidence{artifact: artifact, servingConfiguration: &old}},
+			runtime: observerRuntimeStub{
+				evidence: runtimeEvidence{artifact: artifact, legacyServingDigest: fixedLegacyServingDigest(old)},
+			},
 			metrics: &observerMetricsStub{values: [][]byte{forwardMetrics(&effective, 0, 0)}},
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -69,7 +71,7 @@ func TestAwaitConfigurationAcrossReload(t *testing.T) {
 				candidate.artifact = []byte("unexpected replacement")
 			}
 			runtime := &delayedResolverRuntime{values: []runtimeEvidence{
-				{artifact: artifact, servingConfiguration: &old}, candidate,
+				{artifact: artifact, legacyServingDigest: fixedLegacyServingDigest(old)}, candidate,
 			}}
 			executor := &Executor{
 				runtime: runtime,

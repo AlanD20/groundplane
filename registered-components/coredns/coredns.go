@@ -181,7 +181,32 @@ func (Renderer) Render(input dnsresolver.RenderInput) ([]byte, error) {
 	writeForward(&output, ".", normalized.CatchAll)
 	output.WriteString("    reload")
 	rendered := strings.Replace(normalized.CorefileTemplate, groundplaneMarker, output.String(), 1)
+	if normalized.CorefileTemplate == DefaultCorefileTemplate && servingProofZoneAvailable(normalized) {
+		return dnsresolver.AddCorefileServingProof([]byte(rendered))
+	}
 	return []byte(rendered), nil
+}
+
+func servingProofZoneAvailable(input dnsresolver.RenderInput) bool {
+	zone := strings.TrimSuffix(dnsresolver.ServingProofZone, ".")
+	for _, forwarder := range input.Forwarders {
+		if forwarder.Domain == "invalid" || inServingProofZone(forwarder.Domain, zone) {
+			return false
+		}
+	}
+	for _, host := range input.Hosts {
+		for _, name := range host.Hostnames {
+			if inServingProofZone(name, zone) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func inServingProofZone(name, zone string) bool {
+	name = strings.TrimSuffix(name, ".")
+	return name == zone || strings.HasSuffix(name, "."+zone)
 }
 
 func (Renderer) Digest(input dnsresolver.RenderInput) ([sha256.Size]byte, error) {
