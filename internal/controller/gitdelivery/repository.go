@@ -56,10 +56,12 @@ type acceptedRun struct {
 }
 
 type admission struct {
-	binding BindingSnapshot
-	head    int64
-	lock    int64
-	replay  *acceptedRun
+	binding      BindingSnapshot
+	head         int64
+	headID       string
+	lock         int64
+	readRevision int64
+	replay       *acceptedRun
 }
 
 type runView struct {
@@ -140,14 +142,19 @@ func (repository *Repository) binding(ctx context.Context, serviceID string) (Bi
 }
 
 func (repository *Repository) admission(ctx context.Context, serviceID string, input StartInput) (admission, error) {
-	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{
-		requestKey(serviceID, input), bindingKey(serviceID), headKey(serviceID), lockKey(serviceID),
-	}})
+	keys := []string{bindingKey(serviceID), headKey(serviceID), lockKey(serviceID)}
+	if !input.Automatic {
+		keys = append(keys, requestKey(serviceID, input))
+	}
+	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		return admission{}, err
 	}
-	if read.Values[0] != nil {
-		record, err := recordcodec.Decode[acceptedRun](read.Values[0].Value, acceptedKind)
+	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) {
+		return admission{}, errs.New(errs.KindInternal, "GitHub deployment admission snapshot is incomplete")
+	}
+	if !input.Automatic && read.Values[3] != nil {
+		record, err := recordcodec.Decode[acceptedRun](read.Values[3].Value, acceptedKind)
 		if err != nil {
 			return admission{}, err
 		}
@@ -159,11 +166,42 @@ func (repository *Repository) admission(ctx context.Context, serviceID string, i
 		}
 		return admission{replay: &record}, nil
 	}
-	snapshot, err := decodeBinding(read.Values[1], serviceID)
+	snapshot, err := decodeBinding(read.Values[0], serviceID)
 	if err != nil {
 		return admission{}, err
 	}
-	return admission{binding: snapshot, head: revision(read.Values[2]), lock: revision(read.Values[3])}, nil
+	return admission{
+		binding: snapshot, head: revision(read.Values[1]), headID: identity(read.Values[1]),
+		lock: revision(read.Values[2]), readRevision: read.ReadRevision,
+	}, nil
+}
+
+// latestIntent reads the Run selected by the exact admission snapshot. The
+// head's modification revision identifies a transition even when a SHA recurs.
+func (repository *Repository) latestIntent(ctx context.Context, captured admission) (Run, error) {
+	if captured.head == 0 {
+		return Run{}, nil
+	}
+	if ids.Validate(ids.KindOperation, captured.headID) != nil {
+		return Run{}, errs.New(errs.KindInternal, "GitHub deployment head has an invalid Run ID")
+	}
+	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
+		Keys: []string{runKey(captured.headID)}, Revision: captured.readRevision,
+	})
+	if err != nil {
+		return Run{}, err
+	}
+	if read == nil || read.ReadRevision != captured.readRevision || len(read.Values) != 1 || read.Values[0] == nil {
+		return Run{}, errs.New(errs.KindInternal, "GitHub deployment head has no captured Run")
+	}
+	run, err := decodeRun(read.Values[0], captured.headID)
+	if err != nil {
+		return Run{}, err
+	}
+	if run.Binding.Target != captured.binding.Binding.Target {
+		return Run{}, errs.New(errs.KindInternal, "GitHub deployment head has an inconsistent owner")
+	}
+	return run, nil
 }
 
 func (repository *Repository) createRun(

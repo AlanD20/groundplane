@@ -117,10 +117,18 @@ func (testAccess) Recheck(context.Context, Binding, int64) ([]keyvalue.Condition
 	return []keyvalue.Condition{{Key: "/v1/deleted"}}, nil
 }
 
-type testGitHub struct{ dispatches int }
+type testGitHub struct {
+	commit     string
+	dispatches int
+}
 
-func (*testGitHub) ResolveSource(context.Context, Binding) (string, error) { return testCommit, nil }
-func (*testGitHub) VerifyWorkflow(context.Context, Binding) error          { return nil }
+func (github *testGitHub) ResolveSource(context.Context, Binding) (string, error) {
+	if github.commit != "" {
+		return github.commit, nil
+	}
+	return testCommit, nil
+}
+func (*testGitHub) VerifyWorkflow(context.Context, Binding) error { return nil }
 func (github *testGitHub) Dispatch(context.Context, Run) (WorkflowRun, error) {
 	github.dispatches++
 	return WorkflowRun{}, errs.New(errs.KindRequestUnavailable, "response lost")

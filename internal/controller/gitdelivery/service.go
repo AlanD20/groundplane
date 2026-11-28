@@ -222,7 +222,7 @@ func (service *Service) GetBinding(ctx context.Context, serviceID string) (Bindi
 }
 
 // Begin accepts a durable request. Automatic callers pass the observed commit
-// and use a stable key for webhook redelivery or polling rediscovery.
+// and share the current durable head across webhook delivery and polling.
 func (service *Service) Begin(
 	ctx context.Context,
 	serviceID string,
@@ -239,8 +239,9 @@ func (service *Service) beginRequest(
 	observedRevision int64,
 	effects []RunEffects,
 ) (Run, error) {
-	if ids.Validate(ids.KindService, serviceID) != nil || !keyPattern.MatchString(input.IdempotencyKey) ||
-		((input.Automatic || input.ExpectedCommit != "") && !commitPattern.MatchString(input.ExpectedCommit)) {
+	if ids.Validate(ids.KindService, serviceID) != nil ||
+		(!input.Automatic && !keyPattern.MatchString(input.IdempotencyKey)) ||
+		(input.ExpectedCommit != "" && !commitPattern.MatchString(input.ExpectedCommit)) {
 		return Run{}, errs.New(errs.KindValidationFailed, "invalid GitHub deployment request")
 	}
 	captured, err := service.repository.admission(ctx, serviceID, input)
@@ -252,6 +253,24 @@ func (service *Service) beginRequest(
 	}
 	if observedRevision > 0 && captured.binding.Revision != observedRevision {
 		return Run{}, errs.New(errs.KindStateConflict, "GitHub binding changed after observing the branch")
+	}
+	if input.Automatic {
+		if !captured.binding.Binding.Automatic {
+			return Run{}, errs.New(errs.KindRequestForbidden, "automatic GitHub deployment is disabled")
+		}
+		latest, err := service.repository.latestIntent(ctx, captured)
+		if err != nil {
+			return Run{}, err
+		}
+		commit, err := service.resolveObservedSource(ctx, captured.binding.Binding, input.ExpectedCommit)
+		if err != nil {
+			return Run{}, err
+		}
+		if latest.BindingRevision == captured.binding.Revision && latest.Commit == commit {
+			return latest, nil
+		}
+		input.ExpectedCommit = commit
+		input.IdempotencyKey = automaticTransitionKey(captured, commit)
 	}
 	if captured.lock != 0 {
 		return Run{}, errs.New(errs.KindResourceInUse, "the previous GitHub deployment is still activating")
@@ -266,9 +285,6 @@ func (service *Service) begin(
 	effects []RunEffects,
 ) (Run, error) {
 	binding := captured.binding.Binding
-	if input.Automatic && !binding.Automatic {
-		return Run{}, errs.New(errs.KindRequestForbidden, "automatic GitHub deployment is disabled")
-	}
 	binding, defaultGuards, err := service.resolveRunnerSelector(ctx, binding)
 	if err != nil {
 		return Run{}, err
@@ -282,15 +298,12 @@ func (service *Service) begin(
 	if !validRunners(authorized) {
 		return Run{}, errs.New(errs.KindStateConflict, "no compatible registered Runner matches the GitHub deployment")
 	}
-	commit, err := service.github.ResolveSource(ctx, binding)
-	if err != nil {
-		return Run{}, err
-	}
-	if !commitPattern.MatchString(commit) {
-		return Run{}, errs.New(errs.KindStateConflict, "GitHub returned an invalid source commit")
-	}
-	if input.ExpectedCommit != "" && input.ExpectedCommit != commit {
-		return Run{}, errs.New(errs.KindStateConflict, "GitHub branch has moved beyond this deployment request")
+	commit := input.ExpectedCommit
+	if !input.Automatic {
+		commit, err = service.resolveObservedSource(ctx, binding, input.ExpectedCommit)
+		if err != nil {
+			return Run{}, err
+		}
 	}
 	guards, err := service.accessConditions(ctx, binding, 0)
 	if err != nil {
