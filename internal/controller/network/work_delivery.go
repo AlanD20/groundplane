@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/networkexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -15,15 +16,20 @@ import (
 )
 
 type AgentWork struct {
-	inputs *networkwork.InputRepository
-	queue  *workqueue.Repository
+	inputs   *networkwork.InputRepository
+	queue    *workqueue.Repository
+	releases *etcd.ReleaseLedger
 }
 
-func NewAgentWork(inputs *networkwork.InputRepository, queue *workqueue.Repository) (*AgentWork, error) {
-	if inputs == nil || queue == nil {
+func NewAgentWork(
+	inputs *networkwork.InputRepository,
+	queue *workqueue.Repository,
+	releases *etcd.ReleaseLedger,
+) (*AgentWork, error) {
+	if inputs == nil || queue == nil || releases == nil {
 		return nil, errs.New(errs.KindInternal, "Network execution requires captured input storage")
 	}
-	return &AgentWork{inputs: inputs, queue: queue}, nil
+	return &AgentWork{inputs: inputs, queue: queue, releases: releases}, nil
 }
 
 func (owner *AgentWork) LoadWorkAssignment(
@@ -48,6 +54,11 @@ func (owner *AgentWork) AuthorizeAgentStart(ctx context.Context, view workqueue.
 		return workqueue.Change{}, err
 	}
 	if view.Attempt.Attempt.Direction == workexecution.Forward {
+		placement, err := owner.releases.DirectReleaseNetworkConditions(ctx, view.Work, view.Attempt.Attempt.Executor)
+		if err != nil {
+			return workqueue.Change{}, err
+		}
+		guards = append(guards, placement...)
 		current, desired, err := owner.inputs.ReadDesiredMatch(ctx, view.Work)
 		if err != nil {
 			return workqueue.Change{}, err

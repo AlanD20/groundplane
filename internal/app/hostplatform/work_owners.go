@@ -253,11 +253,11 @@ func (platform *Platform) newWorkOwners(
 	if err != nil {
 		return nil, err
 	}
-	networkAgent, err := network.NewAgentWork(networkRecords, queue)
+	networkAgent, err := network.NewAgentWork(networkRecords, queue, directReleases.ledger)
 	if err != nil {
 		return nil, err
 	}
-	networkReports, err := network.NewWorkReports(queue, networkRecords, diagnostics)
+	networkReports, err := network.NewWorkReports(queue, networkRecords, diagnostics, directReleases.ledger)
 	if err != nil {
 		return nil, err
 	}

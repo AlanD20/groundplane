@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/networkexecution"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -58,18 +59,19 @@ type WorkReports struct {
 	queue       *workqueue.Repository
 	records     WorkRecords
 	diagnostics *executiondiagnostics.Repository
+	releases    *etcd.ReleaseLedger
 }
 
 func NewWorkReports(queue *workqueue.Repository, records WorkRecords,
-	diagnostics *executiondiagnostics.Repository,
+	diagnostics *executiondiagnostics.Repository, releases *etcd.ReleaseLedger,
 ) (*WorkReports, error) {
-	if queue == nil || records == nil || diagnostics == nil {
+	if queue == nil || records == nil || diagnostics == nil || releases == nil {
 		return nil, errs.New(
 			errs.KindInternal,
 			"Network reporting requires execution storage, its publication owner and diagnostics",
 		)
 	}
-	return &WorkReports{queue: queue, records: records, diagnostics: diagnostics}, nil
+	return &WorkReports{queue: queue, records: records, diagnostics: diagnostics, releases: releases}, nil
 }
 
 func (service *WorkReports) CheckpointNetwork(ctx context.Context, authorization agentregistration.WorkAuthorization,
@@ -106,6 +108,14 @@ func (service *WorkReports) CheckpointNetwork(ctx context.Context, authorization
 	checkpoint, err := progress.Checkpoint(view.Attempt.Attempt, input.Action, input.NetworkId)
 	if err != nil {
 		return nil, err
+	}
+	if view.Attempt.Attempt.Direction == workexecution.Forward && progress.InFlight &&
+		(view.Checkpoint.Record == nil || progress.Sequence > view.Checkpoint.Record.Sequence) {
+		placement, err := service.releases.DirectReleaseNetworkConditions(ctx, view.Work, view.Attempt.Attempt.Executor)
+		if err != nil {
+			return nil, err
+		}
+		guards = append(guards, placement...)
 	}
 	change, err := service.records.PrepareNetworkWorkCheckpoint(ctx, view, input, progress, time.Now().UTC())
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	networkmodel "github.com/AlanD20/groundplane/internal/core/network"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/networkwork"
@@ -91,6 +92,19 @@ func TestNativeZoneRemovalCapturesHostAndPendingReplay(t *testing.T) {
 	verifyNetworkDiagnosticReplay(t, f.base, accepted.TaskID, inputs, input)
 }
 
+func nativeNetworkReleaseLedger(t *testing.T, store keyvalue.Store) *etcd.ReleaseLedger {
+	t.Helper()
+	tasks, err := etcd.NewTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger, err := etcd.NewReleaseLedger(store, tasks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ledger
+}
+
 type networkDiagnosticFaultStore struct {
 	*nativeVolumeStore
 	fail     bool
@@ -113,7 +127,8 @@ func verifyNetworkDiagnosticReplay(t *testing.T, f *nativeVolumeFixture, taskID 
 	t.Helper()
 	ctx := t.Context()
 	view := f.assign(t, taskID)
-	owner, err := networkcontroller.NewAgentWork(inputs, f.queue)
+	releases := nativeNetworkReleaseLedger(t, f.store)
+	owner, err := networkcontroller.NewAgentWork(inputs, f.queue, releases)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +173,7 @@ func verifyNetworkDiagnosticReplay(t *testing.T, f *nativeVolumeFixture, taskID 
 	if err != nil {
 		t.Fatal(err)
 	}
-	reports, err := networkcontroller.NewWorkReports(f.queue, inputs, diagnostics)
+	reports, err := networkcontroller.NewWorkReports(f.queue, inputs, diagnostics, releases)
 	if err != nil {
 		t.Fatal(err)
 	}

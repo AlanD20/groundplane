@@ -80,12 +80,21 @@ func (repository *InputRepository) prepareApplied(
 	input *agentpb.NetworkWorkInput,
 ) (workqueue.Change, error) {
 	return repository.prepareObservedApplied(ctx, view, input,
-		input.Action == agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE, false, view.Checkpoint.Record.RecordedAt)
+		input.Action == agentpb.NetworkWorkAction_NETWORK_WORK_ACTION_REMOVE, false,
+		view.Checkpoint.Record.RecordedAt, view.Checkpoint.Record.Evidence)
 }
 
 func (repository *InputRepository) prepareObservedApplied(ctx context.Context, view workqueue.ResumeView,
-	input *agentpb.NetworkWorkInput, absent, preserve bool, observedAt time.Time,
+	input *agentpb.NetworkWorkInput, absent, preserve bool, observedAt time.Time, evidence workexecution.Input,
 ) (workqueue.Change, error) {
+	executor := view.Attempt.Attempt.Executor
+	remote, guards, err := repository.appliedNetworkHost(ctx, executor, view.Work.ReadRevision)
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	if remote {
+		return repository.prepareRemoteApplied(ctx, view, input, absent, preserve, observedAt, evidence, guards)
+	}
 	key := AppliedKey(input.NetworkId)
 	read, err := repository.read(ctx, []string{key}, view.Work.ReadRevision)
 	if err != nil {
@@ -105,7 +114,7 @@ func (repository *InputRepository) prepareObservedApplied(ctx context.Context, v
 		}
 		revision = value.ModRevision
 	}
-	change := workqueue.Change{Conditions: []keyvalue.Condition{{Key: key, ModRevision: revision}}}
+	change := workqueue.Change{Conditions: append(guards, keyvalue.Condition{Key: key, ModRevision: revision})}
 	if preserve {
 		if absent {
 			return workqueue.Change{}, conflict("absent Network cannot preserve a present configuration")
@@ -141,22 +150,29 @@ func decodeApplied(raw []byte) (AppliedNetwork, error) {
 		return AppliedNetwork{}, conflict("applied Network state is invalid")
 	}
 	state, err := jcs.Decode[AppliedNetwork](raw)
-	if err != nil || ids.Validate(ids.KindNetwork, state.NetworkID) != nil ||
+	if err != nil {
+		return AppliedNetwork{}, conflict("applied Network state is invalid")
+	}
+	return state, validateApplied(state)
+}
+
+func validateApplied(state AppliedNetwork) error {
+	if ids.Validate(ids.KindNetwork, state.NetworkID) != nil ||
 		ids.Validate(
 			ids.KindEnvironment,
 			state.EnvironmentID,
 		) != nil || ids.Validate(ids.KindHost, state.HostID) != nil ||
 		state.Input.Validate() != nil || state.ObservedAt.IsZero() || len(state.IntentSHA256) != 64 {
-		return AppliedNetwork{}, conflict("applied Network state is invalid")
+		return conflict("applied Network state is invalid")
 	}
 	name, nameErr := networkname.New(state.NetworkID)
 	if nameErr != nil || name != state.DockerName {
-		return AppliedNetwork{}, conflict("applied Network name is not id-derived")
+		return conflict("applied Network name is not id-derived")
 	}
 	if _, err := hex.DecodeString(state.IntentSHA256); err != nil {
-		return AppliedNetwork{}, conflict("applied Network intent digest is invalid")
+		return conflict("applied Network intent digest is invalid")
 	}
-	return state, nil
+	return nil
 }
 
 func (repository *InputRepository) ReadApplied(

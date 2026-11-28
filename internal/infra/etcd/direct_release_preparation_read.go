@@ -135,6 +135,11 @@ func (ledger *ReleaseLedger) DirectReleasePreparationConditions(ctx context.Cont
 		return nil, err
 	}
 	guards = append(guards, remote...)
+	bridges, err := ledger.remoteReleaseBridgeConditions(ctx, request, work.ReadRevision)
+	if err != nil {
+		return nil, err
+	}
+	guards = append(guards, bridges...)
 	return append(guards, condition, keyvalue.Condition{
 		Key: releaserender.ServiceRolloutKey(
 			work.Task.Task.Scope.EnvironmentID,

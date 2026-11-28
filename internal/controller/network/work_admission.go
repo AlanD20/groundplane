@@ -60,6 +60,11 @@ func (owner *AgentWork) Admit(
 		change.Conditions = append(change.Conditions, guards...)
 		return workdispatch.Decision{Disposition: workdispatch.Advance, Change: change}, nil
 	}
+	placement, err := owner.releases.DirectReleaseNetworkConditions(ctx, view, request.Executor.Record.Identity)
+	if err != nil {
+		return workdispatch.Decision{}, err
+	}
+	guards = append(guards, placement...)
 	deadline := item.Deadline
 	removal, err := owner.inputs.RemovalAdmission(ctx, view)
 	if err != nil {

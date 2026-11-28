@@ -19,6 +19,26 @@ func ReleaseNetworkWorkInputs(
 	intentSHA []byte,
 	seed string,
 ) ([]*agentpb.NetworkWorkInput, error) {
+	return releaseNetworkWorkInputs(source, intentSHA, seed, "dns", CaptureReleaseNetworkPreparation)
+}
+
+// RemoteReleaseNetworkWorkInputs prepares every bridge used by the sealed
+// stateless candidate. It refuses any topology that needs shared GP DNS, an
+// external network, or a bridge outside the Environment's private ownership.
+func RemoteReleaseNetworkWorkInputs(
+	source *agentpb.ComposeArtifact,
+	intentSHA []byte,
+	seed string,
+) ([]*agentpb.NetworkWorkInput, error) {
+	return releaseNetworkWorkInputs(source, intentSHA, seed, "remote", captureRemoteReleaseNetworks)
+}
+
+func releaseNetworkWorkInputs(
+	source *agentpb.ComposeArtifact,
+	intentSHA []byte,
+	seed, identityPrefix string,
+	capture func(*agentpb.ComposeArtifact, string) (ReleaseNetworkPreparation, error),
+) ([]*agentpb.NetworkWorkInput, error) {
 	if source == nil || len(intentSHA) != sha256.Size || ids.Validate(ids.KindConfig, seed) != nil {
 		return nil, errs.New(
 			errs.KindValidationFailed,
@@ -29,8 +49,7 @@ func ReleaseNetworkWorkInputs(
 	if err != nil {
 		return nil, err
 	}
-	preparation, err := CaptureReleaseNetworkPreparation(source,
-		ids.DeriveAt(ids.KindConfig, at, seed, "dns-networks"))
+	preparation, err := capture(source, ids.DeriveAt(ids.KindConfig, at, seed, identityPrefix+"-networks"))
 	if err != nil || preparation.Artifact == nil {
 		return nil, err
 	}
@@ -57,7 +76,7 @@ func ReleaseNetworkWorkInputs(
 		}
 		digest := sha256.Sum256(content)
 		artifact := &agentpb.ComposeArtifact{
-			ArtifactId: ids.DeriveAt(ids.KindConfig, at, seed, "dns-network/"+identity.NetworkId),
+			ArtifactId: ids.DeriveAt(ids.KindConfig, at, seed, identityPrefix+"-network/"+identity.NetworkId),
 			OwnerKind:  source.OwnerKind, OwnerId: source.OwnerId, ProjectName: source.ProjectName,
 			AuthorizedVolumeDir: source.AuthorizedVolumeDir, CanonicalYaml: content,
 			YamlSha256: digest[:], Networks: []*agentpb.ComposeNetwork{proto.CloneOf(identity)},

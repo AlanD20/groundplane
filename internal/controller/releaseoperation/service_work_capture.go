@@ -202,24 +202,24 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 			"Release request intent digest is invalid",
 		)
 	}
-	networks, err := executionplan.ReleaseNetworkWorkInputs(artifact, intentSHA, networkSeed)
+	selectNetworks := executionplan.ReleaseNetworkWorkInputs
+	networkPurpose := "dns-network"
+	if candidate.remoteAuthority != nil {
+		selectNetworks = executionplan.RemoteReleaseNetworkWorkInputs
+		networkPurpose = "remote-network"
+	}
+	networks, err := selectNetworks(artifact, intentSHA, networkSeed)
 	if err != nil {
 		return task, item, request, capture, err
 	}
-	if candidate.remoteAuthority != nil && len(networks) != 0 {
-		return task, item, request, capture, errs.New(
-			errs.KindValidationFailed,
-			"Remote Deploy requires prepared network isolation without shared CoreDNS",
-		)
-	}
 	for _, network := range networks {
-		inputID := ids.DeriveAt(ids.KindPlan, at, task.ID, "dns-network-input/"+network.NetworkId)
+		inputID := ids.DeriveAt(ids.KindPlan, at, task.ID, networkPurpose+"-input/"+network.NetworkId)
 		_, raw, reference, err := executionplan.CaptureNetworkWorkInput(inputID, network)
 		if err != nil {
 			return task, item, request, capture, err
 		}
 		request.Networks = append(request.Networks, etcd.DirectReleaseNetwork{
-			WorkItemID: ids.DeriveAt(ids.KindWorkItem, at, task.ID, "dns-network/"+network.NetworkId),
+			WorkItemID: ids.DeriveAt(ids.KindWorkItem, at, task.ID, networkPurpose+"/"+network.NetworkId),
 			NetworkID:  network.NetworkId, Input: reference, Data: raw,
 		})
 	}

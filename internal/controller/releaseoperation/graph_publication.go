@@ -83,6 +83,11 @@ func (owner *GraphPublication) PreparePublication(ctx context.Context, task work
 	guards := []keyvalue.Condition{guard,
 		{Key: workqueue.TaskKey(task.Task.ID), ModRevision: task.Revision},
 		{Key: workqueue.ItemKey(work.Item.Item.ID), ModRevision: work.Item.Revision}}
+	remote, err := owner.ledger.DirectReleaseRemoteConditions(ctx, request.Remote, revision)
+	if err != nil {
+		return workdispatch.PublicationBatch{}, err
+	}
+	guards = append(guards, remote...)
 	staged := workqueue.Change{Conditions: guards}
 	defer keyvalue.ZeroMutationBytes(staged.Mutations)
 	prepared := 0

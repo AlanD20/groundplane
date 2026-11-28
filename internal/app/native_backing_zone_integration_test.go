@@ -102,7 +102,7 @@ func TestNativeBackingZoneRemovalPublishesCapturedGraph(t *testing.T) {
 		graph[0].Operation != workexecution.Network || graph[0].Placement.HostID != f.base.authorization.Identity().HostID {
 		t.Fatalf("captured Backing bridge: %v", err)
 	}
-	owner, err := networkcontroller.NewAgentWork(inputs, f.base.queue)
+	owner, err := networkcontroller.NewAgentWork(inputs, f.base.queue, nativeNetworkReleaseLedger(t, f.base.store))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,6 +17,7 @@ import (
 )
 
 type directReleaseExecution struct {
+	ledger      *etcd.ReleaseLedger
 	restoration *grouprestoration.Service
 	admission   []workdispatch.Registration
 	retention   []operationretention.TaskRegistration
@@ -53,6 +54,7 @@ func (platform *Platform) newDirectReleaseWork(queue *workqueue.Repository, netw
 		return directReleaseExecution{}, err
 	}
 	return directReleaseExecution{
+		ledger:      ledger,
 		restoration: restoration,
 		retention: []operationretention.TaskRegistration{
 			{Action: workexecution.ActionDeploy, Owner: publication, Drafts: publication},

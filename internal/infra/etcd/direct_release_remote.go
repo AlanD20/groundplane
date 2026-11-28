@@ -77,7 +77,7 @@ func (source *DirectReleaseRemoteSource) validate(readRevision int64) error {
 func (request DirectReleasePreparation) validateRemoteSource() error {
 	source := request.Remote
 	target := workexecution.Placement{Executor: workexecution.Agent, HostID: source.Executor.HostID}
-	if request.GroupID != "" || len(request.Networks) != 0 || request.Intent.OperationKind != release.OperationDeploy ||
+	if request.GroupID != "" || len(request.Networks) == 0 || request.Intent.OperationKind != release.OperationDeploy ||
 		request.Intent.Workspace.Kind != release.WorkspaceTenant || request.Configuration.Placement != target ||
 		request.Intent.Strategy != release.StrategyRecreate || request.Intent.CandidateWorkload.ReplicaCount != 1 ||
 		source.validate(request.Source.ReadRevision) != nil {

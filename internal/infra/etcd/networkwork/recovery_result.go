@@ -58,6 +58,7 @@ func (repository *InputRepository) PrepareRecoveryResult(
 		report.Observation.Absent,
 		preserve,
 		report.Observation.At,
+		evidence,
 	)
 	if err != nil {
 		return workqueue.Change{}, workexecution.Completion{}, err

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"slices"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -120,8 +121,14 @@ func (request DirectReleasePreparation) validate() error {
 		if workIDs[network.WorkItemID] || index > 0 && request.Networks[index-1].NetworkID >= network.NetworkID {
 			return errs.New(errs.KindValidationFailed, "Direct Release network membership is duplicated or unordered")
 		}
-		if _, err := network.Open(request.Intent.EnvironmentID); err != nil {
+		input, err := network.Open(request.Intent.EnvironmentID)
+		if err != nil {
 			return err
+		}
+		if request.Remote != nil {
+			if err := executionplan.ValidateRemoteReleaseNetworkWorkInput(input); err != nil {
+				return err
+			}
 		}
 		workIDs[network.WorkItemID] = true
 	}
