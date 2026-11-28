@@ -1,5 +1,6 @@
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Box } from "lucide-react";
+import { useParams } from "react-router-dom";
 import { ResourcePanel } from "@/components/common/resource-panel";
 import { TaskLink } from "@/components/common/task-link";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,9 @@ import {
   type FirstDeploymentDraft,
 } from "./first-deployment-model";
 import { FirstDeploymentServiceConfiguration } from "./first-deployment-service-configuration";
+import { FirstDeploymentStorageMigrations } from "./first-deployment-storage-migrations";
+import { FirstDeploymentAttachments } from "./first-deployment-attachments";
+import type { FirstDeploymentBackingOption } from "./first-deployment-attachment-model";
 
 type WizardEnvironment = Pick<
   Environment,
@@ -34,6 +38,7 @@ type WizardEnvironment = Pick<
 > & {
   zones: Pick<Environment["zones"][number], "id" | "name" | "subnet">[];
   services: Pick<Environment["services"][number], "id" | "name" | "image">[];
+  volumes?: Environment["volumes"];
 };
 
 export type FirstDeploymentProject = {
@@ -41,6 +46,7 @@ export type FirstDeploymentProject = {
   label: string;
   environments?: WizardEnvironment[];
   secretOptions?: SelectOption[];
+  backingOptions?: FirstDeploymentBackingOption[];
 };
 
 type TaskAccepted = { task_id: string };
@@ -51,6 +57,11 @@ export type FirstDeploymentWizardProps = {
   initialEnvironmentId?: string;
   environmentLocked?: boolean;
   blueprint: BlueprintActions;
+  renderRecoveryReview?: (
+    environmentId: string,
+    draft: FirstDeploymentDraft,
+    environmentPath?: string,
+  ) => ReactNode;
   onCreateEnvironment: (
     projectId: string,
     name: string,
@@ -85,6 +96,7 @@ const initialDraft: FirstDeploymentDraft = {
   newService: true,
   newZone: true,
   entries: [],
+  volumes: [],
 };
 
 export function FirstDeploymentWizard({
@@ -93,10 +105,12 @@ export function FirstDeploymentWizard({
   initialEnvironmentId,
   environmentLocked = false,
   blueprint,
+  renderRecoveryReview,
   onCreateEnvironment,
   onFetchImage,
 }: FirstDeploymentWizardProps) {
   const prefix = useId();
+  const params = useParams<"tenant" | "project">();
   const [projectId, setProjectId] = useState(initialProjectId ?? "");
   const [environmentId, setEnvironmentId] = useState(
     initialEnvironmentId ?? "",
@@ -135,6 +149,13 @@ export function FirstDeploymentWizard({
     environmentId === create
       ? createdEnvironment
       : environments.find((candidate) => candidate.id === environmentId);
+  const environmentPath =
+    params.tenant &&
+    params.project &&
+    projectId === initialProjectId &&
+    selectedEnvironment
+      ? `/t/${encodeURIComponent(params.tenant)}/${encodeURIComponent(params.project)}/${encodeURIComponent(selectedEnvironment.name)}`
+      : undefined;
   const ready =
     selectedEnvironment?.provisioningState === "ready" &&
     !selectedEnvironment.deletionTaskId;
@@ -158,6 +179,9 @@ export function FirstDeploymentWizard({
       newZone: true,
       subnet: "",
       entries: [],
+      volumes: [],
+      migration: undefined,
+      attachments: [],
     });
   }
 
@@ -217,12 +241,19 @@ export function FirstDeploymentWizard({
     void perform("review", async () => {
       setPrepared(undefined);
       const current = await blueprint.getBlueprint(id);
-      const document = firstDeploymentBlueprint(current.document, draft);
+      const document = firstDeploymentBlueprint(
+        current.document,
+        draft,
+        project?.backingOptions,
+      );
       const request = await createBlueprintTextApplyRequest(document);
       if (
         current.revision !== "0" &&
         !(draft.newService && draft.newZone) &&
-        !draft.entries.length
+        !draft.entries.length &&
+        !draft.attachments?.length &&
+        !draft.volumes.some((volume) => !volume.existing) &&
+        !draft.migration
       )
         request.manifest.service = draft.service.trim();
       if (applicableFetch) request.manifest.after = [applicableFetch.taskId];
@@ -400,6 +431,9 @@ export function FirstDeploymentWizard({
                         service: existing?.name ?? "",
                         image: existing?.image ?? "",
                         entries: [],
+                        volumes: [],
+                        migration: undefined,
+                        attachments: [],
                       });
                     }}
                   />
@@ -455,6 +489,20 @@ export function FirstDeploymentWizard({
                 secretOptions={project?.secretOptions}
                 onChange={updateDraft}
               />
+              <FirstDeploymentStorageMigrations
+                draft={draft}
+                volumes={selectedEnvironment.volumes ?? []}
+                environmentPath={environmentPath}
+                disabled={Boolean(working)}
+                onChange={updateDraft}
+              />
+              {draft.newService && (
+                <FirstDeploymentAttachments
+                  attachments={draft.attachments ?? []}
+                  options={project?.backingOptions ?? []}
+                  onChange={(attachments) => updateDraft({ attachments })}
+                />
+              )}
             </>
           )}
         </fieldset>
@@ -478,6 +526,11 @@ export function FirstDeploymentWizard({
               </TaskLink>
             )}
             <BlueprintReview validation={prepared.validation} />
+            {renderRecoveryReview?.(
+              prepared.environmentId,
+              draft,
+              environmentPath,
+            )}
             <details>
               <summary className="cursor-pointer text-sm font-medium">
                 Proposed Blueprint

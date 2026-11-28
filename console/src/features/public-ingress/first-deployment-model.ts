@@ -1,10 +1,28 @@
 import { isMap, parseDocument } from "yaml";
+import {
+  applyFirstDeploymentAttachments,
+  type FirstDeploymentAttachment,
+  type FirstDeploymentBackingOption,
+} from "./first-deployment-attachment-model.ts";
 
 export type FirstDeploymentEntry = {
   id: string;
   key: string;
   source: "literal" | "secret_ref";
   value: string;
+};
+
+export type FirstDeploymentVolume = {
+  id: string;
+  key: string;
+  target: string;
+  existing: boolean;
+  readOnly: boolean;
+};
+
+export type FirstDeploymentMigration = {
+  slug: string;
+  script: string;
 };
 
 export type FirstDeploymentDraft = {
@@ -17,11 +35,17 @@ export type FirstDeploymentDraft = {
   newService: boolean;
   newZone: boolean;
   entries: FirstDeploymentEntry[];
+  volumes: FirstDeploymentVolume[];
+  migration?: FirstDeploymentMigration;
+  attachments?: FirstDeploymentAttachment[];
 };
+
+const resourceSlug = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export function firstDeploymentBlueprint(
   source: string,
   draft: FirstDeploymentDraft,
+  backingOptions: readonly FirstDeploymentBackingOption[] = [],
 ): string {
   const document = parseDocument(source, { intAsBigInt: true });
   if (
@@ -76,18 +100,22 @@ export function firstDeploymentBlueprint(
     const healthURL = new URL(`http://127.0.0.1:${port}${draft.healthPath}`);
     if (healthURL.hostname !== "127.0.0.1")
       throw new Error("Use a local application health path.");
-    document.setIn(servicePath, {
-      image,
-      expose: [String(port)],
-      networks: [zone],
-      healthcheck: {
-        test: ["CMD", "curl", "-fsS", "--", healthURL.href],
-        interval: "10s",
-        timeout: "3s",
-        retries: 5,
-      },
-      "x-gp-release": { default_strategy: "recreate" },
-    });
+    document.setIn(
+      servicePath,
+      document.createNode({
+        image,
+        expose: [String(port)],
+        networks: [zone],
+        healthcheck: {
+          test: ["CMD", "curl", "-fsS", "--", healthURL.href],
+          interval: "10s",
+          timeout: "3s",
+          retries: 5,
+        },
+        "x-gp-release": { default_strategy: "recreate" },
+      }),
+    );
+    addStorageAndMigration(document, service, draft);
   } else {
     document.setIn([...servicePath, "image"], image);
   }
@@ -116,5 +144,87 @@ export function firstDeploymentBlueprint(
     });
   }
 
+  applyFirstDeploymentAttachments(
+    document,
+    service,
+    draft.attachments ?? [],
+    backingOptions,
+  );
   return document.toString({ indent: 2, lineWidth: 100 });
+}
+
+function addStorageAndMigration(
+  document: ReturnType<typeof parseDocument>,
+  service: string,
+  { volumes, migration }: FirstDeploymentDraft,
+) {
+  const targets = new Set<string>();
+  const declaredVolumes = document.get("volumes", true);
+  const existingVolumeSlugs = isMap(declaredVolumes)
+    ? declaredVolumes.items.map(
+        ({ key, value }) =>
+          (isMap(value) ? value.get("x-gp-slug") : undefined) ?? String(key),
+      )
+    : [];
+  const mounts = volumes.map((volume) => {
+    const key = volume.key.trim();
+    const target = volume.target.trim();
+    const path = ["volumes", key];
+    if (
+      !target.startsWith("/") ||
+      target
+        .slice(1)
+        .split("/")
+        .some((part) => !part || part === "." || part === "..") ||
+      target.includes("\0")
+    )
+      throw new Error("Use a clean absolute container path such as /app/data.");
+    if (targets.has(target))
+      throw new Error(
+        `More than one Volume uses the container path ${target}.`,
+      );
+    targets.add(target);
+
+    if (volume.existing) {
+      if (!key || !document.hasIn(path))
+        throw new Error("Select an existing Volume from this Environment.");
+    } else {
+      if (!resourceSlug.test(key))
+        throw new Error(
+          "Use up to 63 lowercase letters, digits, and hyphens for the Volume name. Start and end with a letter or digit.",
+        );
+      if (document.hasIn(path) || existingVolumeSlugs.includes(key))
+        throw new Error(`Volume ${key} already exists. Select it to mount it.`);
+      document.setIn(path, {});
+    }
+    return { type: "volume", source: key, target, read_only: volume.readOnly };
+  });
+  if (mounts.length) document.setIn(["services", service, "volumes"], mounts);
+
+  if (!migration) return;
+  const slug = migration.slug.trim();
+  const script = migration.script;
+  const path = ["x-gp-scripts", slug];
+  if (!resourceSlug.test(slug))
+    throw new Error(
+      "Use up to 63 lowercase letters, digits, and hyphens for the Script name. Start and end with a letter or digit.",
+    );
+  if (
+    !script.trim() ||
+    script.includes("\0") ||
+    new TextEncoder().encode(script).length > 65_536
+  )
+    throw new Error(
+      "Enter a migration script up to 64 KiB without NUL characters.",
+    );
+  const scripts = document.get("x-gp-scripts", true);
+  if (
+    document.hasIn(path) ||
+    (isMap(scripts) &&
+      scripts.items.some(
+        ({ value }) => isMap(value) && value.get("slug") === slug,
+      ))
+  )
+    throw new Error(`Script ${slug} already exists in this Environment.`);
+  document.setIn(path, { slug, service, when: "pre-deploy", script });
 }

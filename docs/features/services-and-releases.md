@@ -76,6 +76,29 @@ Redeploying the same tag can apply configuration changes. If that local tag has
 been moved to different bytes, a new Deploy can select those bytes; an existing
 Release never changes with the tag. Retry retains its original image and inputs.
 
+### Deploy a first image
+
+Open **Deploy an image** from the Project or Environment. Select a target and
+an OCI image. For a new Service, set its private Zone, container port and
+readiness path. The image needs `curl` for the generated health check. Fetch the
+image if it is missing on the host.
+
+Add mounted storage, Backing connections and a pre-deploy migration only when
+the application needs them. A mount can use an existing Environment Volume
+or declare a new one. For supported Backing Services, you can map the
+connection URL to a variable exposed to the new Service. The migration runs
+with that Service's image and captured configuration before the Service
+starts. Use the Environment's existing configuration actions to manage mounts,
+connections and Scripts for an existing Service.
+
+Review the Blueprint before applying. New shared resources require an
+Environment-wide Apply. Review its complete change list and release strategies.
+The backup panel reports the Environment's current destination and whether it
+can see verified Recovery Points for existing sources. Check the individual
+source before relying on a restore. Add new sources to the backup policy after
+deployment where supported. Deployment rollback restores an earlier image.
+Restore data separately if a migration changed it.
+
 ### Promote a tested image
 
 In Deploy, choose **Promote a Release** and review the source Release ID. The
