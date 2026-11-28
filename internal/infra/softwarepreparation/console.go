@@ -45,4 +45,24 @@ func (preparer *Preparer) prepareConsoleRelease(
 	)
 }
 
-func preparerConsoleArtifactInvalid(artifact consolerelease.Artifact) bool { return !artifact.Valid() }
+func consoleSourceRelease(source ResolvedSource) string { return "console/ref/" + source.ResolvedSHA }
+
+func (preparer *Preparer) prepareConsoleSource(
+	ctx context.Context, source ResolvedSource, controller controllerDigests, workspace string,
+) (consolerelease.Artifact, error) {
+	bundlePath := filepath.Join(workspace, "console-source.tar.gz")
+	release := consoleSourceRelease(source)
+	digest, err := consolerelease.WriteSourceBundle(
+		ctx,
+		filepath.Join(workspace, "controller-payload", "console-dist"),
+		bundlePath,
+		consolerelease.Manifest{
+			Release: release, SourceCommit: source.ResolvedSHA, APISHA256: controller.api,
+			CreatedAt: source.CommitTime,
+		},
+	)
+	if err != nil {
+		return consolerelease.Artifact{}, err
+	}
+	return preparer.console.StageArchive(ctx, bundlePath, release, digest, source.ResolvedSHA)
+}

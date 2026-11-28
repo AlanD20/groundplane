@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/postgres16protocol"
 	buildversion "github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/agentimagemetadata"
+	"github.com/AlanD20/groundplane/internal/infra/consolerelease"
 	"github.com/AlanD20/groundplane/internal/infra/registryimages"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -114,10 +115,13 @@ func (preparer *Preparer) Prepare(
 			if preparer.console == nil {
 				return errs.New(errs.KindStrategyNotImplemented, "Console release preparation is unavailable on this host")
 			}
-			if input.Source.SourceKind != Release {
-				return errs.New(errs.KindStrategyNotImplemented, "Console source-ref preparation is not implemented")
+			var artifact consolerelease.Artifact
+			var err error
+			if input.Source.SourceKind == SourceRef {
+				artifact, err = preparer.prepareConsoleSource(ctx, input.Source, controllerIdentity, workspace)
+			} else {
+				artifact, err = preparer.prepareConsoleRelease(ctx, input.Source.ConsoleRelease, workspace)
 			}
-			artifact, err := preparer.prepareConsoleRelease(ctx, input.Source.ConsoleRelease, workspace)
 			if err != nil {
 				return err
 			}
@@ -270,8 +274,15 @@ func ValidateResult(result Result, source ResolvedSource, partial bool) error {
 		}
 	}
 	if result.Console != nil {
-		if preparerConsoleArtifactInvalid(result.Console.Artifact) {
+		artifact := result.Console.Artifact
+		if !artifact.Valid() {
 			return errs.New(errs.KindValidationFailed, "prepared Console bundle identity is invalid")
+		}
+		if source.SourceKind == SourceRef {
+			if artifact.Release != consoleSourceRelease(source) ||
+				result.Controller != nil && artifact.APISHA256 != result.Controller.APISHA256 {
+				return errs.New(errs.KindStateConflict, "prepared Console does not match the selected source and API")
+			}
 		}
 	}
 	if !partial && (source.Selection.includesController() != (result.Controller != nil) ||

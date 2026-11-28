@@ -169,17 +169,21 @@ func (operation *dockerOperation) buildController(
 	if err := os.Mkdir(payload, 0o700); err != nil {
 		return "", controllerDigests{}, errs.Wrap(errs.KindInternal, err)
 	}
-	_, err := operation.runIn(ctx, buildTimeout, sourceDirectory,
+	arguments := []string{
 		"buildx", "build", "--builder", operation.builder,
-		"--platform", source.Platform.OS+"/"+source.Platform.Architecture,
+		"--platform", source.Platform.OS + "/" + source.Platform.Architecture,
 		"--provenance=false", "--progress=plain", "--file", "Dockerfile.build",
-		"--build-arg", "VERSION="+version,
-		"--build-arg", "SOURCE_KIND="+string(source.SourceKind),
-		"--build-arg", "SOURCE_COMMIT="+source.ResolvedSHA,
-		"--build-arg", "POSTGRES16_RELEASE_BASE64="+base64.StdEncoding.EncodeToString(catalog),
-		"--build-arg", "SOURCE_DATE_EPOCH="+strconv.FormatInt(source.CommitTime.Unix(), 10),
-		"--output", "type=local,dest="+payload, ".",
-	)
+		"--build-arg", "VERSION=" + version,
+		"--build-arg", "SOURCE_KIND=" + string(source.SourceKind),
+		"--build-arg", "SOURCE_COMMIT=" + source.ResolvedSHA,
+		"--build-arg", "POSTGRES16_RELEASE_BASE64=" + base64.StdEncoding.EncodeToString(catalog),
+		"--build-arg", "SOURCE_DATE_EPOCH=" + strconv.FormatInt(source.CommitTime.Unix(), 10),
+		"--output", "type=local,dest=" + payload,
+	}
+	if source.Selection == SelectionAll {
+		arguments = append(arguments, "--target", "source-payload")
+	}
+	_, err := operation.runIn(ctx, buildTimeout, sourceDirectory, append(arguments, ".")...)
 	if err != nil {
 		return "", controllerDigests{}, err
 	}

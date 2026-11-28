@@ -19,8 +19,20 @@ RUN if [ -n "$SOURCE_KIND$SOURCE_COMMIT" ]; then \
     && make console-toolchain controller-binary cli VERSION="$VERSION" \
         SOURCE_KIND="$SOURCE_KIND" SOURCE_COMMIT="$SOURCE_COMMIT" \
         POSTGRES16_RELEASE_BASE64="$POSTGRES16_RELEASE_BASE64"
-FROM scratch
+FROM scratch AS controller-payload
 COPY --from=build /src/bin/controller /controller
 COPY --from=build /src/bin/controller-release.json /controller-release.json
 COPY --from=build /src/bin/groundplane /groundplane
 COPY --from=build /src/openapi.json /openapi.json
+
+FROM build AS source-checked
+RUN bash scripts/repo-env.sh go run ./internal/openapigen -output .tmp/source-openapi.json \
+    && cmp openapi.json .tmp/source-openapi.json \
+    && cp console/src/lib/api.generated.ts .tmp/source-api.generated.ts \
+    && bash scripts/repo-env.sh npm --prefix console run generate:api \
+    && cmp console/src/lib/api.generated.ts .tmp/source-api.generated.ts
+
+FROM controller-payload AS source-payload
+COPY --from=source-checked /src/console/dist /console-dist
+
+FROM controller-payload

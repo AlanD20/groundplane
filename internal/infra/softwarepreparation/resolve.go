@@ -51,10 +51,10 @@ func (preparer *Preparer) Resolve(ctx context.Context, input ResolveInput) (Reso
 			"published release tag is outside its component namespace",
 		)
 	}
-	if input.SourceKind == SourceRef && input.Selection.includesConsole() {
+	if input.SourceKind == SourceRef && input.Selection == SelectionConsole {
 		return ResolvedSource{}, errs.New(
 			errs.KindStrategyNotImplemented,
-			"Console and All preparation require a published release",
+			"Console-only preparation requires a published release",
 		)
 	}
 

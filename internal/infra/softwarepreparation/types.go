@@ -325,8 +325,8 @@ func (source ResolvedSource) validate() error {
 		return errs.New(errs.KindValidationFailed, "software preparation platform does not match this host")
 	}
 	if source.SourceKind == SourceRef {
-		if source.Selection.includesConsole() {
-			return errs.New(errs.KindStrategyNotImplemented, "Console and All preparation require a published release")
+		if source.Selection == SelectionConsole {
+			return errs.New(errs.KindStrategyNotImplemented, "Console-only preparation requires a published release")
 		}
 		if !commitPattern.MatchString(source.ResolvedSHA) || source.CommitTime.Before(time.Unix(0, 0)) ||
 			source.CommitTime.Nanosecond() != 0 || source.ControllerRelease != nil || source.AgentRelease != nil ||
