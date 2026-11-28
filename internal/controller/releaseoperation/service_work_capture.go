@@ -149,7 +149,7 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 		ReadRevision: scope.ReadRevision,
 	}
 	hooks, err := service.prepareReleaseHooks(ctx, scope, manifest.ReadRevision, operation, work, operationID, planID,
-		[]releaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}}, candidate.remotePlacement)
+		[]releaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}}, candidate.remoteAuthority != nil)
 	if err != nil {
 		return task, item, request, capture, err
 	}
@@ -179,6 +179,7 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 		return task, item, request, capture, err
 	}
 	request = etcd.DirectReleasePreparation{
+		Remote:        candidate.remoteAuthority,
 		Rollout:       rollout,
 		Intent:        intent,
 		Manifest:      manifest,
@@ -204,6 +205,12 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 	networks, err := executionplan.ReleaseNetworkWorkInputs(artifact, intentSHA, networkSeed)
 	if err != nil {
 		return task, item, request, capture, err
+	}
+	if candidate.remoteAuthority != nil && len(networks) != 0 {
+		return task, item, request, capture, errs.New(
+			errs.KindValidationFailed,
+			"Remote Deploy requires prepared network isolation without shared CoreDNS",
+		)
 	}
 	for _, network := range networks {
 		inputID := ids.DeriveAt(ids.KindPlan, at, task.ID, "dns-network-input/"+network.NetworkId)

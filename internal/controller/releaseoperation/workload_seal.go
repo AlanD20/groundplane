@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/hostplacement"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (service *Service) sealCandidates(ctx context.Context, candidates []releaseCandidateInput) error {
@@ -27,6 +28,13 @@ func (service *Service) sealCandidatesOnHost(ctx context.Context, candidates []r
 	var seals []domain.WorkloadSeal
 	var err error
 	if selected != nil {
+		if len(candidates) != 1 || candidates[0].remoteProxyImage == nil {
+			return remotePlacementUnavailable()
+		}
+		proxy := *candidates[0].remoteProxyImage
+		selections = append(selections, workloadseal.Selection{
+			Requested: &workloadseal.Requested{Reference: proxy.Reference(), Replicas: 1},
+		})
 		seals, err = workloadseal.ResolveForProcess(
 			ctx,
 			service.images,
@@ -34,6 +42,9 @@ func (service *Service) sealCandidatesOnHost(ctx context.Context, candidates []r
 			selected.ProcessGeneration,
 			selections,
 		)
+		if err == nil && seals[len(seals)-1].LocalImageID != "sha256:"+proxy.Platform.ConfigDigest {
+			return errs.New(errs.KindStateConflict, "selected Host proxy image differs from the attested image")
+		}
 	} else {
 		agent, readErr := service.agents.GetSingleton(ctx)
 		if readErr != nil {

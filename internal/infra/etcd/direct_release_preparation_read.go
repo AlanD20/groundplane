@@ -130,6 +130,11 @@ func (ledger *ReleaseLedger) DirectReleasePreparationConditions(ctx context.Cont
 	if err != nil {
 		return nil, err
 	}
+	remote, err := ledger.DirectReleaseRemoteConditions(ctx, request.Remote, work.ReadRevision)
+	if err != nil {
+		return nil, err
+	}
+	guards = append(guards, remote...)
 	return append(guards, condition, keyvalue.Condition{
 		Key: releaserender.ServiceRolloutKey(
 			work.Task.Task.Scope.EnvironmentID,
@@ -189,13 +194,21 @@ func (ledger *ReleaseLedger) MatchDirectReleaseSource(
 			return false, nil, errs.New(errs.KindStateConflict, "Group Release source differs from its captured member")
 		}
 	}
-	return ledger.readDirectReleaseSourceMatch(
+	current, guards, err := ledger.readDirectReleaseSourceMatch(
 		ctx,
 		work.Task.Task.Scope,
 		request.Source,
 		work.Item.Item.TargetID,
 		work.ReadRevision,
 	)
+	if err != nil || !current {
+		return current, guards, err
+	}
+	current, remote, err := ledger.matchRemoteReleaseSource(ctx, request.Remote, work.ReadRevision)
+	if err != nil {
+		return false, nil, err
+	}
+	return current, append(guards, remote...), nil
 }
 
 func (ledger *ReleaseLedger) readDirectReleaseSourceMatch(ctx context.Context, scope workexecution.Scope,

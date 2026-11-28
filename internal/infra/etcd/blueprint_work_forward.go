@@ -109,7 +109,12 @@ func (ledger *ReleaseLedger) loadReleaseForwardSources(
 		if err != nil {
 			return empty, err
 		}
+		remote, err := ledger.DirectReleaseRemoteConditions(ctx, request.Remote, work.ReadRevision)
+		if err != nil {
+			return empty, err
+		}
 		sources.Conditions = append(sources.Conditions, conditions...)
+		sources.Conditions = append(sources.Conditions, remote...)
 		sources.Conditions = append(sources.Conditions, guard)
 	} else if task.Action == workexecution.ActionApply {
 		units, err := blueprintunits.NewRepository(ledger.store)

@@ -24,7 +24,6 @@ func (service *Service) prepareServiceWork(ctx context.Context, scope releaseque
 type remoteServiceSelection struct {
 	host         hostplacement.Snapshot
 	localImageID string
-	conditions   []keyvalue.Condition
 }
 
 func (service *Service) prepareServiceWorkForHost(ctx context.Context, scope releasequeries.ReleasePlanningScope,
@@ -57,7 +56,6 @@ func (service *Service) prepareServiceWorkForHost(ctx context.Context, scope rel
 		}
 	} else {
 		placement = remote.host.Placement
-		candidate.remotePlacement = true
 		if err := validateRemoteDeploymentProjection(scope, projection, candidate); err != nil {
 			return taskdependencies.Prepared{}, err
 		}
@@ -92,7 +90,6 @@ func (service *Service) prepareServiceWorkForHost(ctx context.Context, scope rel
 		authority, err = service.ledger.PrepareDirectReleaseCapture(ctx, task, item, request, rollout, addresses)
 	} else {
 		authority, err = service.ledger.PrepareRemoteDirectReleaseCapture(ctx, task, item, request, rollout, addresses, remote.host.Identity)
-		authority.Conditions = append(authority.Conditions, remote.conditions...)
 	}
 	if err != nil {
 		return taskdependencies.Prepared{}, err

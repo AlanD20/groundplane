@@ -60,7 +60,7 @@ type Service struct {
 }
 
 type releaseCandidateInput struct {
-	remotePlacement  bool
+	remoteAuthority  *etcd.DirectReleaseRemoteSource
 	remoteProxyImage *domain.ProxyImage
 	planning         releasequeries.ReleasePlanningService
 	selection        workloadseal.Selection

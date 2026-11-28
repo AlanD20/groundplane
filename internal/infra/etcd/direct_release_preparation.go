@@ -54,6 +54,7 @@ type DirectReleasePreparation struct {
 	Hooks         []DirectReleaseHookSources        `json:"hooks,omitempty"`
 	Networks      []DirectReleaseNetwork            `json:"networks,omitempty"`
 	GroupID       string                            `json:"group_id,omitempty"`
+	Remote        *DirectReleaseRemoteSource        `json:"remote,omitempty"`
 }
 
 func (request DirectReleasePreparation) validate() error {
@@ -91,6 +92,11 @@ func (request DirectReleasePreparation) validate() error {
 	if request.Source.TenantRevision < 0 || request.Source.TenantRevision > request.Source.ReadRevision ||
 		(request.Intent.Workspace.TenantID == "") != (request.Source.TenantRevision == 0) {
 		return errs.New(errs.KindValidationFailed, "Direct Release Tenant source is invalid")
+	}
+	if request.Remote != nil {
+		if err := request.validateRemoteSource(); err != nil {
+			return err
+		}
 	}
 	member := request.Manifest.Record.Members[0]
 	intentDigest, err := domain.Digest(request.Intent)

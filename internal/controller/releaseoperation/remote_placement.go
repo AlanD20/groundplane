@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/core/serviceports"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -127,9 +128,14 @@ func (service *Service) prepareRemoteServiceWork(ctx context.Context, scope rele
 		conditions,
 		keyvalue.Condition{Key: remoteimages.WitnessKey(hostID, imageReference), ModRevision: image.Revision},
 	)
+	authority, err := etcd.CaptureDirectReleaseRemoteSource(selected.Identity, conditions, scope.ReadRevision)
+	if err != nil {
+		return taskdependencies.Prepared{}, err
+	}
+	candidate.remoteAuthority = authority
 	candidate.remoteProxyImage = &prepared.ProxyImage
 	return service.prepareServiceWorkForHost(ctx, scope, candidate, task, &remoteServiceSelection{
-		host: selected, localImageID: image.Record.LocalImageID, conditions: conditions,
+		host: selected, localImageID: image.Record.LocalImageID,
 	})
 }
 

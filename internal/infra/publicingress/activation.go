@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/jcs"
@@ -191,7 +192,8 @@ func (store *Store) Recover(ctx context.Context, predecessor, candidate Receipt)
 	}
 }
 
-func (store *Store) Observe(ctx context.Context) (Receipt, error) {
+// Observe verifies that the live runtime serves one of the exact expected publications.
+func (store *Store) Observe(ctx context.Context, expected Receipt, alternatives ...Receipt) (Receipt, error) {
 	dir, err := store.open(ctx)
 	if err != nil {
 		return Receipt{}, err
@@ -203,6 +205,16 @@ func (store *Store) Observe(ctx context.Context) (Receipt, error) {
 	}
 	if state.Candidate != nil {
 		return Receipt{}, conflict("public ingress activation is awaiting recovery")
+	}
+	if state.Current.Receipt != expected && !slices.Contains(alternatives, state.Current.Receipt) {
+		return Receipt{}, conflict("public ingress settled receipt differs from the expected publication")
+	}
+	_, pending, err := dir.read(reloadMarker, 512)
+	if err != nil {
+		return Receipt{}, err
+	}
+	if pending {
+		return Receipt{}, conflict("public ingress has an unresolved reload")
 	}
 	return store.verify(ctx, state.Current)
 }

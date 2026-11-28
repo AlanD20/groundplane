@@ -111,8 +111,7 @@ func (local *Local) applyExisting(ctx context.Context, plan ingressexecution.Pla
 	if err != nil {
 		// A failed candidate can have restored the exact predecessor. Evidence
 		// after the attempt, rather than a particular error string, settles it.
-		if observed, observationErr := store.Observe(ctx); observationErr == nil &&
-			observed == Receipt(*plan.Predecessor) {
+		if observed, observationErr := store.Observe(ctx, Receipt(*plan.Predecessor)); observationErr == nil {
 			return localReport(plan, observed)
 		}
 		return ingressexecution.Report{}, err
@@ -149,21 +148,21 @@ func (local *Local) readOrRecover(ctx context.Context, plan ingressexecution.Pla
 	if err != nil {
 		return ingressexecution.Report{}, err
 	}
+	predecessor := Receipt(*plan.Predecessor)
+	candidate := Receipt{RuntimeID: identity.RuntimeID, Revision: plan.Revision, Digest: plan.Digest}
 	if recover {
-		wanted := Receipt{RuntimeID: identity.RuntimeID, Revision: plan.Revision, Digest: plan.Digest}
-		receipt, err := store.Recover(ctx, Receipt(*plan.Predecessor), wanted)
+		receipt, err := store.Recover(ctx, predecessor, candidate)
 		if err == nil {
 			return localReport(plan, receipt)
 		}
 		// Recover may restore the previous known-good configuration and report
 		// the candidate's failure. Only a matching live receipt proves restore.
-		if observed, observationErr := store.Observe(ctx); observationErr == nil &&
-			observed == Receipt(*plan.Predecessor) {
+		if observed, observationErr := store.Observe(ctx, predecessor); observationErr == nil {
 			return localReport(plan, observed)
 		}
 		return ingressexecution.Report{}, err
 	}
-	receipt, err := store.Observe(ctx)
+	receipt, err := store.Observe(ctx, predecessor, candidate)
 	if err != nil {
 		return ingressexecution.Report{}, err
 	}
