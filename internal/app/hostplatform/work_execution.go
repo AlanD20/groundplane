@@ -2,6 +2,7 @@ package hostplatform
 
 import (
 	"context"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/attachreports"
@@ -74,7 +75,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	if err != nil {
 		return nil, err
 	}
-	retentionOwners := append(
+	retentionOwners := slices.Concat(
+		dependencies.Extensions.Retention,
 		append(append(softwareWork.retention, owners.provisioning.retention...), owners.resolver.retention...),
 		[]operationretention.WorkRegistration{
 			{Operation: workexecution.ReleaseGroup, Owner: owners.groupRemoval},
@@ -128,7 +130,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 			operationretention.WorkRegistration{
 				Operation: workexecution.ResourceDefinition,
 				Owner:     owners.definitionWork,
-			}}...)
+			}})
 	retention, err := operationretention.New(
 		queue,
 		owners.connections.connectorRecords,
@@ -167,7 +169,8 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	}
 	completions, err := workdispatch.NewCompletions(
 		queue,
-		append(
+		slices.Concat(
+			dependencies.Extensions.Completion,
 			append(
 				append(
 					append(
@@ -280,7 +283,7 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 				{Action: workexecution.ActionCheck, Owner: workdispatch.CheckImageCompletion{}},
 				{Action: workexecution.ActionFetch, Owner: workdispatch.CheckImageCompletion{}},
 				{Action: workexecution.ActionRemove, Owner: removalCompletion},
-			}...),
+			}),
 	)
 	if err != nil {
 		return nil, err
@@ -440,23 +443,28 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	starts, err := workdispatch.NewAgentStarts(
 		queue,
 		forward,
-		append(append(owners.provisioning.starts, owners.resolver.starts...), []workdispatch.AgentStartRegistration{
-			{Operation: workexecution.ReleaseRestoration, Owner: owners.directReleases.restoration},
-			{Operation: workexecution.Backup, Owner: owners.backupReports},
-			{Operation: workexecution.Restore, Owner: owners.backupReports},
-			{Operation: workexecution.BackupPrune, Owner: owners.backupReports},
-			{Operation: workexecution.ServiceRemoval, Owner: owners.serviceRemovalAgent},
-			{Operation: workexecution.ServiceLifecycle, Owner: owners.lifecycleAgent},
-			{Operation: workexecution.Attach, Owner: owners.attachInputs},
-			{Operation: workexecution.EntryConfiguration, Owner: owners.entryAgent},
-			{Operation: workexecution.Component, Owner: owners.componentAgent},
-			{Operation: workexecution.Detach, Owner: owners.detaches},
-			{Operation: workexecution.Network, Owner: owners.networkAgent},
-			{Operation: workexecution.Volume, Owner: owners.volumeAgent},
-			{Operation: workexecution.Hierarchy, Owner: owners.hierarchyAgent},
-			{Operation: workexecution.Script, Owner: owners.scripts},
-			{Operation: workexecution.Release, Owner: dependencies.Releases},
-		}...),
+		slices.Concat(
+			dependencies.Extensions.AgentStart,
+			owners.provisioning.starts,
+			owners.resolver.starts,
+			[]workdispatch.AgentStartRegistration{
+				{Operation: workexecution.ReleaseRestoration, Owner: owners.directReleases.restoration},
+				{Operation: workexecution.Backup, Owner: owners.backupReports},
+				{Operation: workexecution.Restore, Owner: owners.backupReports},
+				{Operation: workexecution.BackupPrune, Owner: owners.backupReports},
+				{Operation: workexecution.ServiceRemoval, Owner: owners.serviceRemovalAgent},
+				{Operation: workexecution.ServiceLifecycle, Owner: owners.lifecycleAgent},
+				{Operation: workexecution.Attach, Owner: owners.attachInputs},
+				{Operation: workexecution.EntryConfiguration, Owner: owners.entryAgent},
+				{Operation: workexecution.Component, Owner: owners.componentAgent},
+				{Operation: workexecution.Detach, Owner: owners.detaches},
+				{Operation: workexecution.Network, Owner: owners.networkAgent},
+				{Operation: workexecution.Volume, Owner: owners.volumeAgent},
+				{Operation: workexecution.Hierarchy, Owner: owners.hierarchyAgent},
+				{Operation: workexecution.Script, Owner: owners.scripts},
+				{Operation: workexecution.Release, Owner: dependencies.Releases},
+			},
+		),
 	)
 	if err != nil {
 		return nil, err
@@ -501,6 +509,11 @@ func (platform *Platform) NewWorkExecution(dependencies ExecutionDependencies) (
 	}
 	if err := platform.dependencies.Channel.ConfigureWorkExecution(platform.dependencies.Agents, starts, checkpoints, owners.scripts, removalReports, deliveries); err != nil {
 		return nil, err
+	}
+	if dependencies.Extensions.AgentDelivery != nil {
+		if err := dependencies.Extensions.AgentDelivery(deliveries); err != nil {
+			return nil, err
+		}
 	}
 	if err := platform.dependencies.Channel.ConfigureVolumeWork(owners.volumeReports); err != nil {
 		return nil, err

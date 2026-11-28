@@ -40,7 +40,14 @@ type Client struct {
 }
 
 func New(engine Engine, caPEM []byte, username, password, architecture string) (*Client, error) {
-	if engine == nil || (username == "") != (password == "") || (len(caPEM) > 0) != (username != "") ||
+	if engine == nil {
+		return nil, errs.New(errs.KindInternal, "registry image engine is required")
+	}
+	return newClient(engine, caPEM, username, password, architecture)
+}
+
+func newClient(engine Engine, caPEM []byte, username, password, architecture string) (*Client, error) {
+	if (username == "") != (password == "") || (len(caPEM) > 0) != (username != "") ||
 		(architecture != "amd64" && architecture != "arm64") {
 		return nil, errs.New(errs.KindInternal, "private registry client configuration is incomplete")
 	}

@@ -17,11 +17,14 @@ import (
 // older artifact cannot select the next Release's network memberships. Historical
 // recovery remains separately captured; this does not rewrite either source.
 func (service *Service) captureDesiredProjection(
-	ctx context.Context, scope releasequeries.ReleasePlanningScope,
+	ctx context.Context, scope releasequeries.ReleasePlanningScope, requireIsolated bool,
 ) (projectionrecord.EnvironmentComposeProjection, error) {
 	attaches, err := service.ledger.LoadPlanningAttaches(ctx, scope)
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
+	}
+	if requireIsolated && len(attaches) != 0 {
+		return projectionrecord.EnvironmentComposeProjection{}, unsupportedRemoteEnvironment()
 	}
 	projection := scope.Compose.Record
 	joins, err := taskplanning.ResolveAttachNetworkJoins(projection.EnvironmentID, projection, attaches, "")

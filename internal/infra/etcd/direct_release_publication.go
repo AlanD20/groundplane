@@ -20,6 +20,33 @@ func (ledger *ReleaseLedger) PrepareDirectReleaseCapture(ctx context.Context,
 	task workexecution.Task, item workexecution.Item, request DirectReleasePreparation,
 	rollout releaserender.ServiceRolloutCapture, addresses networkreservations.ProxyAddresses,
 ) (workqueue.Change, error) {
+	return ledger.prepareDirectReleaseCapture(ctx, task, item, request, rollout, addresses, "")
+}
+
+// PrepareRemoteDirectReleaseCapture admits only the matching durable host
+// binding. The caller must also compare its executor and remote readiness
+// witnesses in the transaction publishing this change.
+func (ledger *ReleaseLedger) PrepareRemoteDirectReleaseCapture(ctx context.Context,
+	task workexecution.Task, item workexecution.Item, request DirectReleasePreparation,
+	rollout releaserender.ServiceRolloutCapture, addresses networkreservations.ProxyAddresses,
+	executor workexecution.Identity,
+) (workqueue.Change, error) {
+	if executor.Validate() != nil || executor.Executor != workexecution.Agent ||
+		item.Placement != (workexecution.Placement{Executor: workexecution.Agent, HostID: executor.HostID}) ||
+		task.Action != workexecution.ActionDeploy || request.GroupID != "" {
+		return workqueue.Change{}, errs.New(
+			errs.KindValidationFailed,
+			"remote release requires its explicitly selected host and Agent",
+		)
+	}
+	return ledger.prepareDirectReleaseCapture(ctx, task, item, request, rollout, addresses, executor.AgentID)
+}
+
+func (ledger *ReleaseLedger) prepareDirectReleaseCapture(ctx context.Context,
+	task workexecution.Task, item workexecution.Item, request DirectReleasePreparation,
+	rollout releaserender.ServiceRolloutCapture, addresses networkreservations.ProxyAddresses,
+	explicitAgentID string,
+) (workqueue.Change, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return workqueue.Change{}, err
 	}
@@ -61,7 +88,12 @@ func (ledger *ReleaseLedger) PrepareDirectReleaseCapture(ctx context.Context,
 	if err != nil {
 		return workqueue.Change{}, err
 	}
-	host, err := hostbindings.ReadLocal(ctx, ledger.store, request.Source.ReadRevision)
+	var host hostbindings.Snapshot
+	if explicitAgentID == "" {
+		host, err = hostbindings.ReadLocal(ctx, ledger.store, request.Source.ReadRevision)
+	} else {
+		host, err = hostbindings.Read(ctx, ledger.store, explicitAgentID, request.Source.ReadRevision)
+	}
 	if err != nil {
 		return workqueue.Change{}, err
 	}

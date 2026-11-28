@@ -90,6 +90,10 @@ func Describe(message *agentpb.AgentMessage) (*agentpb.WorkAttemptIdentity, stri
 		identity, kind = payload.BackupRecoveryRequest.GetAttempt(), "backup_recovery"
 	case *agentpb.AgentMessage_EnvironmentProvisionResultRequest:
 		identity, kind = payload.EnvironmentProvisionResultRequest.GetAttempt(), "environment_provision_result"
+	case *agentpb.AgentMessage_PublicIngressResultRequest:
+		identity, kind = payload.PublicIngressResultRequest.GetAttempt(), "public_ingress_result"
+	case *agentpb.AgentMessage_RemoteImageResultRequest:
+		identity, kind = payload.RemoteImageResultRequest.GetAttempt(), "remote_image_result"
 	case *agentpb.AgentMessage_BackingProvisionCompletionRequest:
 		identity, kind = payload.BackingProvisionCompletionRequest.GetAttempt(), "backing_completion"
 	case *agentpb.AgentMessage_BackingProvisionFailureRequest:
@@ -200,6 +204,10 @@ func Match(request *agentpb.AgentMessage, reply *agentpb.ControllerMessage) erro
 		acknowledged = reply.GetBackupRecoveryAck().GetAttempt()
 	case "environment_provision_result":
 		acknowledged = reply.GetEnvironmentProvisionResultAck().GetAttempt()
+	case "public_ingress_result":
+		acknowledged = reply.GetPublicIngressResultAck().GetAttempt()
+	case "remote_image_result":
+		acknowledged = reply.GetRemoteImageResultAck().GetAttempt()
 	case "backing_completion":
 		acknowledged = reply.GetBackingProvisionCompletionAck().GetAttempt()
 	case "backing_failure":

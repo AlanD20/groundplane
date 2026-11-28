@@ -24,6 +24,9 @@ func (operations *localOperations) StartRunner(
 	plan corerunner.Plan,
 	token []byte,
 ) (runnerallocation.RunnerRuntimeEvidence, error) {
+	if err := requireScopedCredential(plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
+	}
 	engine, err := newEngine(hostDockerSocket)
 	if err != nil {
 		return runnerallocation.RunnerRuntimeEvidence{}, err
@@ -206,21 +209,26 @@ func validateRunnerContainer(inspected container.InspectResponse, plan corerunne
 		string(inspected.HostConfig.NetworkMode) != plan.Network.Name {
 		return errs.New(errs.KindStateConflict, "Runner container ownership changed")
 	}
+	if plan.Egress.ScopedEndpoint.IsValid() && !scopedRunnerContainer(inspected, plan) {
+		return errs.New(errs.KindStateConflict, "Scoped Runner container transport changed")
+	}
+	if plan.Egress.RegistrationOnly && !runnerRegistrationContainer(inspected) {
+		return errs.New(errs.KindStateConflict, "Runner registration container has unexpected Groundplane access")
+	}
 	return nil
 }
 
 func runnerContainerOptions(plan corerunner.Plan) client.ContainerCreateOptions {
-	return client.ContainerCreateOptions{
+	environment := []string{
+		"HOME=" + plan.Paths.RunnerHome, "DOCKER_HOST=unix://" + plan.Container.DockerSocketTarget,
+		"DOCKER_CONFIG=" + runnerDockerConfig(plan),
+	}
+	options := client.ContainerCreateOptions{
 		Name: plan.Container.Name,
 		Config: &container.Config{
 			Image: plan.Container.ImageRef, User: plan.Container.User, WorkingDir: plan.Paths.RunnerHome,
 			AttachStdin: true, OpenStdin: true, StdinOnce: true,
-			Env: []string{
-				"HOME=" + plan.Paths.RunnerHome, "DOCKER_HOST=unix://" + plan.Container.DockerSocketTarget,
-				"DOCKER_CONFIG=" + runnerDockerConfig(plan),
-				"SSL_CERT_FILE=" + runnerRegistryCA(plan),
-				"GROUNDPLANE_HOST=http://" + plan.Egress.ControllerEndpoint.String(),
-			},
+			Env: environment,
 			Labels: map[string]string{
 				"com.groundplane.managed":   "true",
 				"com.groundplane.kind":      "runner",
@@ -254,6 +262,90 @@ func runnerContainerOptions(plan corerunner.Plan) client.ContainerCreateOptions 
 			plan.Network.Name: {IPAMConfig: &network.EndpointIPAMConfig{IPv4Address: plan.Network.RunnerAddress}},
 		}},
 	}
+	if plan.Egress.ScopedEndpoint.IsValid() {
+		options.Config.Env = append(environment, scopedEndpointEnv(plan), scopedCredentialEnv())
+		if plan.Egress.ScopedRegistry.IsValid() {
+			for _, name := range []string{"SSL_CERT_FILE", "CURL_CA_BUNDLE"} {
+				options.Config.Env = append(options.Config.Env, scopedRegistryTrustEnv(name))
+			}
+		}
+		options.HostConfig.Mounts = append(options.HostConfig.Mounts, mount.Mount{
+			Type: mount.TypeBind, Source: scopedCredentialSource(plan), Target: runnerCredentialDirectory, ReadOnly: true,
+		})
+	} else if !plan.Egress.RegistrationOnly {
+		options.Config.Env = append(environment,
+			"GROUNDPLANE_HOST=http://"+plan.Egress.APIEndpoint().String(),
+			"SSL_CERT_FILE="+runnerRegistryCA(plan),
+		)
+	}
+	return options
+}
+
+func runnerRegistrationContainer(inspected container.InspectResponse) bool {
+	for _, item := range inspected.Config.Env {
+		name, _, _ := strings.Cut(item, "=")
+		switch name {
+		case "GROUNDPLANE_HOST", "GROUNDPLANE_RUNNER_ENDPOINT", "GROUNDPLANE_RUNNER_TOKEN_FILE":
+			return false
+		}
+	}
+	for _, binding := range inspected.HostConfig.Mounts {
+		if binding.Target == runnerCredentialDirectory {
+			return false
+		}
+	}
+	return true
+}
+
+func scopedEndpointEnv(plan corerunner.Plan) string {
+	return "GROUNDPLANE_RUNNER_ENDPOINT=http://" + plan.Egress.ScopedEndpoint.String()
+}
+
+func scopedCredentialEnv() string { return "GROUNDPLANE_RUNNER_TOKEN_FILE=" + runnerCredentialFile }
+
+func scopedRegistryTrustEnv(name string) string {
+	return name + "=" + runnerCredentialDirectory + "/" + scopedRegistryBundleName
+}
+
+func scopedRunnerContainer(inspected container.InspectResponse, plan corerunner.Plan) bool {
+	var endpointSeen, credentialSeen bool
+	trust := map[string]bool{"SSL_CERT_FILE": false, "CURL_CA_BUNDLE": false}
+	for _, item := range inspected.Config.Env {
+		name, _, _ := strings.Cut(item, "=")
+		switch name {
+		case "GROUNDPLANE_HOST":
+			return false
+		case "GROUNDPLANE_RUNNER_ENDPOINT":
+			if endpointSeen || item != scopedEndpointEnv(plan) {
+				return false
+			}
+			endpointSeen = true
+		case "GROUNDPLANE_RUNNER_TOKEN_FILE":
+			if credentialSeen || item != scopedCredentialEnv() {
+				return false
+			}
+			credentialSeen = true
+		case "SSL_CERT_FILE", "CURL_CA_BUNDLE":
+			if plan.Egress.ScopedRegistry.IsValid() {
+				if trust[name] || item != scopedRegistryTrustEnv(name) {
+					return false
+				}
+				trust[name] = true
+			}
+		}
+	}
+	if plan.Egress.ScopedRegistry.IsValid() && (!trust["SSL_CERT_FILE"] || !trust["CURL_CA_BUNDLE"]) {
+		return false
+	}
+	if !endpointSeen || !credentialSeen {
+		return false
+	}
+	for _, binding := range inspected.HostConfig.Mounts {
+		if binding.Target == runnerCredentialDirectory {
+			return binding.Type == mount.TypeBind && binding.Source == scopedCredentialSource(plan) && binding.ReadOnly
+		}
+	}
+	return false
 }
 
 func (operations *localOperations) ResumeRunner(
@@ -261,6 +353,9 @@ func (operations *localOperations) ResumeRunner(
 	plan corerunner.Plan,
 	containerID string,
 ) (runnerallocation.RunnerRuntimeEvidence, error) {
+	if err := requireScopedCredential(plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
+	}
 	if err := registrationPresent(plan); err != nil {
 		return runnerallocation.RunnerRuntimeEvidence{}, err
 	}

@@ -11,6 +11,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+type AgentReadiness struct {
+	Staging       bool
+	PublicIngress bool
+	RemoteImage   bool
+}
+
 // Ready enables only the current authenticated process. It inventories durable
 // reservations before enabling admission. Unresolved older attempts retain both
 // their slots and claims; readiness never asserts their effects have stopped.
@@ -19,7 +25,7 @@ func (delivery *AgentDeliveries) Ready(
 	ctx context.Context,
 	authorization agentregistration.WorkAuthorization,
 	limits workexecution.AgentConcurrency,
-	stagingReady bool,
+	readiness AgentReadiness,
 ) ([]Issue, error) {
 	if delivery == nil || ctx == nil || limits.Validate() != nil {
 		return nil, errs.New(errs.KindInternal, "Agent readiness requires configured capacity")
@@ -43,10 +49,18 @@ func (delivery *AgentDeliveries) Ready(
 		return nil, errs.New(errs.KindStateConflict, "Agent process changed before readiness")
 	}
 	var unavailable []workexecution.Operation
-	if !stagingReady {
-		for _, operation := range current.Record.Operations {
-			switch operation {
-			case workexecution.Backup, workexecution.BackupPrune, workexecution.Restore:
+	for _, operation := range current.Record.Operations {
+		switch operation {
+		case workexecution.Backup, workexecution.BackupPrune, workexecution.Restore:
+			if !readiness.Staging {
+				unavailable = append(unavailable, operation)
+			}
+		case workexecution.PublicIngress:
+			if !readiness.PublicIngress || delivery.publicIngress == nil {
+				unavailable = append(unavailable, operation)
+			}
+		case workexecution.RemoteImage:
+			if !readiness.RemoteImage || delivery.remoteImage == nil {
 				unavailable = append(unavailable, operation)
 			}
 		}
@@ -128,6 +142,18 @@ func (delivery *AgentDeliveries) Ready(
 				continue
 			}
 
+			if prior.Item.Item.Operation == workexecution.PublicIngress {
+				if err := delivery.reconcilePublicIngress(ctx, attempt, authorization); err != nil {
+					issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
+				}
+				continue
+			}
+			if prior.Item.Item.Operation == workexecution.RemoteImage {
+				if err := delivery.reconcileRemoteImage(ctx, attempt, authorization); err != nil {
+					issues = append(issues, Issue{TaskID: attempt.TaskID, WorkID: attempt.WorkItemID, Err: err})
+				}
+				continue
+			}
 			if prior.Item.Item.Operation == workexecution.Environment {
 				view, err := delivery.queue.ReadResume(
 					ctx,

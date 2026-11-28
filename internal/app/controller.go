@@ -43,6 +43,7 @@ type Controller struct {
 	scheduler             controllerScheduler
 	monitoring            controllerScheduler
 	workExecution         controllerRunLoop
+	gitDelivery           func(context.Context) error
 	runners               controllerScheduler
 	resolverConfiguration controllerScheduler
 	localAgent            controllerScheduler

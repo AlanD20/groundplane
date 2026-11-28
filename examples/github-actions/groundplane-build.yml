@@ -1,0 +1,208 @@
+# Reference workflow for an approved Groundplane repository and managed Runner.
+name: Groundplane build
+run-name: Groundplane build ${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Groundplane deployment request ID
+        type: string
+        required: true
+      source_commit:
+        description: Commit to build
+        type: string
+        required: true
+      runner_label:
+        description: Registered Runner label
+        type: string
+        required: true
+      runner_group:
+        description: GitHub Runner group, when selected
+        type: string
+        required: false
+      dockerfile:
+        description: Dockerfile path relative to the repository
+        type: string
+        required: true
+      build_context:
+        description: Build context path relative to the repository
+        type: string
+        required: true
+      image_repository:
+        description: Private registry repository for this request
+        type: string
+        required: true
+
+jobs:
+  build:
+    name: Groundplane build
+    runs-on: >-
+      ${{ fromJSON(inputs.runner_group != ''
+        && format('{{"group":{0},"labels":["self-hosted",{1}]}}', toJSON(inputs.runner_group), toJSON(inputs.runner_label))
+        || format('["self-hosted",{0}]', toJSON(inputs.runner_label))) }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REQUEST_ID: ${{ inputs.request_id }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      IMAGE_REPOSITORY: ${{ inputs.image_repository }}
+
+    steps:
+      - name: Validate the deployment request
+        id: state
+        shell: bash
+        run: |
+          if [[ ! "$REQUEST_ID" =~ ^op_[0-9A-HJKMNP-TV-Z]{26}$ ||
+                ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ||
+                ! "$GITHUB_RUN_ID" =~ ^[1-9][0-9]*$ ||
+                "$GITHUB_RUN_ATTEMPT" != 1 ||
+                ! "$IMAGE_REPOSITORY" =~ ^registry\.groundplane\.internal:5000/gitdelivery/svc_[0-9a-hjkmnp-tv-z]{26}/op_[0-9a-hjkmnp-tv-z]{26}$ ||
+                "${IMAGE_REPOSITORY##*/}" != "${REQUEST_ID,,}" ]]; then
+            echo 'The Groundplane deployment request is invalid.' >&2
+            exit 1
+          fi
+
+          umask 077
+          state_dir="$(mktemp -d "$RUNNER_TEMP/groundplane-build.XXXXXXXX")"
+          printf 'directory=%s\n' "$state_dir" >> "$GITHUB_OUTPUT"
+          mkdir "$state_dir/docker" "$state_dir/result"
+          printf 'DOCKER_CONFIG=%s/docker\n' "$state_dir" >> "$GITHUB_ENV"
+
+      - name: Check out the requested commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_commit }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build the image
+        shell: bash
+        env:
+          BUILD_CONTEXT: ${{ inputs.build_context }}
+          DOCKERFILE: ${{ inputs.dockerfile }}
+        run: |
+          workspace="$(realpath -e -- "$GITHUB_WORKSPACE")"
+          context="$(realpath -e -- "$workspace/$BUILD_CONTEXT")"
+          dockerfile="$(realpath -e -- "$workspace/$DOCKERFILE")"
+          if [[ "$(git rev-parse HEAD)" != "$SOURCE_COMMIT" ||
+                ! -d "$context" || ! -f "$dockerfile" ||
+                ( "$context" != "$workspace" && "$context" != "$workspace/"* ) ||
+                "$dockerfile" != "$workspace/"* ]]; then
+            echo 'The build must use the requested commit and paths inside its checkout.' >&2
+            exit 1
+          fi
+
+          docker buildx build --builder default --load --provenance=false --sbom=false \
+            --file "$dockerfile" --tag "$IMAGE_REPOSITORY:$SOURCE_COMMIT" "$context"
+
+      - name: Authorize this job to publish
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const { spawnSync } = require('node:child_process');
+            const { isIP } = require('node:net');
+            const { setTimeout: wait } = require('node:timers/promises');
+            const runnerEndpoint = process.env.GROUNDPLANE_RUNNER_ENDPOINT;
+            const tokenFile = process.env.GROUNDPLANE_RUNNER_TOKEN_FILE;
+            if (!runnerEndpoint || !tokenFile || !process.env.DOCKER_CONFIG) {
+              throw new Error('This Runner has no Groundplane job credential endpoint.');
+            }
+
+            const origin = new URL(runnerEndpoint);
+            const host = origin.hostname.replace(/^\[|\]$/g, '');
+            if (origin.protocol !== 'http:' || !isIP(host) || origin.username || origin.password ||
+                origin.pathname !== '/' || origin.search || origin.hash) {
+              throw new Error('This Runner has an invalid Groundplane credential endpoint.');
+            }
+
+            const requestID = process.env.REQUEST_ID;
+            const url = new URL(`/api/v1/runner-jobs/${requestID}/registry-credential`, origin);
+            const runnerToken = (await fs.readFile(tokenFile, 'utf8')).trim();
+            if (!runnerToken) throw new Error('This Runner has no Groundplane credential.');
+            const proof = await core.getIDToken(`groundplane-build:${requestID}`);
+            core.setSecret(proof);
+            core.setSecret(runnerToken);
+
+            let response;
+            for (let attempt = 0; attempt < 15; attempt++) {
+              response = await fetch(url, {
+                method: 'POST',
+                redirect: 'error',
+                headers: {
+                  Authorization: `Bearer ${runnerToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ proof }),
+                signal: AbortSignal.timeout(15_000),
+              });
+              if (response.status !== 409) break;
+              await response.body?.cancel();
+              await wait(2_000);
+            }
+            if (response.status !== 201) {
+              throw new Error(`Groundplane did not authorize registry publication (${response.status}).`);
+            }
+
+            const { username, password, repository, expires_at } = await response.json();
+            const imagePath = process.env.IMAGE_REPOSITORY.split('/').slice(1).join('/');
+            const registry = typeof repository === 'string' ? repository.split('/', 1)[0] : '';
+            const match = /^(\d+\.\d+\.\d+\.\d+):(\d+)$/.exec(registry);
+            const octets = match ? match[1].split('.').map(Number) : [];
+            const privateRegistry = match && isIP(match[1]) === 4 && Number(match[2]) > 0 && Number(match[2]) <= 65535 &&
+              (octets[0] === 10 || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) || (octets[0] === 192 && octets[1] === 168));
+            if (!privateRegistry || repository !== `${registry}/${imagePath}` || username !== requestID ||
+                typeof password !== 'string' || !password || !Number.isFinite(Date.parse(expires_at)) || Date.parse(expires_at) <= Date.now()) {
+              throw new Error('Groundplane returned an invalid registry credential.');
+            }
+            core.setSecret(password);
+            const login = spawnSync('docker', ['login', '--username', username, '--password-stdin', registry], {
+              input: `${password}\n`, stdio: ['pipe', 'ignore', 'ignore'], timeout: 15_000,
+            });
+            if (login.status !== 0) throw new Error('The private registry rejected the job credential.');
+            core.exportVariable('PUSH_REPOSITORY', repository);
+
+      - name: Publish the image and record its digest
+        shell: bash
+        env:
+          STATE_DIR: ${{ steps.state.outputs.directory }}
+        run: |
+          image="$PUSH_REPOSITORY:$SOURCE_COMMIT"
+          docker image tag "$IMAGE_REPOSITORY:$SOURCE_COMMIT" "$image"
+          docker image push "$image"
+          rm -f -- "$DOCKER_CONFIG/config.json"
+          mapfile -t digests < <(
+            docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" |
+              awk -v prefix="$PUSH_REPOSITORY@" 'index($0, prefix) == 1 { print substr($0, length(prefix) + 1) }' |
+              sort -u
+          )
+          if [[ "${#digests[@]}" != 1 || ! "${digests[0]}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo 'Docker did not report one digest for the authorized repository.' >&2
+            exit 1
+          fi
+
+          printf '{"request_id":"%s","source_commit":"%s","image_digest":"%s","run_id":%s,"run_attempt":%s}\n' \
+            "$REQUEST_ID" "$SOURCE_COMMIT" "${digests[0]}" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$STATE_DIR/result/build-result.json"
+
+      - name: Upload the build result
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: groundplane-build-result
+          path: ${{ steps.state.outputs.directory }}/result/build-result.json
+          if-no-files-found: error
+          archive: true
+
+      - name: Remove temporary job state
+        if: ${{ always() && steps.state.outputs.directory != '' }}
+        shell: bash
+        env:
+          STATE_DIR: ${{ steps.state.outputs.directory }}
+        run: |
+          case "$STATE_DIR" in
+            "$RUNNER_TEMP"/groundplane-build.????????) rm -rf -- "$STATE_DIR" ;;
+            *) exit 1 ;;
+          esac

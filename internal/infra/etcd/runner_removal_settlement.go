@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerscoped"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -48,6 +49,29 @@ func (repository *RunnerRepository) PrepareRunnerRemovalResult(ctx context.Conte
 	default:
 		return workqueue.Change{}, errs.New(errs.KindStateConflict, "Runner removal result lacks cleanup evidence")
 	}
+	migrationKey := runnerscoped.Key(id)
+	migration, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
+		Keys: []string{migrationKey}, Revision: input.ReadRevision,
+	})
+	if err != nil {
+		return workqueue.Change{}, err
+	}
+	if migration == nil || migration.ReadRevision != input.ReadRevision || len(migration.Values) != 1 {
+		return workqueue.Change{}, errs.New(errs.KindInternal, "Runner scoped migration retirement read was incomplete")
+	}
+	defer keyvalue.ClearValues(migration.Values)
+	if value := migration.Values[0]; value != nil {
+		proof, err := runnerscoped.Decode(value.Value, id)
+		if err != nil || proof.Phase != runnerscoped.Complete ||
+			proof.Candidate.RuntimeEpoch != capture.Plan.RuntimeEpoch {
+			return workqueue.Change{}, errs.New(
+				errs.KindStateConflict,
+				"Runner removal does not own its scoped migration",
+			)
+		}
+	}
+	change.Conditions = append(change.Conditions,
+		keyvalue.Condition{Key: migrationKey, ModRevision: keyvalue.RevisionOf(migration.Values[0])})
 	record := runners.RunnerRecord{Desired: capture.Desired, RunnerLifecycleRecord: capture.Removal.Lifecycle}
 	allocation, err := repository.ReadRunnerAllocationEvidence(ctx, record, input.ReadRevision)
 	if err != nil {
@@ -91,7 +115,7 @@ func (repository *RunnerRepository) PrepareRunnerRemovalResult(ctx context.Conte
 	}
 	for _, key := range []string{tombstone, runners.RunnerKey(id), runners.RunnerLifecycleKey(id),
 		runners.RunnerRuntimeOwnershipKey(id), runnerwork.AppliedKey(id), runnerwork.AllocationPlanKey(id),
-		runners.RunnerObservationKey(id), allocation.Owner.Key, allocation.Slug.Key, allocation.Host.Key} {
+		runners.RunnerObservationKey(id), allocation.Owner.Key, allocation.Slug.Key, allocation.Host.Key, migrationKey} {
 		change.Mutations = append(change.Mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: key})
 	}
 	return change, nil

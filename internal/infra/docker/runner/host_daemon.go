@@ -47,8 +47,13 @@ func (operations *localOperations) StartDaemon(ctx context.Context, plan corerun
 		"--property=Environment=HOME=" + plan.Paths.RunnerHome,
 		"--property=Environment=XDG_RUNTIME_DIR=" + filepath.Dir(plan.Paths.RawSocket),
 		"--property=Restart=always", "--property=RestartSec=2",
+	}
+	if plan.Egress.ScopedRegistry.IsValid() {
+		args = append(args, "--property=Environment=SSL_CERT_FILE="+scopedRegistryHostBundle(plan))
+	}
+	args = append(args,
 		"--", "/usr/bin/rootlesskit",
-		"--state-dir=" + filepath.Join(controlRoot, "rootlesskit"),
+		"--state-dir="+filepath.Join(controlRoot, "rootlesskit"),
 		"--net=slirp4netns", "--mtu=65520", "--disable-host-loopback",
 		"--copy-up=/etc", "--copy-up=/run", "--propagation=rslave",
 		// RootlessKit's copied-up /run initially links back to host directories.
@@ -59,16 +64,16 @@ if test -L "$p"; then rm -- "$p"; fi
 done
 printf 'nameserver %s\n' "$1" > /etc/resolv.conf; shift; exec "$@"`,
 		"groundplane-rootless-docker", plan.Egress.ControllerEndpoint.Addr().String(),
-		"/usr/bin/dockerd", "--rootless", "--host=unix://" + plan.Paths.RawSocket,
-		"--dns=" + plan.Egress.ControllerEndpoint.Addr().String(),
-		"--data-root=" + plan.Paths.DataRoot,
-		"--exec-root=" + filepath.Join(controlRoot, "docker-exec"),
-		"--pidfile=" + filepath.Join(controlRoot, "dockerd.pid"),
+		"/usr/bin/dockerd", "--rootless", "--host=unix://"+plan.Paths.RawSocket,
+		"--dns="+plan.Egress.ControllerEndpoint.Addr().String(),
+		"--data-root="+plan.Paths.DataRoot,
+		"--exec-root="+filepath.Join(controlRoot, "docker-exec"),
+		"--pidfile="+filepath.Join(controlRoot, "dockerd.pid"),
 		// The outer systemd slice owns the aggregate budget. Rootless children
 		// inherit it; do not ask Docker to create a separate user-manager slice.
 		"--exec-opt=native.cgroupdriver=cgroupfs",
 		"--storage-driver=fuse-overlayfs",
-	}
+	)
 	if err := operations.ensureUnit(ctx, plan, args); err != nil {
 		return err
 	}

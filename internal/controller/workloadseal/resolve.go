@@ -19,6 +19,40 @@ type Resolver interface {
 	) (*agentpb.WorkloadImageResolutionResult, error)
 }
 
+// ProcessResolver can capture an image only from one expected Agent process.
+type ProcessResolver interface {
+	ResolveWorkloadImagesForProcess(
+		context.Context,
+		string,
+		[16]byte,
+		[]*agentpb.WorkloadImageSelector,
+	) (*agentpb.WorkloadImageResolutionResult, error)
+}
+
+type boundProcessResolver struct {
+	resolver ProcessResolver
+	process  [16]byte
+}
+
+func (resolver boundProcessResolver) ResolveWorkloadImages(ctx context.Context, agentID string,
+	selectors []*agentpb.WorkloadImageSelector,
+) (*agentpb.WorkloadImageResolutionResult, error) {
+	return resolver.resolver.ResolveWorkloadImagesForProcess(ctx, agentID, resolver.process, selectors)
+}
+
+func ResolveForProcess(ctx context.Context, resolver Resolver, agentID string, process [16]byte,
+	selections []Selection,
+) ([]domain.WorkloadSeal, error) {
+	exact, ok := resolver.(ProcessResolver)
+	if !ok || process == [16]byte{} {
+		return nil, errs.New(
+			errs.KindWorkloadImageResolutionUnavailable,
+			"selected Agent process image resolution is unavailable",
+		)
+	}
+	return Resolve(ctx, boundProcessResolver{resolver: exact, process: process}, agentID, selections)
+}
+
 type Requested struct {
 	Reference string
 	Replicas  uint32

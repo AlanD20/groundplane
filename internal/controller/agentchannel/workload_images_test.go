@@ -66,6 +66,39 @@ func imageResult(request *agentpb.ResolveWorkloadImages) *agentpb.AgentMessage {
 	}}
 }
 
+func TestImageResolutionRequiresSelectedAgentProcess(t *testing.T) {
+	registry := NewRegistry()
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	session, err := registry.Open(ctx, "agent", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	selected := [16]byte{1}
+	registry.mu.Lock()
+	session.state.processAuthentication.ProcessGeneration = selected
+	registry.mu.Unlock()
+
+	if result, err := registry.ResolveWorkloadImagesForProcess(ctx, "agent", [16]byte{2}, imageSelectors()); result != nil ||
+		!errors.Is(err, errs.New(errs.KindWorkloadImageResolutionUnavailable, "")) {
+		t.Fatalf("image lookup for another process: result=%v, error=%v", result, err)
+	}
+
+	done := make(chan imageReply, 1)
+	go func() {
+		result, err := registry.ResolveWorkloadImagesForProcess(ctx, "agent", selected, imageSelectors())
+		done <- imageReply{result: result, err: err}
+	}()
+	select {
+	case command := <-session.state.imageCommands:
+		session.acceptImageResult(imageResult(command.request))
+		assertImageReply(t, awaitImageRead(t, ctx, done), command.request.RequestId)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+}
+
 // QA: BP-08, SVC-05/10; local busy/correlation and result identity, not image inspection or staging.
 // Rationale: only the active request id may complete lookup; a stale response
 // cannot satisfy it, and success must return the selected image identity.

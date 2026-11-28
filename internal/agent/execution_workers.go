@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/AlanD20/groundplane/internal/agent/attachruntime"
@@ -12,9 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
+	"github.com/AlanD20/groundplane/internal/agent/ingressruntime"
 	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
 	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
+	"github.com/AlanD20/groundplane/internal/agent/remotefetchruntime"
 	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
 	"github.com/AlanD20/groundplane/internal/agent/resolverruntime"
 	"github.com/AlanD20/groundplane/internal/agent/scriptruntime"
@@ -77,6 +78,8 @@ type executionExchange interface {
 }
 
 type activeExecution struct {
+	publicIngress        *agentpb.PublicIngressAssignment
+	remoteImage          *agentpb.RemoteImageAssignment
 	resolver             *agentpb.ResolverWorkAssignment
 	backing              *agentpb.BackingProvisionAssignment
 	environmentProvision *agentpb.EnvironmentProvisionAssignment
@@ -108,6 +111,8 @@ type activeExecution struct {
 // a failed action. Closing a stream cancels and joins every local execution
 // before another stream can begin reconciling the same attempts.
 type executionWorkers struct {
+	publicIngress   *ingressruntime.Executor
+	remoteImage     *remotefetchruntime.Executor
 	resolvers       *resolverruntime.Executor
 	backings        *backingruntime.Executor
 	environments    *environmentruntime.Executor
@@ -255,27 +260,6 @@ func (workers *executionWorkers) submit(delivery *agentpb.ReleaseWorkAssignment,
 	return nil
 }
 
-func (workers *executionWorkers) execute(
-	attempt workexecution.Attempt,
-	delivery *agentpb.ReleaseWorkAssignment,
-	execution *agentownership.Execution,
-) {
-	defer workers.wait.Done()
-	result, err := workers.executor.Execute(
-		workers.executionContext(attempt),
-		delivery,
-		workers.identity,
-		workers.exchange,
-	)
-	err = errors.Join(err, execution.Close())
-	// Keep the local slot until the session consumes this result. Otherwise a
-	// slow consumer can accumulate arbitrarily many undelivered completions.
-	select {
-	case workers.outputs <- executionOutput{attempt: attempt, result: result, err: err}:
-	case <-workers.ctx.Done():
-	}
-}
-
 func (workers *executionWorkers) consume(output executionOutput) error {
 	workers.mu.Lock()
 	defer workers.mu.Unlock()
@@ -285,6 +269,10 @@ func (workers *executionWorkers) consume(output executionOutput) error {
 	}
 	if !workexecution.SameAssignment(active.attempt, output.attempt) {
 		return errs.New(errs.KindStateConflict, "operation result differs from its local execution slot")
+	}
+	if active.publicIngress != nil || active.remoteImage != nil {
+		workers.retireLocalExecution(output.attempt.WorkItemID)
+		return nil
 	}
 	if active.backup != nil || active.backupRecovery != nil {
 		return workers.consumeBackup(output)

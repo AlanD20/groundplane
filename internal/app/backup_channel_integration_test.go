@@ -268,7 +268,7 @@ func (nativeBackupUncalledOperations) Ready(
 	context.Context,
 	agentregistration.WorkAuthorization,
 	workexecution.AgentConcurrency,
-	bool,
+	workdispatch.AgentReadiness,
 ) ([]workdispatch.Issue, error) {
 	return nil, unexpectedBackupChannelOperation()
 }

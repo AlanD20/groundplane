@@ -173,6 +173,18 @@ func (journal *Journal) Retire(ctx context.Context, terminal workexecution.Attem
 				return conflict()
 			}
 		}
+		if ingress := record.PublicIngress; ingress != nil {
+			if receipt := ingress.Receipt; receipt == nil || receipt.Outcome != terminal.Outcome ||
+				!receipt.FinishedAt.Equal(*terminal.FinishedAt) || *receipt.Result != *terminal.Result {
+				return conflict()
+			}
+		}
+		if image := record.RemoteImage; image != nil {
+			if receipt := image.Receipt; receipt == nil || receipt.Outcome != terminal.Outcome ||
+				!receipt.FinishedAt.Equal(*terminal.FinishedAt) || *receipt.Result != *terminal.Result {
+				return conflict()
+			}
+		}
 		if backup := record.Backup; backup != nil {
 			saved := backup.Completion
 			if saved == nil || saved.Outcome != terminal.Outcome || !saved.FinishedAt.Equal(*terminal.FinishedAt) ||

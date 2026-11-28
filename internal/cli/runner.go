@@ -19,6 +19,8 @@ func newRunnerCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "runner", Short: "GitHub Actions self-hosted runners"}
 	cmd.AddCommand(newRunnerSoftwareUpdateCmd(), newRunnerSoftwareVersionsCmd(), newRunnerSoftwareResultCmd())
 	cmd.AddCommand(newRunnerCheckCmd(), newRunnerCheckResultCmd())
+	cmd.AddCommand(newRunnerScopedMigrationCmd())
+	cmd.AddCommand(newRunnerCLIGrantCmd())
 
 	list := &cobra.Command{
 		Use:   "list",

@@ -40,6 +40,8 @@ import { useState } from "react";
 import { ContainerSoftwareIdentity } from "@/features/image-delivery/software-identity";
 import { RunnerSoftwarePanel } from "./runner-software-panel";
 import { RunnerCheckPanel } from "./runner-check-panel";
+import { ScopedMigrationPanel } from "./scoped-migration-panel";
+import { CLIGrantPanel } from "./cli-grant-panel";
 
 function runnerStatus(runner: Runner) {
   if (runner.lifecycle !== "ready") return runner.lifecycle;
@@ -371,6 +373,12 @@ export function RunnerInventory({
                                 </ResourcePanel>
                               </div>
                               <RunnerSoftwarePanel runner={runner} />
+                              {runner.lifecycle === "ready" && (
+                                <>
+                                  <ScopedMigrationPanel runner={runner} />
+                                  <CLIGrantPanel runner={runner} />
+                                </>
+                              )}
                               <RunnerCheckPanel
                                 runnerId={runner.id}
                                 open

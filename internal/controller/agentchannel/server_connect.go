@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
+	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc/codes"
@@ -15,7 +16,11 @@ import (
 )
 
 func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
-	if s.auth == nil {
+	return s.connect(stream, nil)
+}
+
+func (s *Server) connect(stream agentpb.AgentChannel_ConnectServer, remote *remoteSession) error {
+	if s.auth == nil && remote == nil {
 		return status.Error(codes.Internal, "agent channel is not configured")
 	}
 
@@ -23,14 +28,18 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	if err != nil {
 		return unauthenticated()
 	}
-	authenticate, token, err := validateAuthenticate(first)
+	tokenLength := tokenSize
+	if remote != nil {
+		tokenLength = 0
+	}
+	authenticate, token, err := validateChannelAuthenticate(first, tokenLength)
 	if err != nil {
 		return unauthenticated()
 	}
 	defer clear(token[:])
 	defer clear(authenticate.Token)
 
-	authorization, authErr := s.auth.Authenticate(stream.Context(), authenticate.AgentId, token)
+	authorization, configuration, authErr := s.authorizeChannel(stream.Context(), authenticate.AgentId, token, remote)
 	if authErr != nil {
 		return unauthenticated()
 	}
@@ -55,6 +64,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		return status.Error(codes.FailedPrecondition, "agent session is not current")
 	}
 	defer session.Close()
+	session.remote = remote
 	if err := session.RecordProcessAuthentication(authenticate); err != nil {
 		return status.Error(codes.FailedPrecondition, "agent session authentication is not current")
 	}
@@ -92,7 +102,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	edgeChecks := &edgeCheckExchange{}
 	staging := &backupStagingSession{}
 	journalReplayComplete := false
-	reportedStagingReady := false
+	var reportedReadiness workdispatch.AgentReadiness
 	journalReplayReports := 0
 	controlBurst := 0
 	for {
@@ -200,7 +210,11 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			if !ready || capacity == 0 {
 				continue
 			}
-			if err := s.dispatchWork(stream, session, authorization.Generation, capacity, authorization.Config, staging.ready && reportedStagingReady, workDelivered, payloads); err != nil {
+			readiness := reportedReadiness
+			readiness.Staging = readiness.Staging && staging.ready
+			if err := s.dispatchWork(
+				stream, session, authorization.Generation, capacity, authorization.Config, readiness, workDelivered, payloads,
+			); err != nil {
 				return taskStoreStatus(err)
 			}
 		case connectReceived:
@@ -390,7 +404,10 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if !staging.ready && ready.GetStagingReady() {
 					return status.Error(codes.FailedPrecondition, "Agent startup staging is not reconciled")
 				}
-				reportedStagingReady = ready.GetStagingReady()
+				reportedReadiness = workdispatch.AgentReadiness{
+					Staging: ready.GetStagingReady(), PublicIngress: ready.GetPublicIngressReady(),
+					RemoteImage: ready.GetRemoteImageReady(),
+				}
 				identity, err := s.authenticatedWorkIdentity(stream.Context(), session, authorization.Generation)
 				if err != nil {
 					return taskStoreStatus(err)
@@ -401,11 +418,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if err := session.RecordReady(s.now(), ready.Capacity, ready.Version, source); err != nil {
 					return status.Error(codes.FailedPrecondition, "agent session is not current")
 				}
-				currentConfig, err := s.auth.Configuration(
-					stream.Context(),
-					authenticate.AgentId,
-					authorization.Generation,
-				)
+				currentConfig, err := configuration(stream.Context())
 				if err != nil {
 					return taskStoreStatus(err)
 				}
@@ -437,7 +450,10 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					authorization.Config = nextConfig
 					continue
 				}
-				if err := s.dispatchWork(stream, session, authorization.Generation, ready.Capacity, authorization.Config, staging.ready && reportedStagingReady, workDelivered, payloads); err != nil {
+				if err := s.dispatchWork(
+					stream, session, authorization.Generation, ready.Capacity, authorization.Config, reportedReadiness,
+					workDelivered, payloads,
+				); err != nil {
 					return taskStoreStatus(err)
 				}
 				continue

@@ -23,26 +23,30 @@ const (
 )
 
 type Target struct {
-	RunnerID         string
-	TenantID         string
-	OwnerKind        OwnerKind
-	OwnerID          string
-	GitHubURL        string
-	RunnerGroup      string
-	GitHubName       string
-	CPUMillis        int64
-	MemoryBytes      int64
-	Labels           []string
-	ImageRef         string
-	RuntimeEpoch     uint64
-	AllocationConfig runnerallocation.RunnerAllocationConfig
-	Allocation       runnerallocation.RunnerHostAllocationRecord
+	RunnerID               string
+	TenantID               string
+	OwnerKind              OwnerKind
+	OwnerID                string
+	GitHubURL              string
+	RunnerGroup            string
+	GitHubName             string
+	CPUMillis              int64
+	MemoryBytes            int64
+	Labels                 []string
+	ImageRef               string
+	ScopedPredecessorImage string
+	RuntimeEpoch           uint64
+	AllocationConfig       runnerallocation.RunnerAllocationConfig
+	Allocation             runnerallocation.RunnerHostAllocationRecord
 }
 
 type IsolationPolicy struct {
 	RunnerPool         netip.Prefix
 	DeniedCIDRs        []netip.Prefix
 	ControllerEndpoint netip.AddrPort
+	ScopedEndpoint     netip.AddrPort
+	ScopedRegistry     netip.AddrPort
+	RegistrationOnly   bool
 }
 
 type Plan = runnerallocation.RuntimePlan
@@ -79,6 +83,10 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 	if err := validatePolicy(target.Allocation.NetworkCIDR, target.AllocationConfig, policy); err != nil {
 		return Plan{}, err
 	}
+	if target.ScopedPredecessorImage != "" && (!policy.ScopedEndpoint.IsValid() ||
+		target.ScopedPredecessorImage == target.ImageRef || !validDigestImage(target.ScopedPredecessorImage)) {
+		return Plan{}, errs.New(errs.KindValidationFailed, "Runner scoped predecessor image is invalid")
+	}
 	prefix := netip.MustParsePrefix(target.Allocation.NetworkCIDR)
 	gateway := prefix.Addr().Next()
 	runnerAddress := gateway.Next()
@@ -93,7 +101,8 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 		CPUMillis: target.CPUMillis, MemoryBytes: target.MemoryBytes,
 		RunnerID: target.RunnerID, TenantID: target.TenantID, OwnerKind: string(target.OwnerKind),
 		OwnerID: target.OwnerID, RuntimeEpoch: target.RuntimeEpoch,
-		AllocationConfig: target.AllocationConfig, Allocation: target.Allocation,
+		ScopedPredecessorImage: target.ScopedPredecessorImage,
+		AllocationConfig:       target.AllocationConfig, Allocation: target.Allocation,
 		Identity: Identity{
 			User: account, Group: account, UID: target.Allocation.HostUID, GID: target.Allocation.HostUID,
 			SubUIDStart: target.Allocation.SubUIDStart, SubUIDCount: target.Allocation.SubUIDCount,
@@ -112,6 +121,9 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 			SourceUID:          target.Allocation.HostUID,
 			DeniedCIDRs:        denied,
 			ControllerEndpoint: policy.ControllerEndpoint,
+			ScopedEndpoint:     policy.ScopedEndpoint,
+			ScopedRegistry:     policy.ScopedRegistry,
+			RegistrationOnly:   policy.RegistrationOnly,
 		},
 		Container: Container{
 			Name: "gp_runner_" + target.RunnerID, ImageRef: target.ImageRef,
@@ -185,6 +197,9 @@ func validatePolicy(
 	if err := policy.RequireControllerEndpoint(); err != nil {
 		return err
 	}
+	if err := policy.validateScopedEndpoints(); err != nil {
+		return err
+	}
 	if !policy.RunnerPool.IsValid() || !policy.RunnerPool.Addr().Is4() ||
 		policy.RunnerPool != policy.RunnerPool.Masked() ||
 		policy.RunnerPool.Bits() > runnerallocation.RunnerSubnetBits ||
@@ -246,12 +261,15 @@ func ValidatePlan(plan Plan) error {
 	target := Target{
 		RunnerID: plan.RunnerID, TenantID: plan.TenantID, OwnerKind: OwnerKind(plan.OwnerKind), OwnerID: plan.OwnerID,
 		GitHubURL: plan.Container.GitHubURL, RunnerGroup: plan.Container.RunnerGroup, Labels: plan.Container.Labels, ImageRef: plan.Container.ImageRef,
-		GitHubName: plan.Container.RunnerName, CPUMillis: plan.CPUMillis, MemoryBytes: plan.MemoryBytes,
+		ScopedPredecessorImage: plan.ScopedPredecessorImage,
+		GitHubName:             plan.Container.RunnerName, CPUMillis: plan.CPUMillis, MemoryBytes: plan.MemoryBytes,
 		RuntimeEpoch: plan.RuntimeEpoch, AllocationConfig: plan.AllocationConfig, Allocation: plan.Allocation,
 	}
 	expected, err := NewPlan(target, IsolationPolicy{
 		RunnerPool: plan.Network.RunnerPool, DeniedCIDRs: plan.Egress.DeniedCIDRs,
 		ControllerEndpoint: plan.Egress.ControllerEndpoint,
+		ScopedEndpoint:     plan.Egress.ScopedEndpoint, ScopedRegistry: plan.Egress.ScopedRegistry,
+		RegistrationOnly: plan.Egress.RegistrationOnly,
 	})
 	if err != nil || expected.Digest() != plan.Digest() {
 		return errs.New(errs.KindValidationFailed, "runner runtime plan violates the isolation contract")

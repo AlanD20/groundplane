@@ -54,6 +54,10 @@ func (exchange *nativeExchange) accept(message *agentpb.ControllerMessage) (bool
 		identity, kind, executionID = delivery.Attempt, "backing_hook", delivery.StageId
 	case message.GetEnvironmentProvisionResultAck() != nil:
 		identity, kind = message.GetEnvironmentProvisionResultAck().Attempt, "environment_provision_result"
+	case message.GetPublicIngressResultAck() != nil:
+		identity, kind = message.GetPublicIngressResultAck().Attempt, "public_ingress_result"
+	case message.GetRemoteImageResultAck() != nil:
+		identity, kind = message.GetRemoteImageResultAck().Attempt, "remote_image_result"
 	case message.GetBackupConfigRecoveryPrepareAck() != nil:
 		ack := message.GetBackupConfigRecoveryPrepareAck()
 		identity, kind, executionID = ack.GetAssignment().

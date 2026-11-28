@@ -100,6 +100,10 @@ func Terminal(
 		body = payload.BackupRecoveryAck
 	case *agentpb.ControllerMessage_EnvironmentProvisionResultAck:
 		body = payload.EnvironmentProvisionResultAck
+	case *agentpb.ControllerMessage_PublicIngressResultAck:
+		body = payload.PublicIngressResultAck
+	case *agentpb.ControllerMessage_RemoteImageResultAck:
+		body = payload.RemoteImageResultAck
 	case *agentpb.ControllerMessage_BackingProvisionCompletionAck:
 		body = payload.BackingProvisionCompletionAck
 	case *agentpb.ControllerMessage_BackingProvisionFailureAck:

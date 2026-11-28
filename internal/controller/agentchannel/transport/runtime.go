@@ -23,6 +23,8 @@ type Runtime struct {
 	Registry               *agentchannel.Registry
 	listen                 func(context.Context) (net.Listener, error)
 	newServer              func(*agentchannel.Registry) (agentChannelGRPCServer, error)
+	newChannel             func(*agentchannel.Registry) (*agentchannel.Server, error)
+	remote                 *remoteListener
 	workIdentities         agentchannel.WorkIdentityResolver
 	workStarts             agentchannel.WorkStarter
 	workCheckpoints        agentchannel.ReleaseWorkCheckpointer
@@ -31,6 +33,8 @@ type Runtime struct {
 	attachReports          agentchannel.AttachReporter
 	attachProvisionReports agentchannel.AttachProvisionReporter
 	networkReports         agentchannel.NetworkReporter
+	publicIngressReports   agentchannel.PublicIngressReporter
+	remoteImageReports     agentchannel.RemoteImageReporter
 	componentReports       agentchannel.ComponentReporter
 	backingReports         agentchannel.BackingReporter
 	resolverReports        agentchannel.ResolverReporter
@@ -58,7 +62,7 @@ func New(
 	scriptCheckpoints agentchannel.ScriptCheckpointer,
 ) *Runtime {
 	runtime := &Runtime{Registry: agentchannel.NewRegistry(), listen: agentlistener.Listen}
-	runtime.newServer = func(registry *agentchannel.Registry) (agentChannelGRPCServer, error) {
+	runtime.newChannel = func(registry *agentchannel.Registry) (*agentchannel.Server, error) {
 		channel := agentchannel.New(authenticator, registry, staging, secrets, scriptCheckpoints)
 		if err := channel.ConfigureWorkExecution(runtime.workIdentities, runtime.workStarts, runtime.workCheckpoints, runtime.scriptCompletion, runtime.hierarchyReports, runtime.workDispatch); err != nil {
 			return nil, err
@@ -114,6 +118,23 @@ func New(
 			return nil, err
 		}
 		if err := channel.ConfigureBackupWorkSecrets(runtime.backupWorkSecrets); err != nil {
+			return nil, err
+		}
+		if runtime.publicIngressReports != nil {
+			if err := channel.ConfigurePublicIngress(runtime.publicIngressReports); err != nil {
+				return nil, err
+			}
+		}
+		if runtime.remoteImageReports != nil {
+			if err := channel.ConfigureRemoteImage(runtime.remoteImageReports); err != nil {
+				return nil, err
+			}
+		}
+		return channel, nil
+	}
+	runtime.newServer = func(registry *agentchannel.Registry) (agentChannelGRPCServer, error) {
+		channel, err := runtime.newChannel(registry)
+		if err != nil {
 			return nil, err
 		}
 		return newChannelGRPCServer(channel), nil
@@ -236,14 +257,27 @@ func (runtime *Runtime) ConfigureEntryConfigurationWork(reports agentchannel.Ent
 	return nil
 }
 
-func (runtime *Runtime) Run(ctx context.Context) (resultErr error) {
+func (runtime *Runtime) Run(ctx context.Context) error {
+	if runtime == nil {
+		return errs.New(errs.KindInternal, "agent channel runtime is not configured")
+	}
+	if runtime.remote != nil {
+		return runtime.runWithRemote(ctx)
+	}
+	return runtime.runLocal(ctx, runtime.newServer)
+}
+
+func (runtime *Runtime) runLocal(
+	ctx context.Context,
+	factory func(*agentchannel.Registry) (agentChannelGRPCServer, error),
+) (resultErr error) {
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "agent channel context is required")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil
 	}
-	if runtime == nil || runtime.Registry == nil || runtime.listen == nil || runtime.newServer == nil {
+	if runtime.Registry == nil || runtime.listen == nil || factory == nil {
 		return errs.New(errs.KindInternal, "agent channel runtime is not configured")
 	}
 
@@ -258,7 +292,7 @@ func (runtime *Runtime) Run(ctx context.Context) (resultErr error) {
 		}
 	}()
 
-	server, err := runtime.newServer(runtime.Registry)
+	server, err := factory(runtime.Registry)
 	if err != nil {
 		return err
 	}

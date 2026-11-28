@@ -29,6 +29,7 @@ type AcknowledgedRuntimeReader interface {
 // one fixed planning revision. Neither artifact bytes nor identity are rewritten.
 type AcknowledgedRuntimeCapture struct {
 	Release                releaserender.ServiceLifecycleRelease
+	HostID                 string
 	RuntimeRevision        int64
 	CurrentArtifact        []byte
 	CurrentArtifactID      string
@@ -84,7 +85,7 @@ func CaptureAcknowledgedRuntime(
 		return AcknowledgedRuntimeCapture{}, err
 	}
 	result := AcknowledgedRuntimeCapture{
-		Release: release, RuntimeRevision: sources[0].Revision,
+		Release: release, HostID: source.Source.Executor.HostID, RuntimeRevision: sources[0].Revision,
 		CurrentArtifact: slices.Clone(
 			source.Runtime.CurrentArtifact,
 		), CurrentArtifactID: runtime.Artifact.GetArtifactId(),

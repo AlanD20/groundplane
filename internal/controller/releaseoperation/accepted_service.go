@@ -12,12 +12,22 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 )
 
-func acceptReleaseRequest[T any](ctx context.Context, service *Service, environmentID, targetID, targetName string,
-	action workexecution.Action, kind string, after []string, input T, locator idempotency.IdempotencyLocator,
-	durable idempotency.ProtectedIntentRecord, protected requestidempotency.ProtectedEvidence,
+func acceptReleaseRequest[T any](
+	ctx context.Context,
+	service *Service,
+	environmentID, targetID, targetName string,
+	action workexecution.Action,
+	kind string,
+	after []string,
+	input T,
+	locator idempotency.IdempotencyLocator,
+	durable idempotency.ProtectedIntentRecord,
+	protected requestidempotency.ProtectedEvidence,
+	guards ...keyvalue.Condition,
 ) (idempotency.IdempotencyResponse, error) {
 	// Only ancestor identity is needed at acceptance. No image, predecessor,
 	// configuration baseline, proxy address or runtime claim is selected here.
@@ -25,6 +35,25 @@ func acceptReleaseRequest[T any](ctx context.Context, service *Service, environm
 	if err != nil {
 		return idempotency.IdempotencyResponse{}, err
 	}
+	return publishReleaseRequest(ctx, service, scope, targetID, targetName, action, kind, after, input,
+		locator, durable, protected, nil, guards...)
+}
+
+func publishReleaseRequest[T any](
+	ctx context.Context,
+	service *Service,
+	scope workexecution.Scope,
+	targetID, targetName string,
+	action workexecution.Action,
+	kind string,
+	after []string,
+	input T,
+	locator idempotency.IdempotencyLocator,
+	durable idempotency.ProtectedIntentRecord,
+	protected requestidempotency.ProtectedEvidence,
+	publicationForTask func(workexecution.Task) (workqueue.Change, error),
+	guards ...keyvalue.Condition,
+) (idempotency.IdempotencyResponse, error) {
 	at := service.now().UTC()
 	task := workexecution.Task{ID: ids.New(ids.KindTask), Actor: workexecution.OperatorActor,
 		Scope:  scope,
@@ -34,11 +63,13 @@ func acceptReleaseRequest[T any](ctx context.Context, service *Service, environm
 		ctx,
 		service.acceptedActions,
 		acceptedaction.Submission{
-			Task:     task,
-			Kind:     kind,
-			Locator:  locator,
-			Intent:   durable,
-			Evidence: protected,
+			Task:               task,
+			Kind:               kind,
+			Guards:             guards,
+			Locator:            locator,
+			Intent:             durable,
+			Evidence:           protected,
+			PublicationForTask: publicationForTask,
 		},
 		input,
 	)
@@ -90,16 +121,29 @@ func (service *Service) prepareAcceptedServiceDeploy(
 	task workqueue.TaskSnapshot,
 	_ int64,
 	_ time.Time,
-	request domain.ServiceDeployInput,
+	request acceptedServiceDeploy,
 ) (taskdependencies.Prepared, error) {
 	ctx = imagefence.WithScope(ctx)
 	scope, err := service.ledger.LoadPlanningScope(ctx, task.Task.Scope.EnvironmentID)
 	if err != nil {
 		return taskdependencies.Prepared{}, err
 	}
+	// Native promotion compares this same planning snapshot through its source
+	// guards, so a rewrite after this check cannot publish a Release graph.
+	if request.Source != nil && !request.Source.matches(task.Task.Scope, scope) {
+		return taskdependencies.Prepared{}, staleDeploySource()
+	}
 	planning, err := service.ledger.LoadPlanningServices(ctx, scope, []string{task.Task.TargetID})
 	if err != nil {
 		return taskdependencies.Prepared{}, err
+	}
+	if request.HostID != "" {
+		if service.remotePlacement == nil || request.Source != nil {
+			return taskdependencies.Prepared{}, remotePlacementUnavailable()
+		}
+		if request.RemoteDesiredRevision <= 0 || planning[0].Service.Revision != request.RemoteDesiredRevision {
+			return taskdependencies.Prepared{}, staleDeploySource()
+		}
 	}
 	candidate, err := service.deployCandidate(
 		ctx,
@@ -112,6 +156,9 @@ func (service *Service) prepareAcceptedServiceDeploy(
 	)
 	if err != nil {
 		return taskdependencies.Prepared{}, err
+	}
+	if request.HostID != "" {
+		return service.prepareRemoteServiceWork(ctx, scope, candidate, task.Task, request.HostID)
 	}
 	return service.prepareServiceWork(ctx, scope, candidate, task.Task)
 }

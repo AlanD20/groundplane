@@ -23,10 +23,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/entryruntime"
 	"github.com/AlanD20/groundplane/internal/agent/environmentruntime"
 	"github.com/AlanD20/groundplane/internal/agent/hierarchyruntime"
+	"github.com/AlanD20/groundplane/internal/agent/ingressruntime"
 	"github.com/AlanD20/groundplane/internal/agent/lifecycleruntime"
 	logstream "github.com/AlanD20/groundplane/internal/agent/logstream"
 	"github.com/AlanD20/groundplane/internal/agent/networkruntime"
 	"github.com/AlanD20/groundplane/internal/agent/releaseruntime"
+	"github.com/AlanD20/groundplane/internal/agent/remotefetchruntime"
 	"github.com/AlanD20/groundplane/internal/agent/removalruntime"
 	"github.com/AlanD20/groundplane/internal/agent/resolverruntime"
 	"github.com/AlanD20/groundplane/internal/agent/scriptruntime"
@@ -68,12 +70,15 @@ type reconnectWaiter func(context.Context, uint) error
 // Client owns one authenticated, single-use Controller stream. Identity and
 // credential material are deliberately private and are never logged.
 type Client struct {
+	publicIngress       *ingressruntime.Executor
+	remoteImage         *remotefetchruntime.Executor
 	workJournal         *agentworkjournal.Journal
 	environmentExecutor *environmentruntime.Executor
 	lifecycleExecutor   *lifecycleruntime.Executor
 	backupExecutor      *backupruntime.Executor
 	removalRecovery     *removalruntime.Runtime
 	socketPath          string
+	remoteHostID        string
 	agentID             string
 	token               [agentprotocol.RawTokenBytes]byte
 	processGeneration   [16]byte
@@ -125,15 +130,25 @@ func NewClient(
 	if socketPath != agentprotocol.SocketPath {
 		return nil, errs.New(errs.KindValidationFailed, "agent: invalid Controller socket path")
 	}
-	if err := ids.Validate(ids.KindAgent, agentID); err != nil {
-		return nil, errs.New(errs.KindValidationFailed, "agent: invalid Agent id")
-	}
 	if len(token) != agentprotocol.RawTokenBytes {
 		return nil, errs.Newf(
 			errs.KindValidationFailed,
 			"agent: channel token must contain exactly %d decoded bytes",
 			agentprotocol.RawTokenBytes,
 		)
+	}
+	client, err := newClient(agentID, volumeRoot, logger, logReader)
+	if err != nil {
+		return nil, err
+	}
+	client.socketPath, client.connect = socketPath, connectGRPC
+	copy(client.token[:], token)
+	return client, nil
+}
+
+func newClient(agentID, volumeRoot string, logger *slog.Logger, logReader agentprotocol.LogReader) (*Client, error) {
+	if err := ids.Validate(ids.KindAgent, agentID); err != nil {
+		return nil, errs.New(errs.KindValidationFailed, "agent: invalid Agent id")
 	}
 	if logger == nil || logReader == nil {
 		return nil, errs.New(errs.KindValidationFailed, "agent: logger and log reader are required")
@@ -143,21 +158,18 @@ func NewClient(
 	}
 
 	client := &Client{
-		socketPath:         socketPath,
 		agentID:            agentID,
 		volumeRoot:         volumeRoot,
 		statePath:          agentprotocol.StatePath,
 		openStaging:        openBackupStaging,
 		openStagingJournal: agentstagingjournal.Open,
 		logger:             logger,
-		connect:            connectGRPC,
 		reconnect:          waitForAgentChannelReconnect,
 		logs:               logstream.New(logReader),
 	}
 	if _, err := cryptorand.Read(client.processGeneration[:]); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	copy(client.token[:], token)
 	return client, nil
 }
 

@@ -17,6 +17,7 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { ServiceSettings } from "@/features/service/service-settings";
+import { GitDeliveryRuntime } from "@/features/git-delivery/git-delivery-runtime";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,6 +74,9 @@ export function ServiceWorkspace({
 }) {
   const params = useRequiredParams("tenant", "project", "env");
   const store = useStore();
+  const tenantId = store.tenantProjects.find(
+    (project) => project.id === env.projectId,
+  )?.tenantId;
   const [search, setSearch] = useSearchParams();
   const [detail, setDetail] = useState<Service>();
   const [reload, setReload] = useState(0);
@@ -341,6 +345,20 @@ export function ServiceWorkspace({
                 )}
               </ResourcePanel>
             </div>
+          )}
+          {tab === "git-delivery" && tenantId && (
+            <GitDeliveryRuntime
+              serviceId={service.id}
+              serviceName={service.name}
+              environmentId={env.id}
+              environmentName={env.name}
+              projectId={env.projectId}
+              tenantId={tenantId}
+              runnerRegistrationHref="?view=operations&panel=runners"
+              onConnect={() =>
+                setSearch(new URLSearchParams({ view: "settings", panel: "settings" }))
+              }
+            />
           )}
           {tab === "entries" && (
             <div className="pt-5">

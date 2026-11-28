@@ -34,7 +34,10 @@ type hostOperations interface {
 
 // HostControl is the sole validated host-effect facade. Every method fixes
 // one capability and evidence shape before crossing the transport seam.
-type HostControl struct{ operations hostOperations }
+type HostControl struct {
+	operations hostOperations
+	local      *localOperations
+}
 
 func New(operations hostOperations) (*HostControl, error) {
 	if operations == nil {

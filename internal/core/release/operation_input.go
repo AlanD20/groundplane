@@ -12,6 +12,7 @@ type ServiceDeployInput struct {
 	Tag       string
 	Strategy  Strategy
 	OnFailure OnFailure
+	HostID    string `json:"host_id,omitempty"`
 }
 
 type ServiceRollbackInput struct {

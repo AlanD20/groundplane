@@ -462,16 +462,18 @@ func (l *readyListener) Accept() (net.Conn, error) {
 }
 
 func (s *Server) serveListener(ctx context.Context, listener net.Listener, policy httpPolicy) error {
+	lifecycle := newHTTPLifecycle(s, policy)
+	return s.serveHTTPHandler(ctx, listener, policy,
+		s.withRequestReference(lifecycle.handler(s.requestHandler())), lifecycle.beginDrain)
+}
+
+func (s *Server) serveHTTPHandler(
+	ctx context.Context, listener net.Listener, policy httpPolicy, handler http.Handler, beginDrain func(),
+) error {
 	requestBase, cancelAll := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancelAll()
 
-	lifecycle := newHTTPLifecycle(s, policy)
-	srv := newHTTPServer(
-		listener.Addr().String(),
-		s.withRequestReference(lifecycle.handler(s.requestHandler())),
-		requestBase,
-		policy,
-	)
+	srv := newHTTPServer(listener.Addr().String(), handler, requestBase, policy)
 	trackedListener := &readyListener{Listener: listener, ready: make(chan struct{})}
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(trackedListener) }()
@@ -491,7 +493,7 @@ func (s *Server) serveListener(ctx context.Context, listener net.Listener, polic
 	case <-ctx.Done():
 	}
 
-	lifecycle.beginDrain()
+	beginDrain()
 	if policy.beforeShutdown != nil {
 		policy.beforeShutdown()
 	}

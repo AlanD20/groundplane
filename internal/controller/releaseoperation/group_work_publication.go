@@ -22,7 +22,7 @@ func (service *Service) prepareGroupWork(ctx context.Context, scope releasequeri
 	if err := service.sealCandidates(ctx, candidates); err != nil {
 		return taskdependencies.Prepared{}, err
 	}
-	projection, err := service.captureDesiredProjection(ctx, scope)
+	projection, err := service.captureDesiredProjection(ctx, scope, false)
 	if err != nil {
 		return taskdependencies.Prepared{}, err
 	}

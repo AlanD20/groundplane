@@ -10,6 +10,12 @@ A Runner is a persistent GitHub Actions self-hosted runner owned by a Tenant,
 Project or Environment. It is not a Project or an ordinary Agent workload. The native Controller
 owns its local lifecycle and registration.
 
+The [GitHub build workflow example](../../examples/github-actions/groundplane-build.yml)
+shows the workflow contract for a GitHub-connected Service. It requires a scoped
+Runner and the private job credential endpoint. Review it on the repository's
+trusted workflow ref before approving it for use. Its GitHub-triggered deployment
+journey still requires qualification.
+
 ## Creation and limits
 
 Creation selects one Tenant, Project or Environment owner, a canonical GitHub repository or
@@ -128,13 +134,12 @@ ownership does not permit communication with another Runner.
 
 ## GP command access and image delivery
 
-A Runner executes ordinary GitHub Actions
-workflows. Jobs may use the existing GP CLI or private API with full operator
+A legacy Runner executes ordinary GitHub Actions
+workflows. Its jobs may use the existing GP CLI or private API with full operator
 authority. Tenant, Project and Environment ownership organizes Runners and their
 lifecycle; it does not limit their GP commands or accessible resources.
 
-There is no Runner-specific API gateway, command allowlist or permission system.
-Normal validation, deletion approvals, concurrency and replay checks still apply.
+Normal validation, deletion approvals, concurrency and replay checks apply.
 Only trusted workflows should run here: they can manage other projects, shared
 Backing Services, Secrets and host-wide GP operations. Direct network isolation
 does not prevent actions that a workflow requests through GP.
@@ -147,6 +152,48 @@ endpoint first. Operator LAN/Tailscale listeners do not select Runner API or
 registry addresses. No public listener or API relay is created automatically.
 
 The API remains private; Runner access does not require public exposure.
+
+### Scoped Runner migration and GitHub deployments
+
+This opt-in path requires installed upgrade and live GitHub qualification before
+production use. The Controller reads the dedicated Runner API and registry
+addresses and pinned scoped-capable Runner image from the local
+`<controller-config>.github-delivery.yaml` companion. These listeners use
+separate ports on the private internal address. The scoped registry requires
+its TLS certificate and key in `/etc/groundplane/scoped-runner-registry`,
+with the listener IPv4 address in the certificate's subject alternative name.
+
+Register the Runner once at Tenant, Project or Environment scope. With the
+scoped registry configured, new Runners use Groundplane DNS and public IPv4
+HTTPS until verification. To grant scoped Groundplane API and registry access,
+open the Runner's details and select **Verify GitHub registration** or **Move to
+scoped access**. Choose a GitHub App connection and repository that can verify
+the registration. The migration Task waits for active work, then enables scoped
+access while preserving the Runner identity and workspace. Check the Task
+before using the Runner for a GitHub deployment.
+
+In the Service's **GitHub deployment** page, select the repository, reviewed
+workflow and source branch. Inherit a Runner selector from the repository
+settings or choose an eligible label and optional group for this Service.
+The build captures the source commit and publishes a digest to a dedicated
+registry repository. Groundplane verifies the job and digest before it creates
+the native Fetch and Deploy Tasks. Approval, when enabled, holds the image
+until an operator approves deployment. Deployment follows the captured Service
+rollout strategy.
+
+For automatic deployments, pin the approved workflow to a protected ref
+separate from the moving source branch. Branch polling works on private
+installations. An optional dedicated listener accepts signed GitHub App
+webhooks through an operator-configured HTTPS endpoint. Both inputs use the
+same deployment deduplication.
+
+After scoped migration, **Runner CLI access** lets an operator grant specific
+Service, Task and image operations within one Environment for up to an hour.
+A Runner can check the status of Tasks admitted under its own grant.
+Revoking the grant removes those CLI permissions while preserving the Runner's
+ability to authenticate a verified GitHub build.
+
+#### Image delivery with legacy Runner access
 
 Jobs build and push with ordinary Docker commands
 to a private registry on the same host. CoreDNS supplies its internal name to both

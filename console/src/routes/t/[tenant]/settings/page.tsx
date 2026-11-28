@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { MetaPill } from "@/components/common/meta-pill";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { GitHubConnectionsRuntime } from "@/features/git-delivery/github-connections-runtime";
 import { useStore } from "@/lib/store";
 
 export default function TenantSettingsPage() {
@@ -213,6 +214,11 @@ export default function TenantSettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <GitHubConnectionsRuntime
+        scope={{ kind: "tenant", id: tenant.id }}
+        scopeName={tenant.name}
+      />
 
       <Card>
         <CardHeader>

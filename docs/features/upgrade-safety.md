@@ -95,7 +95,12 @@ its byte limit. The active release and its immediate predecessor stay available.
 Apply checks Console retention capacity during staging, before any component
 is replaced. If the retention window is full, retry after the oldest retired
 bundles expire.
-Console source-ref preparation is unavailable; use a published Console release.
+
+All can build from a branch, tag, or commit. Groundplane resolves the ref once,
+stages the Console built alongside the Controller, and verifies that their API
+hashes match before Apply. Choose an exact commit for repeatable QA without
+publishing tags. The selected source must support building the paired Console.
+Console-only preparation still uses published Console releases.
 
 ## Admission and activation
 
@@ -146,6 +151,14 @@ encryption settings, Controller builds predating independent Entry encryption
 cannot read those definitions. Do not select such a build as a later update.
 The automatic predecessor recovery window ends when the candidate qualifies;
 ordinary configuration mutations remain blocked until that transition.
+
+New opt-in listener and remote Agent settings live in companion configuration
+files. Older binaries read the primary configuration without those settings.
+Qualification of a software update on an existing host leaves the new features
+disabled. Before enabling them, verify which new Task and runtime records the
+predecessor can read. A successful rollback before activation does not qualify
+a rollback after scoped Runners, public ingress or remote placement have
+published state.
 
 ## Failure and interruption
 

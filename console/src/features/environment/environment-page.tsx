@@ -17,6 +17,7 @@ import { BackupsCard } from "@/features/backup/environment-backups";
 import { EnvironmentConnectorManager } from "@/features/connectors/environment-connector-manager";
 import { EnvironmentDNSPanel } from "@/features/environment-dns/environment-dns";
 import { BlueprintState } from "@/features/blueprint/environment-blueprint-state";
+import { ConnectedFirstDeployment } from "@/features/public-ingress/connected-first-deployment";
 import { EnvVarsCard } from "@/features/entry/environment-entries";
 import { LogViewer, LogStream } from "@/features/logs/log-viewer";
 import { ReleaseGroupsPanel } from "@/features/release-group/release-group-surface";
@@ -38,6 +39,7 @@ import { useStore } from "@/lib/store";
 import {
   AlertTriangle,
   ArrowLeft,
+  Box,
   Boxes,
   Layers,
   Network,
@@ -63,18 +65,18 @@ export default function EnvironmentPage() {
   const [releaseAction, setReleaseAction] = useState<
     "deploy" | "rollback" | null
   >(null);
-  function setAddingService(open: boolean) {
+  function setCreation(action: "service" | "image", open: boolean) {
     setSearch((current) => {
       const next = new URLSearchParams(current);
       if (open) {
         next.set("view", "overview");
         next.set("panel", "overview");
-        next.set("create", "service");
+        next.set("create", action);
         next.delete("service");
         next.delete("serviceTab");
         next.delete(deploymentRunParam);
         next.delete(deploymentReleaseParam);
-      } else next.delete("create");
+      } else if (next.get("create") === action) next.delete("create");
       return next;
     });
   }
@@ -260,14 +262,24 @@ export default function EnvironmentPage() {
             showingMonitoring ? undefined : (
               <>
                 {panel.key === "overview" && (
-                  <CreationButton
-                    active={search.get("create") === "service"}
-                    variant="outline"
-                    disabled={deleting}
-                    onOpenChange={setAddingService}
-                  >
-                    <Plus className="size-3.5" /> Add Service
-                  </CreationButton>
+                  <>
+                    <CreationButton
+                      active={search.get("create") === "image"}
+                      variant="outline"
+                      disabled={deleting || env.provisioningState !== "ready"}
+                      onOpenChange={(open) => setCreation("image", open)}
+                    >
+                      <Box className="size-3.5" /> Deploy an image
+                    </CreationButton>
+                    <CreationButton
+                      active={search.get("create") === "service"}
+                      variant="outline"
+                      disabled={deleting}
+                      onOpenChange={(open) => setCreation("service", open)}
+                    >
+                      <Plus className="size-3.5" /> Add Service
+                    </CreationButton>
+                  </>
                 )}
                 <LogViewer
                   target={{ kind: "environment", id: env.id }}
@@ -347,7 +359,7 @@ export default function EnvironmentPage() {
             key={env.id}
             env={env}
             open
-            onOpenChange={setAddingService}
+            onOpenChange={(open) => setCreation("service", open)}
           />
         )}
         <section
@@ -355,6 +367,13 @@ export default function EnvironmentPage() {
           aria-label={panel.label}
           className="min-w-0 space-y-5"
         >
+          {panel.key === "overview" && search.get("create") === "image" && (
+            <ConnectedFirstDeployment
+              key={env.id}
+              project={project}
+              environment={env}
+            />
+          )}
           {["logs", "zones"].includes(panel.key) && (
             <h2 className="text-lg font-semibold">{panel.label}</h2>
           )}

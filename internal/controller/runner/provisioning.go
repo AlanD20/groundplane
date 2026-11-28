@@ -216,6 +216,10 @@ func (service *ProvisioningService) RetryRunner(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	if service.policy.RegistrationOnly && !source.Record.Plan.Egress.RegistrationOnly {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict,
+			"Remove the failed legacy Runner registration and create a scoped registration")
+	}
 	view, err := service.queue.ReadWork(ctx, source.Record.TaskID, source.Record.WorkItemID, current.ReadRevision)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

@@ -110,6 +110,10 @@ func (c *Client) ShowTask(ctx context.Context, id string, options TaskDetailOpti
 	if err != nil {
 		return apiTypes.TaskDetails{}, err
 	}
+	if c.ScopedRunner() {
+		response, err := client.TaskShow(ctx, id, nil)
+		return readTaskResponse[apiTypes.TaskDetails](ctx, "/api/v1/tasks/"+id, response, err)
+	}
 	if options.Limit == 0 {
 		options.Limit = 25
 	}

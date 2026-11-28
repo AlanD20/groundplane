@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/app/runnerassembly"
 	"log/slog"
 	"os"
 	"time"
@@ -24,6 +25,7 @@ import (
 
 type controllerBootstrapComposition struct {
 	config             config.ControllerConfig
+	publicIngress      *config.PublicIngressConfig
 	controllerConfig   *controllerconfigstore.Store
 	tick               time.Duration
 	logger             *slog.Logger
@@ -59,12 +61,32 @@ func newControllerBootstrapComposition(
 	if err != nil {
 		return controllerBootstrapComposition{}, err
 	}
+	publicIngress, err := config.LoadPublicIngress(ctx, configPath)
+	if err != nil {
+		return controllerBootstrapComposition{}, err
+	}
+	if err := config.LoadCompanion(ctx, configPath, "remote-agent", &cfg.RemoteAgent); err != nil {
+		return controllerBootstrapComposition{}, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return controllerBootstrapComposition{}, err
+	}
 	controllerConfig, err := controllerconfigstore.New(
 		ctx,
 		configPath,
 		startupDocument,
 		"controller.config.set",
-		config.ValidateControllerDocument,
+		func(ctx context.Context, document []byte) error {
+			candidate, err := config.ParseControllerDocument(ctx, document)
+			if err != nil {
+				return err
+			}
+			candidate.RemoteAgent = cfg.RemoteAgent
+			candidate.Listen.ScopedRunnerHTTP = cfg.Listen.ScopedRunnerHTTP
+			candidate.Listen.ScopedRunnerRegistry = cfg.Listen.ScopedRunnerRegistry
+			candidate.Listen.GitHubWebhooks = cfg.Listen.GitHubWebhooks
+			return candidate.Validate()
+		},
 	)
 	if err != nil {
 		return controllerBootstrapComposition{}, fmt.Errorf(
@@ -130,13 +152,14 @@ func newControllerBootstrapComposition(
 	if err != nil {
 		return controllerBootstrapComposition{}, fmt.Errorf("controller: initialize etcd: %w", err)
 	}
-	if err := bootstrapRunnerNetworkPool(ctx, store, cfg); err != nil {
+	if err := runnerassembly.BootstrapNetworkPool(ctx, store, cfg); err != nil {
 		_ = store.Close()
 		return controllerBootstrapComposition{}, fmt.Errorf("controller: reserve Runner network pool: %w", err)
 	}
 	keepEtcdLifecycle = true
 	return controllerBootstrapComposition{
 		config:             cfg,
+		publicIngress:      publicIngress,
 		controllerConfig:   controllerConfig,
 		tick:               tick,
 		logger:             logger,

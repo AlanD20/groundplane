@@ -10,6 +10,7 @@ import {
   FileCode2,
   ArchiveRestore,
   Activity,
+  GitBranch,
 } from "lucide-react";
 
 export const serviceDestinations = [
@@ -17,6 +18,7 @@ export const serviceDestinations = [
   { key: "monitoring", label: "Monitoring", icon: Activity },
   { key: "logs", label: "Logs", icon: Terminal },
   { key: "releases", label: "Deployments", icon: History },
+  { key: "git-delivery", label: "GitHub deployment", icon: GitBranch },
   { key: "entries", label: "Configuration", icon: Braces },
   { key: "storage", label: "Storage", icon: HardDrive },
   { key: "connections", label: "Backing connections", icon: Plug },

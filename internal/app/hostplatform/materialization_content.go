@@ -1,4 +1,4 @@
-package app
+package hostplatform
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
-func initializeTaskMaterializationResolver(
+func NewMaterializationResolver(
 	store etcdstore.Store,
 	blueprints *etcd.HierarchyRepository,
 	values *entryvalues.Repository,

@@ -27,6 +27,29 @@ func (r *Registry) ResolveWorkloadImages(
 	agentID string,
 	selectors []*agentpb.WorkloadImageSelector,
 ) (*agentpb.WorkloadImageResolutionResult, error) {
+	return r.resolveWorkloadImages(ctx, agentID, [16]byte{}, selectors)
+}
+
+// ResolveWorkloadImagesForProcess requires the process recorded in the selected
+// host's executor snapshot. A newer connection must capture its own selection.
+func (r *Registry) ResolveWorkloadImagesForProcess(
+	ctx context.Context,
+	agentID string,
+	process [16]byte,
+	selectors []*agentpb.WorkloadImageSelector,
+) (*agentpb.WorkloadImageResolutionResult, error) {
+	if process == [16]byte{} {
+		return nil, errs.New(errs.KindValidationFailed, "image resolution requires a captured Agent process")
+	}
+	return r.resolveWorkloadImages(ctx, agentID, process, selectors)
+}
+
+func (r *Registry) resolveWorkloadImages(
+	ctx context.Context,
+	agentID string,
+	process [16]byte,
+	selectors []*agentpb.WorkloadImageSelector,
+) (*agentpb.WorkloadImageResolutionResult, error) {
 	if ctx == nil {
 		return nil, errs.New(errs.KindInternal, "image resolution context is required")
 	}
@@ -34,7 +57,8 @@ func (r *Registry) ResolveWorkloadImages(
 	defer cancel()
 	r.mu.Lock()
 	state := r.agents[agentID]
-	if state == nil || !state.online || state.revoked || closed(state.done) {
+	if state == nil || !state.online || state.revoked || closed(state.done) ||
+		process != [16]byte{} && state.processAuthentication.ProcessGeneration != process {
 		r.mu.Unlock()
 		return nil, imageUnavailable()
 	}

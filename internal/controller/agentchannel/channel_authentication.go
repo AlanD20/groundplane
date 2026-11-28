@@ -49,6 +49,13 @@ func taskStoreStatus(err error) error {
 }
 
 func validateAuthenticate(message *agentpb.AgentMessage) (*agentpb.Authenticate, Token, error) {
+	return validateChannelAuthenticate(message, tokenSize)
+}
+
+func validateChannelAuthenticate(
+	message *agentpb.AgentMessage,
+	expectedTokenLength int,
+) (*agentpb.Authenticate, Token, error) {
 	if message == nil || message.GetAuthenticate() == nil {
 		return nil, Token{}, errs.New(
 			errs.KindValidationFailed,
@@ -62,7 +69,7 @@ func validateAuthenticate(message *agentpb.AgentMessage) (*agentpb.Authenticate,
 	if err := ids.Validate(ids.KindAgent, authenticate.AgentId); err != nil {
 		return nil, Token{}, errs.New(errs.KindValidationFailed, "agent id is invalid")
 	}
-	if len(authenticate.Token) != tokenSize {
+	if len(authenticate.Token) != expectedTokenLength {
 		return nil, Token{}, errs.New(
 			errs.KindValidationFailed,
 			"agent token has an invalid length",

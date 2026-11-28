@@ -26,6 +26,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/app/adaptercompiler"
 	"github.com/AlanD20/groundplane/internal/app/agentplatform"
 	"github.com/AlanD20/groundplane/internal/app/componentregistration"
+	"github.com/AlanD20/groundplane/internal/app/publicingressplatform"
+	"github.com/AlanD20/groundplane/internal/app/remoteagentplatform"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/agentownership"
 	"github.com/AlanD20/groundplane/internal/infra/agentworkjournal"
@@ -66,7 +68,14 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	if err := config.Load(ctx, configPath, &cfg); err != nil {
 		return nil, err
 	}
+	if err := config.LoadCompanion(ctx, configPath, "remote-agent", &cfg.Remote); err != nil {
+		return nil, err
+	}
 	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	remoteConnection, err := remoteagentplatform.AgentChannel(cfg)
+	if err != nil {
 		return nil, err
 	}
 	ownership, err := agentownership.Acquire(ctx)
@@ -92,9 +101,12 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 		return nil, err
 	}
 
-	token, err := agentcredential.ReadChannelToken(ctx, agentprotocol.TokenPath, 0)
-	if err != nil {
-		return nil, err
+	var token []byte
+	if remoteConnection == nil {
+		token, err = agentcredential.ReadChannelToken(ctx, agentprotocol.TokenPath, 0)
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer clear(token)
 	image := os.Getenv(agentprotocol.AgentImageEnv)
@@ -219,14 +231,12 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 		managedConfigs: managedConfigs, dnsResolverObserver: dnsObserver,
 		hostResolution: hostResolution, logs: logReader, scripts: scripts,
 	}
-	client, err := agent.NewClient(
-		agentprotocol.SocketPath,
-		cfg.AgentID,
-		token,
-		cfg.Storage.VolumeRoot,
-		logger,
-		logReader,
-	)
+	var client *agent.Client
+	if remoteConnection != nil {
+		client, err = agent.NewRemoteClient(*remoteConnection, cfg.Storage.VolumeRoot, logger, logReader)
+	} else {
+		client, err = agent.NewClient(agentprotocol.SocketPath, cfg.AgentID, token, cfg.Storage.VolumeRoot, logger, logReader)
+	}
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
@@ -239,6 +249,14 @@ func NewAgent(ctx context.Context, configPath string) (result *Agent, resultErr 
 	}
 	runtimeResources.workJournal = workJournal
 	if err := client.SetWorkJournal(workJournal); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if remoteConnection != nil {
+		if err := remoteagentplatform.ConfigureImageFetch(client, workJournal); err != nil {
+			return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+		}
+	}
+	if err := publicingressplatform.ConfigureAgent(ctx, configPath, remoteConnection == nil, client, workJournal, logger); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	scriptExecutor, err := scriptruntime.NewExecutor(scripts, workJournal)

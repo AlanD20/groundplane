@@ -914,6 +914,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/github-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List GitHub App connections in a scope */
+        get: operations["github-connection.list"];
+        put?: never;
+        /** Register credentials for an operator-owned GitHub App installation */
+        post: operations["github-connection.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/github-connections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show GitHub App connection metadata */
+        get: operations["github-connection.show"];
+        put?: never;
+        post?: never;
+        /** Revoke a GitHub App connection */
+        delete: operations["github-connection.revoke"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/github-connections/{id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace GitHub App connection credentials */
+        put: operations["github-connection.rotate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/github-connections/{id}/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List repositories available to the GitHub App installation */
+        get: operations["github-connection.repositories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/github-connections/{id}/repositories/{repository_id}/runner-default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show the preferred Runner selector saved at this repository scope */
+        get: operations["github-repository.runner-default-show"];
+        /** Save the preferred Runner selector for this repository scope */
+        put: operations["github-repository.runner-default-put"];
+        post?: never;
+        /** Remove the preferred Runner selector at this repository scope */
+        delete: operations["github-repository.runner-default-remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/github-connections/{id}/repositories/{repository_id}/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List GitHub Actions workflows visible in this repository */
+        get: operations["github-repository.workflows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/host": {
         parameters: {
             query?: never;
@@ -942,6 +1048,74 @@ export interface paths {
         put?: never;
         /** Open an independent root host terminal; replay resumes the same session */
         post: operations["host.terminal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/hosts/{id}/images/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fetch an exact public image manifest into an enrolled remote Host */
+        post: operations["remote-host.fetch-image"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/hosts/{id}/public-ingress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show public ingress configuration and eligible Routes for a Host */
+        get: operations["public-ingress.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/hosts/{id}/public-ingress/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a reviewed public ingress configuration to a Host */
+        post: operations["public-ingress.apply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/hosts/{id}/public-ingress/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review a public ingress configuration for a Host */
+        post: operations["public-ingress.preflight"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1192,6 +1366,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/remote-hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List remote Hosts */
+        get: operations["remote-host.list"];
+        put?: never;
+        /** Register a remote Host */
+        post: operations["remote-host.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote-hosts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a remote Host */
+        get: operations["remote-host.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote-hosts/{id}/enrollment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stage an Agent certificate from a signed CSR */
+        post: operations["remote-host.stage-enrollment"];
+        /** Revoke a remote Host's exact Agent generation */
+        delete: operations["remote-host.revoke-enrollment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/routes": {
         parameters: {
             query?: never;
@@ -1302,6 +1529,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runners/{id}/cli-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show the CLI grant attached to the Runner's scoped credential */
+        get: operations["runner.cli-grant.show"];
+        /** Replace the exact Runner CLI grant for the checked revision */
+        put: operations["runner.cli-grant.set"];
+        post?: never;
+        /** Revoke CLI actions while keeping Runner build authentication */
+        delete: operations["runner.cli-grant.revoke"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runners/{id}/retry": {
         parameters: {
             query?: never;
@@ -1313,6 +1559,24 @@ export interface paths {
         put?: never;
         /** Retry failed Runner creation */
         post: operations["runner.retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/{id}/scoped-migration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show scoped Runner migration status */
+        get: operations["runner.scoped-migration.show"];
+        put?: never;
+        /** Move an installed Runner to scoped access after its current job completes */
+        post: operations["runner.scoped-migration.start"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1527,6 +1791,93 @@ export interface paths {
         put?: never;
         /** Destroy service runtime */
         post: operations["service.destroy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/services/{id}/git-deployment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a Service's GitHub deployment binding */
+        get: operations["git-deployment.binding-show"];
+        /** Save a Service's GitHub deployment binding */
+        put: operations["git-deployment.bind"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/services/{id}/git-deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a Service's GitHub deployments */
+        get: operations["git-deployment.list"];
+        put?: never;
+        /** Start a GitHub deployment for a Service */
+        post: operations["git-deployment.start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/services/{id}/git-deployments/{deployment}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a Service's GitHub deployment */
+        get: operations["git-deployment.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/services/{id}/git-deployments/{deployment}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a verified GitHub build for deployment */
+        post: operations["git-deployment.approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/services/{id}/git-runner-selectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runner selectors available to this Service and repository */
+        get: operations["git-deployment.runner-selectors"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3376,6 +3727,220 @@ export interface components {
             /** @description More history remains but this request reached its bounded scan budget; continue with after and revision */
             scan_limited: boolean;
         };
+        GitDeployment: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/GitDeployment.json
+             */
+            readonly $schema?: string;
+            binding: components["schemas"]["GitDeploymentBinding"];
+            /** Format: int64 */
+            binding_revision: number;
+            commit: string;
+            /** Format: date-time */
+            created_at: string;
+            deploy_task_id?: string;
+            error_code?: string;
+            fetch_task_id?: string;
+            /** Format: int64 */
+            github_run_attempt?: number;
+            /** Format: int64 */
+            github_run_id?: number;
+            /** Format: int64 */
+            github_runner_id?: number;
+            github_url?: string;
+            id: string;
+            image_digest?: string;
+            /** @enum {string} */
+            phase: "queued" | "dispatching" | "building" | "awaiting_approval" | "fetch_pending" | "fetching" | "deploy_pending" | "deploying" | "succeeded" | "failed" | "superseded" | "attention_required";
+            release_id?: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        GitDeploymentBinding: {
+            automatic: boolean;
+            branch: string;
+            build_context: string;
+            connection_id: string;
+            dockerfile: string;
+            environment_id: string;
+            inherit_runner_default?: boolean;
+            project_id: string;
+            /** Format: int64 */
+            repository_id: number;
+            require_approval: boolean;
+            runner_group?: string;
+            /** Format: int64 */
+            runner_group_id?: number;
+            runner_label?: string;
+            service_id: string;
+            tenant_id: string;
+            workflow_commit?: string;
+            /** Format: int64 */
+            workflow_id: number;
+            workflow_ref: string;
+        };
+        GitDeploymentBindingState: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/GitDeploymentBindingState.json
+             */
+            readonly $schema?: string;
+            binding?: components["schemas"]["GitDeploymentBinding"];
+            /** Format: int64 */
+            revision: number;
+        };
+        GitDeploymentBindingWrite: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/GitDeploymentBindingWrite.json
+             */
+            readonly $schema?: string;
+            automatic: boolean;
+            branch: string;
+            build_context: string;
+            connection_id: string;
+            dockerfile: string;
+            inherit_runner_default?: boolean;
+            /** Format: int64 */
+            repository_id: number;
+            require_approval: boolean;
+            runner_group?: string;
+            /** Format: int64 */
+            runner_group_id?: number;
+            runner_label?: string;
+            workflow_commit?: string;
+            /** Format: int64 */
+            workflow_id: number;
+            workflow_ref: string;
+        };
+        GitDeploymentStartRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/GitDeploymentStartRequest.json
+             */
+            readonly $schema?: string;
+            expected_commit?: string;
+        };
+        GitHubConnection: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/GitHubConnection.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            app_id: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            generation: number;
+            id: string;
+            /** Format: int64 */
+            installation_id: number;
+            name: string;
+            /** Format: date-time */
+            revoked_at?: string;
+            scope: components["schemas"]["GitHubConnectionScope"];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        GitHubConnectionCreateRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/GitHubConnectionCreateRequest.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            app_id: number;
+            /** Format: int64 */
+            installation_id: number;
+            name: string;
+            /** Format: password */
+            private_key_pem: string;
+            scope: components["schemas"]["GitHubConnectionScope"];
+            /** Format: password */
+            webhook_secret?: string;
+        };
+        GitHubConnectionCredentialsWrite: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/GitHubConnectionCredentialsWrite.json
+             */
+            readonly $schema?: string;
+            /** Format: password */
+            private_key_pem: string;
+            /** Format: password */
+            webhook_secret?: string;
+        };
+        GitHubConnectionScope: {
+            id: string;
+            /** @enum {string} */
+            kind: "tenant" | "project" | "environment";
+        };
+        GitHubRepository: {
+            default_branch: string;
+            full_name: string;
+            /** Format: int64 */
+            id: number;
+            private: boolean;
+        };
+        GitHubWorkflow: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            path: string;
+            state: string;
+        };
+        GitRepositoryRunnerDefault: {
+            connection_id: string;
+            group?: string;
+            /** Format: int64 */
+            group_id?: number;
+            label: string;
+            /** Format: int64 */
+            repository_id: number;
+            scope: components["schemas"]["GitHubConnectionScope"];
+        };
+        GitRepositoryRunnerDefaultState: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/GitRepositoryRunnerDefaultState.json
+             */
+            readonly $schema?: string;
+            default?: components["schemas"]["GitRepositoryRunnerDefault"];
+            /** Format: int64 */
+            revision: number;
+        };
+        GitRepositoryRunnerDefaultWrite: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/GitRepositoryRunnerDefaultWrite.json
+             */
+            readonly $schema?: string;
+            group?: string;
+            /** Format: int64 */
+            group_id?: number;
+            label: string;
+        };
+        GitRunnerSelector: {
+            /** Format: int64 */
+            available: number;
+            group?: string;
+            /** Format: int64 */
+            group_id?: number;
+            label: string;
+            /** Format: int64 */
+            matching: number;
+        };
         HierarchyDeleteOutputBody: {
             /**
              * Format: uri
@@ -3400,6 +3965,7 @@ export interface components {
             docker: string;
             etcd: components["schemas"]["HostEtcd"];
             hostname: string;
+            id?: string;
             memory: components["schemas"]["HostResource"];
             os: string;
             swap: components["schemas"]["HostResource"];
@@ -3777,6 +4343,66 @@ export interface components {
             /** Format: int64 */
             revision?: number;
         };
+        PageGitDeployment: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/PageGitDeployment.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["GitDeployment"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
+        PageGitHubConnection: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/PageGitHubConnection.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["GitHubConnection"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
+        PageGitHubRepository: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/PageGitHubRepository.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["GitHubRepository"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
+        PageGitHubWorkflow: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/PageGitHubWorkflow.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["GitHubWorkflow"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
+        PageGitRunnerSelector: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/PageGitRunnerSelector.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["GitRunnerSelector"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
         PageMonitoringChild: {
             items: components["schemas"]["MonitoringChild"][] | null;
             next_cursor?: string;
@@ -3821,6 +4447,18 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["ReleaseSummary"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            revision?: number;
+        };
+        PageRemoteHost: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/PageRemoteHost.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["RemoteHost"][] | null;
             next_cursor?: string;
             /** Format: int64 */
             revision?: number;
@@ -3990,6 +4628,75 @@ export interface components {
              */
             readonly $schema?: string;
             slug: string;
+        };
+        PublicIngressApplyRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/PublicIngressApplyRequest.json
+             */
+            readonly $schema?: string;
+            addresses: string[] | null;
+            enabled: boolean;
+            review_token: string;
+            route_ids: string[] | null;
+        };
+        PublicIngressCheck: {
+            message: string;
+            scope: string;
+            /** @enum {string} */
+            status: "passed" | "warning" | "blocked" | "not_checked";
+        };
+        PublicIngressConfiguration: {
+            addresses: string[] | null;
+            enabled: boolean;
+            message?: string;
+            revision: string;
+            route_ids: string[] | null;
+            /** @enum {string} */
+            state: "disabled" | "pending" | "serving" | "failed";
+            task_id?: string;
+        };
+        PublicIngressDraft: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/PublicIngressDraft.json
+             */
+            readonly $schema?: string;
+            addresses: string[] | null;
+            enabled: boolean;
+            route_ids: string[] | null;
+        };
+        PublicIngressReview: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/PublicIngressReview.json
+             */
+            readonly $schema?: string;
+            can_apply: boolean;
+            checks: components["schemas"]["PublicIngressCheck"][] | null;
+            review_token?: string;
+            revision: string;
+        };
+        PublicIngressRouteOption: {
+            environment: string;
+            hostname: string;
+            id: string;
+            path: string;
+            service: string;
+            unavailable?: string;
+        };
+        PublicIngressState: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/PublicIngressState.json
+             */
+            readonly $schema?: string;
+            configuration: components["schemas"]["PublicIngressConfiguration"];
+            routes: components["schemas"]["PublicIngressRouteOption"][] | null;
         };
         PublicTarget: {
             hostname: string;
@@ -4177,6 +4884,66 @@ export interface components {
             strategy: string;
             tag: string;
         };
+        RemoteHost: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RemoteHost.json
+             */
+            readonly $schema?: string;
+            agent_id?: string;
+            /** Format: date-time */
+            credential_expiry?: string;
+            /** Format: int64 */
+            generation: number;
+            id: string;
+            name: string;
+            /** @enum {string} */
+            state: "unenrolled" | "enrolling" | "enrolled";
+        };
+        RemoteHostCreateRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RemoteHostCreateRequest.json
+             */
+            readonly $schema?: string;
+            name: string;
+        };
+        RemoteHostEnrollment: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RemoteHostEnrollment.json
+             */
+            readonly $schema?: string;
+            certificate: string;
+            /** Format: date-time */
+            expires_at: string;
+            host: components["schemas"]["RemoteHost"];
+        };
+        RemoteHostEnrollmentRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RemoteHostEnrollmentRequest.json
+             */
+            readonly $schema?: string;
+            csr: string;
+            /** Format: int64 */
+            expected_generation: number;
+        };
+        RemoteImageFetchRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RemoteImageFetchRequest.json
+             */
+            readonly $schema?: string;
+            after?: string[] | null;
+            /** @description Exact Linux platform manifest digest in a supported public registry */
+            image: string;
+        };
         RestoreDatabaseReview: {
             artifact_format: string;
             backup_tool_version: string;
@@ -4321,6 +5088,47 @@ export interface components {
             software?: components["schemas"]["ContainerIdentity"];
             tenant_id: string;
         };
+        RunnerCLIGrantAction: {
+            image?: string;
+            /** @enum {string} */
+            operation: "service.read" | "task.read" | "service.image.fetch" | "service.deploy";
+            target_id: string;
+            task_ids?: string[] | null;
+        };
+        RunnerCLIGrantScope: {
+            environment_id: string;
+            project_id: string;
+            tenant_id: string;
+        };
+        RunnerCLIGrantStatus: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RunnerCLIGrantStatus.json
+             */
+            readonly $schema?: string;
+            actions: components["schemas"]["RunnerCLIGrantAction"][];
+            active: boolean;
+            available: boolean;
+            /** Format: date-time */
+            expires_at?: string;
+            /** Format: int64 */
+            revision: number;
+            runner_id: string;
+            scope?: components["schemas"]["RunnerCLIGrantScope"];
+        };
+        RunnerCLIGrantWrite: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RunnerCLIGrantWrite.json
+             */
+            readonly $schema?: string;
+            actions: components["schemas"]["RunnerCLIGrantAction"][] | null;
+            /** Format: int64 */
+            lifetime_seconds: number;
+            scope: components["schemas"]["RunnerCLIGrantScope"];
+        };
         RunnerCheckConfiguration: {
             controller_endpoint: string;
             github_url: string;
@@ -4418,6 +5226,36 @@ export interface components {
              */
             readonly $schema?: string;
             registration_token: string;
+        };
+        RunnerScopedMigrationRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RunnerScopedMigrationRequest.json
+             */
+            readonly $schema?: string;
+            connection_id: string;
+            /** Format: int64 */
+            repository_id: number;
+        };
+        RunnerScopedMigrationStatus: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/RunnerScopedMigrationStatus.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            accepted_at?: string;
+            available: boolean;
+            /** Format: date-time */
+            completed_at?: string;
+            /** @enum {string} */
+            phase: "legacy" | "registration" | "pending" | "cutover" | "complete";
+            /** Format: int64 */
+            revision: number;
+            runner_id: string;
+            task_id?: string;
         };
         RunnerUpdateRequest: {
             /**
@@ -8369,6 +9207,558 @@ export interface operations {
             };
         };
     };
+    "github-connection.list": {
+        parameters: {
+            query: {
+                scope_kind: "tenant" | "project" | "environment";
+                scope_id: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageGitHubConnection"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "github-connection.create": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitHubConnectionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubConnection"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "github-connection.show": {
+        parameters: {
+            query: {
+                scope_kind: "tenant" | "project" | "environment";
+                scope_id: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubConnection"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "github-connection.revoke": {
+        parameters: {
+            query: {
+                scope_kind: "tenant" | "project" | "environment";
+                scope_id: string;
+            };
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description GitHub App connection revoked */
+            204: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "github-connection.rotate": {
+        parameters: {
+            query: {
+                scope_kind: "tenant" | "project" | "environment";
+                scope_id: string;
+            };
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitHubConnectionCredentialsWrite"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubConnection"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "github-connection.repositories": {
+        parameters: {
+            query: {
+                scope_kind: "tenant" | "project" | "environment";
+                scope_id: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageGitHubRepository"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "github-repository.runner-default-show": {
+        parameters: {
+            query: {
+                scope_kind: "tenant" | "project" | "environment";
+                scope_id: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                repository_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitRepositoryRunnerDefaultState"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "github-repository.runner-default-put": {
+        parameters: {
+            query: {
+                scope_kind: "tenant" | "project" | "environment";
+                scope_id: string;
+            };
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+                repository_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitRepositoryRunnerDefaultWrite"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitRepositoryRunnerDefaultState"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "github-repository.runner-default-remove": {
+        parameters: {
+            query: {
+                scope_kind: "tenant" | "project" | "environment";
+                scope_id: string;
+            };
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+                repository_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Repository Runner default removed */
+            204: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "github-repository.workflows": {
+        parameters: {
+            query: {
+                scope_kind: "tenant" | "project" | "environment";
+                scope_id: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                repository_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageGitHubWorkflow"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "host.show": {
         parameters: {
             query?: never;
@@ -8422,6 +9812,152 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TerminalSession"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "remote-host.fetch-image": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteImageFetchRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "public-ingress.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicIngressState"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "public-ingress.apply": {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicIngressApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "public-ingress.preflight": {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicIngressDraft"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicIngressReview"];
                 };
             };
             /** @description Error */
@@ -9143,6 +10679,267 @@ export interface operations {
             };
         };
     };
+    "remote-host.list": {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageRemoteHost"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "remote-host.create": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteHostCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteHost"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "remote-host.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteHost"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "remote-host.stage-enrollment": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteHostEnrollmentRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteHostEnrollment"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "remote-host.revoke-enrollment": {
+        parameters: {
+            query: {
+                generation: number;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "route.list": {
         parameters: {
             query: {
@@ -9640,6 +11437,111 @@ export interface operations {
             };
         };
     };
+    "runner.cli-grant.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerCLIGrantStatus"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "runner.cli-grant.set": {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunnerCLIGrantWrite"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerCLIGrantStatus"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "runner.cli-grant.revoke": {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "runner.retry": {
         parameters: {
             query?: never;
@@ -9654,6 +11556,77 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RunnerRetryRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "runner.scoped-migration.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerScopedMigrationStatus"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "runner.scoped-migration.start": {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunnerScopedMigrationRequest"];
             };
         };
         responses: {
@@ -10447,6 +12420,376 @@ export interface operations {
             };
             /** @description Error */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "git-deployment.binding-show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitDeploymentBindingState"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "git-deployment.bind": {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitDeploymentBindingWrite"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitDeploymentBindingState"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "git-deployment.list": {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageGitDeployment"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "git-deployment.start": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["GitDeploymentStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitDeployment"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "git-deployment.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                deployment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitDeployment"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "git-deployment.approve": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+                deployment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitDeployment"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "git-deployment.runner-selectors": {
+        parameters: {
+            query: {
+                connection_id: string;
+                repository_id: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageGitRunnerSelector"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

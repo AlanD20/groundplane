@@ -17,6 +17,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnergrants"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -76,10 +79,92 @@ func (service *Service) FetchImage(
 	requested, key string,
 	after []string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
+	return service.fetchImage(ctx, requested, key, after, nil)
+}
+
+// FetchImageGuarded publishes a native Fetch under the caller's captured
+// authorization. The caller owns the image and Service ownership decision.
+func (service *Service) FetchImageGuarded(
+	ctx context.Context,
+	requested, key string,
+	after []string,
+	guards []keyvalue.Condition,
+) (idempotencyrecord.IdempotencyResponse, error) {
+	if len(guards) == 0 {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"guarded image fetch requires captured authority",
+		)
+	}
+	return service.fetchImage(ctx, requested, key, after, guards)
+}
+
+func (service *Service) fetchImage(
+	ctx context.Context,
+	requested, key string,
+	after []string,
+	guards []keyvalue.Condition,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if _, err := imagefetch.ParseRequested(requested); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.accept(ctx, requested, key, false, after)
+	return service.accept(ctx, requested, key, false, after, workexecution.Scope{}, "", nil, guards...)
+}
+
+// FetchServiceImageGuarded binds accepted image work to one Service's scope.
+func (service *Service) FetchServiceImageGuarded(
+	ctx context.Context,
+	serviceID, requested, key string,
+	after []string,
+	guards []keyvalue.Condition,
+	scope workexecution.Scope,
+) (idempotencyrecord.IdempotencyResponse, error) {
+	return service.fetchServiceImageGuarded(ctx, serviceID, requested, key, after, guards, scope, nil)
+}
+
+func (service *Service) FetchServiceImageForRunnerGuarded(
+	ctx context.Context,
+	serviceID, requested, key string,
+	after []string,
+	guards []keyvalue.Condition,
+	scope workexecution.Scope,
+	provenance runnergrants.TaskProvenance,
+) (idempotencyrecord.IdempotencyResponse, error) {
+	if err := provenance.ValidateFetch(serviceID, requested); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	return service.fetchServiceImageGuarded(
+		ctx,
+		serviceID,
+		requested,
+		key,
+		after,
+		guards,
+		scope,
+		provenance.PublicationForTask,
+	)
+}
+
+func (service *Service) fetchServiceImageGuarded(
+	ctx context.Context,
+	serviceID, requested, key string,
+	after []string,
+	guards []keyvalue.Condition,
+	scope workexecution.Scope,
+	publish func(workexecution.Task) (workqueue.Change, error),
+) (idempotencyrecord.IdempotencyResponse, error) {
+	if len(guards) == 0 || ids.Validate(ids.KindService, serviceID) != nil ||
+		ids.Validate(ids.KindTenant, scope.TenantID) != nil || ids.Validate(ids.KindProject, scope.ProjectID) != nil ||
+		ids.Validate(ids.KindEnvironment, scope.EnvironmentID) != nil {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"scoped image fetch requires captured Service authority",
+		)
+	}
+	if _, err := imagefetch.ParseRequested(requested); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	return service.accept(ctx, requested, key, false, after, scope, serviceID, publish, guards...)
 }
 
 func (service *Service) RemoveImage(
@@ -90,7 +175,7 @@ func (service *Service) RemoveImage(
 	if _, err := imagefetch.RemovalHash(imageID); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return service.accept(ctx, imageID, key, true, after)
+	return service.accept(ctx, imageID, key, true, after, workexecution.Scope{}, "", nil)
 }
 
 func (service *Service) accept(
@@ -98,6 +183,10 @@ func (service *Service) accept(
 	requested, key string,
 	remove bool,
 	after []string,
+	scope workexecution.Scope,
+	serviceID string,
+	publish func(workexecution.Task) (workqueue.Change, error),
+	guards ...keyvalue.Condition,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if len(after) != 0 {
 		if err := workexecution.ValidateTaskDependencies(ids.New(ids.KindTask), after); err != nil {
@@ -109,12 +198,20 @@ func (service *Service) accept(
 		afterValues[i] = requestidempotency.String(id)
 	}
 	method, route := http.MethodPost, FetchRoute
+	locatorScope, locatorID := idempotencyrecord.IdempotencyScopePlatform, "-"
 	intentInput := requestidempotency.CanonicalIntentV1{
 		Method: method, Route: route, Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
 		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(
 			requestidempotency.Field{Name: "image", Value: requestidempotency.String(requested)},
 			requestidempotency.Field{Name: "after", Value: requestidempotency.List(afterValues...)},
 		)),
+	}
+	if serviceID != "" {
+		route = "/services/{id}/images/fetch"
+		intentInput.Route = route
+		intentInput.Path = []requestidempotency.PathBinding{{Name: "id", Value: serviceID}}
+		intentInput.Scope = requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: scope.EnvironmentID}
+		locatorScope, locatorID = idempotencyrecord.IdempotencyScopeEnvironment, scope.EnvironmentID
 	}
 	if remove {
 		method, route = http.MethodDelete, RemoveRoute
@@ -136,7 +233,7 @@ func (service *Service) accept(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer evidence.Destroy()
-	locator := idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
+	locator := idempotencyrecord.IdempotencyLocator{ScopeKind: locatorScope, ScopeID: locatorID,
 		Method: method, Route: route, Key: key}
 	if err := idempotencyrecord.ValidateIdempotencyLocator(locator); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -159,7 +256,7 @@ func (service *Service) accept(
 		)
 	}
 	now := time.Now().UTC()
-	task := workexecution.Task{ID: ids.New(ids.KindTask), Actor: workexecution.OperatorActor,
+	task := workexecution.Task{ID: ids.New(ids.KindTask), Actor: workexecution.OperatorActor, Scope: scope,
 		Action: workexecution.ActionFetch, TargetID: host.Record, TargetName: requested,
 		After: append([]string(nil), after...), CreatedAt: now, UpdatedAt: now,
 		Deadline: now.Add(acceptedaction.QueueTimeout)}
@@ -172,8 +269,9 @@ func (service *Service) accept(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(durable.Ciphertext)
-	return acceptedaction.Submit(ctx, service.submitter,
-		acceptedaction.Submission{Task: task, Kind: kind, Locator: locator, Intent: durable, Evidence: evidence},
+	return acceptedaction.Submit(ctx, service.submitter, acceptedaction.Submission{
+		Task: task, Kind: kind, Locator: locator, Intent: durable, Evidence: evidence, Guards: guards, PublicationForTask: publish,
+	},
 		imageRequest{Requested: requested, HostID: host.Record})
 }
 

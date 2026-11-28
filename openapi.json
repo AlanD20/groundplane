@@ -4735,6 +4735,667 @@
         ],
         "type": "object"
       },
+      "GitDeployment": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/GitDeployment.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/GitDeploymentBinding"
+          },
+          "binding_revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "deploy_task_id": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "fetch_task_id": {
+            "type": "string"
+          },
+          "github_run_attempt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "github_run_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "github_runner_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "github_url": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image_digest": {
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "queued",
+              "dispatching",
+              "building",
+              "awaiting_approval",
+              "fetch_pending",
+              "fetching",
+              "deploy_pending",
+              "deploying",
+              "succeeded",
+              "failed",
+              "superseded",
+              "attention_required"
+            ],
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "binding",
+          "binding_revision",
+          "commit",
+          "phase",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "GitDeploymentBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic": {
+            "type": "boolean"
+          },
+          "branch": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "build_context": {
+            "maxLength": 250,
+            "minLength": 1,
+            "type": "string"
+          },
+          "connection_id": {
+            "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "dockerfile": {
+            "maxLength": 250,
+            "minLength": 1,
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "inherit_runner_default": {
+            "type": "boolean"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "repository_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "require_approval": {
+            "type": "boolean"
+          },
+          "runner_group": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "runner_group_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "runner_label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "workflow_commit": {
+            "pattern": "^[a-f0-9]{40}$",
+            "type": "string"
+          },
+          "workflow_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workflow_ref": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_id",
+          "environment_id",
+          "project_id",
+          "tenant_id",
+          "connection_id",
+          "repository_id",
+          "workflow_id",
+          "workflow_ref",
+          "branch",
+          "dockerfile",
+          "build_context",
+          "automatic",
+          "require_approval"
+        ],
+        "type": "object"
+      },
+      "GitDeploymentBindingState": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/GitDeploymentBindingState.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/GitDeploymentBinding"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "type": "object"
+      },
+      "GitDeploymentBindingWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/GitDeploymentBindingWrite.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "automatic": {
+            "type": "boolean"
+          },
+          "branch": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "build_context": {
+            "maxLength": 250,
+            "minLength": 1,
+            "type": "string"
+          },
+          "connection_id": {
+            "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "dockerfile": {
+            "maxLength": 250,
+            "minLength": 1,
+            "type": "string"
+          },
+          "inherit_runner_default": {
+            "type": "boolean"
+          },
+          "repository_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "require_approval": {
+            "type": "boolean"
+          },
+          "runner_group": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "runner_group_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "runner_label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "workflow_commit": {
+            "pattern": "^[a-f0-9]{40}$",
+            "type": "string"
+          },
+          "workflow_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workflow_ref": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "connection_id",
+          "repository_id",
+          "workflow_id",
+          "workflow_ref",
+          "branch",
+          "dockerfile",
+          "build_context",
+          "automatic",
+          "require_approval"
+        ],
+        "type": "object"
+      },
+      "GitDeploymentStartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/GitDeploymentStartRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "expected_commit": {
+            "pattern": "^[a-f0-9]{40}$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubConnection": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/GitHubConnection.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "app_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "generation": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "installation_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revoked_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/GitHubConnectionScope"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "name",
+          "app_id",
+          "installation_id",
+          "generation",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "GitHubConnectionCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/GitHubConnectionCreateRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "app_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "installation_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "private_key_pem": {
+            "format": "password",
+            "maxLength": 16384,
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          },
+          "scope": {
+            "$ref": "#/components/schemas/GitHubConnectionScope"
+          },
+          "webhook_secret": {
+            "format": "password",
+            "maxLength": 256,
+            "minLength": 32,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "scope",
+          "name",
+          "app_id",
+          "installation_id",
+          "private_key_pem"
+        ],
+        "type": "object"
+      },
+      "GitHubConnectionCredentialsWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/GitHubConnectionCredentialsWrite.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "private_key_pem": {
+            "format": "password",
+            "maxLength": 16384,
+            "minLength": 1,
+            "type": "string",
+            "writeOnly": true
+          },
+          "webhook_secret": {
+            "format": "password",
+            "maxLength": 256,
+            "minLength": 32,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "private_key_pem"
+        ],
+        "type": "object"
+      },
+      "GitHubConnectionScope": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^(tnt|prj|env)_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "tenant",
+              "project",
+              "environment"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "type": "object"
+      },
+      "GitHubRepository": {
+        "additionalProperties": false,
+        "properties": {
+          "default_branch": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "private": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "full_name",
+          "default_branch",
+          "private"
+        ],
+        "type": "object"
+      },
+      "GitHubWorkflow": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "path",
+          "state"
+        ],
+        "type": "object"
+      },
+      "GitRepositoryRunnerDefault": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_id": {
+            "type": "string"
+          },
+          "group": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "group_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "repository_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/GitHubConnectionScope"
+          }
+        },
+        "required": [
+          "scope",
+          "connection_id",
+          "repository_id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "GitRepositoryRunnerDefaultState": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/GitRepositoryRunnerDefaultState.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "default": {
+            "$ref": "#/components/schemas/GitRepositoryRunnerDefault"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "type": "object"
+      },
+      "GitRepositoryRunnerDefaultWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/GitRepositoryRunnerDefaultWrite.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "group": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "group_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "type": "object"
+      },
+      "GitRunnerSelector": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "group": {
+            "type": "string"
+          },
+          "group_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          },
+          "matching": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "matching",
+          "available"
+        ],
+        "type": "object"
+      },
       "HierarchyDeleteOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -4790,6 +5451,9 @@
             "$ref": "#/components/schemas/HostEtcd"
           },
           "hostname": {
+            "type": "string"
+          },
+          "id": {
             "type": "string"
           },
           "memory": {
@@ -6120,6 +6784,176 @@
         ],
         "type": "object"
       },
+      "PageGitDeployment": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageGitDeployment.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GitDeployment"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageGitHubConnection": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageGitHubConnection.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GitHubConnection"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageGitHubRepository": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageGitHubRepository.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GitHubRepository"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageGitHubWorkflow": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageGitHubWorkflow.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GitHubWorkflow"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageGitRunnerSelector": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageGitRunnerSelector.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GitRunnerSelector"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "PageMonitoringChild": {
         "additionalProperties": false,
         "properties": {
@@ -6269,6 +7103,40 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/ReleaseSummary"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageRemoteHost": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageRemoteHost.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RemoteHost"
             },
             "type": [
               "array",
@@ -6762,6 +7630,280 @@
         },
         "required": [
           "slug"
+        ],
+        "type": "object"
+      },
+      "PublicIngressApplyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PublicIngressApplyRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "review_token": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "route_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 512,
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "review_token",
+          "enabled",
+          "addresses",
+          "route_ids"
+        ],
+        "type": "object"
+      },
+      "PublicIngressCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "warning",
+              "blocked",
+              "not_checked"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "status",
+          "message"
+        ],
+        "type": "object"
+      },
+      "PublicIngressConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "revision": {
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "type": "string"
+          },
+          "route_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 512,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "state": {
+            "enum": [
+              "disabled",
+              "pending",
+              "serving",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "state",
+          "enabled",
+          "addresses",
+          "route_ids"
+        ],
+        "type": "object"
+      },
+      "PublicIngressDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PublicIngressDraft.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "route_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 512,
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "addresses",
+          "route_ids"
+        ],
+        "type": "object"
+      },
+      "PublicIngressReview": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PublicIngressReview.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "can_apply": {
+            "type": "boolean"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/PublicIngressCheck"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "review_token": {
+            "type": "string"
+          },
+          "revision": {
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "can_apply",
+          "checks"
+        ],
+        "type": "object"
+      },
+      "PublicIngressRouteOption": {
+        "additionalProperties": false,
+        "properties": {
+          "environment": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "unavailable": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "hostname",
+          "path",
+          "environment",
+          "service"
+        ],
+        "type": "object"
+      },
+      "PublicIngressState": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PublicIngressState.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/PublicIngressConfiguration"
+          },
+          "routes": {
+            "items": {
+              "$ref": "#/components/schemas/PublicIngressRouteOption"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "configuration",
+          "routes"
         ],
         "type": "object"
       },
@@ -7401,6 +8543,170 @@
         ],
         "type": "object"
       },
+      "RemoteHost": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RemoteHost.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "credential_expiry": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "generation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "unenrolled",
+              "enrolling",
+              "enrolled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "state",
+          "generation"
+        ],
+        "type": "object"
+      },
+      "RemoteHostCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RemoteHostCreateRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 253,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "RemoteHostEnrollment": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RemoteHostEnrollment.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "certificate": {
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "host": {
+            "$ref": "#/components/schemas/RemoteHost"
+          }
+        },
+        "required": [
+          "host",
+          "certificate",
+          "expires_at"
+        ],
+        "type": "object"
+      },
+      "RemoteHostEnrollmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RemoteHostEnrollmentRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "csr": {
+            "maxLength": 24000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "expected_generation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_generation",
+          "csr"
+        ],
+        "type": "object"
+      },
+      "RemoteImageFetchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RemoteImageFetchRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          },
+          "image": {
+            "description": "Exact Linux platform manifest digest in a supported public registry",
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "type": "object"
+      },
       "RestoreDatabaseReview": {
         "additionalProperties": false,
         "properties": {
@@ -7865,6 +9171,156 @@
         ],
         "type": "object"
       },
+      "RunnerCLIGrantAction": {
+        "additionalProperties": false,
+        "properties": {
+          "image": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "service.read",
+              "task.read",
+              "service.image.fetch",
+              "service.deploy"
+            ],
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 31,
+            "minLength": 30,
+            "type": "string"
+          },
+          "task_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": [
+              "array",
+              "null"
+            ],
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "operation",
+          "target_id"
+        ],
+        "type": "object"
+      },
+      "RunnerCLIGrantScope": {
+        "additionalProperties": false,
+        "properties": {
+          "environment_id": {
+            "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "project_id": {
+            "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "tenant_id": {
+            "pattern": "^tnt_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "project_id",
+          "environment_id"
+        ],
+        "type": "object"
+      },
+      "RunnerCLIGrantStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerCLIGrantStatus.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerCLIGrantAction"
+            },
+            "type": "array"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "runner_id": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RunnerCLIGrantScope"
+          }
+        },
+        "required": [
+          "runner_id",
+          "revision",
+          "active",
+          "available",
+          "actions"
+        ],
+        "type": "object"
+      },
+      "RunnerCLIGrantWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerCLIGrantWrite.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerCLIGrantAction"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lifetime_seconds": {
+            "format": "int64",
+            "maximum": 3600,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RunnerCLIGrantScope"
+          }
+        },
+        "required": [
+          "scope",
+          "actions",
+          "lifetime_seconds"
+        ],
+        "type": "object"
+      },
       "RunnerCheckConfiguration": {
         "additionalProperties": false,
         "properties": {
@@ -8181,6 +9637,86 @@
         },
         "required": [
           "registration_token"
+        ],
+        "type": "object"
+      },
+      "RunnerScopedMigrationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerScopedMigrationRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "connection_id": {
+            "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "repository_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connection_id",
+          "repository_id"
+        ],
+        "type": "object"
+      },
+      "RunnerScopedMigrationStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerScopedMigrationStatus.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "accepted_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "legacy",
+              "registration",
+              "pending",
+              "cutover",
+              "complete"
+            ],
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "runner_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "revision",
+          "available",
+          "phase"
         ],
         "type": "object"
       },
@@ -16676,6 +18212,1068 @@
         ]
       }
     },
+    "/github-connections": {
+      "get": {
+        "operationId": "github-connection.list",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tenant",
+                "project",
+                "environment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "pattern": "^(tnt|prj|env)_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 4096,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageGitHubConnection"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List GitHub App connections in a scope",
+        "tags": [
+          "Git Delivery"
+        ]
+      },
+      "post": {
+        "operationId": "github-connection.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubConnectionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubConnection"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Register credentials for an operator-owned GitHub App installation",
+        "tags": [
+          "Git Delivery"
+        ]
+      }
+    },
+    "/github-connections/{id}": {
+      "delete": {
+        "operationId": "github-connection.revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tenant",
+                "project",
+                "environment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "pattern": "^(tnt|prj|env)_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "GitHub App connection revoked",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Revoke a GitHub App connection",
+        "tags": [
+          "Git Delivery"
+        ]
+      },
+      "get": {
+        "operationId": "github-connection.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tenant",
+                "project",
+                "environment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "pattern": "^(tnt|prj|env)_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubConnection"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Show GitHub App connection metadata",
+        "tags": [
+          "Git Delivery"
+        ]
+      }
+    },
+    "/github-connections/{id}/credentials": {
+      "put": {
+        "operationId": "github-connection.rotate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tenant",
+                "project",
+                "environment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "pattern": "^(tnt|prj|env)_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubConnectionCredentialsWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubConnection"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Replace GitHub App connection credentials",
+        "tags": [
+          "Git Delivery"
+        ]
+      }
+    },
+    "/github-connections/{id}/repositories": {
+      "get": {
+        "operationId": "github-connection.repositories",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tenant",
+                "project",
+                "environment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "pattern": "^(tnt|prj|env)_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 4096,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageGitHubRepository"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List repositories available to the GitHub App installation",
+        "tags": [
+          "Git Delivery"
+        ]
+      }
+    },
+    "/github-connections/{id}/repositories/{repository_id}/runner-default": {
+      "delete": {
+        "operationId": "github-repository.runner-default-remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tenant",
+                "project",
+                "environment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "pattern": "^(tnt|prj|env)_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Repository Runner default removed",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Remove the preferred Runner selector at this repository scope",
+        "tags": [
+          "Git Delivery"
+        ]
+      },
+      "get": {
+        "operationId": "github-repository.runner-default-show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tenant",
+                "project",
+                "environment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "pattern": "^(tnt|prj|env)_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitRepositoryRunnerDefaultState"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Show the preferred Runner selector saved at this repository scope",
+        "tags": [
+          "Git Delivery"
+        ]
+      },
+      "put": {
+        "operationId": "github-repository.runner-default-put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tenant",
+                "project",
+                "environment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "pattern": "^(tnt|prj|env)_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitRepositoryRunnerDefaultWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitRepositoryRunnerDefaultState"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Save the preferred Runner selector for this repository scope",
+        "tags": [
+          "Git Delivery"
+        ]
+      }
+    },
+    "/github-connections/{id}/repositories/{repository_id}/workflows": {
+      "get": {
+        "operationId": "github-repository.workflows",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tenant",
+                "project",
+                "environment"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "pattern": "^(tnt|prj|env)_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 4096,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageGitHubWorkflow"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List GitHub Actions workflows visible in this repository",
+        "tags": [
+          "Git Delivery"
+        ]
+      }
+    },
     "/host": {
       "get": {
         "operationId": "host.show",
@@ -16770,6 +19368,263 @@
         "summary": "Open an independent root host terminal; replay resumes the same session",
         "tags": [
           "Host"
+        ]
+      }
+    },
+    "/hosts/{id}/images/fetch": {
+      "post": {
+        "operationId": "remote-host.fetch-image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^host_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteImageFetchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Fetch an exact public image manifest into an enrolled remote Host",
+        "tags": [
+          "Remote Hosts"
+        ]
+      }
+    },
+    "/hosts/{id}/public-ingress": {
+      "get": {
+        "operationId": "public-ingress.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^host_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicIngressState"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show public ingress configuration and eligible Routes for a Host",
+        "tags": [
+          "Public Ingress"
+        ]
+      }
+    },
+    "/hosts/{id}/public-ingress/apply": {
+      "post": {
+        "operationId": "public-ingress.apply",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^host_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicIngressApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Apply a reviewed public ingress configuration to a Host",
+        "tags": [
+          "Public Ingress"
+        ]
+      }
+    },
+    "/hosts/{id}/public-ingress/preflight": {
+      "post": {
+        "operationId": "public-ingress.preflight",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^host_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicIngressDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicIngressReview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Review a public ingress configuration for a Host",
+        "tags": [
+          "Public Ingress"
         ]
       }
     },
@@ -18032,6 +20887,392 @@
         ]
       }
     },
+    "/remote-hosts": {
+      "get": {
+        "operationId": "remote-host.list",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 4096,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageRemoteHost"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List remote Hosts",
+        "tags": [
+          "Remote Hosts"
+        ]
+      },
+      "post": {
+        "operationId": "remote-host.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteHostCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoteHost"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Register a remote Host",
+        "tags": [
+          "Remote Hosts"
+        ]
+      }
+    },
+    "/remote-hosts/{id}": {
+      "get": {
+        "operationId": "remote-host.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^host_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoteHost"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Show a remote Host",
+        "tags": [
+          "Remote Hosts"
+        ]
+      }
+    },
+    "/remote-hosts/{id}/enrollment": {
+      "delete": {
+        "operationId": "remote-host.revoke-enrollment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^host_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "generation",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Revoke a remote Host's exact Agent generation",
+        "tags": [
+          "Remote Hosts"
+        ]
+      },
+      "post": {
+        "operationId": "remote-host.stage-enrollment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^host_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteHostEnrollmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoteHostEnrollment"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Stage an Agent certificate from a signed CSR",
+        "tags": [
+          "Remote Hosts"
+        ]
+      }
+    },
     "/routes": {
       "get": {
         "operationId": "route.list",
@@ -18899,6 +22140,193 @@
         ]
       }
     },
+    "/runners/{id}/cli-grant": {
+      "delete": {
+        "operationId": "runner.cli-grant.revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Revoke CLI actions while keeping Runner build authentication",
+        "tags": [
+          "Runner"
+        ]
+      },
+      "get": {
+        "operationId": "runner.cli-grant.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCLIGrantStatus"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show the CLI grant attached to the Runner's scoped credential",
+        "tags": [
+          "Runner"
+        ]
+      },
+      "put": {
+        "operationId": "runner.cli-grant.set",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerCLIGrantWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCLIGrantStatus"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace the exact Runner CLI grant for the checked revision",
+        "tags": [
+          "Runner"
+        ]
+      }
+    },
     "/runners/{id}/retry": {
       "post": {
         "operationId": "runner.retry",
@@ -18964,6 +22392,131 @@
           }
         },
         "summary": "Retry failed Runner creation",
+        "tags": [
+          "Runner"
+        ]
+      }
+    },
+    "/runners/{id}/scoped-migration": {
+      "get": {
+        "operationId": "runner.scoped-migration.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerScopedMigrationStatus"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show scoped Runner migration status",
+        "tags": [
+          "Runner"
+        ]
+      },
+      "post": {
+        "operationId": "runner.scoped-migration.start",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerScopedMigrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Move an installed Runner to scoped access after its current job completes",
         "tags": [
           "Runner"
         ]
@@ -20286,6 +23839,583 @@
         "summary": "Destroy service runtime",
         "tags": [
           "Service"
+        ]
+      }
+    },
+    "/services/{id}/git-deployment": {
+      "get": {
+        "operationId": "git-deployment.binding-show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitDeploymentBindingState"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Show a Service's GitHub deployment binding",
+        "tags": [
+          "Git Delivery"
+        ]
+      },
+      "put": {
+        "operationId": "git-deployment.bind",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitDeploymentBindingWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitDeploymentBindingState"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Save a Service's GitHub deployment binding",
+        "tags": [
+          "Git Delivery"
+        ]
+      }
+    },
+    "/services/{id}/git-deployments": {
+      "get": {
+        "operationId": "git-deployment.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int64",
+              "maximum": 64,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 4096,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageGitDeployment"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List a Service's GitHub deployments",
+        "tags": [
+          "Git Delivery"
+        ]
+      },
+      "post": {
+        "operationId": "git-deployment.start",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitDeploymentStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitDeployment"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Start a GitHub deployment for a Service",
+        "tags": [
+          "Git Delivery"
+        ]
+      }
+    },
+    "/services/{id}/git-deployments/{deployment}": {
+      "get": {
+        "operationId": "git-deployment.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "deployment",
+            "required": true,
+            "schema": {
+              "pattern": "^op_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitDeployment"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Show a Service's GitHub deployment",
+        "tags": [
+          "Git Delivery"
+        ]
+      }
+    },
+    "/services/{id}/git-deployments/{deployment}/approve": {
+      "post": {
+        "operationId": "git-deployment.approve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "deployment",
+            "required": true,
+            "schema": {
+              "pattern": "^op_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitDeployment"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Approve a verified GitHub build for deployment",
+        "tags": [
+          "Git Delivery"
+        ]
+      }
+    },
+    "/services/{id}/git-runner-selectors": {
+      "get": {
+        "operationId": "git-deployment.runner-selectors",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "pattern": "^ghc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageGitRunnerSelector"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List Runner selectors available to this Service and repository",
+        "tags": [
+          "Git Delivery"
         ]
       }
     },

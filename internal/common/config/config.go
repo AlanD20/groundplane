@@ -55,8 +55,11 @@ type ControllerConfig struct {
 		KeyPrefix string `yaml:"key_prefix"`
 	} `yaml:"etcd"`
 	Listen struct {
-		HTTP         []string `yaml:"http"` // human API (REST/JSON)
-		InternalHTTP string   `yaml:"internal_http"`
+		HTTP                 []string `yaml:"http"` // human API (REST/JSON)
+		InternalHTTP         string   `yaml:"internal_http"`
+		ScopedRunnerHTTP     string   `yaml:"-"`
+		ScopedRunnerRegistry string   `yaml:"-"`
+		GitHubWebhooks       string   `yaml:"-"`
 	} `yaml:"listen"`
 	Scheduler struct {
 		TickInterval string `yaml:"tick_interval"` // e.g. "30s"
@@ -64,7 +67,8 @@ type ControllerConfig struct {
 	HostTerminal struct {
 		InputInactivity string `yaml:"input_inactivity"`
 	} `yaml:"host_terminal"`
-	Maintenance MaintenanceConfig `yaml:"maintenance"`
+	Maintenance MaintenanceConfig          `yaml:"maintenance"`
+	RemoteAgent *RemoteControllerTLSConfig `yaml:"-"`
 	Storage     struct {
 		VolumeRoot string `yaml:"volume_root"`
 	} `yaml:"storage"`
@@ -74,6 +78,7 @@ type ControllerConfig struct {
 	} `yaml:"agent"`
 	Runner struct {
 		Image        string `yaml:"image"`
+		ScopedImage  string `yaml:"-"`
 		NetworkPool  string `yaml:"network_pool"`
 		HostUIDRange string `yaml:"host_uid_range"`
 		SubUIDRange  string `yaml:"subuid_range"`
@@ -139,9 +144,10 @@ type AgentRuntimeConfig struct {
 // AgentConfig is the complete Controller-owned runtime document injected into
 // the managed Agent container.
 type AgentConfig struct {
-	AgentID string             `yaml:"agent_id"`
-	Log     LogConfig          `yaml:"log"`
-	Runtime AgentRuntimeConfig `yaml:"runtime"`
+	AgentID string                `yaml:"agent_id"`
+	Remote  *RemoteAgentTLSConfig `yaml:"-"`
+	Log     LogConfig             `yaml:"log"`
+	Runtime AgentRuntimeConfig    `yaml:"runtime"`
 	Storage struct {
 		VolumeRoot string `yaml:"volume_root"`
 	} `yaml:"storage"`
@@ -192,6 +198,15 @@ func (c ControllerConfig) Validate() error {
 	if err != nil || !internal.Addr().Is4() || internal.Port() == 0 ||
 		(internal.Addr() != netip.MustParseAddr("127.0.0.1") && !internal.Addr().IsPrivate()) {
 		return fmt.Errorf("config: controller listen.internal_http must be 127.0.0.1 or private IPv4 address:port")
+	}
+	if err := c.validateScopedRunnerListeners(internal); err != nil {
+		return err
+	}
+	if err := c.validateGitHubWebhookListener(); err != nil {
+		return err
+	}
+	if err := c.validateRemoteAgentListener(); err != nil {
+		return err
 	}
 	tick, err := time.ParseDuration(c.Scheduler.TickInterval)
 	if err != nil {
@@ -316,8 +331,15 @@ func (c AgentConfig) Validate() error {
 	if err := ids.Validate(ids.KindAgent, c.AgentID); err != nil {
 		return fmt.Errorf("config: agent agent_id must be a canonical agt-prefixed ULID: %w", err)
 	}
-	if err := validateAgentRuntime("agent runtime", c.Runtime); err != nil {
-		return err
+	if c.Remote != nil {
+		if err := c.Remote.validate(c.AgentID); err != nil {
+			return err
+		}
+	}
+	if c.Remote == nil {
+		if err := validateAgentRuntime("agent runtime", c.Runtime); err != nil {
+			return err
+		}
 	}
 	if err := environmentpath.ValidateRoot(c.Storage.VolumeRoot); err != nil {
 		return fmt.Errorf("config: agent storage.volume_root: %w", err)
@@ -451,6 +473,9 @@ func LoadControllerDocument(
 	}
 	cfg, err := ParseControllerDocument(ctx, content)
 	if err != nil {
+		return ControllerConfig{}, nil, err
+	}
+	if err := cfg.loadGitDeliveryCompanion(ctx, path); err != nil {
 		return ControllerConfig{}, nil, err
 	}
 	return cfg, content, nil

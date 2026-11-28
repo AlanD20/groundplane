@@ -4,6 +4,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -24,13 +25,17 @@ import (
 // cmd/controller and pass down; handlers are methods on *Server so they
 // share the store/logger without globals.
 type Server struct {
-	Store             etcdstore.Store
-	Logger            *slog.Logger
-	Mux               *http.ServeMux
-	API               huma.API
-	onHTTPReady       func()
-	mutationAdmission MutationAdmission
-	storageAdmission  StorageAdmission
+	Store                  etcdstore.Store
+	Logger                 *slog.Logger
+	Mux                    *http.ServeMux
+	API                    huma.API
+	onHTTPReady            func()
+	mutationAdmission      MutationAdmission
+	storageAdmission       StorageAdmission
+	runnerListener         *RunnerListener
+	runnerRegistryListener *RunnerListener
+	githubWebhookListener  *RunnerListener
+	hostIdentity           func(context.Context) (string, error)
 
 	host                    HostReader
 	hostTerminals           *hostterminal.Manager
@@ -203,6 +208,16 @@ type Options struct {
 	Console                 ConsoleAssets
 	Logs                    *servicelogs.Service
 	Monitoring              MonitoringReader
+	RunnerListener          *RunnerListener
+	RunnerRegistryListener  *RunnerListener
+	GitHubWebhookListener   *RunnerListener
+	HostIdentity            func(context.Context) (string, error)
+	GitDelivery             GitDeliveryOperator
+	PublicIngress           PublicIngressOperator
+	RemoteHosts             RemoteHostOperator
+	RemoteImages            RemoteImageFetcher
+	RunnerScopedMigration   RunnerScopedMigrationOperator
+	RunnerCLIGrants         RunnerCLIGrantOperator
 }
 
 func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
@@ -213,6 +228,10 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 
 	s := &Server{
 		Store:                   store,
+		runnerListener:          options.RunnerListener,
+		runnerRegistryListener:  options.RunnerRegistryListener,
+		githubWebhookListener:   options.GitHubWebhookListener,
+		hostIdentity:            options.HostIdentity,
 		Logger:                  logger,
 		Mux:                     mux,
 		API:                     humago.NewWithPrefix(mux, "/api/v1", config),
@@ -347,6 +366,12 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	s.registerHost()
 	s.registerMonitoring()
 	s.registerHostTerminal()
+	s.registerGitDelivery(options.GitDelivery)
+	s.registerPublicIngress(options.PublicIngress)
+	s.registerRemoteHosts(options.RemoteHosts)
+	s.registerRemoteImage(options.RemoteImages)
+	s.registerRunnerScopedMigration(options.RunnerScopedMigration)
+	s.registerRunnerCLIGrant(options.RunnerCLIGrants)
 	return s
 }
 

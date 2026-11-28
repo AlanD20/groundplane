@@ -45,5 +45,11 @@ func (s *Server) showHost(ctx context.Context, _ *struct{}) (*hostOutput, error)
 	if err != nil {
 		return nil, err
 	}
+	if s.hostIdentity != nil {
+		host.ID, err = s.hostIdentity(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &hostOutput{Body: host}, nil
 }

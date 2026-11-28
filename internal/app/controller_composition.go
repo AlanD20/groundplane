@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/app/controllerbackup"
 	"github.com/AlanD20/groundplane/internal/app/hostplatform"
+	"github.com/AlanD20/groundplane/internal/app/remoteagentplatform"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/backingservices"
@@ -89,6 +90,10 @@ func NewController(ctx context.Context, configPath string) (_ *Controller, resul
 		execution.backupSecrets,
 		dataServices.scriptCheckpoints,
 	)
+	remoteHosts, err := remoteagentplatform.ConfigureController(cfg, store, authority.agents, agentRuntime)
+	if err != nil {
+		return nil, fmt.Errorf("controller: initialize Remote Agent channel: %w", err)
+	}
 	imageSelections := imagedelivery.SelectionResolver{Images: agentRuntime.Registry, Store: store}
 	blueprintReleases, err := blueprintrelease.NewService(
 		authority.releaseLedger,
@@ -549,6 +554,7 @@ func NewController(ctx context.Context, configPath string) (_ *Controller, resul
 		software:                software,
 		images:                  imageDelivery,
 		agentRuntime:            agentRuntime,
+		remoteHosts:             remoteHosts,
 		blueprintReleases:       blueprintReleases,
 		runner:                  runnerComposition,
 		backup:                  backups,

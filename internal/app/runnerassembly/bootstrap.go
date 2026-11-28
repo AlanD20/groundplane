@@ -1,4 +1,4 @@
-package app
+package runnerassembly
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
-func bootstrapRunnerNetworkPool(
+func BootstrapNetworkPool(
 	ctx context.Context, store etcdstore.Store,
 	controllerConfig config.ControllerConfig,
 ) error {

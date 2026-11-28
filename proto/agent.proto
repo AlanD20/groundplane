@@ -314,6 +314,65 @@ message EnvironmentProvisionHelperRequest {
   WorkStartAck start = 2;
   bool inspect_only = 3;
 }
+
+message PublicIngressReceipt {
+  string runtime_id = 1;
+  int64 revision = 2;
+  string digest = 3;
+}
+
+message PublicIngressAssignment {
+  WorkAttemptIdentity attempt = 1;
+  string host_id = 2;
+  string task_id = 3;
+  int64 revision = 4;
+  string digest = 5;
+  repeated string addresses = 6;
+  bytes configuration = 7;
+  PublicIngressReceipt predecessor = 8;
+}
+
+enum PublicIngressOutcome {
+  PUBLIC_INGRESS_OUTCOME_UNSPECIFIED = 0;
+  PUBLIC_INGRESS_OUTCOME_APPLIED = 1;
+  PUBLIC_INGRESS_OUTCOME_RESTORED = 2;
+  PUBLIC_INGRESS_OUTCOME_UNCERTAIN = 3;
+}
+
+message PublicIngressResultRequest {
+  WorkAttemptIdentity attempt = 1;
+  PublicIngressOutcome outcome = 2;
+  PublicIngressReceipt receipt = 3;
+}
+
+message PublicIngressResultAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  string outcome = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}
+
+message RemoteImageAssignment {
+  WorkAttemptIdentity attempt = 1;
+  string host_id = 2;
+  string task_id = 3;
+  string plan = 4;
+  string plan_sha256 = 5;
+}
+
+message RemoteImageResultRequest {
+  WorkAttemptIdentity attempt = 1;
+  string local_image_id = 2; // empty when exact content was not verified
+}
+
+message RemoteImageResultAck {
+  WorkAttemptIdentity attempt = 1;
+  WorkInputReference evidence = 2;
+  string outcome = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}
 message EnvironmentProvisionHelperResponse {
   string environment_id = 1;
   WorkInputReference input = 2;
@@ -1109,6 +1168,8 @@ message AgentMessage {
     WorkJournalReplayRequest work_journal_replay_request = 113;
     ContainerTerminalEvent container_terminal_event = 114;
     ExecutionQuiescenceResult execution_quiescence_result = 115;
+    PublicIngressResultRequest public_ingress_result_request = 116;
+    RemoteImageResultRequest remote_image_result_request = 117;
   }
 }
 
@@ -1125,6 +1186,8 @@ message Ready {
   string architecture_variant = 5;
   optional bool staging_ready = 6; // Backup staging readiness; independent of general execution capacity
   BuildProvenance source = 7; // exact immutable binary build provenance, when recorded
+  bool public_ingress_ready = 8; // exact Host has a provisioned public ingress executor
+  bool remote_image_ready = 9; // Agent accepts digest-only public image Fetch
 }
 
 message BuildProvenance {
@@ -1613,6 +1676,10 @@ message ControllerMessage {
     ContainerTerminalOpen container_terminal_open = 136;
     ContainerTerminalControl container_terminal_control = 137;
     CheckExecutionQuiescence check_execution_quiescence = 138;
+    PublicIngressAssignment public_ingress_assignment = 139;
+    PublicIngressResultAck public_ingress_result_ack = 140;
+    RemoteImageAssignment remote_image_assignment = 141;
+    RemoteImageResultAck remote_image_result_ack = 142;
   }
 }
 

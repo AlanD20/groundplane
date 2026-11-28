@@ -16,13 +16,16 @@ import (
 )
 
 type Submission struct {
-	SecretIDs    []string
-	ReplayTarget *idempotency.IdempotencyReplayTarget
-	Task         workexecution.Task
-	Kind         string
-	Locator      idempotency.IdempotencyLocator
-	Intent       idempotency.ProtectedIntentRecord
-	Evidence     requestidempotency.ProtectedEvidence
+	SecretIDs          []string
+	Guards             []keyvalue.Condition
+	Publication        workqueue.Change
+	PublicationForTask func(workexecution.Task) (workqueue.Change, error)
+	ReplayTarget       *idempotency.IdempotencyReplayTarget
+	Task               workexecution.Task
+	Kind               string
+	Locator            idempotency.IdempotencyLocator
+	Intent             idempotency.ProtectedIntentRecord
+	Evidence           requestidempotency.ProtectedEvidence
 }
 
 // Submitter owns acceptance storage, encryption and replay as one boundary.
@@ -99,7 +102,44 @@ func Submit[T any](ctx context.Context, submitter *Submitter, submission Submiss
 		return idempotency.IdempotencyResponse{}, err
 	}
 	defer keyvalue.ClearMutationValues(accepted.Mutations)
-	result, err := submitter.replay.PublishAcceptedAction(ctx, marker, accepted, payload, credentials)
+	// These comparisons preserve operation-specific admission authority through
+	// the same transaction that publishes the Task and its replay receipt.
+	if len(submission.Guards) != 0 {
+		byKey := make(map[string]keyvalue.Condition, len(accepted.Conditions)+len(submission.Guards))
+		for _, condition := range accepted.Conditions {
+			byKey[condition.Key] = condition
+		}
+		for _, guard := range submission.Guards {
+			if previous, exists := byKey[guard.Key]; exists {
+				if previous != guard {
+					return idempotency.IdempotencyResponse{}, errs.New(
+						errs.KindStateConflict,
+						"captured authority changed before Task admission",
+					)
+				}
+				continue
+			}
+			byKey[guard.Key] = guard
+			accepted.Conditions = append(accepted.Conditions, guard)
+		}
+	}
+	var taskPublication workqueue.Change
+	if submission.PublicationForTask != nil {
+		taskPublication, err = submission.PublicationForTask(task)
+		if err != nil {
+			return idempotency.IdempotencyResponse{}, err
+		}
+		defer keyvalue.ClearMutationValues(taskPublication.Mutations)
+	}
+	result, err := submitter.replay.PublishAcceptedAction(
+		ctx,
+		marker,
+		accepted,
+		payload,
+		credentials,
+		submission.Publication,
+		taskPublication,
+	)
 	var resolution requestidempotency.Resolution
 	if err != nil {
 		resolution, err = submitter.coordinator.ResolveOperationRootUnknown(

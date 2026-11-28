@@ -11,11 +11,20 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/app"
 	"github.com/AlanD20/groundplane/internal/app/hostcommands"
+	"github.com/AlanD20/groundplane/internal/app/remoteagentplatform"
 )
 
 func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
+	if len(os.Args) == 2 && os.Args[1] == hostcommands.PublicIngressRelayArgument {
+		if err := hostcommands.RunPublicIngressRelay(ctx,
+			os.Getenv(hostcommands.PublicIngressRelayBindEnv), os.Getenv(hostcommands.PublicIngressRelayPeerEnv)); err != nil {
+			fmt.Fprintln(os.Stderr, "agent public ingress relay:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == hostcommands.ResolverWorkHelperArgument {
 		if err := hostcommands.RunResolverWorkHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent DNS resolver helper:", err)
@@ -160,14 +169,20 @@ func main() {
 		}
 		return
 	}
-	if len(os.Args) != 1 {
-		fmt.Fprintln(os.Stderr, "agent: unsupported execution mode")
-		os.Exit(1)
-	}
-
 	configPath := app.DefaultAgentConfigPath
 	if v := os.Getenv("GROUNDPLANE_AGENT_CONFIG"); v != "" {
 		configPath = v
+	}
+	if len(os.Args) == 2 && os.Args[1] == remoteagentplatform.VerifyInstallArgument {
+		if err := remoteagentplatform.VerifyInstall(ctx, configPath, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent remote configuration:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) != 1 {
+		fmt.Fprintln(os.Stderr, "agent: unsupported execution mode")
+		os.Exit(1)
 	}
 
 	a, err := app.NewAgent(ctx, configPath)

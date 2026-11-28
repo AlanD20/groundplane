@@ -4,6 +4,7 @@ import { SettingsDraft } from "@/components/common/settings-draft";
 
 import { useState } from "react";
 import { useDraftField } from "@/lib/use-draft-field";
+import { GitHubConnectionsRuntime } from "@/features/git-delivery/github-connections-runtime";
 import { useNavigate } from "react-router-dom";
 import {
   Boxes,
@@ -244,6 +245,12 @@ export default function ProjectSettingsPage() {
           </SettingsDraft>
         </CardContent>
       </Card>
+
+      <GitHubConnectionsRuntime
+        scope={{ kind: "project", id: project.id }}
+        scopeName={project.name}
+        ancestorScopes={[{ kind: "tenant", id: tenant.id }]}
+      />
 
       <Card>
         <CardHeader>

@@ -3,9 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/app/gitdeliveryplatform"
 	"github.com/AlanD20/groundplane/internal/app/servicereadplatform"
 
 	"github.com/AlanD20/groundplane/internal/app/hostplatform"
+	"github.com/AlanD20/groundplane/internal/app/publicingressplatform"
+	"github.com/AlanD20/groundplane/internal/app/remoteagentplatform"
 	"github.com/AlanD20/groundplane/internal/app/softwareplatform"
 	commonrunner "github.com/AlanD20/groundplane/internal/common/runner"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
@@ -18,6 +21,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/hostterminal"
 	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
+	"github.com/AlanD20/groundplane/internal/controller/releaseoperation"
+	"github.com/AlanD20/groundplane/internal/controller/remotehost"
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/controller/serviceterminal"
@@ -32,6 +37,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprovision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/etcdconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/executiondiagnostics"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/imageoperations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
 	activationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/softwareactivation"
@@ -60,7 +66,7 @@ type controllerHTTPDependencies struct {
 	network                 *networkcontroller.Service
 	serviceMutations        handlers.ServiceMutator
 	releaseGroupMutations   handlers.ReleaseGroupMutator
-	releaseOperations       handlers.ReleaseOperator
+	releaseOperations       *releaseoperation.Service
 	scriptMutations         handlers.ScriptMutator
 	entryMutations          handlers.EntryMutator
 	secretMutations         handlers.SecretMutator
@@ -69,6 +75,7 @@ type controllerHTTPDependencies struct {
 	environmentBlueprints   *blueprint.Service
 	hierarchyDeletions      *hierarchydeletion.Service
 	attachMutations         *attachments.MutationService
+	remoteHosts             *remotehost.Service
 }
 
 func newControllerHTTPComposition(ctx context.Context, dependencies controllerHTTPDependencies) (*Controller, error) {
@@ -114,11 +121,52 @@ func newControllerHTTPComposition(ctx context.Context, dependencies controllerHT
 		_ = dependencies.platform.Close()
 		return nil, fmt.Errorf("controller: initialize host terminal service: %w", err)
 	}
+	gitRuntime, err := gitdeliveryplatform.NewRuntime(ctx, gitdeliveryplatform.RuntimeDependencies{
+		Config: dependencies.bootstrap.config, Store: dependencies.store,
+		Cipher:  secretvalue.NewControllerKeyCipher(dependencies.authority.controllerKey),
+		Intents: dependencies.authority.intentCoordinator, Replays: dependencies.authority.idempotency,
+		Accepted: dependencies.authority.acceptedActions, Images: dependencies.images,
+		Releases: dependencies.releaseOperations, Ledger: dependencies.authority.releaseLedger,
+		Runner: dependencies.runner.lifecycle, Maintenance: dependencies.runner.maintenance,
+		Logger: dependencies.bootstrap.logger, Interval: dependencies.bootstrap.tick,
+	})
+	if err != nil {
+		_, _ = hostTerminals.Close(), dependencies.platform.Close()
+		return nil, fmt.Errorf("controller: initialize GitHub deployment and Runner access: %w", err)
+	}
 	acceptedPreparations := append(dependencies.acceptedPreparations, edgeChecks.AcceptedPreparations()...)
 	acceptedPreparations = append(acceptedPreparations, dnsChecks.AcceptedPreparations()...)
 	acceptedPreparations = append(acceptedPreparations, backingChecks.AcceptedPreparations()...)
+	publicIngress, err := publicingressplatform.NewController(
+		dependencies.bootstrap.publicIngress,
+		dependencies.store,
+		dependencies.authority.releaseLedger,
+		dependencies.authority.acceptedActions,
+		dependencies.authority.idempotency,
+		dependencies.authority.intentCoordinator,
+		dependencies.bootstrap.logger,
+	)
+	if err != nil {
+		_, _ = hostTerminals.Close(), dependencies.platform.Close()
+		return nil, fmt.Errorf("controller: initialize public ingress: %w", err)
+	}
+	remote, err := remoteagentplatform.NewControllerServices(
+		dependencies.remoteHosts,
+		dependencies.store,
+		dependencies.authority.acceptedActions,
+		dependencies.authority.intentCoordinator,
+		dependencies.authority.idempotency,
+	)
+	if err != nil {
+		_, _ = hostTerminals.Close(), dependencies.platform.Close()
+		return nil, fmt.Errorf("controller: initialize Remote Host services: %w", err)
+	}
+	acceptedPreparations, extensions := hostplatform.DeploymentWork(
+		gitRuntime, publicIngress, remote.Images, dependencies.agentRuntime, acceptedPreparations,
+	)
 	workRuntime, err := dependencies.platform.NewWorkExecution(hostplatform.ExecutionDependencies{
 		AcceptedPreparations: acceptedPreparations,
+		Extensions:           extensions,
 		BackupSecrets:        dependencies.execution.backupSecrets,
 		Hierarchy:            dependencies.hierarchyDeletions,
 		AttachFacts:          dependencies.execution.attachFactValues,
@@ -252,6 +300,19 @@ func newControllerHTTPComposition(ctx context.Context, dependencies controllerHT
 		return nil, fmt.Errorf("controller: initialize Service reads: %w", err)
 	}
 	server := handlers.New(dependencies.store, dependencies.bootstrap.logger, handlers.Options{
+		GitDelivery:            gitRuntime.Operator,
+		PublicIngress:          publicIngress.Operator,
+		RunnerScopedMigration:  gitRuntime.Migration,
+		RunnerCLIGrants:        gitRuntime.CLIGrants,
+		RemoteHosts:            remote.Hosts,
+		RemoteImages:           remote.Fetch,
+		RunnerListener:         gitRuntime.RunnerAPI,
+		RunnerRegistryListener: gitRuntime.Registry,
+		GitHubWebhookListener:  gitRuntime.Webhooks,
+		HostIdentity: func(ctx context.Context) (string, error) {
+			identity, err := hostbindings.ReadLocalIdentity(ctx, dependencies.store, 0)
+			return identity.Record, err
+		},
 		Host: dependencies.platform.Host, HostTerminals: hostTerminals, Monitoring: serviceReads.Monitoring,
 		ServiceTerminals: serviceterminal.New(
 			serviceReads.Services,
@@ -265,9 +326,13 @@ func newControllerHTTPComposition(ctx context.Context, dependencies controllerHT
 		SoftwarePreparer:  dependencies.software.Preparations, SoftwareReleases: dependencies.software.Releases,
 		SoftwareActivator: dependencies.software.Activations,
 		Images:            dependencies.images,
-		OnHTTPReady:       dependencies.platform.Readiness.MarkHTTPReady, MutationAdmission: dependencies.platform.Upgrades,
-		StorageAdmission: dependencies.bootstrap.storageMaintenance,
-		Agents:           dependencies.platform.AgentReads, AgentMutations: dependencies.platform.AgentMutations,
+		OnHTTPReady: func() {
+			gitRuntime.MarkHTTPReady()
+			dependencies.platform.Readiness.MarkHTTPReady()
+		},
+		MutationAdmission: dependencies.platform.Upgrades,
+		StorageAdmission:  dependencies.bootstrap.storageMaintenance,
+		Agents:            dependencies.platform.AgentReads, AgentMutations: dependencies.platform.AgentMutations,
 		Tenants:                 dependencies.authority.hierarchyService,
 		Projects:                dependencies.authority.hierarchyService,
 		ProjectMutations:        dependencies.hierarchy.projectMutations,
@@ -356,6 +421,7 @@ func newControllerHTTPComposition(ctx context.Context, dependencies controllerHT
 		scheduler:       maintenanceScheduler,
 		monitoring:      serviceReads,
 		workExecution:   workRuntime,
+		gitDelivery:     gitRuntime.Run,
 		taskAlerts:      alertWorker,
 		localAgent:      dependencies.platform,
 		attachMutations: dependencies.attachMutations,

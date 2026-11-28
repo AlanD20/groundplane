@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerchecks"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerwork"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -35,7 +36,7 @@ func (repository *RunnerRepository) PrepareRunnerRemoval(ctx context.Context,
 		deletions.TombstoneKey(
 			string(deletions.DeletionTargetRunner),
 			id,
-		), workqueue.ClaimKey(workexecution.Claim{ScopeID: id})}
+		), workqueue.ClaimKey(workexecution.Claim{ScopeID: id}), runnerchecks.ActiveKey(id)}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: current.ReadRevision})
 	if err != nil {
 		return RunnerRemovalSource{}, err
@@ -47,7 +48,7 @@ func (repository *RunnerRepository) PrepareRunnerRemoval(ctx context.Context,
 	if read.ReadRevision != current.ReadRevision || len(read.Values) != len(keys) || read.Values[0] == nil {
 		return RunnerRemovalSource{}, errs.New(errs.KindStateConflict, "Runner captured allocation plan is unavailable")
 	}
-	if read.Values[3] != nil || read.Values[4] != nil {
+	if read.Values[3] != nil || read.Values[4] != nil || read.Values[5] != nil {
 		return RunnerRemovalSource{}, errs.New(
 			errs.KindResourceInUse,
 			"Runner still has active work or unresolved effects; finish its cleanup before removal",

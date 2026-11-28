@@ -30,15 +30,12 @@ import (
 // atomically promoted with this capture; later work never reselects its inputs.
 func (service *Service) captureServiceWork(ctx context.Context, scope releasequeries.ReleasePlanningScope,
 	projection environmentprojection.EnvironmentComposeProjection, candidate releaseCandidateInput,
-	addresses networkreservations.ProxyAddresses, accepted workexecution.Task,
+	addresses networkreservations.ProxyAddresses, accepted workexecution.Task, placement workexecution.Placement,
 ) (workexecution.Task, workexecution.Item, etcd.DirectReleasePreparation, releaserender.ServiceRolloutCapture, error) {
 	var task workexecution.Task
 	var item workexecution.Item
 	var request etcd.DirectReleasePreparation
-	placement, err := service.ledger.ResolveReleaseHost(ctx, scope.ReadRevision)
-	if err != nil {
-		return task, item, request, releaserender.ServiceRolloutCapture{}, err
-	}
+	var err error
 	workID, planID := ids.DeriveAt(
 		ids.KindWorkItem,
 		accepted.CreatedAt,
@@ -102,6 +99,7 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 		projection,
 		candidate,
 		addresses,
+		placement,
 		releaseID,
 		planID,
 	)
@@ -151,7 +149,7 @@ func (service *Service) captureReleaseMember(ctx context.Context, scope releaseq
 		ReadRevision: scope.ReadRevision,
 	}
 	hooks, err := service.prepareReleaseHooks(ctx, scope, manifest.ReadRevision, operation, work, operationID, planID,
-		[]releaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}})
+		[]releaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}}, candidate.remotePlacement)
 	if err != nil {
 		return task, item, request, capture, err
 	}
@@ -278,7 +276,7 @@ func (service *Service) validateServiceWorkBudget(
 
 func (service *Service) captureServiceWorkRender(ctx context.Context, scope releasequeries.ReleasePlanningScope,
 	projection environmentprojection.EnvironmentComposeProjection, candidate releaseCandidateInput,
-	addresses networkreservations.ProxyAddresses, releaseID, planID string,
+	addresses networkreservations.ProxyAddresses, placement workexecution.Placement, releaseID, planID string,
 ) (releaserender.ReleaseRenderInput, etcd.BlueprintNativePredecessorCapture, error) {
 	priorSlot := candidate.planning.Projection.ServingSlot
 	if candidate.priorStrategy != domain.StrategyBlueGreen {
@@ -297,6 +295,7 @@ func (service *Service) captureServiceWorkRender(ctx context.Context, scope rele
 		Slot:                   candidate.slot,
 		PriorSlot:              priorSlot,
 		ServiceDependencyPlans: scope.Compose.Record.ServiceDependencyPlans.Clone(),
+		ProxyImage:             candidate.remoteProxyImage,
 		TenantID:               scope.Tenant.Record.ID,
 		TenantSlug:             scope.Tenant.Record.Slug,
 		ProjectID:              scope.Project.Record.ID,
@@ -334,6 +333,13 @@ func (service *Service) captureServiceWorkRender(ctx context.Context, scope rele
 		if err != nil {
 			return render, predecessor, err
 		}
+		if captured.HostID != placement.HostID {
+			captured.Clear()
+			return render, predecessor, errs.New(
+				errs.KindStateConflict,
+				"release host differs from the acknowledged serving host; a host move requires an explicit cutover",
+			)
+		}
 		if err := bindServingRuntime(&render, candidate.priorReleaseID, captured); err != nil {
 			return render, predecessor, err
 		}
@@ -349,6 +355,13 @@ func (service *Service) captureServiceWorkRender(ctx context.Context, scope rele
 	}
 	if err := service.plans.PrepareReleaseProxyImage(&render, priorRender); err != nil {
 		return render, predecessor, err
+	}
+	if candidate.remoteProxyImage != nil &&
+		(render.ProxyImage == nil || *render.ProxyImage != *candidate.remoteProxyImage) {
+		return render, predecessor, errs.New(
+			errs.KindStateConflict,
+			"remote release proxy image differs from its prepared host asset",
+		)
 	}
 	return render, predecessor, nil
 }

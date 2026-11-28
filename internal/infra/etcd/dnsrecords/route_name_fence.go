@@ -71,12 +71,17 @@ func (reader *Reader) PrepareRouteNamePublication(
 	projection environmentprojection.EnvironmentComposeProjection,
 	revision int64,
 ) ([]keyvalue.Condition, []keyvalue.Mutation, error) {
+	ingressConditions, err := reader.protectIngressProjectedRoutes(ctx, projection, revision)
+	if err != nil {
+		return nil, nil, err
+	}
 	conditions, mutations, err := reader.prepareRouteNameSet(
 		ctx,
 		projection.EnvironmentID,
 		routeNames(projection),
 		revision,
 	)
+	conditions = append(conditions, ingressConditions...)
 	if err != nil || len(mutations) != 0 {
 		return conditions, mutations, err
 	}
@@ -97,11 +102,16 @@ func (reader *Reader) PrepareAuthoredRouteNamePublication(
 	input environmentprojection.EnvironmentDesiredInput,
 	revision int64,
 ) ([]keyvalue.Condition, []keyvalue.Mutation, error) {
+	ingressConditions, err := reader.protectIngressAuthoredRoutes(ctx, input, revision)
+	if err != nil {
+		return nil, nil, err
+	}
 	names := authoredRouteNames(input.Input.Routes)
 	conditions, err := reader.RequireHostnamesUnclaimed(ctx, names, revision)
 	if err != nil {
 		return nil, nil, err
 	}
+	conditions = append(conditions, ingressConditions...)
 	generationConditions, mutations, err := reader.prepareRouteNameSet(ctx, input.EnvironmentID, names, revision)
 	if err != nil {
 		return nil, nil, err

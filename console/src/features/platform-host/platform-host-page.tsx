@@ -8,6 +8,8 @@ import { useStore } from "@/lib/store";
 import { Activity, Boxes, Server } from "lucide-react";
 import { Link } from "react-router-dom";
 import { HostAgentsTable } from "./host-agents-table";
+import { ConnectedPublicIngress } from "@/features/public-ingress/connected-public-ingress";
+import { RemoteHostsPanel } from "@/features/remote-host/remote-host-panel";
 import {
   SoftwareIdentity,
   ContainerSoftwareIdentity,
@@ -172,9 +174,14 @@ export default function PlatformHostPage() {
               )}
             </ResourcePanel>
           </div>
+          <ConnectedPublicIngress
+            key={host.id ?? "unavailable"}
+            hostId={host.id}
+          />
         </>
       )}
       <HostAgentsTable />
+      <RemoteHostsPanel />
     </div>
   );
 }

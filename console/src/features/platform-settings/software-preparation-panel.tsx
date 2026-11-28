@@ -135,7 +135,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                   const next = value as SoftwareRequest["selection"];
                   setSelection(next);
                   setLoadingReleases(true);
-                  if (next === "console" || next === "all") {
+                  if (next === "console") {
                     setSource("release");
                     setRef("");
                   } else if (source === "release") setRef("");
@@ -149,7 +149,7 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
                 value={source}
                 disabled={busy}
                 options={
-                  selection === "console" || selection === "all"
+                  selection === "console"
                     ? [{ value: "release", label: "Published release" }]
                     : [
                         {
@@ -209,11 +209,15 @@ export function SoftwarePreparationPanel({ active }: { active: boolean }) {
               )}
             </div>
           </div>
-          {(selection === "console" || selection === "all") && (
+          {selection === "console" && (
             <p className="text-xs text-muted-foreground">
-              Console updates use verified published component releases. All
-              requires Controller, Agent, and Console artifacts from the same
-              source commit and exact API.
+              Console-only updates use verified published component releases.
+            </p>
+          )}
+          {selection === "all" && (
+            <p className="text-xs text-muted-foreground">
+              All stages Controller, Agent, and Console from one source commit.
+              The Console and Controller must target the same API.
             </p>
           )}
           {releaseError && (

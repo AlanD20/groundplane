@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -14,7 +15,7 @@ func (server *Server) dispatchWork(
 	generation uint64,
 	capacity int32,
 	config *agentpb.AgentConfig,
-	stagingReady bool,
+	readiness workdispatch.AgentReadiness,
 	delivered map[string]string,
 	payloads *assignmentPayloadDelivery,
 ) error {
@@ -38,7 +39,7 @@ func (server *Server) dispatchWork(
 		stream.Context(),
 		authorization,
 		limits,
-		stagingReady,
+		readiness,
 	)
 	for _, issue := range readinessIssues {
 		slog.ErrorContext(

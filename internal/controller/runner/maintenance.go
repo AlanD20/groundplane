@@ -9,6 +9,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runnerscoped"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -56,7 +57,8 @@ type readyRuntime interface {
 // Maintenance restores registered runtimes after boot and refreshes local
 // observations. It shares the executor lock, so it cannot race host cleanup.
 type Maintenance struct {
-	software *SoftwareService
+	software  *SoftwareService
+	migration *ScopedMigration
 
 	repository maintenanceRepository
 	runtime    readyRuntime
@@ -83,6 +85,10 @@ func NewMaintenance(
 
 func (maintenance *Maintenance) ConfigureSoftwareUpdates(service *SoftwareService) {
 	maintenance.software = service
+}
+
+func (maintenance *Maintenance) ConfigureScopedMigration(migration *ScopedMigration) {
+	maintenance.migration = migration
 }
 func (maintenance *Maintenance) Run(ctx context.Context) {
 	if maintenance.software != nil {
@@ -133,6 +139,12 @@ func (maintenance *Maintenance) refreshOne(ctx context.Context, runnerID string)
 	defer maintenance.executor.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+	if maintenance.migration != nil {
+		current, exists, err := maintenance.migration.records.Load(ctx, runnerID)
+		if err != nil || exists && current.Record.Phase != runnerscoped.Complete {
+			return err
+		}
+	}
 	current, err := maintenance.repository.GetRunner(ctx, runnerID)
 	if err != nil {
 		return err

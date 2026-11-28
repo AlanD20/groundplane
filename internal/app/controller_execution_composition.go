@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/AlanD20/groundplane/internal/app/componentregistration"
+	"github.com/AlanD20/groundplane/internal/app/hostplatform"
 	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
@@ -62,7 +63,7 @@ func newControllerExecutionComposition(
 	if err := componentregistration.ConfigureServiceProxyImages(planResolver); err != nil {
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize release plan resolver: %w", err)
 	}
-	materializationResolver, err := initializeTaskMaterializationResolver(
+	materializationResolver, err := hostplatform.NewMaterializationResolver(
 		store,
 		authority.hierarchyRecords,
 		dataServices.entryValues,

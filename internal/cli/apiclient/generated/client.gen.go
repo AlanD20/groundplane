@@ -1033,6 +1033,75 @@ func (e EnvironmentDNSWriteScope) Valid() bool {
 	}
 }
 
+// Defines values for GitDeploymentPhase.
+const (
+	GitDeploymentPhaseAttentionRequired GitDeploymentPhase = "attention_required"
+	GitDeploymentPhaseAwaitingApproval  GitDeploymentPhase = "awaiting_approval"
+	GitDeploymentPhaseBuilding          GitDeploymentPhase = "building"
+	GitDeploymentPhaseDeployPending     GitDeploymentPhase = "deploy_pending"
+	GitDeploymentPhaseDeploying         GitDeploymentPhase = "deploying"
+	GitDeploymentPhaseDispatching       GitDeploymentPhase = "dispatching"
+	GitDeploymentPhaseFailed            GitDeploymentPhase = "failed"
+	GitDeploymentPhaseFetchPending      GitDeploymentPhase = "fetch_pending"
+	GitDeploymentPhaseFetching          GitDeploymentPhase = "fetching"
+	GitDeploymentPhaseQueued            GitDeploymentPhase = "queued"
+	GitDeploymentPhaseSucceeded         GitDeploymentPhase = "succeeded"
+	GitDeploymentPhaseSuperseded        GitDeploymentPhase = "superseded"
+)
+
+// Valid indicates whether the value is a known member of the GitDeploymentPhase enum.
+func (e GitDeploymentPhase) Valid() bool {
+	switch e {
+	case GitDeploymentPhaseAttentionRequired:
+		return true
+	case GitDeploymentPhaseAwaitingApproval:
+		return true
+	case GitDeploymentPhaseBuilding:
+		return true
+	case GitDeploymentPhaseDeployPending:
+		return true
+	case GitDeploymentPhaseDeploying:
+		return true
+	case GitDeploymentPhaseDispatching:
+		return true
+	case GitDeploymentPhaseFailed:
+		return true
+	case GitDeploymentPhaseFetchPending:
+		return true
+	case GitDeploymentPhaseFetching:
+		return true
+	case GitDeploymentPhaseQueued:
+		return true
+	case GitDeploymentPhaseSucceeded:
+		return true
+	case GitDeploymentPhaseSuperseded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubConnectionScopeKind.
+const (
+	GitHubConnectionScopeKindEnvironment GitHubConnectionScopeKind = "environment"
+	GitHubConnectionScopeKindProject     GitHubConnectionScopeKind = "project"
+	GitHubConnectionScopeKindTenant      GitHubConnectionScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the GitHubConnectionScopeKind enum.
+func (e GitHubConnectionScopeKind) Valid() bool {
+	switch e {
+	case GitHubConnectionScopeKindEnvironment:
+		return true
+	case GitHubConnectionScopeKindProject:
+		return true
+	case GitHubConnectionScopeKindTenant:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ImageFetchRecordStatus.
 const (
 	ImageFetchRecordStatusAborted   ImageFetchRecordStatus = "aborted"
@@ -1273,6 +1342,54 @@ func (e PreparedSoftwareArtifactComponent) Valid() bool {
 	}
 }
 
+// Defines values for PublicIngressCheckStatus.
+const (
+	PublicIngressCheckStatusBlocked    PublicIngressCheckStatus = "blocked"
+	PublicIngressCheckStatusNotChecked PublicIngressCheckStatus = "not_checked"
+	PublicIngressCheckStatusPassed     PublicIngressCheckStatus = "passed"
+	PublicIngressCheckStatusWarning    PublicIngressCheckStatus = "warning"
+)
+
+// Valid indicates whether the value is a known member of the PublicIngressCheckStatus enum.
+func (e PublicIngressCheckStatus) Valid() bool {
+	switch e {
+	case PublicIngressCheckStatusBlocked:
+		return true
+	case PublicIngressCheckStatusNotChecked:
+		return true
+	case PublicIngressCheckStatusPassed:
+		return true
+	case PublicIngressCheckStatusWarning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PublicIngressConfigurationState.
+const (
+	PublicIngressConfigurationStateDisabled PublicIngressConfigurationState = "disabled"
+	PublicIngressConfigurationStateFailed   PublicIngressConfigurationState = "failed"
+	PublicIngressConfigurationStatePending  PublicIngressConfigurationState = "pending"
+	PublicIngressConfigurationStateServing  PublicIngressConfigurationState = "serving"
+)
+
+// Valid indicates whether the value is a known member of the PublicIngressConfigurationState enum.
+func (e PublicIngressConfigurationState) Valid() bool {
+	switch e {
+	case PublicIngressConfigurationStateDisabled:
+		return true
+	case PublicIngressConfigurationStateFailed:
+		return true
+	case PublicIngressConfigurationStatePending:
+		return true
+	case PublicIngressConfigurationStateServing:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RecoveryPointSourceKind.
 const (
 	RecoveryPointSourceKindAttach RecoveryPointSourceKind = "attach"
@@ -1321,6 +1438,27 @@ func (e RecoveryPointDatabaseFamily) Valid() bool {
 	case RecoveryPointDatabaseFamilyMysql:
 		return true
 	case RecoveryPointDatabaseFamilyPostgres:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteHostState.
+const (
+	Enrolled   RemoteHostState = "enrolled"
+	Enrolling  RemoteHostState = "enrolling"
+	Unenrolled RemoteHostState = "unenrolled"
+)
+
+// Valid indicates whether the value is a known member of the RemoteHostState enum.
+func (e RemoteHostState) Valid() bool {
+	switch e {
+	case Enrolled:
+		return true
+	case Enrolling:
+		return true
+	case Unenrolled:
 		return true
 	default:
 		return false
@@ -1465,6 +1603,30 @@ func (e RunnerLifecycle) Valid() bool {
 	}
 }
 
+// Defines values for RunnerCLIGrantActionOperation.
+const (
+	ServiceDeploy     RunnerCLIGrantActionOperation = "service.deploy"
+	ServiceImageFetch RunnerCLIGrantActionOperation = "service.image.fetch"
+	ServiceRead       RunnerCLIGrantActionOperation = "service.read"
+	TaskRead          RunnerCLIGrantActionOperation = "task.read"
+)
+
+// Valid indicates whether the value is a known member of the RunnerCLIGrantActionOperation enum.
+func (e RunnerCLIGrantActionOperation) Valid() bool {
+	switch e {
+	case ServiceDeploy:
+		return true
+	case ServiceImageFetch:
+		return true
+	case ServiceRead:
+		return true
+	case TaskRead:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunnerCheckResultOutcome.
 const (
 	RunnerCheckResultOutcomeFailed      RunnerCheckResultOutcome = "failed"
@@ -1585,6 +1747,33 @@ func (e RunnerCheckStageOutcome) Valid() bool {
 	case RunnerCheckStageOutcomeFailed:
 		return true
 	case RunnerCheckStageOutcomePassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerScopedMigrationStatusPhase.
+const (
+	RunnerScopedMigrationStatusPhaseComplete     RunnerScopedMigrationStatusPhase = "complete"
+	RunnerScopedMigrationStatusPhaseCutover      RunnerScopedMigrationStatusPhase = "cutover"
+	RunnerScopedMigrationStatusPhaseLegacy       RunnerScopedMigrationStatusPhase = "legacy"
+	RunnerScopedMigrationStatusPhasePending      RunnerScopedMigrationStatusPhase = "pending"
+	RunnerScopedMigrationStatusPhaseRegistration RunnerScopedMigrationStatusPhase = "registration"
+)
+
+// Valid indicates whether the value is a known member of the RunnerScopedMigrationStatusPhase enum.
+func (e RunnerScopedMigrationStatusPhase) Valid() bool {
+	switch e {
+	case RunnerScopedMigrationStatusPhaseComplete:
+		return true
+	case RunnerScopedMigrationStatusPhaseCutover:
+		return true
+	case RunnerScopedMigrationStatusPhaseLegacy:
+		return true
+	case RunnerScopedMigrationStatusPhasePending:
+		return true
+	case RunnerScopedMigrationStatusPhaseRegistration:
 		return true
 	default:
 		return false
@@ -2335,6 +2524,195 @@ func (e ZoneRemovalImpactMode) Valid() bool {
 	case BackingCascade:
 		return true
 	case Ordinary:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GithubConnectionListParamsScopeKind.
+const (
+	GithubConnectionListParamsScopeKindEnvironment GithubConnectionListParamsScopeKind = "environment"
+	GithubConnectionListParamsScopeKindProject     GithubConnectionListParamsScopeKind = "project"
+	GithubConnectionListParamsScopeKindTenant      GithubConnectionListParamsScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the GithubConnectionListParamsScopeKind enum.
+func (e GithubConnectionListParamsScopeKind) Valid() bool {
+	switch e {
+	case GithubConnectionListParamsScopeKindEnvironment:
+		return true
+	case GithubConnectionListParamsScopeKindProject:
+		return true
+	case GithubConnectionListParamsScopeKindTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GithubConnectionRevokeParamsScopeKind.
+const (
+	GithubConnectionRevokeParamsScopeKindEnvironment GithubConnectionRevokeParamsScopeKind = "environment"
+	GithubConnectionRevokeParamsScopeKindProject     GithubConnectionRevokeParamsScopeKind = "project"
+	GithubConnectionRevokeParamsScopeKindTenant      GithubConnectionRevokeParamsScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the GithubConnectionRevokeParamsScopeKind enum.
+func (e GithubConnectionRevokeParamsScopeKind) Valid() bool {
+	switch e {
+	case GithubConnectionRevokeParamsScopeKindEnvironment:
+		return true
+	case GithubConnectionRevokeParamsScopeKindProject:
+		return true
+	case GithubConnectionRevokeParamsScopeKindTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GithubConnectionShowParamsScopeKind.
+const (
+	GithubConnectionShowParamsScopeKindEnvironment GithubConnectionShowParamsScopeKind = "environment"
+	GithubConnectionShowParamsScopeKindProject     GithubConnectionShowParamsScopeKind = "project"
+	GithubConnectionShowParamsScopeKindTenant      GithubConnectionShowParamsScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the GithubConnectionShowParamsScopeKind enum.
+func (e GithubConnectionShowParamsScopeKind) Valid() bool {
+	switch e {
+	case GithubConnectionShowParamsScopeKindEnvironment:
+		return true
+	case GithubConnectionShowParamsScopeKindProject:
+		return true
+	case GithubConnectionShowParamsScopeKindTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GithubConnectionRotateParamsScopeKind.
+const (
+	GithubConnectionRotateParamsScopeKindEnvironment GithubConnectionRotateParamsScopeKind = "environment"
+	GithubConnectionRotateParamsScopeKindProject     GithubConnectionRotateParamsScopeKind = "project"
+	GithubConnectionRotateParamsScopeKindTenant      GithubConnectionRotateParamsScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the GithubConnectionRotateParamsScopeKind enum.
+func (e GithubConnectionRotateParamsScopeKind) Valid() bool {
+	switch e {
+	case GithubConnectionRotateParamsScopeKindEnvironment:
+		return true
+	case GithubConnectionRotateParamsScopeKindProject:
+		return true
+	case GithubConnectionRotateParamsScopeKindTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GithubConnectionRepositoriesParamsScopeKind.
+const (
+	GithubConnectionRepositoriesParamsScopeKindEnvironment GithubConnectionRepositoriesParamsScopeKind = "environment"
+	GithubConnectionRepositoriesParamsScopeKindProject     GithubConnectionRepositoriesParamsScopeKind = "project"
+	GithubConnectionRepositoriesParamsScopeKindTenant      GithubConnectionRepositoriesParamsScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the GithubConnectionRepositoriesParamsScopeKind enum.
+func (e GithubConnectionRepositoriesParamsScopeKind) Valid() bool {
+	switch e {
+	case GithubConnectionRepositoriesParamsScopeKindEnvironment:
+		return true
+	case GithubConnectionRepositoriesParamsScopeKindProject:
+		return true
+	case GithubConnectionRepositoriesParamsScopeKindTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GithubRepositoryRunnerDefaultRemoveParamsScopeKind.
+const (
+	GithubRepositoryRunnerDefaultRemoveParamsScopeKindEnvironment GithubRepositoryRunnerDefaultRemoveParamsScopeKind = "environment"
+	GithubRepositoryRunnerDefaultRemoveParamsScopeKindProject     GithubRepositoryRunnerDefaultRemoveParamsScopeKind = "project"
+	GithubRepositoryRunnerDefaultRemoveParamsScopeKindTenant      GithubRepositoryRunnerDefaultRemoveParamsScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the GithubRepositoryRunnerDefaultRemoveParamsScopeKind enum.
+func (e GithubRepositoryRunnerDefaultRemoveParamsScopeKind) Valid() bool {
+	switch e {
+	case GithubRepositoryRunnerDefaultRemoveParamsScopeKindEnvironment:
+		return true
+	case GithubRepositoryRunnerDefaultRemoveParamsScopeKindProject:
+		return true
+	case GithubRepositoryRunnerDefaultRemoveParamsScopeKindTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GithubRepositoryRunnerDefaultShowParamsScopeKind.
+const (
+	GithubRepositoryRunnerDefaultShowParamsScopeKindEnvironment GithubRepositoryRunnerDefaultShowParamsScopeKind = "environment"
+	GithubRepositoryRunnerDefaultShowParamsScopeKindProject     GithubRepositoryRunnerDefaultShowParamsScopeKind = "project"
+	GithubRepositoryRunnerDefaultShowParamsScopeKindTenant      GithubRepositoryRunnerDefaultShowParamsScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the GithubRepositoryRunnerDefaultShowParamsScopeKind enum.
+func (e GithubRepositoryRunnerDefaultShowParamsScopeKind) Valid() bool {
+	switch e {
+	case GithubRepositoryRunnerDefaultShowParamsScopeKindEnvironment:
+		return true
+	case GithubRepositoryRunnerDefaultShowParamsScopeKindProject:
+		return true
+	case GithubRepositoryRunnerDefaultShowParamsScopeKindTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GithubRepositoryRunnerDefaultPutParamsScopeKind.
+const (
+	GithubRepositoryRunnerDefaultPutParamsScopeKindEnvironment GithubRepositoryRunnerDefaultPutParamsScopeKind = "environment"
+	GithubRepositoryRunnerDefaultPutParamsScopeKindProject     GithubRepositoryRunnerDefaultPutParamsScopeKind = "project"
+	GithubRepositoryRunnerDefaultPutParamsScopeKindTenant      GithubRepositoryRunnerDefaultPutParamsScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the GithubRepositoryRunnerDefaultPutParamsScopeKind enum.
+func (e GithubRepositoryRunnerDefaultPutParamsScopeKind) Valid() bool {
+	switch e {
+	case GithubRepositoryRunnerDefaultPutParamsScopeKindEnvironment:
+		return true
+	case GithubRepositoryRunnerDefaultPutParamsScopeKindProject:
+		return true
+	case GithubRepositoryRunnerDefaultPutParamsScopeKindTenant:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GithubRepositoryWorkflowsParamsScopeKind.
+const (
+	GithubRepositoryWorkflowsParamsScopeKindEnvironment GithubRepositoryWorkflowsParamsScopeKind = "environment"
+	GithubRepositoryWorkflowsParamsScopeKindProject     GithubRepositoryWorkflowsParamsScopeKind = "project"
+	GithubRepositoryWorkflowsParamsScopeKindTenant      GithubRepositoryWorkflowsParamsScopeKind = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the GithubRepositoryWorkflowsParamsScopeKind enum.
+func (e GithubRepositoryWorkflowsParamsScopeKind) Valid() bool {
+	switch e {
+	case GithubRepositoryWorkflowsParamsScopeKindEnvironment:
+		return true
+	case GithubRepositoryWorkflowsParamsScopeKindProject:
+		return true
+	case GithubRepositoryWorkflowsParamsScopeKindTenant:
 		return true
 	default:
 		return false
@@ -3991,6 +4369,202 @@ type ExecutionPageTaskWork struct {
 	ScanLimited bool `json:"scan_limited"`
 }
 
+// GitDeployment defines model for GitDeployment.
+type GitDeployment struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/GitDeployment.json
+	Schema           *string              `json:"$schema,omitempty"`
+	Binding          GitDeploymentBinding `json:"binding"`
+	BindingRevision  int64                `json:"binding_revision"`
+	Commit           string               `json:"commit"`
+	CreatedAt        time.Time            `json:"created_at"`
+	DeployTaskId     *string              `json:"deploy_task_id,omitempty"`
+	ErrorCode        *string              `json:"error_code,omitempty"`
+	FetchTaskId      *string              `json:"fetch_task_id,omitempty"`
+	GithubRunAttempt *int64               `json:"github_run_attempt,omitempty"`
+	GithubRunId      *int64               `json:"github_run_id,omitempty"`
+	GithubRunnerId   *int64               `json:"github_runner_id,omitempty"`
+	GithubUrl        *string              `json:"github_url,omitempty"`
+	Id               string               `json:"id"`
+	ImageDigest      *string              `json:"image_digest,omitempty"`
+	Phase            GitDeploymentPhase   `json:"phase"`
+	ReleaseId        *string              `json:"release_id,omitempty"`
+	UpdatedAt        time.Time            `json:"updated_at"`
+}
+
+// GitDeploymentPhase defines model for GitDeployment.Phase.
+type GitDeploymentPhase string
+
+// GitDeploymentBinding defines model for GitDeploymentBinding.
+type GitDeploymentBinding struct {
+	Automatic            bool    `json:"automatic"`
+	Branch               string  `json:"branch"`
+	BuildContext         string  `json:"build_context"`
+	ConnectionId         string  `json:"connection_id"`
+	Dockerfile           string  `json:"dockerfile"`
+	EnvironmentId        string  `json:"environment_id"`
+	InheritRunnerDefault *bool   `json:"inherit_runner_default,omitempty"`
+	ProjectId            string  `json:"project_id"`
+	RepositoryId         int64   `json:"repository_id"`
+	RequireApproval      bool    `json:"require_approval"`
+	RunnerGroup          *string `json:"runner_group,omitempty"`
+	RunnerGroupId        *int64  `json:"runner_group_id,omitempty"`
+	RunnerLabel          *string `json:"runner_label,omitempty"`
+	ServiceId            string  `json:"service_id"`
+	TenantId             string  `json:"tenant_id"`
+	WorkflowCommit       *string `json:"workflow_commit,omitempty"`
+	WorkflowId           int64   `json:"workflow_id"`
+	WorkflowRef          string  `json:"workflow_ref"`
+}
+
+// GitDeploymentBindingState defines model for GitDeploymentBindingState.
+type GitDeploymentBindingState struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/GitDeploymentBindingState.json
+	Schema   *string               `json:"$schema,omitempty"`
+	Binding  *GitDeploymentBinding `json:"binding,omitempty"`
+	Revision int64                 `json:"revision"`
+}
+
+// GitDeploymentBindingWrite defines model for GitDeploymentBindingWrite.
+type GitDeploymentBindingWrite struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/GitDeploymentBindingWrite.json
+	Schema               *string `json:"$schema,omitempty"`
+	Automatic            bool    `json:"automatic"`
+	Branch               string  `json:"branch"`
+	BuildContext         string  `json:"build_context"`
+	ConnectionId         string  `json:"connection_id"`
+	Dockerfile           string  `json:"dockerfile"`
+	InheritRunnerDefault *bool   `json:"inherit_runner_default,omitempty"`
+	RepositoryId         int64   `json:"repository_id"`
+	RequireApproval      bool    `json:"require_approval"`
+	RunnerGroup          *string `json:"runner_group,omitempty"`
+	RunnerGroupId        *int64  `json:"runner_group_id,omitempty"`
+	RunnerLabel          *string `json:"runner_label,omitempty"`
+	WorkflowCommit       *string `json:"workflow_commit,omitempty"`
+	WorkflowId           int64   `json:"workflow_id"`
+	WorkflowRef          string  `json:"workflow_ref"`
+}
+
+// GitDeploymentStartRequest defines model for GitDeploymentStartRequest.
+type GitDeploymentStartRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/GitDeploymentStartRequest.json
+	Schema         *string `json:"$schema,omitempty"`
+	ExpectedCommit *string `json:"expected_commit,omitempty"`
+}
+
+// GitHubConnection defines model for GitHubConnection.
+type GitHubConnection struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/GitHubConnection.json
+	Schema         *string               `json:"$schema,omitempty"`
+	AppId          int64                 `json:"app_id"`
+	CreatedAt      time.Time             `json:"created_at"`
+	Generation     int64                 `json:"generation"`
+	Id             string                `json:"id"`
+	InstallationId int64                 `json:"installation_id"`
+	Name           string                `json:"name"`
+	RevokedAt      *time.Time            `json:"revoked_at,omitempty"`
+	Scope          GitHubConnectionScope `json:"scope"`
+	UpdatedAt      time.Time             `json:"updated_at"`
+}
+
+// GitHubConnectionCreateRequest defines model for GitHubConnectionCreateRequest.
+type GitHubConnectionCreateRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/GitHubConnectionCreateRequest.json
+	Schema         *string               `json:"$schema,omitempty"`
+	AppId          int64                 `json:"app_id"`
+	InstallationId int64                 `json:"installation_id"`
+	Name           string                `json:"name"`
+	PrivateKeyPem  *string               `json:"private_key_pem,omitempty"`
+	Scope          GitHubConnectionScope `json:"scope"`
+	WebhookSecret  *string               `json:"webhook_secret,omitempty"`
+}
+
+// GitHubConnectionCredentialsWrite defines model for GitHubConnectionCredentialsWrite.
+type GitHubConnectionCredentialsWrite struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/GitHubConnectionCredentialsWrite.json
+	Schema        *string `json:"$schema,omitempty"`
+	PrivateKeyPem *string `json:"private_key_pem,omitempty"`
+	WebhookSecret *string `json:"webhook_secret,omitempty"`
+}
+
+// GitHubConnectionScope defines model for GitHubConnectionScope.
+type GitHubConnectionScope struct {
+	Id   string                    `json:"id"`
+	Kind GitHubConnectionScopeKind `json:"kind"`
+}
+
+// GitHubConnectionScopeKind defines model for GitHubConnectionScope.Kind.
+type GitHubConnectionScopeKind string
+
+// GitHubRepository defines model for GitHubRepository.
+type GitHubRepository struct {
+	DefaultBranch string `json:"default_branch"`
+	FullName      string `json:"full_name"`
+	Id            int64  `json:"id"`
+	Private       bool   `json:"private"`
+}
+
+// GitHubWorkflow defines model for GitHubWorkflow.
+type GitHubWorkflow struct {
+	Id    int64  `json:"id"`
+	Name  string `json:"name"`
+	Path  string `json:"path"`
+	State string `json:"state"`
+}
+
+// GitRepositoryRunnerDefault defines model for GitRepositoryRunnerDefault.
+type GitRepositoryRunnerDefault struct {
+	ConnectionId string                `json:"connection_id"`
+	Group        *string               `json:"group,omitempty"`
+	GroupId      *int64                `json:"group_id,omitempty"`
+	Label        string                `json:"label"`
+	RepositoryId int64                 `json:"repository_id"`
+	Scope        GitHubConnectionScope `json:"scope"`
+}
+
+// GitRepositoryRunnerDefaultState defines model for GitRepositoryRunnerDefaultState.
+type GitRepositoryRunnerDefaultState struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/GitRepositoryRunnerDefaultState.json
+	Schema   *string                     `json:"$schema,omitempty"`
+	Default  *GitRepositoryRunnerDefault `json:"default,omitempty"`
+	Revision int64                       `json:"revision"`
+}
+
+// GitRepositoryRunnerDefaultWrite defines model for GitRepositoryRunnerDefaultWrite.
+type GitRepositoryRunnerDefaultWrite struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/GitRepositoryRunnerDefaultWrite.json
+	Schema  *string `json:"$schema,omitempty"`
+	Group   *string `json:"group,omitempty"`
+	GroupId *int64  `json:"group_id,omitempty"`
+	Label   string  `json:"label"`
+}
+
+// GitRunnerSelector defines model for GitRunnerSelector.
+type GitRunnerSelector struct {
+	Available int64   `json:"available"`
+	Group     *string `json:"group,omitempty"`
+	GroupId   *int64  `json:"group_id,omitempty"`
+	Label     string  `json:"label"`
+	Matching  int64   `json:"matching"`
+}
+
 // HierarchyDeleteOutputBody defines model for HierarchyDeleteOutputBody.
 type HierarchyDeleteOutputBody struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -4014,6 +4588,7 @@ type Host struct {
 	Docker     string         `json:"docker"`
 	Etcd       HostEtcd       `json:"etcd"`
 	Hostname   string         `json:"hostname"`
+	Id         *string        `json:"id,omitempty"`
 	Memory     HostResource   `json:"memory"`
 	Os         string         `json:"os"`
 	Swap       HostResource   `json:"swap"`
@@ -4425,6 +5000,61 @@ type PageEntry struct {
 	Revision   *int64   `json:"revision,omitempty"`
 }
 
+// PageGitDeployment defines model for PageGitDeployment.
+type PageGitDeployment struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageGitDeployment.json
+	Schema     *string          `json:"$schema,omitempty"`
+	Items      *[]GitDeployment `json:"items"`
+	NextCursor *string          `json:"next_cursor,omitempty"`
+	Revision   *int64           `json:"revision,omitempty"`
+}
+
+// PageGitHubConnection defines model for PageGitHubConnection.
+type PageGitHubConnection struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageGitHubConnection.json
+	Schema     *string             `json:"$schema,omitempty"`
+	Items      *[]GitHubConnection `json:"items"`
+	NextCursor *string             `json:"next_cursor,omitempty"`
+	Revision   *int64              `json:"revision,omitempty"`
+}
+
+// PageGitHubRepository defines model for PageGitHubRepository.
+type PageGitHubRepository struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageGitHubRepository.json
+	Schema     *string             `json:"$schema,omitempty"`
+	Items      *[]GitHubRepository `json:"items"`
+	NextCursor *string             `json:"next_cursor,omitempty"`
+	Revision   *int64              `json:"revision,omitempty"`
+}
+
+// PageGitHubWorkflow defines model for PageGitHubWorkflow.
+type PageGitHubWorkflow struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageGitHubWorkflow.json
+	Schema     *string           `json:"$schema,omitempty"`
+	Items      *[]GitHubWorkflow `json:"items"`
+	NextCursor *string           `json:"next_cursor,omitempty"`
+	Revision   *int64            `json:"revision,omitempty"`
+}
+
+// PageGitRunnerSelector defines model for PageGitRunnerSelector.
+type PageGitRunnerSelector struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageGitRunnerSelector.json
+	Schema     *string              `json:"$schema,omitempty"`
+	Items      *[]GitRunnerSelector `json:"items"`
+	NextCursor *string              `json:"next_cursor,omitempty"`
+	Revision   *int64               `json:"revision,omitempty"`
+}
+
 // PageMonitoringChild defines model for PageMonitoringChild.
 type PageMonitoringChild struct {
 	Items      *[]MonitoringChild `json:"items"`
@@ -4473,6 +5103,17 @@ type PageReleaseSummary struct {
 	Items      *[]ReleaseSummary `json:"items"`
 	NextCursor *string           `json:"next_cursor,omitempty"`
 	Revision   *int64            `json:"revision,omitempty"`
+}
+
+// PageRemoteHost defines model for PageRemoteHost.
+type PageRemoteHost struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageRemoteHost.json
+	Schema     *string       `json:"$schema,omitempty"`
+	Items      *[]RemoteHost `json:"items"`
+	NextCursor *string       `json:"next_cursor,omitempty"`
+	Revision   *int64        `json:"revision,omitempty"`
 }
 
 // PageRoute defines model for PageRoute.
@@ -4639,6 +5280,85 @@ type ProjectRename struct {
 	// Examples: /api/v1/ProjectRename.json
 	Schema *string `json:"$schema,omitempty"`
 	Slug   string  `json:"slug"`
+}
+
+// PublicIngressApplyRequest defines model for PublicIngressApplyRequest.
+type PublicIngressApplyRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PublicIngressApplyRequest.json
+	Schema      *string   `json:"$schema,omitempty"`
+	Addresses   *[]string `json:"addresses"`
+	Enabled     bool      `json:"enabled"`
+	ReviewToken string    `json:"review_token"`
+	RouteIds    *[]string `json:"route_ids"`
+}
+
+// PublicIngressCheck defines model for PublicIngressCheck.
+type PublicIngressCheck struct {
+	Message string                   `json:"message"`
+	Scope   string                   `json:"scope"`
+	Status  PublicIngressCheckStatus `json:"status"`
+}
+
+// PublicIngressCheckStatus defines model for PublicIngressCheck.Status.
+type PublicIngressCheckStatus string
+
+// PublicIngressConfiguration defines model for PublicIngressConfiguration.
+type PublicIngressConfiguration struct {
+	Addresses *[]string                       `json:"addresses"`
+	Enabled   bool                            `json:"enabled"`
+	Message   *string                         `json:"message,omitempty"`
+	Revision  string                          `json:"revision"`
+	RouteIds  *[]string                       `json:"route_ids"`
+	State     PublicIngressConfigurationState `json:"state"`
+	TaskId    *string                         `json:"task_id,omitempty"`
+}
+
+// PublicIngressConfigurationState defines model for PublicIngressConfiguration.State.
+type PublicIngressConfigurationState string
+
+// PublicIngressDraft defines model for PublicIngressDraft.
+type PublicIngressDraft struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PublicIngressDraft.json
+	Schema    *string   `json:"$schema,omitempty"`
+	Addresses *[]string `json:"addresses"`
+	Enabled   bool      `json:"enabled"`
+	RouteIds  *[]string `json:"route_ids"`
+}
+
+// PublicIngressReview defines model for PublicIngressReview.
+type PublicIngressReview struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PublicIngressReview.json
+	Schema      *string               `json:"$schema,omitempty"`
+	CanApply    bool                  `json:"can_apply"`
+	Checks      *[]PublicIngressCheck `json:"checks"`
+	ReviewToken *string               `json:"review_token,omitempty"`
+	Revision    string                `json:"revision"`
+}
+
+// PublicIngressRouteOption defines model for PublicIngressRouteOption.
+type PublicIngressRouteOption struct {
+	Environment string  `json:"environment"`
+	Hostname    string  `json:"hostname"`
+	Id          string  `json:"id"`
+	Path        string  `json:"path"`
+	Service     string  `json:"service"`
+	Unavailable *string `json:"unavailable,omitempty"`
+}
+
+// PublicIngressState defines model for PublicIngressState.
+type PublicIngressState struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PublicIngressState.json
+	Schema        *string                     `json:"$schema,omitempty"`
+	Configuration PublicIngressConfiguration  `json:"configuration"`
+	Routes        *[]PublicIngressRouteOption `json:"routes"`
 }
 
 // PublicTarget defines model for PublicTarget.
@@ -4843,6 +5563,65 @@ type ReleaseSummary struct {
 	Tag                string  `json:"tag"`
 }
 
+// RemoteHost defines model for RemoteHost.
+type RemoteHost struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RemoteHost.json
+	Schema           *string         `json:"$schema,omitempty"`
+	AgentId          *string         `json:"agent_id,omitempty"`
+	CredentialExpiry *time.Time      `json:"credential_expiry,omitempty"`
+	Generation       int64           `json:"generation"`
+	Id               string          `json:"id"`
+	Name             string          `json:"name"`
+	State            RemoteHostState `json:"state"`
+}
+
+// RemoteHostState defines model for RemoteHost.State.
+type RemoteHostState string
+
+// RemoteHostCreateRequest defines model for RemoteHostCreateRequest.
+type RemoteHostCreateRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RemoteHostCreateRequest.json
+	Schema *string `json:"$schema,omitempty"`
+	Name   string  `json:"name"`
+}
+
+// RemoteHostEnrollment defines model for RemoteHostEnrollment.
+type RemoteHostEnrollment struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RemoteHostEnrollment.json
+	Schema      *string    `json:"$schema,omitempty"`
+	Certificate string     `json:"certificate"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	Host        RemoteHost `json:"host"`
+}
+
+// RemoteHostEnrollmentRequest defines model for RemoteHostEnrollmentRequest.
+type RemoteHostEnrollmentRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RemoteHostEnrollmentRequest.json
+	Schema             *string `json:"$schema,omitempty"`
+	Csr                string  `json:"csr"`
+	ExpectedGeneration int64   `json:"expected_generation"`
+}
+
+// RemoteImageFetchRequest defines model for RemoteImageFetchRequest.
+type RemoteImageFetchRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RemoteImageFetchRequest.json
+	Schema *string   `json:"$schema,omitempty"`
+	After  *[]string `json:"after,omitempty"`
+
+	// Image Exact Linux platform manifest digest in a supported public registry
+	Image string `json:"image"`
+}
+
 // RestoreDatabaseReview defines model for RestoreDatabaseReview.
 type RestoreDatabaseReview struct {
 	ArtifactFormat      string                             `json:"artifact_format"`
@@ -4997,6 +5776,50 @@ type Runner struct {
 // RunnerLifecycle defines model for Runner.Lifecycle.
 type RunnerLifecycle string
 
+// RunnerCLIGrantAction defines model for RunnerCLIGrantAction.
+type RunnerCLIGrantAction struct {
+	Image     *string                       `json:"image,omitempty"`
+	Operation RunnerCLIGrantActionOperation `json:"operation"`
+	TargetId  string                        `json:"target_id"`
+	TaskIds   *[]string                     `json:"task_ids,omitempty"`
+}
+
+// RunnerCLIGrantActionOperation defines model for RunnerCLIGrantAction.Operation.
+type RunnerCLIGrantActionOperation string
+
+// RunnerCLIGrantScope defines model for RunnerCLIGrantScope.
+type RunnerCLIGrantScope struct {
+	EnvironmentId string `json:"environment_id"`
+	ProjectId     string `json:"project_id"`
+	TenantId      string `json:"tenant_id"`
+}
+
+// RunnerCLIGrantStatus defines model for RunnerCLIGrantStatus.
+type RunnerCLIGrantStatus struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerCLIGrantStatus.json
+	Schema    *string                `json:"$schema,omitempty"`
+	Actions   []RunnerCLIGrantAction `json:"actions"`
+	Active    bool                   `json:"active"`
+	Available bool                   `json:"available"`
+	ExpiresAt *time.Time             `json:"expires_at,omitempty"`
+	Revision  int64                  `json:"revision"`
+	RunnerId  string                 `json:"runner_id"`
+	Scope     *RunnerCLIGrantScope   `json:"scope,omitempty"`
+}
+
+// RunnerCLIGrantWrite defines model for RunnerCLIGrantWrite.
+type RunnerCLIGrantWrite struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerCLIGrantWrite.json
+	Schema          *string                 `json:"$schema,omitempty"`
+	Actions         *[]RunnerCLIGrantAction `json:"actions"`
+	LifetimeSeconds int64                   `json:"lifetime_seconds"`
+	Scope           RunnerCLIGrantScope     `json:"scope"`
+}
+
 // RunnerCheckConfiguration defines model for RunnerCheckConfiguration.
 type RunnerCheckConfiguration struct {
 	ControllerEndpoint string `json:"controller_endpoint"`
@@ -5101,6 +5924,34 @@ type RunnerRetryRequest struct {
 	Schema            *string `json:"$schema,omitempty"`
 	RegistrationToken string  `json:"registration_token"`
 }
+
+// RunnerScopedMigrationRequest defines model for RunnerScopedMigrationRequest.
+type RunnerScopedMigrationRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerScopedMigrationRequest.json
+	Schema       *string `json:"$schema,omitempty"`
+	ConnectionId string  `json:"connection_id"`
+	RepositoryId int64   `json:"repository_id"`
+}
+
+// RunnerScopedMigrationStatus defines model for RunnerScopedMigrationStatus.
+type RunnerScopedMigrationStatus struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerScopedMigrationStatus.json
+	Schema      *string                          `json:"$schema,omitempty"`
+	AcceptedAt  *time.Time                       `json:"accepted_at,omitempty"`
+	Available   bool                             `json:"available"`
+	CompletedAt *time.Time                       `json:"completed_at,omitempty"`
+	Phase       RunnerScopedMigrationStatusPhase `json:"phase"`
+	Revision    int64                            `json:"revision"`
+	RunnerId    string                           `json:"runner_id"`
+	TaskId      *string                          `json:"task_id,omitempty"`
+}
+
+// RunnerScopedMigrationStatusPhase defines model for RunnerScopedMigrationStatus.Phase.
+type RunnerScopedMigrationStatusPhase string
 
 // RunnerUpdateRequest defines model for RunnerUpdateRequest.
 type RunnerUpdateRequest struct {
@@ -6653,9 +7504,125 @@ type EtcdConfigApplyParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// GithubConnectionListParams defines parameters for GithubConnectionList.
+type GithubConnectionListParams struct {
+	ScopeKind GithubConnectionListParamsScopeKind `form:"scope_kind" json:"scope_kind"`
+	ScopeId   string                              `form:"scope_id" json:"scope_id"`
+	Limit     *int64                              `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor    *string                             `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GithubConnectionListParamsScopeKind defines parameters for GithubConnectionList.
+type GithubConnectionListParamsScopeKind string
+
+// GithubConnectionCreateParams defines parameters for GithubConnectionCreate.
+type GithubConnectionCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// GithubConnectionRevokeParams defines parameters for GithubConnectionRevoke.
+type GithubConnectionRevokeParams struct {
+	ScopeKind      GithubConnectionRevokeParamsScopeKind `form:"scope_kind" json:"scope_kind"`
+	ScopeId        string                                `form:"scope_id" json:"scope_id"`
+	IfMatch        string                                `json:"If-Match"`
+	IdempotencyKey string                                `json:"Idempotency-Key"`
+}
+
+// GithubConnectionRevokeParamsScopeKind defines parameters for GithubConnectionRevoke.
+type GithubConnectionRevokeParamsScopeKind string
+
+// GithubConnectionShowParams defines parameters for GithubConnectionShow.
+type GithubConnectionShowParams struct {
+	ScopeKind GithubConnectionShowParamsScopeKind `form:"scope_kind" json:"scope_kind"`
+	ScopeId   string                              `form:"scope_id" json:"scope_id"`
+}
+
+// GithubConnectionShowParamsScopeKind defines parameters for GithubConnectionShow.
+type GithubConnectionShowParamsScopeKind string
+
+// GithubConnectionRotateParams defines parameters for GithubConnectionRotate.
+type GithubConnectionRotateParams struct {
+	ScopeKind      GithubConnectionRotateParamsScopeKind `form:"scope_kind" json:"scope_kind"`
+	ScopeId        string                                `form:"scope_id" json:"scope_id"`
+	IfMatch        string                                `json:"If-Match"`
+	IdempotencyKey string                                `json:"Idempotency-Key"`
+}
+
+// GithubConnectionRotateParamsScopeKind defines parameters for GithubConnectionRotate.
+type GithubConnectionRotateParamsScopeKind string
+
+// GithubConnectionRepositoriesParams defines parameters for GithubConnectionRepositories.
+type GithubConnectionRepositoriesParams struct {
+	ScopeKind GithubConnectionRepositoriesParamsScopeKind `form:"scope_kind" json:"scope_kind"`
+	ScopeId   string                                      `form:"scope_id" json:"scope_id"`
+	Limit     *int64                                      `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor    *string                                     `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GithubConnectionRepositoriesParamsScopeKind defines parameters for GithubConnectionRepositories.
+type GithubConnectionRepositoriesParamsScopeKind string
+
+// GithubRepositoryRunnerDefaultRemoveParams defines parameters for GithubRepositoryRunnerDefaultRemove.
+type GithubRepositoryRunnerDefaultRemoveParams struct {
+	ScopeKind      GithubRepositoryRunnerDefaultRemoveParamsScopeKind `form:"scope_kind" json:"scope_kind"`
+	ScopeId        string                                             `form:"scope_id" json:"scope_id"`
+	IfMatch        string                                             `json:"If-Match"`
+	IdempotencyKey string                                             `json:"Idempotency-Key"`
+}
+
+// GithubRepositoryRunnerDefaultRemoveParamsScopeKind defines parameters for GithubRepositoryRunnerDefaultRemove.
+type GithubRepositoryRunnerDefaultRemoveParamsScopeKind string
+
+// GithubRepositoryRunnerDefaultShowParams defines parameters for GithubRepositoryRunnerDefaultShow.
+type GithubRepositoryRunnerDefaultShowParams struct {
+	ScopeKind GithubRepositoryRunnerDefaultShowParamsScopeKind `form:"scope_kind" json:"scope_kind"`
+	ScopeId   string                                           `form:"scope_id" json:"scope_id"`
+}
+
+// GithubRepositoryRunnerDefaultShowParamsScopeKind defines parameters for GithubRepositoryRunnerDefaultShow.
+type GithubRepositoryRunnerDefaultShowParamsScopeKind string
+
+// GithubRepositoryRunnerDefaultPutParams defines parameters for GithubRepositoryRunnerDefaultPut.
+type GithubRepositoryRunnerDefaultPutParams struct {
+	ScopeKind      GithubRepositoryRunnerDefaultPutParamsScopeKind `form:"scope_kind" json:"scope_kind"`
+	ScopeId        string                                          `form:"scope_id" json:"scope_id"`
+	IfMatch        string                                          `json:"If-Match"`
+	IdempotencyKey string                                          `json:"Idempotency-Key"`
+}
+
+// GithubRepositoryRunnerDefaultPutParamsScopeKind defines parameters for GithubRepositoryRunnerDefaultPut.
+type GithubRepositoryRunnerDefaultPutParamsScopeKind string
+
+// GithubRepositoryWorkflowsParams defines parameters for GithubRepositoryWorkflows.
+type GithubRepositoryWorkflowsParams struct {
+	ScopeKind GithubRepositoryWorkflowsParamsScopeKind `form:"scope_kind" json:"scope_kind"`
+	ScopeId   string                                   `form:"scope_id" json:"scope_id"`
+	Limit     *int64                                   `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor    *string                                  `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GithubRepositoryWorkflowsParamsScopeKind defines parameters for GithubRepositoryWorkflows.
+type GithubRepositoryWorkflowsParamsScopeKind string
+
 // HostTerminalParams defines parameters for HostTerminal.
 type HostTerminalParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// RemoteHostFetchImageParams defines parameters for RemoteHostFetchImage.
+type RemoteHostFetchImageParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// PublicIngressApplyParams defines parameters for PublicIngressApply.
+type PublicIngressApplyParams struct {
+	IfMatch        string `json:"If-Match"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// PublicIngressPreflightParams defines parameters for PublicIngressPreflight.
+type PublicIngressPreflightParams struct {
+	IfMatch string `json:"If-Match"`
 }
 
 // ImageFetchParams defines parameters for ImageFetch.
@@ -6756,6 +7723,28 @@ type ReleaseListParams struct {
 	Cursor        *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// RemoteHostListParams defines parameters for RemoteHostList.
+type RemoteHostListParams struct {
+	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// RemoteHostCreateParams defines parameters for RemoteHostCreate.
+type RemoteHostCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// RemoteHostRevokeEnrollmentParams defines parameters for RemoteHostRevokeEnrollment.
+type RemoteHostRevokeEnrollmentParams struct {
+	Generation     int64  `form:"generation" json:"generation"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// RemoteHostStageEnrollmentParams defines parameters for RemoteHostStageEnrollment.
+type RemoteHostStageEnrollmentParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // RouteListParams defines parameters for RouteList.
 type RouteListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -6825,8 +7814,26 @@ type RunnerCheckParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// RunnerCliGrantRevokeParams defines parameters for RunnerCliGrantRevoke.
+type RunnerCliGrantRevokeParams struct {
+	IfMatch        string `json:"If-Match"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// RunnerCliGrantSetParams defines parameters for RunnerCliGrantSet.
+type RunnerCliGrantSetParams struct {
+	IfMatch        string `json:"If-Match"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // RunnerRetryParams defines parameters for RunnerRetry.
 type RunnerRetryParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// RunnerScopedMigrationStartParams defines parameters for RunnerScopedMigrationStart.
+type RunnerScopedMigrationStartParams struct {
+	IfMatch        string `json:"If-Match"`
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -6920,6 +7927,34 @@ type ServiceDeployParams struct {
 // ServiceDestroyParams defines parameters for ServiceDestroy.
 type ServiceDestroyParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// GitDeploymentBindParams defines parameters for GitDeploymentBind.
+type GitDeploymentBindParams struct {
+	IfMatch        string `json:"If-Match"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// GitDeploymentListParams defines parameters for GitDeploymentList.
+type GitDeploymentListParams struct {
+	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GitDeploymentStartParams defines parameters for GitDeploymentStart.
+type GitDeploymentStartParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// GitDeploymentApproveParams defines parameters for GitDeploymentApprove.
+type GitDeploymentApproveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// GitDeploymentRunnerSelectorsParams defines parameters for GitDeploymentRunnerSelectors.
+type GitDeploymentRunnerSelectorsParams struct {
+	ConnectionId string `form:"connection_id" json:"connection_id"`
+	RepositoryId int64  `form:"repository_id" json:"repository_id"`
 }
 
 // ServiceLogsParams defines parameters for ServiceLogs.
@@ -7258,8 +8293,26 @@ type EtcdConfigSetJSONRequestBody = EtcdConfigReplacement
 // EtcdConfigApplyJSONRequestBody defines body for EtcdConfigApply for application/json ContentType.
 type EtcdConfigApplyJSONRequestBody = EtcdConfigApplyRequest
 
+// GithubConnectionCreateJSONRequestBody defines body for GithubConnectionCreate for application/json ContentType.
+type GithubConnectionCreateJSONRequestBody = GitHubConnectionCreateRequest
+
+// GithubConnectionRotateJSONRequestBody defines body for GithubConnectionRotate for application/json ContentType.
+type GithubConnectionRotateJSONRequestBody = GitHubConnectionCredentialsWrite
+
+// GithubRepositoryRunnerDefaultPutJSONRequestBody defines body for GithubRepositoryRunnerDefaultPut for application/json ContentType.
+type GithubRepositoryRunnerDefaultPutJSONRequestBody = GitRepositoryRunnerDefaultWrite
+
 // HostTerminalJSONRequestBody defines body for HostTerminal for application/json ContentType.
 type HostTerminalJSONRequestBody = HostTerminalOpen
+
+// RemoteHostFetchImageJSONRequestBody defines body for RemoteHostFetchImage for application/json ContentType.
+type RemoteHostFetchImageJSONRequestBody = RemoteImageFetchRequest
+
+// PublicIngressApplyJSONRequestBody defines body for PublicIngressApply for application/json ContentType.
+type PublicIngressApplyJSONRequestBody = PublicIngressApplyRequest
+
+// PublicIngressPreflightJSONRequestBody defines body for PublicIngressPreflight for application/json ContentType.
+type PublicIngressPreflightJSONRequestBody = PublicIngressDraft
 
 // ImageFetchJSONRequestBody defines body for ImageFetch for application/json ContentType.
 type ImageFetchJSONRequestBody = ImageFetchRequest
@@ -7294,6 +8347,12 @@ type ReleaseGroupDeployJSONRequestBody = ReleaseGroupDeployRequest
 // ReleaseGroupRollbackJSONRequestBody defines body for ReleaseGroupRollback for application/json ContentType.
 type ReleaseGroupRollbackJSONRequestBody = ReleaseGroupRollbackRequest
 
+// RemoteHostCreateJSONRequestBody defines body for RemoteHostCreate for application/json ContentType.
+type RemoteHostCreateJSONRequestBody = RemoteHostCreateRequest
+
+// RemoteHostStageEnrollmentJSONRequestBody defines body for RemoteHostStageEnrollment for application/json ContentType.
+type RemoteHostStageEnrollmentJSONRequestBody = RemoteHostEnrollmentRequest
+
 // RouteCreateJSONRequestBody defines body for RouteCreate for application/json ContentType.
 type RouteCreateJSONRequestBody = RouteCreate
 
@@ -7318,8 +8377,14 @@ type RunnerEditJSONRequestBody = RunnerEditRequest
 // RunnerCheckJSONRequestBody defines body for RunnerCheck for application/json ContentType.
 type RunnerCheckJSONRequestBody = RunnerCheckRequest
 
+// RunnerCliGrantSetJSONRequestBody defines body for RunnerCliGrantSet for application/json ContentType.
+type RunnerCliGrantSetJSONRequestBody = RunnerCLIGrantWrite
+
 // RunnerRetryJSONRequestBody defines body for RunnerRetry for application/json ContentType.
 type RunnerRetryJSONRequestBody = RunnerRetryRequest
+
+// RunnerScopedMigrationStartJSONRequestBody defines body for RunnerScopedMigrationStart for application/json ContentType.
+type RunnerScopedMigrationStartJSONRequestBody = RunnerScopedMigrationRequest
 
 // RunnerUpdateJSONRequestBody defines body for RunnerUpdate for application/json ContentType.
 type RunnerUpdateJSONRequestBody = RunnerUpdateRequest
@@ -7359,6 +8424,12 @@ type ServiceDeployJSONRequestBody = DeployRequest
 
 // ServiceDestroyJSONRequestBody defines body for ServiceDestroy for application/json ContentType.
 type ServiceDestroyJSONRequestBody = TaskRunAfterRequest
+
+// GitDeploymentBindJSONRequestBody defines body for GitDeploymentBind for application/json ContentType.
+type GitDeploymentBindJSONRequestBody = GitDeploymentBindingWrite
+
+// GitDeploymentStartJSONRequestBody defines body for GitDeploymentStart for application/json ContentType.
+type GitDeploymentStartJSONRequestBody = GitDeploymentStartRequest
 
 // ServiceRollbackJSONRequestBody defines body for ServiceRollback for application/json ContentType.
 type ServiceRollbackJSONRequestBody = RollbackRequest
@@ -9576,6 +10647,83 @@ type ClientInterface interface {
 	// Corresponds with POST /etcd/config/apply (the `EtcdConfigApply` operationId).
 	EtcdConfigApply(ctx context.Context, params *EtcdConfigApplyParams, body EtcdConfigApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GithubConnectionList List GitHub App connections in a scope
+	//
+	// Corresponds with GET /github-connections (the `GithubConnectionList` operationId).
+	GithubConnectionList(ctx context.Context, params *GithubConnectionListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubConnectionCreateWithBody Register credentials for an operator-owned GitHub App installation
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /github-connections (the `GithubConnectionCreate` operationId).
+	GithubConnectionCreateWithBody(ctx context.Context, params *GithubConnectionCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubConnectionCreate Register credentials for an operator-owned GitHub App installation
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /github-connections (the `GithubConnectionCreate` operationId).
+	GithubConnectionCreate(ctx context.Context, params *GithubConnectionCreateParams, body GithubConnectionCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubConnectionRevoke Revoke a GitHub App connection
+	//
+	// Corresponds with DELETE /github-connections/{id} (the `GithubConnectionRevoke` operationId).
+	GithubConnectionRevoke(ctx context.Context, id string, params *GithubConnectionRevokeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubConnectionShow Show GitHub App connection metadata
+	//
+	// Corresponds with GET /github-connections/{id} (the `GithubConnectionShow` operationId).
+	GithubConnectionShow(ctx context.Context, id string, params *GithubConnectionShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubConnectionRotateWithBody Replace GitHub App connection credentials
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /github-connections/{id}/credentials (the `GithubConnectionRotate` operationId).
+	GithubConnectionRotateWithBody(ctx context.Context, id string, params *GithubConnectionRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubConnectionRotate Replace GitHub App connection credentials
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /github-connections/{id}/credentials (the `GithubConnectionRotate` operationId).
+	GithubConnectionRotate(ctx context.Context, id string, params *GithubConnectionRotateParams, body GithubConnectionRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubConnectionRepositories List repositories available to the GitHub App installation
+	//
+	// Corresponds with GET /github-connections/{id}/repositories (the `GithubConnectionRepositories` operationId).
+	GithubConnectionRepositories(ctx context.Context, id string, params *GithubConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubRepositoryRunnerDefaultRemove Remove the preferred Runner selector at this repository scope
+	//
+	// Corresponds with DELETE /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultRemove` operationId).
+	GithubRepositoryRunnerDefaultRemove(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubRepositoryRunnerDefaultShow Show the preferred Runner selector saved at this repository scope
+	//
+	// Corresponds with GET /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultShow` operationId).
+	GithubRepositoryRunnerDefaultShow(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubRepositoryRunnerDefaultPutWithBody Save the preferred Runner selector for this repository scope
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultPut` operationId).
+	GithubRepositoryRunnerDefaultPutWithBody(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultPutParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubRepositoryRunnerDefaultPut Save the preferred Runner selector for this repository scope
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultPut` operationId).
+	GithubRepositoryRunnerDefaultPut(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultPutParams, body GithubRepositoryRunnerDefaultPutJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GithubRepositoryWorkflows List GitHub Actions workflows visible in this repository
+	//
+	// Corresponds with GET /github-connections/{id}/repositories/{repository_id}/workflows (the `GithubRepositoryWorkflows` operationId).
+	GithubRepositoryWorkflows(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryWorkflowsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// HostShow Show host health
 	//
 	// Corresponds with GET /host (the `HostShow` operationId).
@@ -9594,6 +10742,53 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
 	HostTerminal(ctx context.Context, params *HostTerminalParams, body HostTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoteHostFetchImageWithBody Fetch an exact public image manifest into an enrolled remote Host
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /hosts/{id}/images/fetch (the `RemoteHostFetchImage` operationId).
+	RemoteHostFetchImageWithBody(ctx context.Context, id string, params *RemoteHostFetchImageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoteHostFetchImage Fetch an exact public image manifest into an enrolled remote Host
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /hosts/{id}/images/fetch (the `RemoteHostFetchImage` operationId).
+	RemoteHostFetchImage(ctx context.Context, id string, params *RemoteHostFetchImageParams, body RemoteHostFetchImageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PublicIngressShow Show public ingress configuration and eligible Routes for a Host
+	//
+	// Corresponds with GET /hosts/{id}/public-ingress (the `PublicIngressShow` operationId).
+	PublicIngressShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PublicIngressApplyWithBody Apply a reviewed public ingress configuration to a Host
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /hosts/{id}/public-ingress/apply (the `PublicIngressApply` operationId).
+	PublicIngressApplyWithBody(ctx context.Context, id string, params *PublicIngressApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PublicIngressApply Apply a reviewed public ingress configuration to a Host
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /hosts/{id}/public-ingress/apply (the `PublicIngressApply` operationId).
+	PublicIngressApply(ctx context.Context, id string, params *PublicIngressApplyParams, body PublicIngressApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PublicIngressPreflightWithBody Review a public ingress configuration for a Host
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /hosts/{id}/public-ingress/preflight (the `PublicIngressPreflight` operationId).
+	PublicIngressPreflightWithBody(ctx context.Context, id string, params *PublicIngressPreflightParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PublicIngressPreflight Review a public ingress configuration for a Host
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /hosts/{id}/public-ingress/preflight (the `PublicIngressPreflight` operationId).
+	PublicIngressPreflight(ctx context.Context, id string, params *PublicIngressPreflightParams, body PublicIngressPreflightJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ImageList List images in the local Agent host Docker daemon
 	//
@@ -9794,6 +10989,49 @@ type ClientInterface interface {
 	// Corresponds with GET /releases/{id} (the `ReleaseShow` operationId).
 	ReleaseShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RemoteHostList List remote Hosts
+	//
+	// Corresponds with GET /remote-hosts (the `RemoteHostList` operationId).
+	RemoteHostList(ctx context.Context, params *RemoteHostListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoteHostCreateWithBody Register a remote Host
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /remote-hosts (the `RemoteHostCreate` operationId).
+	RemoteHostCreateWithBody(ctx context.Context, params *RemoteHostCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoteHostCreate Register a remote Host
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /remote-hosts (the `RemoteHostCreate` operationId).
+	RemoteHostCreate(ctx context.Context, params *RemoteHostCreateParams, body RemoteHostCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoteHostShow Show a remote Host
+	//
+	// Corresponds with GET /remote-hosts/{id} (the `RemoteHostShow` operationId).
+	RemoteHostShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoteHostRevokeEnrollment Revoke a remote Host's exact Agent generation
+	//
+	// Corresponds with DELETE /remote-hosts/{id}/enrollment (the `RemoteHostRevokeEnrollment` operationId).
+	RemoteHostRevokeEnrollment(ctx context.Context, id string, params *RemoteHostRevokeEnrollmentParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoteHostStageEnrollmentWithBody Stage an Agent certificate from a signed CSR
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /remote-hosts/{id}/enrollment (the `RemoteHostStageEnrollment` operationId).
+	RemoteHostStageEnrollmentWithBody(ctx context.Context, id string, params *RemoteHostStageEnrollmentParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoteHostStageEnrollment Stage an Agent certificate from a signed CSR
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /remote-hosts/{id}/enrollment (the `RemoteHostStageEnrollment` operationId).
+	RemoteHostStageEnrollment(ctx context.Context, id string, params *RemoteHostStageEnrollmentParams, body RemoteHostStageEnrollmentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// RouteList List routes
 	//
 	// Corresponds with GET /routes (the `RouteList` operationId).
@@ -9936,6 +11174,30 @@ type ClientInterface interface {
 	// Corresponds with POST /runners/{id}/checks (the `RunnerCheck` operationId).
 	RunnerCheck(ctx context.Context, id string, params *RunnerCheckParams, body RunnerCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RunnerCliGrantRevoke Revoke CLI actions while keeping Runner build authentication
+	//
+	// Corresponds with DELETE /runners/{id}/cli-grant (the `RunnerCliGrantRevoke` operationId).
+	RunnerCliGrantRevoke(ctx context.Context, id string, params *RunnerCliGrantRevokeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerCliGrantShow Show the CLI grant attached to the Runner's scoped credential
+	//
+	// Corresponds with GET /runners/{id}/cli-grant (the `RunnerCliGrantShow` operationId).
+	RunnerCliGrantShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerCliGrantSetWithBody Replace the exact Runner CLI grant for the checked revision
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /runners/{id}/cli-grant (the `RunnerCliGrantSet` operationId).
+	RunnerCliGrantSetWithBody(ctx context.Context, id string, params *RunnerCliGrantSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerCliGrantSet Replace the exact Runner CLI grant for the checked revision
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /runners/{id}/cli-grant (the `RunnerCliGrantSet` operationId).
+	RunnerCliGrantSet(ctx context.Context, id string, params *RunnerCliGrantSetParams, body RunnerCliGrantSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// RunnerRetryWithBody Retry failed Runner creation
 	//
 	// Takes any type of body and a specified content type.
@@ -9949,6 +11211,25 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
 	RunnerRetry(ctx context.Context, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerScopedMigrationShow Show scoped Runner migration status
+	//
+	// Corresponds with GET /runners/{id}/scoped-migration (the `RunnerScopedMigrationShow` operationId).
+	RunnerScopedMigrationShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerScopedMigrationStartWithBody Move an installed Runner to scoped access after its current job completes
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /runners/{id}/scoped-migration (the `RunnerScopedMigrationStart` operationId).
+	RunnerScopedMigrationStartWithBody(ctx context.Context, id string, params *RunnerScopedMigrationStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerScopedMigrationStart Move an installed Runner to scoped access after its current job completes
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /runners/{id}/scoped-migration (the `RunnerScopedMigrationStart` operationId).
+	RunnerScopedMigrationStart(ctx context.Context, id string, params *RunnerScopedMigrationStartParams, body RunnerScopedMigrationStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RunnerUpdateShow Show latest or selected Runner software update
 	//
@@ -10176,6 +11457,59 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 	ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, body ServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GitDeploymentBindingShow Show a Service's GitHub deployment binding
+	//
+	// Corresponds with GET /services/{id}/git-deployment (the `GitDeploymentBindingShow` operationId).
+	GitDeploymentBindingShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GitDeploymentBindWithBody Save a Service's GitHub deployment binding
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /services/{id}/git-deployment (the `GitDeploymentBind` operationId).
+	GitDeploymentBindWithBody(ctx context.Context, id string, params *GitDeploymentBindParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GitDeploymentBind Save a Service's GitHub deployment binding
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /services/{id}/git-deployment (the `GitDeploymentBind` operationId).
+	GitDeploymentBind(ctx context.Context, id string, params *GitDeploymentBindParams, body GitDeploymentBindJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GitDeploymentList List a Service's GitHub deployments
+	//
+	// Corresponds with GET /services/{id}/git-deployments (the `GitDeploymentList` operationId).
+	GitDeploymentList(ctx context.Context, id string, params *GitDeploymentListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GitDeploymentStartWithBody Start a GitHub deployment for a Service
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /services/{id}/git-deployments (the `GitDeploymentStart` operationId).
+	GitDeploymentStartWithBody(ctx context.Context, id string, params *GitDeploymentStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GitDeploymentStart Start a GitHub deployment for a Service
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /services/{id}/git-deployments (the `GitDeploymentStart` operationId).
+	GitDeploymentStart(ctx context.Context, id string, params *GitDeploymentStartParams, body GitDeploymentStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GitDeploymentShow Show a Service's GitHub deployment
+	//
+	// Corresponds with GET /services/{id}/git-deployments/{deployment} (the `GitDeploymentShow` operationId).
+	GitDeploymentShow(ctx context.Context, id string, deployment string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GitDeploymentApprove Approve a verified GitHub build for deployment
+	//
+	// Corresponds with POST /services/{id}/git-deployments/{deployment}/approve (the `GitDeploymentApprove` operationId).
+	GitDeploymentApprove(ctx context.Context, id string, deployment string, params *GitDeploymentApproveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GitDeploymentRunnerSelectors List Runner selectors available to this Service and repository
+	//
+	// Corresponds with GET /services/{id}/git-runner-selectors (the `GitDeploymentRunnerSelectors` operationId).
+	GitDeploymentRunnerSelectors(ctx context.Context, id string, params *GitDeploymentRunnerSelectorsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ServiceLogs Stream service logs
 	//
@@ -12533,6 +13867,213 @@ func (c *Client) EtcdConfigApply(ctx context.Context, params *EtcdConfigApplyPar
 	return c.Client.Do(req)
 }
 
+// GithubConnectionList List GitHub App connections in a scope
+//
+// Corresponds with GET /github-connections (the `GithubConnectionList` operationId).
+func (c *Client) GithubConnectionList(ctx context.Context, params *GithubConnectionListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubConnectionListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubConnectionCreateWithBody Register credentials for an operator-owned GitHub App installation
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /github-connections (the `GithubConnectionCreate` operationId).
+func (c *Client) GithubConnectionCreateWithBody(ctx context.Context, params *GithubConnectionCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubConnectionCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubConnectionCreate Register credentials for an operator-owned GitHub App installation
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /github-connections (the `GithubConnectionCreate` operationId).
+func (c *Client) GithubConnectionCreate(ctx context.Context, params *GithubConnectionCreateParams, body GithubConnectionCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubConnectionCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubConnectionRevoke Revoke a GitHub App connection
+//
+// Corresponds with DELETE /github-connections/{id} (the `GithubConnectionRevoke` operationId).
+func (c *Client) GithubConnectionRevoke(ctx context.Context, id string, params *GithubConnectionRevokeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubConnectionRevokeRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubConnectionShow Show GitHub App connection metadata
+//
+// Corresponds with GET /github-connections/{id} (the `GithubConnectionShow` operationId).
+func (c *Client) GithubConnectionShow(ctx context.Context, id string, params *GithubConnectionShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubConnectionShowRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubConnectionRotateWithBody Replace GitHub App connection credentials
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /github-connections/{id}/credentials (the `GithubConnectionRotate` operationId).
+func (c *Client) GithubConnectionRotateWithBody(ctx context.Context, id string, params *GithubConnectionRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubConnectionRotateRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubConnectionRotate Replace GitHub App connection credentials
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /github-connections/{id}/credentials (the `GithubConnectionRotate` operationId).
+func (c *Client) GithubConnectionRotate(ctx context.Context, id string, params *GithubConnectionRotateParams, body GithubConnectionRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubConnectionRotateRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubConnectionRepositories List repositories available to the GitHub App installation
+//
+// Corresponds with GET /github-connections/{id}/repositories (the `GithubConnectionRepositories` operationId).
+func (c *Client) GithubConnectionRepositories(ctx context.Context, id string, params *GithubConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubConnectionRepositoriesRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubRepositoryRunnerDefaultRemove Remove the preferred Runner selector at this repository scope
+//
+// Corresponds with DELETE /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultRemove` operationId).
+func (c *Client) GithubRepositoryRunnerDefaultRemove(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubRepositoryRunnerDefaultRemoveRequest(c.Server, id, repositoryId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubRepositoryRunnerDefaultShow Show the preferred Runner selector saved at this repository scope
+//
+// Corresponds with GET /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultShow` operationId).
+func (c *Client) GithubRepositoryRunnerDefaultShow(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubRepositoryRunnerDefaultShowRequest(c.Server, id, repositoryId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubRepositoryRunnerDefaultPutWithBody Save the preferred Runner selector for this repository scope
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultPut` operationId).
+func (c *Client) GithubRepositoryRunnerDefaultPutWithBody(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultPutParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubRepositoryRunnerDefaultPutRequestWithBody(c.Server, id, repositoryId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubRepositoryRunnerDefaultPut Save the preferred Runner selector for this repository scope
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultPut` operationId).
+func (c *Client) GithubRepositoryRunnerDefaultPut(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultPutParams, body GithubRepositoryRunnerDefaultPutJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubRepositoryRunnerDefaultPutRequest(c.Server, id, repositoryId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GithubRepositoryWorkflows List GitHub Actions workflows visible in this repository
+//
+// Corresponds with GET /github-connections/{id}/repositories/{repository_id}/workflows (the `GithubRepositoryWorkflows` operationId).
+func (c *Client) GithubRepositoryWorkflows(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryWorkflowsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGithubRepositoryWorkflowsRequest(c.Server, id, repositoryId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // HostShow Show host health
 //
 // Corresponds with GET /host (the `HostShow` operationId).
@@ -12572,6 +14113,123 @@ func (c *Client) HostTerminalWithBody(ctx context.Context, params *HostTerminalP
 // Corresponds with POST /host/terminal (the `HostTerminal` operationId).
 func (c *Client) HostTerminal(ctx context.Context, params *HostTerminalParams, body HostTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewHostTerminalRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoteHostFetchImageWithBody Fetch an exact public image manifest into an enrolled remote Host
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /hosts/{id}/images/fetch (the `RemoteHostFetchImage` operationId).
+func (c *Client) RemoteHostFetchImageWithBody(ctx context.Context, id string, params *RemoteHostFetchImageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoteHostFetchImageRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoteHostFetchImage Fetch an exact public image manifest into an enrolled remote Host
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /hosts/{id}/images/fetch (the `RemoteHostFetchImage` operationId).
+func (c *Client) RemoteHostFetchImage(ctx context.Context, id string, params *RemoteHostFetchImageParams, body RemoteHostFetchImageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoteHostFetchImageRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PublicIngressShow Show public ingress configuration and eligible Routes for a Host
+//
+// Corresponds with GET /hosts/{id}/public-ingress (the `PublicIngressShow` operationId).
+func (c *Client) PublicIngressShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPublicIngressShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PublicIngressApplyWithBody Apply a reviewed public ingress configuration to a Host
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /hosts/{id}/public-ingress/apply (the `PublicIngressApply` operationId).
+func (c *Client) PublicIngressApplyWithBody(ctx context.Context, id string, params *PublicIngressApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPublicIngressApplyRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PublicIngressApply Apply a reviewed public ingress configuration to a Host
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /hosts/{id}/public-ingress/apply (the `PublicIngressApply` operationId).
+func (c *Client) PublicIngressApply(ctx context.Context, id string, params *PublicIngressApplyParams, body PublicIngressApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPublicIngressApplyRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PublicIngressPreflightWithBody Review a public ingress configuration for a Host
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /hosts/{id}/public-ingress/preflight (the `PublicIngressPreflight` operationId).
+func (c *Client) PublicIngressPreflightWithBody(ctx context.Context, id string, params *PublicIngressPreflightParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPublicIngressPreflightRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PublicIngressPreflight Review a public ingress configuration for a Host
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /hosts/{id}/public-ingress/preflight (the `PublicIngressPreflight` operationId).
+func (c *Client) PublicIngressPreflight(ctx context.Context, id string, params *PublicIngressPreflightParams, body PublicIngressPreflightJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPublicIngressPreflightRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13091,6 +14749,119 @@ func (c *Client) ReleaseShow(ctx context.Context, id string, reqEditors ...Reque
 	return c.Client.Do(req)
 }
 
+// RemoteHostList List remote Hosts
+//
+// Corresponds with GET /remote-hosts (the `RemoteHostList` operationId).
+func (c *Client) RemoteHostList(ctx context.Context, params *RemoteHostListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoteHostListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoteHostCreateWithBody Register a remote Host
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /remote-hosts (the `RemoteHostCreate` operationId).
+func (c *Client) RemoteHostCreateWithBody(ctx context.Context, params *RemoteHostCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoteHostCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoteHostCreate Register a remote Host
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /remote-hosts (the `RemoteHostCreate` operationId).
+func (c *Client) RemoteHostCreate(ctx context.Context, params *RemoteHostCreateParams, body RemoteHostCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoteHostCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoteHostShow Show a remote Host
+//
+// Corresponds with GET /remote-hosts/{id} (the `RemoteHostShow` operationId).
+func (c *Client) RemoteHostShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoteHostShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoteHostRevokeEnrollment Revoke a remote Host's exact Agent generation
+//
+// Corresponds with DELETE /remote-hosts/{id}/enrollment (the `RemoteHostRevokeEnrollment` operationId).
+func (c *Client) RemoteHostRevokeEnrollment(ctx context.Context, id string, params *RemoteHostRevokeEnrollmentParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoteHostRevokeEnrollmentRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoteHostStageEnrollmentWithBody Stage an Agent certificate from a signed CSR
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /remote-hosts/{id}/enrollment (the `RemoteHostStageEnrollment` operationId).
+func (c *Client) RemoteHostStageEnrollmentWithBody(ctx context.Context, id string, params *RemoteHostStageEnrollmentParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoteHostStageEnrollmentRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoteHostStageEnrollment Stage an Agent certificate from a signed CSR
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /remote-hosts/{id}/enrollment (the `RemoteHostStageEnrollment` operationId).
+func (c *Client) RemoteHostStageEnrollment(ctx context.Context, id string, params *RemoteHostStageEnrollmentParams, body RemoteHostStageEnrollmentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoteHostStageEnrollmentRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // RouteList List routes
 //
 // Corresponds with GET /routes (the `RouteList` operationId).
@@ -13453,6 +15224,70 @@ func (c *Client) RunnerCheck(ctx context.Context, id string, params *RunnerCheck
 	return c.Client.Do(req)
 }
 
+// RunnerCliGrantRevoke Revoke CLI actions while keeping Runner build authentication
+//
+// Corresponds with DELETE /runners/{id}/cli-grant (the `RunnerCliGrantRevoke` operationId).
+func (c *Client) RunnerCliGrantRevoke(ctx context.Context, id string, params *RunnerCliGrantRevokeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerCliGrantRevokeRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerCliGrantShow Show the CLI grant attached to the Runner's scoped credential
+//
+// Corresponds with GET /runners/{id}/cli-grant (the `RunnerCliGrantShow` operationId).
+func (c *Client) RunnerCliGrantShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerCliGrantShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerCliGrantSetWithBody Replace the exact Runner CLI grant for the checked revision
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /runners/{id}/cli-grant (the `RunnerCliGrantSet` operationId).
+func (c *Client) RunnerCliGrantSetWithBody(ctx context.Context, id string, params *RunnerCliGrantSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerCliGrantSetRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerCliGrantSet Replace the exact Runner CLI grant for the checked revision
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /runners/{id}/cli-grant (the `RunnerCliGrantSet` operationId).
+func (c *Client) RunnerCliGrantSet(ctx context.Context, id string, params *RunnerCliGrantSetParams, body RunnerCliGrantSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerCliGrantSetRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // RunnerRetryWithBody Retry failed Runner creation
 //
 // Takes any type of body and a specified content type.
@@ -13477,6 +15312,55 @@ func (c *Client) RunnerRetryWithBody(ctx context.Context, id string, params *Run
 // Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
 func (c *Client) RunnerRetry(ctx context.Context, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRunnerRetryRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerScopedMigrationShow Show scoped Runner migration status
+//
+// Corresponds with GET /runners/{id}/scoped-migration (the `RunnerScopedMigrationShow` operationId).
+func (c *Client) RunnerScopedMigrationShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerScopedMigrationShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerScopedMigrationStartWithBody Move an installed Runner to scoped access after its current job completes
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /runners/{id}/scoped-migration (the `RunnerScopedMigrationStart` operationId).
+func (c *Client) RunnerScopedMigrationStartWithBody(ctx context.Context, id string, params *RunnerScopedMigrationStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerScopedMigrationStartRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerScopedMigrationStart Move an installed Runner to scoped access after its current job completes
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /runners/{id}/scoped-migration (the `RunnerScopedMigrationStart` operationId).
+func (c *Client) RunnerScopedMigrationStart(ctx context.Context, id string, params *RunnerScopedMigrationStartParams, body RunnerScopedMigrationStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerScopedMigrationStartRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -14054,6 +15938,149 @@ func (c *Client) ServiceDestroyWithBody(ctx context.Context, id string, params *
 // Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 func (c *Client) ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, body ServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewServiceDestroyRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GitDeploymentBindingShow Show a Service's GitHub deployment binding
+//
+// Corresponds with GET /services/{id}/git-deployment (the `GitDeploymentBindingShow` operationId).
+func (c *Client) GitDeploymentBindingShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGitDeploymentBindingShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GitDeploymentBindWithBody Save a Service's GitHub deployment binding
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /services/{id}/git-deployment (the `GitDeploymentBind` operationId).
+func (c *Client) GitDeploymentBindWithBody(ctx context.Context, id string, params *GitDeploymentBindParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGitDeploymentBindRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GitDeploymentBind Save a Service's GitHub deployment binding
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /services/{id}/git-deployment (the `GitDeploymentBind` operationId).
+func (c *Client) GitDeploymentBind(ctx context.Context, id string, params *GitDeploymentBindParams, body GitDeploymentBindJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGitDeploymentBindRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GitDeploymentList List a Service's GitHub deployments
+//
+// Corresponds with GET /services/{id}/git-deployments (the `GitDeploymentList` operationId).
+func (c *Client) GitDeploymentList(ctx context.Context, id string, params *GitDeploymentListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGitDeploymentListRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GitDeploymentStartWithBody Start a GitHub deployment for a Service
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /services/{id}/git-deployments (the `GitDeploymentStart` operationId).
+func (c *Client) GitDeploymentStartWithBody(ctx context.Context, id string, params *GitDeploymentStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGitDeploymentStartRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GitDeploymentStart Start a GitHub deployment for a Service
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /services/{id}/git-deployments (the `GitDeploymentStart` operationId).
+func (c *Client) GitDeploymentStart(ctx context.Context, id string, params *GitDeploymentStartParams, body GitDeploymentStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGitDeploymentStartRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GitDeploymentShow Show a Service's GitHub deployment
+//
+// Corresponds with GET /services/{id}/git-deployments/{deployment} (the `GitDeploymentShow` operationId).
+func (c *Client) GitDeploymentShow(ctx context.Context, id string, deployment string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGitDeploymentShowRequest(c.Server, id, deployment)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GitDeploymentApprove Approve a verified GitHub build for deployment
+//
+// Corresponds with POST /services/{id}/git-deployments/{deployment}/approve (the `GitDeploymentApprove` operationId).
+func (c *Client) GitDeploymentApprove(ctx context.Context, id string, deployment string, params *GitDeploymentApproveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGitDeploymentApproveRequest(c.Server, id, deployment, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GitDeploymentRunnerSelectors List Runner selectors available to this Service and repository
+//
+// Corresponds with GET /services/{id}/git-runner-selectors (the `GitDeploymentRunnerSelectors` operationId).
+func (c *Client) GitDeploymentRunnerSelectors(ctx context.Context, id string, params *GitDeploymentRunnerSelectorsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGitDeploymentRunnerSelectorsRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -19492,6 +21519,851 @@ func NewEtcdConfigApplyRequestWithBody(server string, params *EtcdConfigApplyPar
 	return req, nil
 }
 
+// NewGithubConnectionListRequest constructs an http.Request for the GithubConnectionList method
+func NewGithubConnectionListRequest(server string, params *GithubConnectionListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/github-connections")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_kind", params.ScopeKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_id", params.ScopeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGithubConnectionCreateRequest calls the generic GithubConnectionCreate builder with application/json body
+func NewGithubConnectionCreateRequest(server string, params *GithubConnectionCreateParams, body GithubConnectionCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewGithubConnectionCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewGithubConnectionCreateRequestWithBody constructs an http.Request for the GithubConnectionCreate method, with any body, and a specified content type
+func NewGithubConnectionCreateRequestWithBody(server string, params *GithubConnectionCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/github-connections")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGithubConnectionRevokeRequest constructs an http.Request for the GithubConnectionRevoke method
+func NewGithubConnectionRevokeRequest(server string, id string, params *GithubConnectionRevokeParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/github-connections/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_kind", params.ScopeKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_id", params.ScopeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewGithubConnectionShowRequest constructs an http.Request for the GithubConnectionShow method
+func NewGithubConnectionShowRequest(server string, id string, params *GithubConnectionShowParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/github-connections/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_kind", params.ScopeKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_id", params.ScopeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGithubConnectionRotateRequest calls the generic GithubConnectionRotate builder with application/json body
+func NewGithubConnectionRotateRequest(server string, id string, params *GithubConnectionRotateParams, body GithubConnectionRotateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewGithubConnectionRotateRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewGithubConnectionRotateRequestWithBody constructs an http.Request for the GithubConnectionRotate method, with any body, and a specified content type
+func NewGithubConnectionRotateRequestWithBody(server string, id string, params *GithubConnectionRotateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/github-connections/%s/credentials", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_kind", params.ScopeKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_id", params.ScopeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewGithubConnectionRepositoriesRequest constructs an http.Request for the GithubConnectionRepositories method
+func NewGithubConnectionRepositoriesRequest(server string, id string, params *GithubConnectionRepositoriesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/github-connections/%s/repositories", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_kind", params.ScopeKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_id", params.ScopeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGithubRepositoryRunnerDefaultRemoveRequest constructs an http.Request for the GithubRepositoryRunnerDefaultRemove method
+func NewGithubRepositoryRunnerDefaultRemoveRequest(server string, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repository_id", repositoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/github-connections/%s/repositories/%s/runner-default", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_kind", params.ScopeKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_id", params.ScopeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewGithubRepositoryRunnerDefaultShowRequest constructs an http.Request for the GithubRepositoryRunnerDefaultShow method
+func NewGithubRepositoryRunnerDefaultShowRequest(server string, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultShowParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repository_id", repositoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/github-connections/%s/repositories/%s/runner-default", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_kind", params.ScopeKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_id", params.ScopeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGithubRepositoryRunnerDefaultPutRequest calls the generic GithubRepositoryRunnerDefaultPut builder with application/json body
+func NewGithubRepositoryRunnerDefaultPutRequest(server string, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultPutParams, body GithubRepositoryRunnerDefaultPutJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewGithubRepositoryRunnerDefaultPutRequestWithBody(server, id, repositoryId, params, "application/json", bodyReader)
+}
+
+// NewGithubRepositoryRunnerDefaultPutRequestWithBody constructs an http.Request for the GithubRepositoryRunnerDefaultPut method, with any body, and a specified content type
+func NewGithubRepositoryRunnerDefaultPutRequestWithBody(server string, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultPutParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repository_id", repositoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/github-connections/%s/repositories/%s/runner-default", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_kind", params.ScopeKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_id", params.ScopeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewGithubRepositoryWorkflowsRequest constructs an http.Request for the GithubRepositoryWorkflows method
+func NewGithubRepositoryWorkflowsRequest(server string, id string, repositoryId int64, params *GithubRepositoryWorkflowsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repository_id", repositoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/github-connections/%s/repositories/%s/workflows", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_kind", params.ScopeKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "scope_id", params.ScopeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewHostShowRequest constructs an http.Request for the HostShow method
 func NewHostShowRequest(server string) (*http.Request, error) {
 	var err error
@@ -19566,6 +22438,229 @@ func NewHostTerminalRequestWithBody(server string, params *HostTerminalParams, c
 		}
 
 		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewRemoteHostFetchImageRequest calls the generic RemoteHostFetchImage builder with application/json body
+func NewRemoteHostFetchImageRequest(server string, id string, params *RemoteHostFetchImageParams, body RemoteHostFetchImageJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRemoteHostFetchImageRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRemoteHostFetchImageRequestWithBody constructs an http.Request for the RemoteHostFetchImage method, with any body, and a specified content type
+func NewRemoteHostFetchImageRequestWithBody(server string, id string, params *RemoteHostFetchImageParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/hosts/%s/images/fetch", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewPublicIngressShowRequest constructs an http.Request for the PublicIngressShow method
+func NewPublicIngressShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/hosts/%s/public-ingress", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPublicIngressApplyRequest calls the generic PublicIngressApply builder with application/json body
+func NewPublicIngressApplyRequest(server string, id string, params *PublicIngressApplyParams, body PublicIngressApplyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPublicIngressApplyRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPublicIngressApplyRequestWithBody constructs an http.Request for the PublicIngressApply method, with any body, and a specified content type
+func NewPublicIngressApplyRequestWithBody(server string, id string, params *PublicIngressApplyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/hosts/%s/public-ingress/apply", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewPublicIngressPreflightRequest calls the generic PublicIngressPreflight builder with application/json body
+func NewPublicIngressPreflightRequest(server string, id string, params *PublicIngressPreflightParams, body PublicIngressPreflightJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPublicIngressPreflightRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPublicIngressPreflightRequestWithBody constructs an http.Request for the PublicIngressPreflight method, with any body, and a specified content type
+func NewPublicIngressPreflightRequestWithBody(server string, id string, params *PublicIngressPreflightParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/hosts/%s/public-ingress/preflight", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
 
 	}
 
@@ -20767,6 +23862,289 @@ func NewReleaseShowRequest(server string, id string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewRemoteHostListRequest constructs an http.Request for the RemoteHostList method
+func NewRemoteHostListRequest(server string, params *RemoteHostListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/remote-hosts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRemoteHostCreateRequest calls the generic RemoteHostCreate builder with application/json body
+func NewRemoteHostCreateRequest(server string, params *RemoteHostCreateParams, body RemoteHostCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRemoteHostCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewRemoteHostCreateRequestWithBody constructs an http.Request for the RemoteHostCreate method, with any body, and a specified content type
+func NewRemoteHostCreateRequestWithBody(server string, params *RemoteHostCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/remote-hosts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewRemoteHostShowRequest constructs an http.Request for the RemoteHostShow method
+func NewRemoteHostShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/remote-hosts/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRemoteHostRevokeEnrollmentRequest constructs an http.Request for the RemoteHostRevokeEnrollment method
+func NewRemoteHostRevokeEnrollmentRequest(server string, id string, params *RemoteHostRevokeEnrollmentParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/remote-hosts/%s/enrollment", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "generation", params.Generation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewRemoteHostStageEnrollmentRequest calls the generic RemoteHostStageEnrollment builder with application/json body
+func NewRemoteHostStageEnrollmentRequest(server string, id string, params *RemoteHostStageEnrollmentParams, body RemoteHostStageEnrollmentJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRemoteHostStageEnrollmentRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRemoteHostStageEnrollmentRequestWithBody constructs an http.Request for the RemoteHostStageEnrollment method, with any body, and a specified content type
+func NewRemoteHostStageEnrollmentRequestWithBody(server string, id string, params *RemoteHostStageEnrollmentParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/remote-hosts/%s/enrollment", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewRouteListRequest constructs an http.Request for the RouteList method
 func NewRouteListRequest(server string, params *RouteListParams) (*http.Request, error) {
 	var err error
@@ -21628,6 +25006,165 @@ func NewRunnerCheckRequestWithBody(server string, id string, params *RunnerCheck
 	return req, nil
 }
 
+// NewRunnerCliGrantRevokeRequest constructs an http.Request for the RunnerCliGrantRevoke method
+func NewRunnerCliGrantRevokeRequest(server string, id string, params *RunnerCliGrantRevokeParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/cli-grant", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewRunnerCliGrantShowRequest constructs an http.Request for the RunnerCliGrantShow method
+func NewRunnerCliGrantShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/cli-grant", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRunnerCliGrantSetRequest calls the generic RunnerCliGrantSet builder with application/json body
+func NewRunnerCliGrantSetRequest(server string, id string, params *RunnerCliGrantSetParams, body RunnerCliGrantSetJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRunnerCliGrantSetRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRunnerCliGrantSetRequestWithBody constructs an http.Request for the RunnerCliGrantSet method, with any body, and a specified content type
+func NewRunnerCliGrantSetRequestWithBody(server string, id string, params *RunnerCliGrantSetParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/cli-grant", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
 // NewRunnerRetryRequest calls the generic RunnerRetry builder with application/json body
 func NewRunnerRetryRequest(server string, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -21682,6 +25219,109 @@ func NewRunnerRetryRequestWithBody(server string, id string, params *RunnerRetry
 		}
 
 		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewRunnerScopedMigrationShowRequest constructs an http.Request for the RunnerScopedMigrationShow method
+func NewRunnerScopedMigrationShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/scoped-migration", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRunnerScopedMigrationStartRequest calls the generic RunnerScopedMigrationStart builder with application/json body
+func NewRunnerScopedMigrationStartRequest(server string, id string, params *RunnerScopedMigrationStartParams, body RunnerScopedMigrationStartJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRunnerScopedMigrationStartRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRunnerScopedMigrationStartRequestWithBody constructs an http.Request for the RunnerScopedMigrationStart method, with any body, and a specified content type
+func NewRunnerScopedMigrationStartRequestWithBody(server string, id string, params *RunnerScopedMigrationStartParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/scoped-migration", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
 
 	}
 
@@ -22911,6 +26551,402 @@ func NewServiceDestroyRequestWithBody(server string, id string, params *ServiceD
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewGitDeploymentBindingShowRequest constructs an http.Request for the GitDeploymentBindingShow method
+func NewGitDeploymentBindingShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/git-deployment", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGitDeploymentBindRequest calls the generic GitDeploymentBind builder with application/json body
+func NewGitDeploymentBindRequest(server string, id string, params *GitDeploymentBindParams, body GitDeploymentBindJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewGitDeploymentBindRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewGitDeploymentBindRequestWithBody constructs an http.Request for the GitDeploymentBind method, with any body, and a specified content type
+func NewGitDeploymentBindRequestWithBody(server string, id string, params *GitDeploymentBindParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/git-deployment", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewGitDeploymentListRequest constructs an http.Request for the GitDeploymentList method
+func NewGitDeploymentListRequest(server string, id string, params *GitDeploymentListParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/git-deployments", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGitDeploymentStartRequest calls the generic GitDeploymentStart builder with application/json body
+func NewGitDeploymentStartRequest(server string, id string, params *GitDeploymentStartParams, body GitDeploymentStartJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewGitDeploymentStartRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewGitDeploymentStartRequestWithBody constructs an http.Request for the GitDeploymentStart method, with any body, and a specified content type
+func NewGitDeploymentStartRequestWithBody(server string, id string, params *GitDeploymentStartParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/git-deployments", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGitDeploymentShowRequest constructs an http.Request for the GitDeploymentShow method
+func NewGitDeploymentShowRequest(server string, id string, deployment string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "deployment", deployment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/git-deployments/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGitDeploymentApproveRequest constructs an http.Request for the GitDeploymentApprove method
+func NewGitDeploymentApproveRequest(server string, id string, deployment string, params *GitDeploymentApproveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "deployment", deployment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/git-deployments/%s/approve", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGitDeploymentRunnerSelectorsRequest constructs an http.Request for the GitDeploymentRunnerSelectors method
+func NewGitDeploymentRunnerSelectorsRequest(server string, id string, params *GitDeploymentRunnerSelectorsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/git-runner-selectors", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "connection_id", params.ConnectionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "repository_id", params.RepositoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -26356,6 +30392,97 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /etcd/config/apply (the `EtcdConfigApply` operationId).
 	EtcdConfigApplyWithResponse(ctx context.Context, params *EtcdConfigApplyParams, body EtcdConfigApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*EtcdConfigApplyResponse, error)
 
+	// GithubConnectionListWithResponse List GitHub App connections in a scope
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /github-connections (the `GithubConnectionList` operationId).
+	GithubConnectionListWithResponse(ctx context.Context, params *GithubConnectionListParams, reqEditors ...RequestEditorFn) (*GithubConnectionListResponse, error)
+
+	// GithubConnectionCreateWithBodyWithResponse Register credentials for an operator-owned GitHub App installation
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /github-connections (the `GithubConnectionCreate` operationId).
+	GithubConnectionCreateWithBodyWithResponse(ctx context.Context, params *GithubConnectionCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GithubConnectionCreateResponse, error)
+
+	// GithubConnectionCreateWithResponse Register credentials for an operator-owned GitHub App installation
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /github-connections (the `GithubConnectionCreate` operationId).
+	GithubConnectionCreateWithResponse(ctx context.Context, params *GithubConnectionCreateParams, body GithubConnectionCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*GithubConnectionCreateResponse, error)
+
+	// GithubConnectionRevokeWithResponse Revoke a GitHub App connection
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /github-connections/{id} (the `GithubConnectionRevoke` operationId).
+	GithubConnectionRevokeWithResponse(ctx context.Context, id string, params *GithubConnectionRevokeParams, reqEditors ...RequestEditorFn) (*GithubConnectionRevokeResponse, error)
+
+	// GithubConnectionShowWithResponse Show GitHub App connection metadata
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /github-connections/{id} (the `GithubConnectionShow` operationId).
+	GithubConnectionShowWithResponse(ctx context.Context, id string, params *GithubConnectionShowParams, reqEditors ...RequestEditorFn) (*GithubConnectionShowResponse, error)
+
+	// GithubConnectionRotateWithBodyWithResponse Replace GitHub App connection credentials
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /github-connections/{id}/credentials (the `GithubConnectionRotate` operationId).
+	GithubConnectionRotateWithBodyWithResponse(ctx context.Context, id string, params *GithubConnectionRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GithubConnectionRotateResponse, error)
+
+	// GithubConnectionRotateWithResponse Replace GitHub App connection credentials
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /github-connections/{id}/credentials (the `GithubConnectionRotate` operationId).
+	GithubConnectionRotateWithResponse(ctx context.Context, id string, params *GithubConnectionRotateParams, body GithubConnectionRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*GithubConnectionRotateResponse, error)
+
+	// GithubConnectionRepositoriesWithResponse List repositories available to the GitHub App installation
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /github-connections/{id}/repositories (the `GithubConnectionRepositories` operationId).
+	GithubConnectionRepositoriesWithResponse(ctx context.Context, id string, params *GithubConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*GithubConnectionRepositoriesResponse, error)
+
+	// GithubRepositoryRunnerDefaultRemoveWithResponse Remove the preferred Runner selector at this repository scope
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultRemove` operationId).
+	GithubRepositoryRunnerDefaultRemoveWithResponse(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultRemoveParams, reqEditors ...RequestEditorFn) (*GithubRepositoryRunnerDefaultRemoveResponse, error)
+
+	// GithubRepositoryRunnerDefaultShowWithResponse Show the preferred Runner selector saved at this repository scope
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultShow` operationId).
+	GithubRepositoryRunnerDefaultShowWithResponse(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultShowParams, reqEditors ...RequestEditorFn) (*GithubRepositoryRunnerDefaultShowResponse, error)
+
+	// GithubRepositoryRunnerDefaultPutWithBodyWithResponse Save the preferred Runner selector for this repository scope
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultPut` operationId).
+	GithubRepositoryRunnerDefaultPutWithBodyWithResponse(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultPutParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GithubRepositoryRunnerDefaultPutResponse, error)
+
+	// GithubRepositoryRunnerDefaultPutWithResponse Save the preferred Runner selector for this repository scope
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultPut` operationId).
+	GithubRepositoryRunnerDefaultPutWithResponse(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultPutParams, body GithubRepositoryRunnerDefaultPutJSONRequestBody, reqEditors ...RequestEditorFn) (*GithubRepositoryRunnerDefaultPutResponse, error)
+
+	// GithubRepositoryWorkflowsWithResponse List GitHub Actions workflows visible in this repository
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /github-connections/{id}/repositories/{repository_id}/workflows (the `GithubRepositoryWorkflows` operationId).
+	GithubRepositoryWorkflowsWithResponse(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryWorkflowsParams, reqEditors ...RequestEditorFn) (*GithubRepositoryWorkflowsResponse, error)
+
 	// HostShowWithResponse Show host health
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -26376,6 +30503,55 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /host/terminal (the `HostTerminal` operationId).
 	HostTerminalWithResponse(ctx context.Context, params *HostTerminalParams, body HostTerminalJSONRequestBody, reqEditors ...RequestEditorFn) (*HostTerminalResponse, error)
+
+	// RemoteHostFetchImageWithBodyWithResponse Fetch an exact public image manifest into an enrolled remote Host
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /hosts/{id}/images/fetch (the `RemoteHostFetchImage` operationId).
+	RemoteHostFetchImageWithBodyWithResponse(ctx context.Context, id string, params *RemoteHostFetchImageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemoteHostFetchImageResponse, error)
+
+	// RemoteHostFetchImageWithResponse Fetch an exact public image manifest into an enrolled remote Host
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /hosts/{id}/images/fetch (the `RemoteHostFetchImage` operationId).
+	RemoteHostFetchImageWithResponse(ctx context.Context, id string, params *RemoteHostFetchImageParams, body RemoteHostFetchImageJSONRequestBody, reqEditors ...RequestEditorFn) (*RemoteHostFetchImageResponse, error)
+
+	// PublicIngressShowWithResponse Show public ingress configuration and eligible Routes for a Host
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /hosts/{id}/public-ingress (the `PublicIngressShow` operationId).
+	PublicIngressShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PublicIngressShowResponse, error)
+
+	// PublicIngressApplyWithBodyWithResponse Apply a reviewed public ingress configuration to a Host
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /hosts/{id}/public-ingress/apply (the `PublicIngressApply` operationId).
+	PublicIngressApplyWithBodyWithResponse(ctx context.Context, id string, params *PublicIngressApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PublicIngressApplyResponse, error)
+
+	// PublicIngressApplyWithResponse Apply a reviewed public ingress configuration to a Host
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /hosts/{id}/public-ingress/apply (the `PublicIngressApply` operationId).
+	PublicIngressApplyWithResponse(ctx context.Context, id string, params *PublicIngressApplyParams, body PublicIngressApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*PublicIngressApplyResponse, error)
+
+	// PublicIngressPreflightWithBodyWithResponse Review a public ingress configuration for a Host
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /hosts/{id}/public-ingress/preflight (the `PublicIngressPreflight` operationId).
+	PublicIngressPreflightWithBodyWithResponse(ctx context.Context, id string, params *PublicIngressPreflightParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PublicIngressPreflightResponse, error)
+
+	// PublicIngressPreflightWithResponse Review a public ingress configuration for a Host
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /hosts/{id}/public-ingress/preflight (the `PublicIngressPreflight` operationId).
+	PublicIngressPreflightWithResponse(ctx context.Context, id string, params *PublicIngressPreflightParams, body PublicIngressPreflightJSONRequestBody, reqEditors ...RequestEditorFn) (*PublicIngressPreflightResponse, error)
 
 	// ImageListWithResponse List images in the local Agent host Docker daemon
 	//
@@ -26594,6 +30770,55 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /releases/{id} (the `ReleaseShow` operationId).
 	ReleaseShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ReleaseShowResponse, error)
 
+	// RemoteHostListWithResponse List remote Hosts
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /remote-hosts (the `RemoteHostList` operationId).
+	RemoteHostListWithResponse(ctx context.Context, params *RemoteHostListParams, reqEditors ...RequestEditorFn) (*RemoteHostListResponse, error)
+
+	// RemoteHostCreateWithBodyWithResponse Register a remote Host
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /remote-hosts (the `RemoteHostCreate` operationId).
+	RemoteHostCreateWithBodyWithResponse(ctx context.Context, params *RemoteHostCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemoteHostCreateResponse, error)
+
+	// RemoteHostCreateWithResponse Register a remote Host
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /remote-hosts (the `RemoteHostCreate` operationId).
+	RemoteHostCreateWithResponse(ctx context.Context, params *RemoteHostCreateParams, body RemoteHostCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*RemoteHostCreateResponse, error)
+
+	// RemoteHostShowWithResponse Show a remote Host
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /remote-hosts/{id} (the `RemoteHostShow` operationId).
+	RemoteHostShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RemoteHostShowResponse, error)
+
+	// RemoteHostRevokeEnrollmentWithResponse Revoke a remote Host's exact Agent generation
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /remote-hosts/{id}/enrollment (the `RemoteHostRevokeEnrollment` operationId).
+	RemoteHostRevokeEnrollmentWithResponse(ctx context.Context, id string, params *RemoteHostRevokeEnrollmentParams, reqEditors ...RequestEditorFn) (*RemoteHostRevokeEnrollmentResponse, error)
+
+	// RemoteHostStageEnrollmentWithBodyWithResponse Stage an Agent certificate from a signed CSR
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /remote-hosts/{id}/enrollment (the `RemoteHostStageEnrollment` operationId).
+	RemoteHostStageEnrollmentWithBodyWithResponse(ctx context.Context, id string, params *RemoteHostStageEnrollmentParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemoteHostStageEnrollmentResponse, error)
+
+	// RemoteHostStageEnrollmentWithResponse Stage an Agent certificate from a signed CSR
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /remote-hosts/{id}/enrollment (the `RemoteHostStageEnrollment` operationId).
+	RemoteHostStageEnrollmentWithResponse(ctx context.Context, id string, params *RemoteHostStageEnrollmentParams, body RemoteHostStageEnrollmentJSONRequestBody, reqEditors ...RequestEditorFn) (*RemoteHostStageEnrollmentResponse, error)
+
 	// RouteListWithResponse List routes
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -26748,6 +30973,34 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /runners/{id}/checks (the `RunnerCheck` operationId).
 	RunnerCheckWithResponse(ctx context.Context, id string, params *RunnerCheckParams, body RunnerCheckJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerCheckResponse, error)
 
+	// RunnerCliGrantRevokeWithResponse Revoke CLI actions while keeping Runner build authentication
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /runners/{id}/cli-grant (the `RunnerCliGrantRevoke` operationId).
+	RunnerCliGrantRevokeWithResponse(ctx context.Context, id string, params *RunnerCliGrantRevokeParams, reqEditors ...RequestEditorFn) (*RunnerCliGrantRevokeResponse, error)
+
+	// RunnerCliGrantShowWithResponse Show the CLI grant attached to the Runner's scoped credential
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /runners/{id}/cli-grant (the `RunnerCliGrantShow` operationId).
+	RunnerCliGrantShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RunnerCliGrantShowResponse, error)
+
+	// RunnerCliGrantSetWithBodyWithResponse Replace the exact Runner CLI grant for the checked revision
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /runners/{id}/cli-grant (the `RunnerCliGrantSet` operationId).
+	RunnerCliGrantSetWithBodyWithResponse(ctx context.Context, id string, params *RunnerCliGrantSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerCliGrantSetResponse, error)
+
+	// RunnerCliGrantSetWithResponse Replace the exact Runner CLI grant for the checked revision
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /runners/{id}/cli-grant (the `RunnerCliGrantSet` operationId).
+	RunnerCliGrantSetWithResponse(ctx context.Context, id string, params *RunnerCliGrantSetParams, body RunnerCliGrantSetJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerCliGrantSetResponse, error)
+
 	// RunnerRetryWithBodyWithResponse Retry failed Runner creation
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -26761,6 +31014,27 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
 	RunnerRetryWithResponse(ctx context.Context, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerRetryResponse, error)
+
+	// RunnerScopedMigrationShowWithResponse Show scoped Runner migration status
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /runners/{id}/scoped-migration (the `RunnerScopedMigrationShow` operationId).
+	RunnerScopedMigrationShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RunnerScopedMigrationShowResponse, error)
+
+	// RunnerScopedMigrationStartWithBodyWithResponse Move an installed Runner to scoped access after its current job completes
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /runners/{id}/scoped-migration (the `RunnerScopedMigrationStart` operationId).
+	RunnerScopedMigrationStartWithBodyWithResponse(ctx context.Context, id string, params *RunnerScopedMigrationStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerScopedMigrationStartResponse, error)
+
+	// RunnerScopedMigrationStartWithResponse Move an installed Runner to scoped access after its current job completes
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /runners/{id}/scoped-migration (the `RunnerScopedMigrationStart` operationId).
+	RunnerScopedMigrationStartWithResponse(ctx context.Context, id string, params *RunnerScopedMigrationStartParams, body RunnerScopedMigrationStartJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerScopedMigrationStartResponse, error)
 
 	// RunnerUpdateShowWithResponse Show latest or selected Runner software update
 	//
@@ -27006,6 +31280,69 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 	ServiceDestroyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, body ServiceDestroyJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error)
+
+	// GitDeploymentBindingShowWithResponse Show a Service's GitHub deployment binding
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /services/{id}/git-deployment (the `GitDeploymentBindingShow` operationId).
+	GitDeploymentBindingShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GitDeploymentBindingShowResponse, error)
+
+	// GitDeploymentBindWithBodyWithResponse Save a Service's GitHub deployment binding
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /services/{id}/git-deployment (the `GitDeploymentBind` operationId).
+	GitDeploymentBindWithBodyWithResponse(ctx context.Context, id string, params *GitDeploymentBindParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GitDeploymentBindResponse, error)
+
+	// GitDeploymentBindWithResponse Save a Service's GitHub deployment binding
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /services/{id}/git-deployment (the `GitDeploymentBind` operationId).
+	GitDeploymentBindWithResponse(ctx context.Context, id string, params *GitDeploymentBindParams, body GitDeploymentBindJSONRequestBody, reqEditors ...RequestEditorFn) (*GitDeploymentBindResponse, error)
+
+	// GitDeploymentListWithResponse List a Service's GitHub deployments
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /services/{id}/git-deployments (the `GitDeploymentList` operationId).
+	GitDeploymentListWithResponse(ctx context.Context, id string, params *GitDeploymentListParams, reqEditors ...RequestEditorFn) (*GitDeploymentListResponse, error)
+
+	// GitDeploymentStartWithBodyWithResponse Start a GitHub deployment for a Service
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/git-deployments (the `GitDeploymentStart` operationId).
+	GitDeploymentStartWithBodyWithResponse(ctx context.Context, id string, params *GitDeploymentStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GitDeploymentStartResponse, error)
+
+	// GitDeploymentStartWithResponse Start a GitHub deployment for a Service
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/git-deployments (the `GitDeploymentStart` operationId).
+	GitDeploymentStartWithResponse(ctx context.Context, id string, params *GitDeploymentStartParams, body GitDeploymentStartJSONRequestBody, reqEditors ...RequestEditorFn) (*GitDeploymentStartResponse, error)
+
+	// GitDeploymentShowWithResponse Show a Service's GitHub deployment
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /services/{id}/git-deployments/{deployment} (the `GitDeploymentShow` operationId).
+	GitDeploymentShowWithResponse(ctx context.Context, id string, deployment string, reqEditors ...RequestEditorFn) (*GitDeploymentShowResponse, error)
+
+	// GitDeploymentApproveWithResponse Approve a verified GitHub build for deployment
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/git-deployments/{deployment}/approve (the `GitDeploymentApprove` operationId).
+	GitDeploymentApproveWithResponse(ctx context.Context, id string, deployment string, params *GitDeploymentApproveParams, reqEditors ...RequestEditorFn) (*GitDeploymentApproveResponse, error)
+
+	// GitDeploymentRunnerSelectorsWithResponse List Runner selectors available to this Service and repository
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /services/{id}/git-runner-selectors (the `GitDeploymentRunnerSelectors` operationId).
+	GitDeploymentRunnerSelectorsWithResponse(ctx context.Context, id string, params *GitDeploymentRunnerSelectorsParams, reqEditors ...RequestEditorFn) (*GitDeploymentRunnerSelectorsResponse, error)
 
 	// ServiceLogsWithResponse Stream service logs
 	//
@@ -31456,6 +35793,661 @@ func (r EtcdConfigApplyResponse) ContentType() string {
 	return ""
 }
 
+type GithubConnectionListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageGitHubConnection
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GithubConnectionListResponse) GetJSON200() *PageGitHubConnection {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GithubConnectionListResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GithubConnectionListResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GithubConnectionListResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GithubConnectionListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GithubConnectionListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GithubConnectionListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GithubConnectionListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GithubConnectionCreateResponse201Headers the declared response headers of an HTTP 201 response for GithubConnectionCreate
+type GithubConnectionCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type GithubConnectionCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *GitHubConnection
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *GithubConnectionCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r GithubConnectionCreateResponse) GetJSON201() *GitHubConnection {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GithubConnectionCreateResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GithubConnectionCreateResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GithubConnectionCreateResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GithubConnectionCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GithubConnectionCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GithubConnectionCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GithubConnectionCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GithubConnectionRevokeResponse204Headers the declared response headers of an HTTP 204 response for GithubConnectionRevoke
+type GithubConnectionRevokeResponse204Headers struct {
+	ContentType *string
+}
+
+type GithubConnectionRevokeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers204 the parsed response headers for an HTTP 204 response
+	Headers204 *GithubConnectionRevokeResponse204Headers
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GithubConnectionRevokeResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GithubConnectionRevokeResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GithubConnectionRevokeResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GithubConnectionRevokeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GithubConnectionRevokeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GithubConnectionRevokeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GithubConnectionRevokeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GithubConnectionShowResponse200Headers the declared response headers of an HTTP 200 response for GithubConnectionShow
+type GithubConnectionShowResponse200Headers struct {
+	ETag *string
+}
+
+type GithubConnectionShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *GitHubConnection
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GithubConnectionShowResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GithubConnectionShowResponse) GetJSON200() *GitHubConnection {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GithubConnectionShowResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GithubConnectionShowResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GithubConnectionShowResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GithubConnectionShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GithubConnectionShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GithubConnectionShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GithubConnectionShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GithubConnectionRotateResponse200Headers the declared response headers of an HTTP 200 response for GithubConnectionRotate
+type GithubConnectionRotateResponse200Headers struct {
+	ContentType *string
+}
+
+type GithubConnectionRotateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *GitHubConnection
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GithubConnectionRotateResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GithubConnectionRotateResponse) GetJSON200() *GitHubConnection {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GithubConnectionRotateResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GithubConnectionRotateResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GithubConnectionRotateResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GithubConnectionRotateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GithubConnectionRotateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GithubConnectionRotateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GithubConnectionRotateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GithubConnectionRepositoriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageGitHubRepository
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GithubConnectionRepositoriesResponse) GetJSON200() *PageGitHubRepository {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GithubConnectionRepositoriesResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GithubConnectionRepositoriesResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GithubConnectionRepositoriesResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GithubConnectionRepositoriesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GithubConnectionRepositoriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GithubConnectionRepositoriesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GithubConnectionRepositoriesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GithubRepositoryRunnerDefaultRemoveResponse204Headers the declared response headers of an HTTP 204 response for GithubRepositoryRunnerDefaultRemove
+type GithubRepositoryRunnerDefaultRemoveResponse204Headers struct {
+	ContentType *string
+}
+
+type GithubRepositoryRunnerDefaultRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers204 the parsed response headers for an HTTP 204 response
+	Headers204 *GithubRepositoryRunnerDefaultRemoveResponse204Headers
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GithubRepositoryRunnerDefaultRemoveResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GithubRepositoryRunnerDefaultRemoveResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GithubRepositoryRunnerDefaultRemoveResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GithubRepositoryRunnerDefaultRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GithubRepositoryRunnerDefaultRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GithubRepositoryRunnerDefaultRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GithubRepositoryRunnerDefaultRemoveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GithubRepositoryRunnerDefaultShowResponse200Headers the declared response headers of an HTTP 200 response for GithubRepositoryRunnerDefaultShow
+type GithubRepositoryRunnerDefaultShowResponse200Headers struct {
+	ETag *string
+}
+
+type GithubRepositoryRunnerDefaultShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *GitRepositoryRunnerDefaultState
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GithubRepositoryRunnerDefaultShowResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GithubRepositoryRunnerDefaultShowResponse) GetJSON200() *GitRepositoryRunnerDefaultState {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GithubRepositoryRunnerDefaultShowResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GithubRepositoryRunnerDefaultShowResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GithubRepositoryRunnerDefaultShowResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GithubRepositoryRunnerDefaultShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GithubRepositoryRunnerDefaultShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GithubRepositoryRunnerDefaultShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GithubRepositoryRunnerDefaultShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GithubRepositoryRunnerDefaultPutResponse200Headers the declared response headers of an HTTP 200 response for GithubRepositoryRunnerDefaultPut
+type GithubRepositoryRunnerDefaultPutResponse200Headers struct {
+	ContentType *string
+}
+
+type GithubRepositoryRunnerDefaultPutResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *GitRepositoryRunnerDefaultState
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GithubRepositoryRunnerDefaultPutResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GithubRepositoryRunnerDefaultPutResponse) GetJSON200() *GitRepositoryRunnerDefaultState {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GithubRepositoryRunnerDefaultPutResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GithubRepositoryRunnerDefaultPutResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GithubRepositoryRunnerDefaultPutResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GithubRepositoryRunnerDefaultPutResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GithubRepositoryRunnerDefaultPutResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GithubRepositoryRunnerDefaultPutResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GithubRepositoryRunnerDefaultPutResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GithubRepositoryWorkflowsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageGitHubWorkflow
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GithubRepositoryWorkflowsResponse) GetJSON200() *PageGitHubWorkflow {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GithubRepositoryWorkflowsResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GithubRepositoryWorkflowsResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GithubRepositoryWorkflowsResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GithubRepositoryWorkflowsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GithubRepositoryWorkflowsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GithubRepositoryWorkflowsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GithubRepositoryWorkflowsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type HostShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -31554,6 +36546,219 @@ func (r HostTerminalResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r HostTerminalResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RemoteHostFetchImageResponse202Headers the declared response headers of an HTTP 202 response for RemoteHostFetchImage
+type RemoteHostFetchImageResponse202Headers struct {
+	ContentType *string
+}
+
+type RemoteHostFetchImageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RemoteHostFetchImageResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RemoteHostFetchImageResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RemoteHostFetchImageResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoteHostFetchImageResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoteHostFetchImageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoteHostFetchImageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoteHostFetchImageResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PublicIngressShowResponse200Headers the declared response headers of an HTTP 200 response for PublicIngressShow
+type PublicIngressShowResponse200Headers struct {
+	ETag *string
+}
+
+type PublicIngressShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PublicIngressState
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PublicIngressShowResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PublicIngressShowResponse) GetJSON200() *PublicIngressState {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PublicIngressShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PublicIngressShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PublicIngressShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PublicIngressShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PublicIngressShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// PublicIngressApplyResponse202Headers the declared response headers of an HTTP 202 response for PublicIngressApply
+type PublicIngressApplyResponse202Headers struct {
+	ContentType *string
+}
+
+type PublicIngressApplyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *PublicIngressApplyResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r PublicIngressApplyResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PublicIngressApplyResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PublicIngressApplyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PublicIngressApplyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PublicIngressApplyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PublicIngressApplyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PublicIngressPreflightResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PublicIngressReview
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PublicIngressPreflightResponse) GetJSON200() *PublicIngressReview {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PublicIngressPreflightResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PublicIngressPreflightResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PublicIngressPreflightResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PublicIngressPreflightResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PublicIngressPreflightResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -32590,6 +37795,330 @@ func (r ReleaseShowResponse) ContentType() string {
 	return ""
 }
 
+type RemoteHostListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageRemoteHost
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RemoteHostListResponse) GetJSON200() *PageRemoteHost {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r RemoteHostListResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r RemoteHostListResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r RemoteHostListResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoteHostListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoteHostListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoteHostListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoteHostListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RemoteHostCreateResponse201Headers the declared response headers of an HTTP 201 response for RemoteHostCreate
+type RemoteHostCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type RemoteHostCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *RemoteHost
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *RemoteHostCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r RemoteHostCreateResponse) GetJSON201() *RemoteHost {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r RemoteHostCreateResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r RemoteHostCreateResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r RemoteHostCreateResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoteHostCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoteHostCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoteHostCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoteHostCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RemoteHostShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RemoteHost
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RemoteHostShowResponse) GetJSON200() *RemoteHost {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r RemoteHostShowResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r RemoteHostShowResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r RemoteHostShowResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoteHostShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoteHostShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoteHostShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoteHostShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RemoteHostRevokeEnrollmentResponse204Headers the declared response headers of an HTTP 204 response for RemoteHostRevokeEnrollment
+type RemoteHostRevokeEnrollmentResponse204Headers struct {
+	ContentType *string
+}
+
+type RemoteHostRevokeEnrollmentResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers204 the parsed response headers for an HTTP 204 response
+	Headers204 *RemoteHostRevokeEnrollmentResponse204Headers
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r RemoteHostRevokeEnrollmentResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r RemoteHostRevokeEnrollmentResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r RemoteHostRevokeEnrollmentResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoteHostRevokeEnrollmentResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoteHostRevokeEnrollmentResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoteHostRevokeEnrollmentResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoteHostRevokeEnrollmentResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RemoteHostStageEnrollmentResponse200Headers the declared response headers of an HTTP 200 response for RemoteHostStageEnrollment
+type RemoteHostStageEnrollmentResponse200Headers struct {
+	ContentType *string
+}
+
+type RemoteHostStageEnrollmentResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RemoteHostEnrollment
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *RemoteHostStageEnrollmentResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RemoteHostStageEnrollmentResponse) GetJSON200() *RemoteHostEnrollment {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r RemoteHostStageEnrollmentResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r RemoteHostStageEnrollmentResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r RemoteHostStageEnrollmentResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoteHostStageEnrollmentResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoteHostStageEnrollmentResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoteHostStageEnrollmentResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoteHostStageEnrollmentResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type RouteListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -33318,6 +38847,159 @@ func (r RunnerCheckResponse) ContentType() string {
 	return ""
 }
 
+type RunnerCliGrantRevokeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerCliGrantRevokeResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerCliGrantRevokeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerCliGrantRevokeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerCliGrantRevokeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerCliGrantRevokeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RunnerCliGrantShowResponse200Headers the declared response headers of an HTTP 200 response for RunnerCliGrantShow
+type RunnerCliGrantShowResponse200Headers struct {
+	CacheControl *string
+	ETag         *string
+}
+
+type RunnerCliGrantShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RunnerCLIGrantStatus
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *RunnerCliGrantShowResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RunnerCliGrantShowResponse) GetJSON200() *RunnerCLIGrantStatus {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerCliGrantShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerCliGrantShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerCliGrantShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerCliGrantShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerCliGrantShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RunnerCliGrantSetResponse200Headers the declared response headers of an HTTP 200 response for RunnerCliGrantSet
+type RunnerCliGrantSetResponse200Headers struct {
+	CacheControl *string
+	ETag         *string
+}
+
+type RunnerCliGrantSetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RunnerCLIGrantStatus
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *RunnerCliGrantSetResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RunnerCliGrantSetResponse) GetJSON200() *RunnerCLIGrantStatus {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerCliGrantSetResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerCliGrantSetResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerCliGrantSetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerCliGrantSetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerCliGrantSetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // RunnerRetryResponse202Headers the declared response headers of an HTTP 202 response for RunnerRetry
 type RunnerRetryResponse202Headers struct {
 	ContentType *string
@@ -33367,6 +39049,116 @@ func (r RunnerRetryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r RunnerRetryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RunnerScopedMigrationShowResponse200Headers the declared response headers of an HTTP 200 response for RunnerScopedMigrationShow
+type RunnerScopedMigrationShowResponse200Headers struct {
+	ETag *string
+}
+
+type RunnerScopedMigrationShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RunnerScopedMigrationStatus
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *RunnerScopedMigrationShowResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RunnerScopedMigrationShowResponse) GetJSON200() *RunnerScopedMigrationStatus {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerScopedMigrationShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerScopedMigrationShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerScopedMigrationShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerScopedMigrationShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerScopedMigrationShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RunnerScopedMigrationStartResponse202Headers the declared response headers of an HTTP 202 response for RunnerScopedMigrationStart
+type RunnerScopedMigrationStartResponse202Headers struct {
+	ContentType *string
+}
+
+type RunnerScopedMigrationStartResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RunnerScopedMigrationStartResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RunnerScopedMigrationStartResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerScopedMigrationStartResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerScopedMigrationStartResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerScopedMigrationStartResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerScopedMigrationStartResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerScopedMigrationStartResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -34514,6 +40306,468 @@ func (r ServiceDestroyResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ServiceDestroyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GitDeploymentBindingShowResponse200Headers the declared response headers of an HTTP 200 response for GitDeploymentBindingShow
+type GitDeploymentBindingShowResponse200Headers struct {
+	ETag *string
+}
+
+type GitDeploymentBindingShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *GitDeploymentBindingState
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GitDeploymentBindingShowResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GitDeploymentBindingShowResponse) GetJSON200() *GitDeploymentBindingState {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GitDeploymentBindingShowResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GitDeploymentBindingShowResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GitDeploymentBindingShowResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GitDeploymentBindingShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GitDeploymentBindingShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GitDeploymentBindingShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GitDeploymentBindingShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GitDeploymentBindResponse200Headers the declared response headers of an HTTP 200 response for GitDeploymentBind
+type GitDeploymentBindResponse200Headers struct {
+	ContentType *string
+}
+
+type GitDeploymentBindResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *GitDeploymentBindingState
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GitDeploymentBindResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GitDeploymentBindResponse) GetJSON200() *GitDeploymentBindingState {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GitDeploymentBindResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GitDeploymentBindResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GitDeploymentBindResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GitDeploymentBindResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GitDeploymentBindResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GitDeploymentBindResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GitDeploymentBindResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GitDeploymentListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageGitDeployment
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GitDeploymentListResponse) GetJSON200() *PageGitDeployment {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GitDeploymentListResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GitDeploymentListResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GitDeploymentListResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GitDeploymentListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GitDeploymentListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GitDeploymentListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GitDeploymentListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GitDeploymentStartResponse202Headers the declared response headers of an HTTP 202 response for GitDeploymentStart
+type GitDeploymentStartResponse202Headers struct {
+	ContentType *string
+}
+
+type GitDeploymentStartResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *GitDeployment
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *GitDeploymentStartResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r GitDeploymentStartResponse) GetJSON202() *GitDeployment {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GitDeploymentStartResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GitDeploymentStartResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GitDeploymentStartResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GitDeploymentStartResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GitDeploymentStartResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GitDeploymentStartResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GitDeploymentStartResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GitDeploymentShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *GitDeployment
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GitDeploymentShowResponse) GetJSON200() *GitDeployment {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GitDeploymentShowResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GitDeploymentShowResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GitDeploymentShowResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GitDeploymentShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GitDeploymentShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GitDeploymentShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GitDeploymentShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GitDeploymentApproveResponse202Headers the declared response headers of an HTTP 202 response for GitDeploymentApprove
+type GitDeploymentApproveResponse202Headers struct {
+	ContentType *string
+}
+
+type GitDeploymentApproveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *GitDeployment
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *GitDeploymentApproveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r GitDeploymentApproveResponse) GetJSON202() *GitDeployment {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GitDeploymentApproveResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GitDeploymentApproveResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GitDeploymentApproveResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GitDeploymentApproveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GitDeploymentApproveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GitDeploymentApproveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GitDeploymentApproveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GitDeploymentRunnerSelectorsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageGitRunnerSelector
+	// ApplicationproblemJSON422 the response for an HTTP 422 `application/problem+json` response
+	ApplicationproblemJSON422 *Error
+	// ApplicationproblemJSON500 the response for an HTTP 500 `application/problem+json` response
+	ApplicationproblemJSON500 *Error
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GitDeploymentRunnerSelectorsResponse) GetJSON200() *PageGitRunnerSelector {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON422 returns the response for an HTTP 422 `application/problem+json` response
+func (r GitDeploymentRunnerSelectorsResponse) GetApplicationproblemJSON422() *Error {
+	return r.ApplicationproblemJSON422
+}
+
+// GetApplicationproblemJSON500 returns the response for an HTTP 500 `application/problem+json` response
+func (r GitDeploymentRunnerSelectorsResponse) GetApplicationproblemJSON500() *Error {
+	return r.ApplicationproblemJSON500
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GitDeploymentRunnerSelectorsResponse) GetApplicationproblemJSON503() *Error {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r GitDeploymentRunnerSelectorsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GitDeploymentRunnerSelectorsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GitDeploymentRunnerSelectorsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GitDeploymentRunnerSelectorsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -38124,6 +44378,175 @@ func (c *ClientWithResponses) EtcdConfigApplyWithResponse(ctx context.Context, p
 	return ParseEtcdConfigApplyResponse(rsp)
 }
 
+// GithubConnectionListWithResponse List GitHub App connections in a scope
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /github-connections (the `GithubConnectionList` operationId).
+func (c *ClientWithResponses) GithubConnectionListWithResponse(ctx context.Context, params *GithubConnectionListParams, reqEditors ...RequestEditorFn) (*GithubConnectionListResponse, error) {
+	rsp, err := c.GithubConnectionList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubConnectionListResponse(rsp)
+}
+
+// GithubConnectionCreateWithBodyWithResponse Register credentials for an operator-owned GitHub App installation
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /github-connections (the `GithubConnectionCreate` operationId).
+func (c *ClientWithResponses) GithubConnectionCreateWithBodyWithResponse(ctx context.Context, params *GithubConnectionCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GithubConnectionCreateResponse, error) {
+	rsp, err := c.GithubConnectionCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubConnectionCreateResponse(rsp)
+}
+
+// GithubConnectionCreateWithResponse Register credentials for an operator-owned GitHub App installation
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /github-connections (the `GithubConnectionCreate` operationId).
+func (c *ClientWithResponses) GithubConnectionCreateWithResponse(ctx context.Context, params *GithubConnectionCreateParams, body GithubConnectionCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*GithubConnectionCreateResponse, error) {
+	rsp, err := c.GithubConnectionCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubConnectionCreateResponse(rsp)
+}
+
+// GithubConnectionRevokeWithResponse Revoke a GitHub App connection
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /github-connections/{id} (the `GithubConnectionRevoke` operationId).
+func (c *ClientWithResponses) GithubConnectionRevokeWithResponse(ctx context.Context, id string, params *GithubConnectionRevokeParams, reqEditors ...RequestEditorFn) (*GithubConnectionRevokeResponse, error) {
+	rsp, err := c.GithubConnectionRevoke(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubConnectionRevokeResponse(rsp)
+}
+
+// GithubConnectionShowWithResponse Show GitHub App connection metadata
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /github-connections/{id} (the `GithubConnectionShow` operationId).
+func (c *ClientWithResponses) GithubConnectionShowWithResponse(ctx context.Context, id string, params *GithubConnectionShowParams, reqEditors ...RequestEditorFn) (*GithubConnectionShowResponse, error) {
+	rsp, err := c.GithubConnectionShow(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubConnectionShowResponse(rsp)
+}
+
+// GithubConnectionRotateWithBodyWithResponse Replace GitHub App connection credentials
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /github-connections/{id}/credentials (the `GithubConnectionRotate` operationId).
+func (c *ClientWithResponses) GithubConnectionRotateWithBodyWithResponse(ctx context.Context, id string, params *GithubConnectionRotateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GithubConnectionRotateResponse, error) {
+	rsp, err := c.GithubConnectionRotateWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubConnectionRotateResponse(rsp)
+}
+
+// GithubConnectionRotateWithResponse Replace GitHub App connection credentials
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /github-connections/{id}/credentials (the `GithubConnectionRotate` operationId).
+func (c *ClientWithResponses) GithubConnectionRotateWithResponse(ctx context.Context, id string, params *GithubConnectionRotateParams, body GithubConnectionRotateJSONRequestBody, reqEditors ...RequestEditorFn) (*GithubConnectionRotateResponse, error) {
+	rsp, err := c.GithubConnectionRotate(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubConnectionRotateResponse(rsp)
+}
+
+// GithubConnectionRepositoriesWithResponse List repositories available to the GitHub App installation
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /github-connections/{id}/repositories (the `GithubConnectionRepositories` operationId).
+func (c *ClientWithResponses) GithubConnectionRepositoriesWithResponse(ctx context.Context, id string, params *GithubConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*GithubConnectionRepositoriesResponse, error) {
+	rsp, err := c.GithubConnectionRepositories(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubConnectionRepositoriesResponse(rsp)
+}
+
+// GithubRepositoryRunnerDefaultRemoveWithResponse Remove the preferred Runner selector at this repository scope
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultRemove` operationId).
+func (c *ClientWithResponses) GithubRepositoryRunnerDefaultRemoveWithResponse(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultRemoveParams, reqEditors ...RequestEditorFn) (*GithubRepositoryRunnerDefaultRemoveResponse, error) {
+	rsp, err := c.GithubRepositoryRunnerDefaultRemove(ctx, id, repositoryId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubRepositoryRunnerDefaultRemoveResponse(rsp)
+}
+
+// GithubRepositoryRunnerDefaultShowWithResponse Show the preferred Runner selector saved at this repository scope
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultShow` operationId).
+func (c *ClientWithResponses) GithubRepositoryRunnerDefaultShowWithResponse(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultShowParams, reqEditors ...RequestEditorFn) (*GithubRepositoryRunnerDefaultShowResponse, error) {
+	rsp, err := c.GithubRepositoryRunnerDefaultShow(ctx, id, repositoryId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubRepositoryRunnerDefaultShowResponse(rsp)
+}
+
+// GithubRepositoryRunnerDefaultPutWithBodyWithResponse Save the preferred Runner selector for this repository scope
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultPut` operationId).
+func (c *ClientWithResponses) GithubRepositoryRunnerDefaultPutWithBodyWithResponse(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultPutParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GithubRepositoryRunnerDefaultPutResponse, error) {
+	rsp, err := c.GithubRepositoryRunnerDefaultPutWithBody(ctx, id, repositoryId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubRepositoryRunnerDefaultPutResponse(rsp)
+}
+
+// GithubRepositoryRunnerDefaultPutWithResponse Save the preferred Runner selector for this repository scope
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /github-connections/{id}/repositories/{repository_id}/runner-default (the `GithubRepositoryRunnerDefaultPut` operationId).
+func (c *ClientWithResponses) GithubRepositoryRunnerDefaultPutWithResponse(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryRunnerDefaultPutParams, body GithubRepositoryRunnerDefaultPutJSONRequestBody, reqEditors ...RequestEditorFn) (*GithubRepositoryRunnerDefaultPutResponse, error) {
+	rsp, err := c.GithubRepositoryRunnerDefaultPut(ctx, id, repositoryId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubRepositoryRunnerDefaultPutResponse(rsp)
+}
+
+// GithubRepositoryWorkflowsWithResponse List GitHub Actions workflows visible in this repository
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /github-connections/{id}/repositories/{repository_id}/workflows (the `GithubRepositoryWorkflows` operationId).
+func (c *ClientWithResponses) GithubRepositoryWorkflowsWithResponse(ctx context.Context, id string, repositoryId int64, params *GithubRepositoryWorkflowsParams, reqEditors ...RequestEditorFn) (*GithubRepositoryWorkflowsResponse, error) {
+	rsp, err := c.GithubRepositoryWorkflows(ctx, id, repositoryId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGithubRepositoryWorkflowsResponse(rsp)
+}
+
 // HostShowWithResponse Show host health
 //
 // Returns a wrapper object for the known response body format(s).
@@ -38161,6 +44584,97 @@ func (c *ClientWithResponses) HostTerminalWithResponse(ctx context.Context, para
 		return nil, err
 	}
 	return ParseHostTerminalResponse(rsp)
+}
+
+// RemoteHostFetchImageWithBodyWithResponse Fetch an exact public image manifest into an enrolled remote Host
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /hosts/{id}/images/fetch (the `RemoteHostFetchImage` operationId).
+func (c *ClientWithResponses) RemoteHostFetchImageWithBodyWithResponse(ctx context.Context, id string, params *RemoteHostFetchImageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemoteHostFetchImageResponse, error) {
+	rsp, err := c.RemoteHostFetchImageWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteHostFetchImageResponse(rsp)
+}
+
+// RemoteHostFetchImageWithResponse Fetch an exact public image manifest into an enrolled remote Host
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /hosts/{id}/images/fetch (the `RemoteHostFetchImage` operationId).
+func (c *ClientWithResponses) RemoteHostFetchImageWithResponse(ctx context.Context, id string, params *RemoteHostFetchImageParams, body RemoteHostFetchImageJSONRequestBody, reqEditors ...RequestEditorFn) (*RemoteHostFetchImageResponse, error) {
+	rsp, err := c.RemoteHostFetchImage(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteHostFetchImageResponse(rsp)
+}
+
+// PublicIngressShowWithResponse Show public ingress configuration and eligible Routes for a Host
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /hosts/{id}/public-ingress (the `PublicIngressShow` operationId).
+func (c *ClientWithResponses) PublicIngressShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PublicIngressShowResponse, error) {
+	rsp, err := c.PublicIngressShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePublicIngressShowResponse(rsp)
+}
+
+// PublicIngressApplyWithBodyWithResponse Apply a reviewed public ingress configuration to a Host
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /hosts/{id}/public-ingress/apply (the `PublicIngressApply` operationId).
+func (c *ClientWithResponses) PublicIngressApplyWithBodyWithResponse(ctx context.Context, id string, params *PublicIngressApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PublicIngressApplyResponse, error) {
+	rsp, err := c.PublicIngressApplyWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePublicIngressApplyResponse(rsp)
+}
+
+// PublicIngressApplyWithResponse Apply a reviewed public ingress configuration to a Host
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /hosts/{id}/public-ingress/apply (the `PublicIngressApply` operationId).
+func (c *ClientWithResponses) PublicIngressApplyWithResponse(ctx context.Context, id string, params *PublicIngressApplyParams, body PublicIngressApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*PublicIngressApplyResponse, error) {
+	rsp, err := c.PublicIngressApply(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePublicIngressApplyResponse(rsp)
+}
+
+// PublicIngressPreflightWithBodyWithResponse Review a public ingress configuration for a Host
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /hosts/{id}/public-ingress/preflight (the `PublicIngressPreflight` operationId).
+func (c *ClientWithResponses) PublicIngressPreflightWithBodyWithResponse(ctx context.Context, id string, params *PublicIngressPreflightParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PublicIngressPreflightResponse, error) {
+	rsp, err := c.PublicIngressPreflightWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePublicIngressPreflightResponse(rsp)
+}
+
+// PublicIngressPreflightWithResponse Review a public ingress configuration for a Host
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /hosts/{id}/public-ingress/preflight (the `PublicIngressPreflight` operationId).
+func (c *ClientWithResponses) PublicIngressPreflightWithResponse(ctx context.Context, id string, params *PublicIngressPreflightParams, body PublicIngressPreflightJSONRequestBody, reqEditors ...RequestEditorFn) (*PublicIngressPreflightResponse, error) {
+	rsp, err := c.PublicIngressPreflight(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePublicIngressPreflightResponse(rsp)
 }
 
 // ImageListWithResponse List images in the local Agent host Docker daemon
@@ -38566,6 +45080,97 @@ func (c *ClientWithResponses) ReleaseShowWithResponse(ctx context.Context, id st
 	return ParseReleaseShowResponse(rsp)
 }
 
+// RemoteHostListWithResponse List remote Hosts
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /remote-hosts (the `RemoteHostList` operationId).
+func (c *ClientWithResponses) RemoteHostListWithResponse(ctx context.Context, params *RemoteHostListParams, reqEditors ...RequestEditorFn) (*RemoteHostListResponse, error) {
+	rsp, err := c.RemoteHostList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteHostListResponse(rsp)
+}
+
+// RemoteHostCreateWithBodyWithResponse Register a remote Host
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /remote-hosts (the `RemoteHostCreate` operationId).
+func (c *ClientWithResponses) RemoteHostCreateWithBodyWithResponse(ctx context.Context, params *RemoteHostCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemoteHostCreateResponse, error) {
+	rsp, err := c.RemoteHostCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteHostCreateResponse(rsp)
+}
+
+// RemoteHostCreateWithResponse Register a remote Host
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /remote-hosts (the `RemoteHostCreate` operationId).
+func (c *ClientWithResponses) RemoteHostCreateWithResponse(ctx context.Context, params *RemoteHostCreateParams, body RemoteHostCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*RemoteHostCreateResponse, error) {
+	rsp, err := c.RemoteHostCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteHostCreateResponse(rsp)
+}
+
+// RemoteHostShowWithResponse Show a remote Host
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /remote-hosts/{id} (the `RemoteHostShow` operationId).
+func (c *ClientWithResponses) RemoteHostShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RemoteHostShowResponse, error) {
+	rsp, err := c.RemoteHostShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteHostShowResponse(rsp)
+}
+
+// RemoteHostRevokeEnrollmentWithResponse Revoke a remote Host's exact Agent generation
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /remote-hosts/{id}/enrollment (the `RemoteHostRevokeEnrollment` operationId).
+func (c *ClientWithResponses) RemoteHostRevokeEnrollmentWithResponse(ctx context.Context, id string, params *RemoteHostRevokeEnrollmentParams, reqEditors ...RequestEditorFn) (*RemoteHostRevokeEnrollmentResponse, error) {
+	rsp, err := c.RemoteHostRevokeEnrollment(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteHostRevokeEnrollmentResponse(rsp)
+}
+
+// RemoteHostStageEnrollmentWithBodyWithResponse Stage an Agent certificate from a signed CSR
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /remote-hosts/{id}/enrollment (the `RemoteHostStageEnrollment` operationId).
+func (c *ClientWithResponses) RemoteHostStageEnrollmentWithBodyWithResponse(ctx context.Context, id string, params *RemoteHostStageEnrollmentParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemoteHostStageEnrollmentResponse, error) {
+	rsp, err := c.RemoteHostStageEnrollmentWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteHostStageEnrollmentResponse(rsp)
+}
+
+// RemoteHostStageEnrollmentWithResponse Stage an Agent certificate from a signed CSR
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /remote-hosts/{id}/enrollment (the `RemoteHostStageEnrollment` operationId).
+func (c *ClientWithResponses) RemoteHostStageEnrollmentWithResponse(ctx context.Context, id string, params *RemoteHostStageEnrollmentParams, body RemoteHostStageEnrollmentJSONRequestBody, reqEditors ...RequestEditorFn) (*RemoteHostStageEnrollmentResponse, error) {
+	rsp, err := c.RemoteHostStageEnrollment(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteHostStageEnrollmentResponse(rsp)
+}
+
 // RouteListWithResponse List routes
 //
 // Returns a wrapper object for the known response body format(s).
@@ -38852,6 +45457,58 @@ func (c *ClientWithResponses) RunnerCheckWithResponse(ctx context.Context, id st
 	return ParseRunnerCheckResponse(rsp)
 }
 
+// RunnerCliGrantRevokeWithResponse Revoke CLI actions while keeping Runner build authentication
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /runners/{id}/cli-grant (the `RunnerCliGrantRevoke` operationId).
+func (c *ClientWithResponses) RunnerCliGrantRevokeWithResponse(ctx context.Context, id string, params *RunnerCliGrantRevokeParams, reqEditors ...RequestEditorFn) (*RunnerCliGrantRevokeResponse, error) {
+	rsp, err := c.RunnerCliGrantRevoke(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerCliGrantRevokeResponse(rsp)
+}
+
+// RunnerCliGrantShowWithResponse Show the CLI grant attached to the Runner's scoped credential
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /runners/{id}/cli-grant (the `RunnerCliGrantShow` operationId).
+func (c *ClientWithResponses) RunnerCliGrantShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RunnerCliGrantShowResponse, error) {
+	rsp, err := c.RunnerCliGrantShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerCliGrantShowResponse(rsp)
+}
+
+// RunnerCliGrantSetWithBodyWithResponse Replace the exact Runner CLI grant for the checked revision
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /runners/{id}/cli-grant (the `RunnerCliGrantSet` operationId).
+func (c *ClientWithResponses) RunnerCliGrantSetWithBodyWithResponse(ctx context.Context, id string, params *RunnerCliGrantSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerCliGrantSetResponse, error) {
+	rsp, err := c.RunnerCliGrantSetWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerCliGrantSetResponse(rsp)
+}
+
+// RunnerCliGrantSetWithResponse Replace the exact Runner CLI grant for the checked revision
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /runners/{id}/cli-grant (the `RunnerCliGrantSet` operationId).
+func (c *ClientWithResponses) RunnerCliGrantSetWithResponse(ctx context.Context, id string, params *RunnerCliGrantSetParams, body RunnerCliGrantSetJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerCliGrantSetResponse, error) {
+	rsp, err := c.RunnerCliGrantSet(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerCliGrantSetResponse(rsp)
+}
+
 // RunnerRetryWithBodyWithResponse Retry failed Runner creation
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -38876,6 +45533,45 @@ func (c *ClientWithResponses) RunnerRetryWithResponse(ctx context.Context, id st
 		return nil, err
 	}
 	return ParseRunnerRetryResponse(rsp)
+}
+
+// RunnerScopedMigrationShowWithResponse Show scoped Runner migration status
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /runners/{id}/scoped-migration (the `RunnerScopedMigrationShow` operationId).
+func (c *ClientWithResponses) RunnerScopedMigrationShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RunnerScopedMigrationShowResponse, error) {
+	rsp, err := c.RunnerScopedMigrationShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerScopedMigrationShowResponse(rsp)
+}
+
+// RunnerScopedMigrationStartWithBodyWithResponse Move an installed Runner to scoped access after its current job completes
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /runners/{id}/scoped-migration (the `RunnerScopedMigrationStart` operationId).
+func (c *ClientWithResponses) RunnerScopedMigrationStartWithBodyWithResponse(ctx context.Context, id string, params *RunnerScopedMigrationStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerScopedMigrationStartResponse, error) {
+	rsp, err := c.RunnerScopedMigrationStartWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerScopedMigrationStartResponse(rsp)
+}
+
+// RunnerScopedMigrationStartWithResponse Move an installed Runner to scoped access after its current job completes
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /runners/{id}/scoped-migration (the `RunnerScopedMigrationStart` operationId).
+func (c *ClientWithResponses) RunnerScopedMigrationStartWithResponse(ctx context.Context, id string, params *RunnerScopedMigrationStartParams, body RunnerScopedMigrationStartJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerScopedMigrationStartResponse, error) {
+	rsp, err := c.RunnerScopedMigrationStart(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerScopedMigrationStartResponse(rsp)
 }
 
 // RunnerUpdateShowWithResponse Show latest or selected Runner software update
@@ -39331,6 +46027,123 @@ func (c *ClientWithResponses) ServiceDestroyWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseServiceDestroyResponse(rsp)
+}
+
+// GitDeploymentBindingShowWithResponse Show a Service's GitHub deployment binding
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /services/{id}/git-deployment (the `GitDeploymentBindingShow` operationId).
+func (c *ClientWithResponses) GitDeploymentBindingShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GitDeploymentBindingShowResponse, error) {
+	rsp, err := c.GitDeploymentBindingShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGitDeploymentBindingShowResponse(rsp)
+}
+
+// GitDeploymentBindWithBodyWithResponse Save a Service's GitHub deployment binding
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /services/{id}/git-deployment (the `GitDeploymentBind` operationId).
+func (c *ClientWithResponses) GitDeploymentBindWithBodyWithResponse(ctx context.Context, id string, params *GitDeploymentBindParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GitDeploymentBindResponse, error) {
+	rsp, err := c.GitDeploymentBindWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGitDeploymentBindResponse(rsp)
+}
+
+// GitDeploymentBindWithResponse Save a Service's GitHub deployment binding
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /services/{id}/git-deployment (the `GitDeploymentBind` operationId).
+func (c *ClientWithResponses) GitDeploymentBindWithResponse(ctx context.Context, id string, params *GitDeploymentBindParams, body GitDeploymentBindJSONRequestBody, reqEditors ...RequestEditorFn) (*GitDeploymentBindResponse, error) {
+	rsp, err := c.GitDeploymentBind(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGitDeploymentBindResponse(rsp)
+}
+
+// GitDeploymentListWithResponse List a Service's GitHub deployments
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /services/{id}/git-deployments (the `GitDeploymentList` operationId).
+func (c *ClientWithResponses) GitDeploymentListWithResponse(ctx context.Context, id string, params *GitDeploymentListParams, reqEditors ...RequestEditorFn) (*GitDeploymentListResponse, error) {
+	rsp, err := c.GitDeploymentList(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGitDeploymentListResponse(rsp)
+}
+
+// GitDeploymentStartWithBodyWithResponse Start a GitHub deployment for a Service
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/git-deployments (the `GitDeploymentStart` operationId).
+func (c *ClientWithResponses) GitDeploymentStartWithBodyWithResponse(ctx context.Context, id string, params *GitDeploymentStartParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GitDeploymentStartResponse, error) {
+	rsp, err := c.GitDeploymentStartWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGitDeploymentStartResponse(rsp)
+}
+
+// GitDeploymentStartWithResponse Start a GitHub deployment for a Service
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/git-deployments (the `GitDeploymentStart` operationId).
+func (c *ClientWithResponses) GitDeploymentStartWithResponse(ctx context.Context, id string, params *GitDeploymentStartParams, body GitDeploymentStartJSONRequestBody, reqEditors ...RequestEditorFn) (*GitDeploymentStartResponse, error) {
+	rsp, err := c.GitDeploymentStart(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGitDeploymentStartResponse(rsp)
+}
+
+// GitDeploymentShowWithResponse Show a Service's GitHub deployment
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /services/{id}/git-deployments/{deployment} (the `GitDeploymentShow` operationId).
+func (c *ClientWithResponses) GitDeploymentShowWithResponse(ctx context.Context, id string, deployment string, reqEditors ...RequestEditorFn) (*GitDeploymentShowResponse, error) {
+	rsp, err := c.GitDeploymentShow(ctx, id, deployment, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGitDeploymentShowResponse(rsp)
+}
+
+// GitDeploymentApproveWithResponse Approve a verified GitHub build for deployment
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/git-deployments/{deployment}/approve (the `GitDeploymentApprove` operationId).
+func (c *ClientWithResponses) GitDeploymentApproveWithResponse(ctx context.Context, id string, deployment string, params *GitDeploymentApproveParams, reqEditors ...RequestEditorFn) (*GitDeploymentApproveResponse, error) {
+	rsp, err := c.GitDeploymentApprove(ctx, id, deployment, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGitDeploymentApproveResponse(rsp)
+}
+
+// GitDeploymentRunnerSelectorsWithResponse List Runner selectors available to this Service and repository
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /services/{id}/git-runner-selectors (the `GitDeploymentRunnerSelectors` operationId).
+func (c *ClientWithResponses) GitDeploymentRunnerSelectorsWithResponse(ctx context.Context, id string, params *GitDeploymentRunnerSelectorsParams, reqEditors ...RequestEditorFn) (*GitDeploymentRunnerSelectorsResponse, error) {
+	rsp, err := c.GitDeploymentRunnerSelectors(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGitDeploymentRunnerSelectorsResponse(rsp)
 }
 
 // ServiceLogsWithResponse Stream service logs
@@ -43238,6 +50051,559 @@ func ParseEtcdConfigApplyResponse(rsp *http.Response) (*EtcdConfigApplyResponse,
 	return response, nil
 }
 
+// ParseGithubConnectionListResponse parses an HTTP response from a GithubConnectionListWithResponse call
+func ParseGithubConnectionListResponse(rsp *http.Response) (*GithubConnectionListResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GithubConnectionListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageGitHubConnection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGithubConnectionCreateResponse parses an HTTP response from a GithubConnectionCreateWithResponse call
+func ParseGithubConnectionCreateResponse(rsp *http.Response) (*GithubConnectionCreateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GithubConnectionCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest GitHubConnection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers GithubConnectionCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGithubConnectionRevokeResponse parses an HTTP response from a GithubConnectionRevokeWithResponse call
+func ParseGithubConnectionRevokeResponse(rsp *http.Response) (*GithubConnectionRevokeResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GithubConnectionRevokeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		var headers GithubConnectionRevokeResponse204Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers204 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGithubConnectionShowResponse parses an HTTP response from a GithubConnectionShowWithResponse call
+func ParseGithubConnectionShowResponse(rsp *http.Response) (*GithubConnectionShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GithubConnectionShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GitHubConnection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GithubConnectionShowResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGithubConnectionRotateResponse parses an HTTP response from a GithubConnectionRotateWithResponse call
+func ParseGithubConnectionRotateResponse(rsp *http.Response) (*GithubConnectionRotateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GithubConnectionRotateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GitHubConnection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GithubConnectionRotateResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGithubConnectionRepositoriesResponse parses an HTTP response from a GithubConnectionRepositoriesWithResponse call
+func ParseGithubConnectionRepositoriesResponse(rsp *http.Response) (*GithubConnectionRepositoriesResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GithubConnectionRepositoriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageGitHubRepository
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGithubRepositoryRunnerDefaultRemoveResponse parses an HTTP response from a GithubRepositoryRunnerDefaultRemoveWithResponse call
+func ParseGithubRepositoryRunnerDefaultRemoveResponse(rsp *http.Response) (*GithubRepositoryRunnerDefaultRemoveResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GithubRepositoryRunnerDefaultRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		var headers GithubRepositoryRunnerDefaultRemoveResponse204Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers204 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGithubRepositoryRunnerDefaultShowResponse parses an HTTP response from a GithubRepositoryRunnerDefaultShowWithResponse call
+func ParseGithubRepositoryRunnerDefaultShowResponse(rsp *http.Response) (*GithubRepositoryRunnerDefaultShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GithubRepositoryRunnerDefaultShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GitRepositoryRunnerDefaultState
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GithubRepositoryRunnerDefaultShowResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGithubRepositoryRunnerDefaultPutResponse parses an HTTP response from a GithubRepositoryRunnerDefaultPutWithResponse call
+func ParseGithubRepositoryRunnerDefaultPutResponse(rsp *http.Response) (*GithubRepositoryRunnerDefaultPutResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GithubRepositoryRunnerDefaultPutResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GitRepositoryRunnerDefaultState
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GithubRepositoryRunnerDefaultPutResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGithubRepositoryWorkflowsResponse parses an HTTP response from a GithubRepositoryWorkflowsWithResponse call
+func ParseGithubRepositoryWorkflowsResponse(rsp *http.Response) (*GithubRepositoryWorkflowsResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GithubRepositoryWorkflowsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageGitHubWorkflow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseHostShowResponse parses an HTTP response from a HostShowWithResponse call
 func ParseHostShowResponse(rsp *http.Response) (*HostShowResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -43319,6 +50685,177 @@ func ParseHostTerminalResponse(rsp *http.Response) (*HostTerminalResponse, error
 			headers.SetCookie = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRemoteHostFetchImageResponse parses an HTTP response from a RemoteHostFetchImageWithResponse call
+func ParseRemoteHostFetchImageResponse(rsp *http.Response) (*RemoteHostFetchImageResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoteHostFetchImageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers RemoteHostFetchImageResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePublicIngressShowResponse parses an HTTP response from a PublicIngressShowWithResponse call
+func ParsePublicIngressShowResponse(rsp *http.Response) (*PublicIngressShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PublicIngressShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PublicIngressState
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PublicIngressShowResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePublicIngressApplyResponse parses an HTTP response from a PublicIngressApplyWithResponse call
+func ParsePublicIngressApplyResponse(rsp *http.Response) (*PublicIngressApplyResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PublicIngressApplyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers PublicIngressApplyResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePublicIngressPreflightResponse parses an HTTP response from a PublicIngressPreflightWithResponse call
+func ParsePublicIngressPreflightResponse(rsp *http.Response) (*PublicIngressPreflightResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PublicIngressPreflightResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PublicIngressReview
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -44114,6 +51651,276 @@ func ParseReleaseShowResponse(rsp *http.Response) (*ReleaseShowResponse, error) 
 	return response, nil
 }
 
+// ParseRemoteHostListResponse parses an HTTP response from a RemoteHostListWithResponse call
+func ParseRemoteHostListResponse(rsp *http.Response) (*RemoteHostListResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoteHostListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageRemoteHost
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemoteHostCreateResponse parses an HTTP response from a RemoteHostCreateWithResponse call
+func ParseRemoteHostCreateResponse(rsp *http.Response) (*RemoteHostCreateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoteHostCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest RemoteHost
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers RemoteHostCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRemoteHostShowResponse parses an HTTP response from a RemoteHostShowWithResponse call
+func ParseRemoteHostShowResponse(rsp *http.Response) (*RemoteHostShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoteHostShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RemoteHost
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemoteHostRevokeEnrollmentResponse parses an HTTP response from a RemoteHostRevokeEnrollmentWithResponse call
+func ParseRemoteHostRevokeEnrollmentResponse(rsp *http.Response) (*RemoteHostRevokeEnrollmentResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoteHostRevokeEnrollmentResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		var headers RemoteHostRevokeEnrollmentResponse204Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers204 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRemoteHostStageEnrollmentResponse parses an HTTP response from a RemoteHostStageEnrollmentWithResponse call
+func ParseRemoteHostStageEnrollmentResponse(rsp *http.Response) (*RemoteHostStageEnrollmentResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoteHostStageEnrollmentResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RemoteHostEnrollment
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers RemoteHostStageEnrollmentResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseRouteListResponse parses an HTTP response from a RouteListWithResponse call
 func ParseRouteListResponse(rsp *http.Response) (*RouteListResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -44680,6 +52487,141 @@ func ParseRunnerCheckResponse(rsp *http.Response) (*RunnerCheckResponse, error) 
 	return response, nil
 }
 
+// ParseRunnerCliGrantRevokeResponse parses an HTTP response from a RunnerCliGrantRevokeWithResponse call
+func ParseRunnerCliGrantRevokeResponse(rsp *http.Response) (*RunnerCliGrantRevokeResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerCliGrantRevokeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRunnerCliGrantShowResponse parses an HTTP response from a RunnerCliGrantShowWithResponse call
+func ParseRunnerCliGrantShowResponse(rsp *http.Response) (*RunnerCliGrantShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerCliGrantShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RunnerCLIGrantStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers RunnerCliGrantShowResponse200Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRunnerCliGrantSetResponse parses an HTTP response from a RunnerCliGrantSetWithResponse call
+func ParseRunnerCliGrantSetResponse(rsp *http.Response) (*RunnerCliGrantSetResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerCliGrantSetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RunnerCLIGrantStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers RunnerCliGrantSetResponse200Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseRunnerRetryResponse parses an HTTP response from a RunnerRetryWithResponse call
 func ParseRunnerRetryResponse(rsp *http.Response) (*RunnerRetryResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -44713,6 +52655,98 @@ func ParseRunnerRetryResponse(rsp *http.Response) (*RunnerRetryResponse, error) 
 	switch {
 	case rsp.StatusCode == 202:
 		var headers RunnerRetryResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRunnerScopedMigrationShowResponse parses an HTTP response from a RunnerScopedMigrationShowWithResponse call
+func ParseRunnerScopedMigrationShowResponse(rsp *http.Response) (*RunnerScopedMigrationShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerScopedMigrationShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RunnerScopedMigrationStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers RunnerScopedMigrationShowResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRunnerScopedMigrationStartResponse parses an HTTP response from a RunnerScopedMigrationStartWithResponse call
+func ParseRunnerScopedMigrationStartResponse(rsp *http.Response) (*RunnerScopedMigrationStartResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerScopedMigrationStartResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers RunnerScopedMigrationStartResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -45616,6 +53650,387 @@ func ParseServiceDestroyResponse(rsp *http.Response) (*ServiceDestroyResponse, e
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGitDeploymentBindingShowResponse parses an HTTP response from a GitDeploymentBindingShowWithResponse call
+func ParseGitDeploymentBindingShowResponse(rsp *http.Response) (*GitDeploymentBindingShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GitDeploymentBindingShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GitDeploymentBindingState
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GitDeploymentBindingShowResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGitDeploymentBindResponse parses an HTTP response from a GitDeploymentBindWithResponse call
+func ParseGitDeploymentBindResponse(rsp *http.Response) (*GitDeploymentBindResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GitDeploymentBindResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GitDeploymentBindingState
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GitDeploymentBindResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGitDeploymentListResponse parses an HTTP response from a GitDeploymentListWithResponse call
+func ParseGitDeploymentListResponse(rsp *http.Response) (*GitDeploymentListResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GitDeploymentListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageGitDeployment
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGitDeploymentStartResponse parses an HTTP response from a GitDeploymentStartWithResponse call
+func ParseGitDeploymentStartResponse(rsp *http.Response) (*GitDeploymentStartResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GitDeploymentStartResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest GitDeployment
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers GitDeploymentStartResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGitDeploymentShowResponse parses an HTTP response from a GitDeploymentShowWithResponse call
+func ParseGitDeploymentShowResponse(rsp *http.Response) (*GitDeploymentShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GitDeploymentShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GitDeployment
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGitDeploymentApproveResponse parses an HTTP response from a GitDeploymentApproveWithResponse call
+func ParseGitDeploymentApproveResponse(rsp *http.Response) (*GitDeploymentApproveResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GitDeploymentApproveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest GitDeployment
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers GitDeploymentApproveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGitDeploymentRunnerSelectorsResponse parses an HTTP response from a GitDeploymentRunnerSelectorsWithResponse call
+func ParseGitDeploymentRunnerSelectorsResponse(rsp *http.Response) (*GitDeploymentRunnerSelectorsResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GitDeploymentRunnerSelectorsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageGitRunnerSelector
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
 	}
 
 	return response, nil

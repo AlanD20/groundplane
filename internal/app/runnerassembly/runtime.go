@@ -1,4 +1,4 @@
-package app
+package runnerassembly
 
 import (
 	"log/slog"
@@ -14,7 +14,7 @@ import (
 
 const runnerJournalRoot = "/var/lib/groundplane/runner-journal"
 
-func newRunnerLifecycleExecutor(
+func NewLifecycle(
 	logger *slog.Logger,
 	repository *etcd.RunnerRepository,
 	broker *runnercapability.TokenBroker,

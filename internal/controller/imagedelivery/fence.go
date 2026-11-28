@@ -32,17 +32,37 @@ func (resolver SelectionResolver) ResolveWorkloadImages(
 	agentID string,
 	selectors []*agentpb.WorkloadImageSelector,
 ) (*agentpb.WorkloadImageResolutionResult, error) {
-	fence, revision, err := readFence(ctx, resolver.Store)
-	if err != nil {
-		return nil, err
-	}
-	if fence.Operation != "" {
-		return nil, errs.New(errs.KindResourceInUse, "host image removal is in progress")
-	}
-	if err := imagefence.Capture(ctx, revision); err != nil {
+	if err := resolver.captureReadFence(ctx); err != nil {
 		return nil, err
 	}
 	return resolver.Images.ResolveWorkloadImages(ctx, agentID, selectors)
+}
+
+func (resolver SelectionResolver) ResolveWorkloadImagesForProcess(ctx context.Context, agentID string,
+	process [16]byte, selectors []*agentpb.WorkloadImageSelector,
+) (*agentpb.WorkloadImageResolutionResult, error) {
+	reader, ok := resolver.Images.(workloadseal.ProcessResolver)
+	if !ok || process == [16]byte{} {
+		return nil, errs.New(
+			errs.KindWorkloadImageResolutionUnavailable,
+			"selected Agent process image resolution is unavailable",
+		)
+	}
+	if err := resolver.captureReadFence(ctx); err != nil {
+		return nil, err
+	}
+	return reader.ResolveWorkloadImagesForProcess(ctx, agentID, process, selectors)
+}
+
+func (resolver SelectionResolver) captureReadFence(ctx context.Context) error {
+	fence, revision, err := readFence(ctx, resolver.Store)
+	if err != nil {
+		return err
+	}
+	if fence.Operation != "" {
+		return errs.New(errs.KindResourceInUse, "host image removal is in progress")
+	}
+	return imagefence.Capture(ctx, revision)
 }
 
 type removalFence struct {

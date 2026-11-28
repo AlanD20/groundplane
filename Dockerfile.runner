@@ -52,6 +52,7 @@ COPY release/runner/entrypoint.sh /usr/local/bin/groundplane-runner
 RUN chmod 0755 /usr/local/bin/groundplane-runner
 ENV HOME=/runner
 LABEL org.opencontainers.image.source="https://github.com/AlanD20/groundplane" \
+      com.groundplane.runner.scoped-api="v1" \
       org.opencontainers.image.title="Groundplane Runner" \
       org.opencontainers.image.version="${RUNNER_VERSION}" \
       org.opencontainers.image.revision="${SOURCE_COMMIT}" \

@@ -58,7 +58,10 @@ func (c *Client) runSession(
 		_ = connection.Close()
 	}()
 
-	authToken := append([]byte(nil), token[:]...)
+	var authToken []byte
+	if c.remoteHostID == "" {
+		authToken = append([]byte(nil), token[:]...)
+	}
 	authenticate := &agentpb.Authenticate{
 		AgentId: c.agentID, Token: authToken,
 		ExecutionPlanSchema: executionplan.SchemaVersion,
@@ -89,7 +92,11 @@ func (c *Client) runSession(
 	if err != nil {
 		return agentChannelTransportResult(ctx, err, "agent: receive executor registration", false)
 	}
-	if err := native.bindExecutor(registered.GetWorkExecutorRegistration(), c.agentID, c.processGeneration); err != nil {
+	registration := registered.GetWorkExecutorRegistration()
+	if c.remoteHostID != "" && registration.GetHostId() != c.remoteHostID {
+		return false, errs.New(errs.KindStateConflict, "Controller executor registration differs from this Agent Host")
+	}
+	if err := native.bindExecutor(registration, c.agentID, c.processGeneration); err != nil {
 		return false, err
 	}
 	if err := c.replayWorkJournal(streamCtx, stream); err != nil {
@@ -121,33 +128,10 @@ func (c *Client) runSession(
 		}
 		c.staging = nil
 	}()
-	releases, err := newExecutionWorkers(
-		streamCtx,
-		runtimeConcurrency(config),
-		native.identity,
-		c.releaseExecutor,
-		c.releaseRecoveryExecutor,
-		c.scriptExecutor,
-		c.hierarchyExecutor,
-		c.attachRemovalExecutor,
-		c.volumeExecutor,
-		c.networkExecutor,
-		c.componentExecutor,
-		c.entryExecutor,
-		c.attachProvisionExecutor,
-		c.lifecycleExecutor,
-		c.removalRecovery,
-		c.backupExecutor,
-		c.environmentExecutor,
-		c.backingExecutor,
-		c.resolverExecutor,
-		native,
-		c.processOwnership,
-	)
+	releases, err := c.openExecutionWorkers(streamCtx, config, native)
 	if err != nil {
 		return false, err
 	}
-	c.executionWorkers = releases
 	defer func() {
 		if releases != nil {
 			releases.close()
@@ -416,6 +400,20 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
+			if assignment := result.message.GetPublicIngressAssignment(); assignment != nil {
+				if err := releases.submitPublicIngress(assignment, c.availableWorkCapacity(), native); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
+			if assignment := result.message.GetRemoteImageAssignment(); assignment != nil {
+				if err := releases.submitRemoteImage(assignment, c.availableWorkCapacity(), native); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			if assignment := result.message.GetEnvironmentRemovalAssignment(); assignment != nil {
 				if err := releases.submitEnvironmentRemoval(assignment, c.availableWorkCapacity()); err != nil {
 					return false, err
@@ -517,33 +515,10 @@ func (c *Client) runSession(
 				}
 				releases.close()
 				config = proto.Clone(next).(*agentpb.AgentConfig)
-				releases, err = newExecutionWorkers(
-					streamCtx,
-					runtimeConcurrency(config),
-					native.identity,
-					c.releaseExecutor,
-					c.releaseRecoveryExecutor,
-					c.scriptExecutor,
-					c.hierarchyExecutor,
-					c.attachRemovalExecutor,
-					c.volumeExecutor,
-					c.networkExecutor,
-					c.componentExecutor,
-					c.entryExecutor,
-					c.attachProvisionExecutor,
-					c.lifecycleExecutor,
-					c.removalRecovery,
-					c.backupExecutor,
-					c.environmentExecutor,
-					c.backingExecutor,
-					c.resolverExecutor,
-					native,
-					c.processOwnership,
-				)
+				releases, err = c.openExecutionWorkers(streamCtx, config, native)
 				if err != nil {
 					return false, err
 				}
-				c.executionWorkers = releases
 				pullInterval = time.Duration(config.PullIntervalSeconds) * time.Second
 				ticker.Reset(pullInterval)
 				receiveNext(streamCtx, stream, received)

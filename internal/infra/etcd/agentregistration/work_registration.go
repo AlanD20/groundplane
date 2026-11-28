@@ -8,7 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -26,16 +25,37 @@ func (repository *Repository) RegisterWorkProcess(
 	limits workexecution.AgentConcurrency,
 	operations []workexecution.Operation,
 ) (workexecution.Identity, error) {
-	if credentialGeneration == 0 || process == [16]byte{} || limits.Validate() != nil {
+	return repository.registerWorkProcess(
+		ctx,
+		agentID,
+		localWorkCredential(agentID, credentialGeneration),
+		process,
+		limits,
+		operations,
+	)
+}
+
+func (repository *Repository) registerWorkProcess(
+	ctx context.Context,
+	agentID string,
+	credential workCredential,
+	process [16]byte,
+	limits workexecution.AgentConcurrency,
+	operations []workexecution.Operation,
+) (workexecution.Identity, error) {
+	if !credential.valid() || process == [16]byte{} || limits.Validate() != nil {
 		return workexecution.Identity{}, agentCredentialNotFound()
 	}
 	binding, err := hostbindings.Read(ctx, repository.store, agentID, 0)
 	if err != nil {
 		return workexecution.Identity{}, err
 	}
+	if !credential.acceptsHost(binding.Binding.HostID) {
+		return workexecution.Identity{}, agentCredentialNotFound()
+	}
 	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: binding.Binding.HostID, AgentID: agentID}
 	receiptKey := "/v1/execution/agent-processes/" + identity.HostID + "/" + hex.EncodeToString(process[:])
-	keys := []string{localagents.LocalAgentPrimaryKey(agentID), workqueue.ExecutorKey(identity), receiptKey}
+	keys := []string{credential.key, workqueue.ExecutorKey(identity), receiptKey}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: binding.ReadRevision})
 	if err != nil {
 		return workexecution.Identity{}, err
@@ -58,16 +78,8 @@ func (repository *Repository) RegisterWorkProcess(
 		}
 		conditions = append(conditions, condition)
 	}
-	if read.Values[0] == nil {
-		return workexecution.Identity{}, agentCredentialNotFound()
-	}
-	credential, err := localagents.DecodeLocalAgentPrimary(read.Values[0].Value)
-	if err != nil {
+	if err := credential.check(read.Values[0]); err != nil {
 		return workexecution.Identity{}, err
-	}
-	if credential.ID != agentID || credential.Generation != credentialGeneration ||
-		credential.Phase == localagents.LocalAgentPhaseDeleting {
-		return workexecution.Identity{}, agentCredentialNotFound()
 	}
 	var previous workqueue.ExecutorSnapshot
 	if value := read.Values[1]; value != nil {

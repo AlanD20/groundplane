@@ -17,6 +17,27 @@ INVENTORY = (200, {"items": [{"id": AGENT, "status": "healthy"}]})
 
 
 class AgentInstallationTests(unittest.TestCase):
+    def test_remote_validation_requires_exact_signed_enrollment_evidence(self):
+        identity = {"host_id": "host_01ARZ3NDEKTSV4RRFFQ69G5FAV", "agent_id": AGENT, "generation": 2}
+        evidence = {"identity": {**identity, "generation": 1}, "volume_root": "/var/lib/groundplane/vol"}
+        with patch.object(install_agent, "remote_docker", return_value=json.dumps(evidence).encode()) as docker:
+            with self.assertRaisesRegex(ValueError, "does not match the requested enrollment"):
+                install_agent.remote_validate(IMAGE, Path("/etc/groundplane/remote-agent"), identity)
+            command = docker.call_args.args
+            self.assertIn(("--network", "none"), tuple(zip(command, command[1:])))
+            self.assertIn("--read-only", command)
+            self.assertNotIn(install_agent.REMOTE_DOCKER_SOCKET, " ".join(command))
+
+    def test_remote_install_refuses_foreign_named_container(self):
+        identity = {"host_id": "host_01ARZ3NDEKTSV4RRFFQ69G5FAV", "agent_id": AGENT, "generation": 1}
+        foreign = {"Name": "/groundplane-agent", "Config": {"Image": "foreign"}, "HostConfig": {}, "Mounts": []}
+        with patch.object(install_agent, "remote_container_ids", side_effect=[["b" * 64], [], []]), \
+                patch.object(install_agent, "remote_inspect", return_value=foreign), \
+                patch.object(install_agent, "remote_create") as create:
+            with self.assertRaisesRegex(ValueError, "Existing Agent has different ownership"):
+                install_agent.remote_select_runtime(IMAGE, identity, [])
+            create.assert_not_called()
+
     # IMG-05: names must come from the selected artifact, including independent
     # Agent and Runner versions, rather than the installing Controller's version.
     def test_selected_artifact_tags_are_retained(self):

@@ -29,6 +29,8 @@ func (c *Client) sendReady(stream agentStream) error {
 			StagingReady:    &stagingReady,
 			OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH,
 			ArchitectureVariant: variant,
+			PublicIngressReady:  c.publicIngress != nil,
+			RemoteImageReady:    c.remoteImage != nil,
 		},
 	}})
 }

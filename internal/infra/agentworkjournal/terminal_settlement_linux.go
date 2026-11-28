@@ -4,8 +4,10 @@ import (
 	"context"
 	"slices"
 
+	"github.com/AlanD20/groundplane/internal/common/ingressexecution"
 	"github.com/AlanD20/groundplane/internal/common/lifecycleexecution"
 	"github.com/AlanD20/groundplane/internal/common/releaseexecution"
+	"github.com/AlanD20/groundplane/internal/common/remotefetch"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/common/workreceipt"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -93,6 +95,35 @@ func (record *attemptRecord) applyTerminalReceipt(
 		return err
 	}
 	switch kind {
+	case "public_ingress_result":
+		if record.PublicIngress == nil {
+			return conflict()
+		}
+		_, report, err := ingressexecution.DecodeReport(
+			request.GetPublicIngressResultRequest(),
+			record.Attempt.Executor,
+		)
+		if err != nil {
+			return err
+		}
+		expected, err := ingressexecution.ResultReference(record.Attempt, report)
+		if err != nil || terminal.Result == nil || *terminal.Result != expected {
+			return conflict()
+		}
+		record.PublicIngress.Receipt = &terminal
+	case "remote_image_result":
+		if record.RemoteImage == nil {
+			return conflict()
+		}
+		_, localID, err := remotefetch.DecodeReport(request.GetRemoteImageResultRequest(), record.Attempt.Executor)
+		if err != nil {
+			return err
+		}
+		expected, err := remotefetch.ResultReference(record.Attempt, localID)
+		if err != nil || terminal.Result == nil || *terminal.Result != expected {
+			return conflict()
+		}
+		record.RemoteImage.Receipt = &terminal
 	case "resolver_completion", "resolver_failure", "resolver_recovery":
 		if record.Resolver == nil {
 			return conflict()

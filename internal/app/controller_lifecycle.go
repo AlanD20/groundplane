@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	"sync"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Run supervises HTTP, the local Agent channel, and the scheduler as one
@@ -29,62 +30,47 @@ func (c *Controller) Run(ctx context.Context) error {
 		go func(worker controllerScheduler) { defer workers.Done(); worker.Run(runCtx) }(worker)
 	}
 
-	type runtimeResult struct {
-		name string
-		err  error
+	runtimes := []struct {
+		operation, stopped string
+		run                func(context.Context) error
+	}{
+		{"run execution runtime", "execution runtime", c.workExecution.Run},
+		{"run Git delivery", "Git delivery runtime", c.gitDelivery},
+		{"serve HTTP", "http server", func(ctx context.Context) error {
+			return c.server.Serve(ctx, c.Config.HTTPAddresses())
+		}},
+		{"serve Agent channel", "agent channel", c.agent.Run},
+		{"reconcile etcd container", "etcd container reconciliation", c.etcdContainer.Run},
 	}
-	runtimeDone := make(chan runtimeResult, 4)
-	go func() {
-		err := c.workExecution.Run(runCtx)
-		if err == nil && runCtx.Err() == nil {
-			err = errors.New("execution runtime stopped unexpectedly")
+	done := make(chan struct{}, len(runtimes))
+	failures := make([]error, len(runtimes))
+	started := 0
+	for index, runtime := range runtimes {
+		if runtime.run == nil {
+			continue
 		}
-		runtimeDone <- runtimeResult{name: "run execution runtime", err: err}
-	}()
-	go func() {
-		err := c.server.Serve(runCtx, c.Config.HTTPAddresses())
-		if err == nil && runCtx.Err() == nil {
-			err = errors.New("http server stopped unexpectedly")
-		}
-		runtimeDone <- runtimeResult{name: "serve HTTP", err: err}
-	}()
-	go func() {
-		err := c.agent.Run(runCtx)
-		if err == nil && runCtx.Err() == nil {
-			err = errors.New("agent channel stopped unexpectedly")
-		}
-		runtimeDone <- runtimeResult{name: "serve Agent channel", err: err}
-	}()
-	go func() {
-		err := c.etcdContainer.Run(runCtx)
-		if err == nil && runCtx.Err() == nil {
-			err = errors.New("etcd container reconciliation stopped unexpectedly")
-		}
-		runtimeDone <- runtimeResult{name: "reconcile etcd container", err: err}
-	}()
-
-	runtimeErrors := make(map[string]error, 4)
-	for index := 0; index < 4; index++ {
-		result := <-runtimeDone
-		runtimeErrors[result.name] = result.err
-		if index == 0 {
-			cancel()
-		}
+		started++
+		go func() {
+			err := runtime.run(runCtx)
+			if err == nil && runCtx.Err() == nil {
+				err = fmt.Errorf("%s stopped unexpectedly", runtime.stopped)
+			}
+			failures[index] = wrapControllerRunError(runtime.operation, err)
+			done <- struct{}{}
+		}()
+	}
+	<-done
+	cancel()
+	for range started - 1 {
+		<-done
 	}
 	workers.Wait()
 
-	containerCloseErr := c.container.Close()
-	closeErr := c.store.Close()
-	etcdContainerCloseErr := c.etcdContainer.Close()
-	joined := errors.Join(
-		wrapControllerRunError("run execution runtime", runtimeErrors["run execution runtime"]),
-		wrapControllerRunError("serve HTTP", runtimeErrors["serve HTTP"]),
-		wrapControllerRunError("serve Agent channel", runtimeErrors["serve Agent channel"]),
-		wrapControllerRunError("reconcile etcd container", runtimeErrors["reconcile etcd container"]),
-		wrapControllerRunError("close platform runtime", containerCloseErr),
-		wrapControllerRunError("close etcd", closeErr),
-		wrapControllerRunError("close etcd container lifecycle", etcdContainerCloseErr),
-	)
+	joined := errors.Join(append(failures,
+		wrapControllerRunError("close platform runtime", c.container.Close()),
+		wrapControllerRunError("close etcd", c.store.Close()),
+		wrapControllerRunError("close etcd container lifecycle", c.etcdContainer.Close()),
+	)...)
 	if joined != nil {
 		return errs.Wrap(errs.KindInternal, joined)
 	}

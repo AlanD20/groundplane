@@ -6,7 +6,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hostbindings"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -67,16 +66,31 @@ func (authorization WorkAuthorization) Conditions() ([]keyvalue.Condition, error
 func (repository *Repository) ResolveWorkIdentity(ctx context.Context, agentID string,
 	credentialGeneration uint64,
 	processGeneration [16]byte,
+) (WorkAuthorization, error) {
+	return repository.resolveWorkIdentity(
+		ctx,
+		agentID,
+		localWorkCredential(agentID, credentialGeneration),
+		processGeneration,
+	)
+}
+
+func (repository *Repository) resolveWorkIdentity(ctx context.Context, agentID string,
+	credential workCredential,
+	processGeneration [16]byte,
 ) (authorization WorkAuthorization, err error) {
-	if credentialGeneration == 0 || processGeneration == [16]byte{} {
+	if !credential.valid() || processGeneration == [16]byte{} {
 		return authorization, agentCredentialNotFound()
 	}
 	binding, err := hostbindings.Read(ctx, repository.store, agentID, 0)
 	if err != nil {
 		return authorization, err
 	}
+	if !credential.acceptsHost(binding.Binding.HostID) {
+		return authorization, agentCredentialNotFound()
+	}
 	identity := workexecution.Identity{Executor: workexecution.Agent, HostID: binding.Binding.HostID}
-	keys := []string{localagents.LocalAgentPrimaryKey(agentID), workqueue.ExecutorKey(identity)}
+	keys := []string{credential.key, workqueue.ExecutorKey(identity)}
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: keys, Revision: binding.ReadRevision})
 	if err != nil {
 		return authorization, err
@@ -93,13 +107,8 @@ func (repository *Repository) ResolveWorkIdentity(ctx context.Context, agentID s
 			)
 		}
 	}
-	credential, err := localagents.DecodeLocalAgentPrimary(read.Values[0].Value)
-	if err != nil {
+	if err := credential.check(read.Values[0]); err != nil {
 		return authorization, err
-	}
-	if credential.ID != agentID || credential.Generation != credentialGeneration ||
-		credential.Phase == localagents.LocalAgentPhaseDeleting {
-		return authorization, agentCredentialNotFound()
 	}
 	executor, err := workqueue.DecodeExecutor(read.Values[1].Value)
 	if err != nil {

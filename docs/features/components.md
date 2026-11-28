@@ -52,6 +52,29 @@ Targets must have reachable Zone membership. Additional memberships do not chang
 that primary address. Use [full Caddyfile templates](router-template.md) to set
 request policy; a template cannot grant access absent from GP's Routes.
 
+## Host public ingress
+
+Host public ingress is opt-in and requires installed qualification before
+production use. It publishes selected public Routes on explicitly approved
+host addresses on TCP ports 80 and 443. Caddy terminates HTTPS and reaches
+the verified local Service proxies through a dedicated private relay.
+
+From **Platform → Host → Public ingress**, choose the addresses and Routes,
+run preflight, then Apply the reviewed configuration. Resolve each approved
+hostname to the selected addresses and allow inbound HTTP and HTTPS for
+certificate issuance and serving. The Task reports the result of activation.
+If a route changes after review, review the new candidate before applying it.
+Serving application traffic is independent of the Controller and Agent
+connection once the configuration is active.
+
+The Controller and Agent require matching local public-ingress companion
+settings, a dedicated Docker bridge and pinned Caddy and relay images.
+An active hostname belongs to one Environment. Route changes that would
+invalidate an active claim require withdrawing that publication first.
+Review of an empty Route list withdraws all hostnames while retaining the
+listener. The operator API, Console, registry and backing ports remain
+outside this publication.
+
 ## Cloudflare Tunnel
 
 Tunnel has its own Zone selection. Its gateway is the first non-internal Zone;

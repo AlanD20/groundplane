@@ -85,6 +85,10 @@ func (server *Server) dispatchTerminalReport(
 	message *agentpb.AgentMessage,
 ) (*agentpb.ControllerMessage, error) {
 	switch payload := message.Payload.(type) {
+	case *agentpb.AgentMessage_PublicIngressResultRequest:
+		return server.reportPublicIngress(ctx, authorization, payload.PublicIngressResultRequest)
+	case *agentpb.AgentMessage_RemoteImageResultRequest:
+		return server.reportRemoteImage(ctx, authorization, payload.RemoteImageResultRequest)
 	case *agentpb.AgentMessage_ReleaseWorkCompletionRequest:
 		if server.releaseCheckpoints == nil {
 			return nil, errs.New(errs.KindInternal, "terminal result owner is not configured")

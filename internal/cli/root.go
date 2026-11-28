@@ -114,6 +114,9 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 			return errs.Newf(errs.KindMalformedRequest, "%s: %s; use %s --help",
 				cmd.CommandPath(), err.Error(), cmd.CommandPath())
 		}
+		if handled, err := configureScopedRunner(cmd, flags); handled {
+			return err
+		}
 		cfg := config.DefaultCLIConfig()
 		switch commandExecutionClass(cmd) {
 		case executionTool:

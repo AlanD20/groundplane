@@ -47,7 +47,13 @@ func newControllerRunnerComposition(
 		return nil, fmt.Errorf("controller: initialize Runner allocation: %w", err)
 	}
 	runnerTokens := runnercapability.NewTokenBroker()
-	policy, err := corerunner.NewIsolationPolicy(
+	runnerPolicy := corerunner.NewIsolationPolicy
+	runnerImage := cfg.Runner.Image
+	if cfg.Listen.ScopedRunnerRegistry != "" {
+		runnerPolicy = corerunner.NewRunnerRegistrationPolicy
+		runnerImage = cfg.Runner.ScopedImage
+	}
+	policy, err := runnerPolicy(
 		runnerPools.Runner.Network, []netip.Prefix{runnerPools.Environment, runnerPools.System}, cfg.InternalAPI(),
 	)
 	if err != nil {
@@ -63,7 +69,7 @@ func newControllerRunnerComposition(
 	}
 	runnerProvisioning, err := runnercapability.NewProvisioningService(
 		runnerRecords, queue, inputs, hierarchyRecords, idempotency, intentCoordinator, runnerTokens,
-		runnerallocation.RunnerAllocationConfigFromPools(runnerPools), cfg.Runner.Image, policy, accepted,
+		runnerallocation.RunnerAllocationConfigFromPools(runnerPools), runnerImage, policy, accepted,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner provisioning service: %w", err)
@@ -80,7 +86,7 @@ func newControllerRunnerComposition(
 	if err != nil {
 		return nil, err
 	}
-	lifecycle, maintenance, err := newRunnerLifecycleExecutor(logger, runnerRecords, runnerTokens, inputs, diagnostics)
+	lifecycle, maintenance, err := runnerassembly.NewLifecycle(logger, runnerRecords, runnerTokens, inputs, diagnostics)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner lifecycle: %w", err)
 	}

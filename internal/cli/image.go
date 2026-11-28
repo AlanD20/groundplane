@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
 )
 
@@ -13,7 +15,7 @@ func newImageCmd() *cobra.Command {
 		Use:   "image",
 		Short: "Manage local Agent host images from public and GP private registries",
 	}
-	var key string
+	var key, fetchService string
 	var fetchAfter []string
 	fetch := &cobra.Command{
 		Use: "fetch <reference>", Short: "Fetch an explicit registry tag or digest without deploying", Args: cobra.ExactArgs(1),
@@ -26,7 +28,15 @@ func newImageCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			accepted, err := app.Client.FetchImage(cmd.Context(), args[0], key, after)
+			var accepted apiTypes.TaskAccepted
+			switch {
+			case app.Client.ScopedRunner():
+				accepted, err = app.Client.FetchRunnerServiceImage(cmd.Context(), fetchService, args[0], key, after)
+			case cmd.Flags().Changed("service"):
+				return errs.New(errs.KindValidationFailed, "image fetch --service is available to scoped Runners")
+			default:
+				accepted, err = app.Client.FetchImage(cmd.Context(), args[0], key, after)
+			}
 			if err != nil {
 				return err
 			}
@@ -35,6 +45,7 @@ func newImageCmd() *cobra.Command {
 	}
 	fetch.Flags().
 		StringVar(&key, "idempotency-key", "", "reuse this key to resolve uncertain acceptance of the same request")
+	fetch.Flags().StringVar(&fetchService, "service", "", "stable Service ID required for a scoped Runner fetch")
 	list := &cobra.Command{
 		Use:   "ls",
 		Short: "List live host images and their removal protection",

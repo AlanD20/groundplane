@@ -18,6 +18,8 @@ type Server struct {
 	workDispatch           WorkDispatcher
 	releaseCheckpoints     ReleaseWorkCheckpointer
 	environmentProvision   EnvironmentProvisionReporter
+	publicIngress          PublicIngressReporter
+	remoteImage            RemoteImageReporter
 	hierarchyReports       HierarchyReporter
 	attachReports          AttachReporter
 	attachProvisionReports AttachProvisionReporter

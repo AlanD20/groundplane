@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/app/hostplatform"
 	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
@@ -108,7 +109,7 @@ func TestNativeEntryEditPreservesShapeAndProtectsValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	materials, err := initializeTaskMaterializationResolver(f.store, f.blueprint.HierarchyRepository,
+	materials, err := hostplatform.NewMaterializationResolver(f.store, f.blueprint.HierarchyRepository,
 		values, secrets, planner, protector)
 	if err != nil {
 		t.Fatal(err)

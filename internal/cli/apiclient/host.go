@@ -51,7 +51,12 @@ func hostFromGenerated(host generated.Host) (apiTypes.Host, error) {
 	if host.Agent.Labels != nil {
 		labels = append(labels, (*host.Agent.Labels)...)
 	}
+	var hostID string
+	if host.Id != nil {
+		hostID = *host.Id
+	}
 	return apiTypes.Host{
+		ID:       hostID,
 		Hostname: host.Hostname, Arch: host.Arch, OS: host.Os, Uptime: host.Uptime,
 		CPU: apiTypes.HostCPU{Model: host.Cpu.Model, Cores: int(host.Cpu.Cores), Load: int(host.Cpu.Load)},
 		Memory: apiTypes.HostResource{

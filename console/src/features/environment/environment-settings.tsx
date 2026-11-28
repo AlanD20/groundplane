@@ -34,6 +34,7 @@ import type { Environment } from "@/lib/types";
 import { TaskLink } from "@/components/common/task-link";
 import { useBackupRefresh } from "@/features/backup/use-backup-refresh";
 import { TaskAlertSettings } from "@/features/task-alerts/task-alert-settings";
+import { GitHubConnectionsRuntime } from "@/features/git-delivery/github-connections-runtime";
 import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 
 // ---- Shared-infra facts ----
@@ -44,6 +45,7 @@ export function SettingsCard({ env }: { env: Environment }) {
   const editorSession = useEditorSession();
   const store = useStore();
   const params = useRequiredParams("tenant", "project");
+  const tenantId = store.getTenant(params.tenant)?.id;
   const navigate = useNavigate();
   const [renameOpen, setRenameOpen] = useState(false);
   const [networkPoolOpen, setNetworkPoolOpen] = useState(false);
@@ -76,6 +78,14 @@ export function SettingsCard({ env }: { env: Environment }) {
 
   return (
     <>
+      <GitHubConnectionsRuntime
+        scope={{ kind: "environment", id: env.id }}
+        scopeName={env.name}
+        ancestorScopes={[
+          { kind: "project", id: env.projectId },
+          ...(tenantId ? ([{ kind: "tenant", id: tenantId }] as const) : []),
+        ]}
+      />
       <TaskAlertSettings scope={env.id} />
       <Card>
         <CardHeader className="flex-row items-center justify-between">

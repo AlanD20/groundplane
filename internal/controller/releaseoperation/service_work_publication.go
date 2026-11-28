@@ -4,24 +4,62 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
+	"github.com/AlanD20/groundplane/internal/controller/hostplacement"
 	"github.com/AlanD20/groundplane/internal/controller/taskdependencies"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (service *Service) prepareServiceWork(ctx context.Context, scope releasequeries.ReleasePlanningScope,
 	candidate releaseCandidateInput, accepted workexecution.Task,
 ) (taskdependencies.Prepared, error) {
+	return service.prepareServiceWorkForHost(ctx, scope, candidate, accepted, nil)
+}
+
+type remoteServiceSelection struct {
+	host         hostplacement.Snapshot
+	localImageID string
+	conditions   []keyvalue.Condition
+}
+
+func (service *Service) prepareServiceWorkForHost(ctx context.Context, scope releasequeries.ReleasePlanningScope,
+	candidate releaseCandidateInput, accepted workexecution.Task, remote *remoteServiceSelection,
+) (taskdependencies.Prepared, error) {
 	candidates := []releaseCandidateInput{candidate}
-	if err := service.sealCandidates(ctx, candidates); err != nil {
+	var selected *hostplacement.Snapshot
+	if remote != nil {
+		selected = &remote.host
+	}
+	if err := service.sealCandidatesOnHost(ctx, candidates, selected); err != nil {
 		return taskdependencies.Prepared{}, err
 	}
 	candidate = candidates[0]
-	projection, err := service.captureDesiredProjection(ctx, scope)
+	if remote != nil && candidate.workload.LocalImageID != remote.localImageID {
+		return taskdependencies.Prepared{}, errs.New(
+			errs.KindStateConflict,
+			"selected host image differs from its successful Fetch receipt",
+		)
+	}
+	projection, err := service.captureDesiredProjection(ctx, scope, remote != nil)
 	if err != nil {
 		return taskdependencies.Prepared{}, err
+	}
+	var placement workexecution.Placement
+	if remote == nil {
+		placement, err = service.ledger.ResolveReleaseHost(ctx, scope.ReadRevision)
+		if err != nil {
+			return taskdependencies.Prepared{}, err
+		}
+	} else {
+		placement = remote.host.Placement
+		candidate.remotePlacement = true
+		if err := validateRemoteDeploymentProjection(scope, projection, candidate); err != nil {
+			return taskdependencies.Prepared{}, err
+		}
 	}
 	proxy := candidate.planning.Service.Record.Desired
 	proxy.Expose = proxy.ProxyExposures()
@@ -42,12 +80,19 @@ func (service *Service) prepareServiceWork(ctx context.Context, scope releaseque
 		candidate,
 		addresses,
 		accepted,
+		placement,
 	)
 	defer clear(rollout.CandidateArtifact)
 	if err != nil {
 		return taskdependencies.Prepared{}, err
 	}
-	authority, err := service.ledger.PrepareDirectReleaseCapture(ctx, task, item, request, rollout, addresses)
+	var authority workqueue.Change
+	if remote == nil {
+		authority, err = service.ledger.PrepareDirectReleaseCapture(ctx, task, item, request, rollout, addresses)
+	} else {
+		authority, err = service.ledger.PrepareRemoteDirectReleaseCapture(ctx, task, item, request, rollout, addresses, remote.host.Identity)
+		authority.Conditions = append(authority.Conditions, remote.conditions...)
+	}
 	if err != nil {
 		return taskdependencies.Prepared{}, err
 	}

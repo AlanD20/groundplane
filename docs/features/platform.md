@@ -266,6 +266,83 @@ Removing an Agent stops new assignments, cancels active work, revokes its identi
 and removes its owned runtime. Updating an Agent requires an explicit immutable
 image and idle-work admission; it must not silently abort application work.
 
+### Remote Agents
+
+Remote enrollment is opt-in. The Controller and its local Agent keep their
+existing settings. Provision a distinct TLS server certificate and a dedicated
+Agent enrollment CA for the Controller. Place these settings beside the
+Controller's startup file as `controller.yaml.remote-agent.yaml`, then restart
+the Controller. Use a concrete address reachable from the Agent's private
+network or overlay, with a separate port from the Console and API.
+
+```yaml
+listen: "10.20.0.5:8443"
+certificate: /etc/groundplane/remote/controller.pem
+private_key: /etc/groundplane/remote/controller-key.pem
+enrollment_ca_certificate: /etc/groundplane/remote/agent-ca.pem
+enrollment_ca_private_key: /etc/groundplane/remote/agent-ca-key.pem
+```
+
+Keep both private keys owned by the Controller account with mode `0600` or
+`0400`. Retain the companion file and credential files in the host recovery
+process. The startup configuration editor covers the primary file.
+
+1. On the Agent host, run `sudo groundplane remote-host prepare-enrollment
+   /etc/groundplane/remote-agent`. This creates `agent-key.pem` and
+   `agent.csr.pem`. Copy the CSR to the operator machine and keep the private
+   key on the Agent host.
+2. Register the Host with `groundplane remote-host create HOST_NAME`. Stage
+   the CSR using `groundplane remote-host stage-enrollment HOST_ID --id
+   --generation 0 --csr-file agent.csr.pem --certificate-file agent.pem`.
+   For an existing enrollment, use its current generation. Record the returned
+   Agent ID and new Host generation. Copy the public certificate, the Controller
+   TLS CA, and the Agent enrollment CA certificate into the Agent's private
+   configuration directory. Complete startup while the enrollment is pending.
+3. On the Agent host, write the two configuration files below and use the
+   exact returned identifiers. The directory is root-owned with mode `0700`.
+   Keep the Agent private key at mode `0600` or `0400`. If setting a custom
+   `storage.volume_root`, use the same absolute path as configured on the
+   Controller.
+
+`/etc/groundplane/remote-agent/agent.yaml`
+
+```yaml
+agent_id: AGENT_ID
+```
+
+`/etc/groundplane/remote-agent/agent.yaml.remote-agent.yaml`
+
+```yaml
+endpoint: "10.20.0.5:8443"
+controller_server_name: controller.example.net
+controller_ca_certificate: /run/groundplane/remote-agent/controller-ca.pem
+enrollment_ca_certificate: /run/groundplane/remote-agent/agent-ca.pem
+certificate: /run/groundplane/remote-agent/agent.pem
+private_key: /run/groundplane/remote-agent/agent-key.pem
+host_id: HOST_ID
+generation: 1
+```
+
+Run the `install_agent.py` shipped in the checksum-verified Agent release
+archive on the Agent host. Use the image and digest named in its manifest.
+
+```sh
+sudo python3 install_agent.py --image "$AGENT_IMAGE" \
+  --remote-config-dir /etc/groundplane/remote-agent \
+  --host-id HOST_ID --agent-id AGENT_ID --generation 1
+```
+
+The installer validates the configuration and signed identity before starting
+the pinned image in the local Docker engine. An identical running installation
+can be checked with the same command. An existing Agent with different identity,
+mounts, or image requires operator inspection. The installer preserves that
+container and its state.
+
+The installer reports container startup. Check `groundplane remote-host show
+HOST_ID --id` for the Controller's enrollment state after the Agent connects.
+The first authenticated connection confirms possession of the private key. Use
+explicit placement for the intended remote Host when preparing work.
+
 ## Images
 
 **Host → Images**, also linked from the Agent detail, lists the local Agent's

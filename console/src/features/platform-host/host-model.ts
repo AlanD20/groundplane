@@ -4,6 +4,7 @@ import type { HealthState } from "@/lib/types";
 export type HostResponse =
   operations["host.show"]["responses"][200]["content"]["application/json"];
 export type HostInfo = {
+  id?: string;
   hostname: string;
   arch: string;
   os: string;
@@ -39,6 +40,7 @@ export type HostInfo = {
 
 export function hostFromAPI(host: HostResponse): HostInfo {
   return {
+    id: host.id,
     hostname: host.hostname,
     arch: host.arch,
     os: host.os,

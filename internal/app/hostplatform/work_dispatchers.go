@@ -1,6 +1,8 @@
 package hostplatform
 
 import (
+	"slices"
+
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/workdispatch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
@@ -24,7 +26,8 @@ func (owners *workOwners) newDispatchers(
 	scheduler, err := workdispatch.NewScheduler(
 		queue,
 		forward,
-		append(
+		slices.Concat(
+			dependencies.Extensions.Admission,
 			append(
 				append(
 					append(softwareWork.admission, owners.directReleases.admission...),
@@ -185,7 +188,7 @@ func (owners *workOwners) newDispatchers(
 					Executor:  workexecution.Controller,
 					Owner:     dependencies.RunnerChecks,
 				},
-			}...),
+			}),
 	)
 	if err != nil {
 		return executionDispatchers{}, err
@@ -193,29 +196,34 @@ func (owners *workOwners) newDispatchers(
 	controller, err := workdispatch.NewControllerExecutor(
 		queue,
 		forward,
-		append(softwareWork.controller, []workdispatch.ControllerRegistration{
-			{Operation: workexecution.AgentLifecycle, Owner: owners.agentWork},
-			{Operation: workexecution.AgentSoftware, Owner: owners.agentWork},
-			{Operation: workexecution.ControllerSoftware, Owner: platform.controllerWork},
-			{Operation: workexecution.SoftwarePreparation, Owner: platform.preparations},
-			{Operation: workexecution.EtcdConfiguration, Owner: platform.EtcdConfig},
-			{Operation: workexecution.Runner, Owner: dependencies.RunnerLifecycle},
-			{Operation: workexecution.RemovalBackupObject, Owner: owners.backupRemoval},
-			{Operation: workexecution.Image, Owner: dependencies.Images},
-			{Operation: workexecution.ConnectorCheck, Owner: owners.connections.connectors},
-			{Operation: workexecution.BackingCheck, Owner: owners.connections.backings},
-			{Operation: workexecution.DNSCheck, Owner: owners.connections.dns},
-			{Operation: workexecution.EdgeCheck, Owner: owners.connections.edges},
-			{Operation: workexecution.RunnerCheck, Owner: dependencies.RunnerChecks},
-			{Operation: workexecution.RunnerSoftware, Owner: dependencies.RunnerSoftware},
-		}...),
+		slices.Concat(
+			dependencies.Extensions.Controller,
+			softwareWork.controller,
+			[]workdispatch.ControllerRegistration{
+				{Operation: workexecution.AgentLifecycle, Owner: owners.agentWork},
+				{Operation: workexecution.AgentSoftware, Owner: owners.agentWork},
+				{Operation: workexecution.ControllerSoftware, Owner: platform.controllerWork},
+				{Operation: workexecution.SoftwarePreparation, Owner: platform.preparations},
+				{Operation: workexecution.EtcdConfiguration, Owner: platform.EtcdConfig},
+				{Operation: workexecution.Runner, Owner: dependencies.RunnerLifecycle},
+				{Operation: workexecution.RemovalBackupObject, Owner: owners.backupRemoval},
+				{Operation: workexecution.Image, Owner: dependencies.Images},
+				{Operation: workexecution.ConnectorCheck, Owner: owners.connections.connectors},
+				{Operation: workexecution.BackingCheck, Owner: owners.connections.backings},
+				{Operation: workexecution.DNSCheck, Owner: owners.connections.dns},
+				{Operation: workexecution.EdgeCheck, Owner: owners.connections.edges},
+				{Operation: workexecution.RunnerCheck, Owner: dependencies.RunnerChecks},
+				{Operation: workexecution.RunnerSoftware, Owner: dependencies.RunnerSoftware},
+			},
+		),
 	)
 	if err != nil {
 		return executionDispatchers{}, err
 	}
 	retries, err := workdispatch.NewRetries(
 		queue,
-		append(
+		slices.Concat(
+			dependencies.Extensions.Retry,
 			append(append(softwareWork.retry, owners.provisioning.retry...), owners.resolver.retry...),
 			[]workdispatch.RetryRegistration{
 				{Operation: workexecution.Image, Owner: dependencies.Images},
@@ -244,7 +252,7 @@ func (owners *workOwners) newDispatchers(
 				{Operation: workexecution.ConnectorCheck, Owner: owners.connections.connectors},
 				{Operation: workexecution.BackingCheck, Owner: owners.connections.backings},
 				{Operation: workexecution.EdgeCheck, Owner: owners.connections.edges},
-			}...),
+			}),
 	)
 	if err != nil {
 		return executionDispatchers{}, err

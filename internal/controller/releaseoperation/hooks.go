@@ -29,6 +29,7 @@ func (service *Service) prepareReleaseHooks(
 	work workqueue.View,
 	operationID, planID string,
 	members []releaserender.ReleaseTaskRenderMember,
+	remotePlacement bool,
 ) (preparedReleaseHooks, error) {
 	if service.scripts == nil || service.preparation == nil || revision <= 0 {
 		return preparedReleaseHooks{}, errs.New(errs.KindInternal, "release hook dependencies are not configured")
@@ -58,6 +59,12 @@ func (service *Service) prepareReleaseHooks(
 		)
 		if err != nil {
 			return preparedReleaseHooks{}, err
+		}
+		if remotePlacement && len(scriptIDs) != 0 {
+			return preparedReleaseHooks{}, errs.New(
+				errs.KindValidationFailed,
+				"remote deployment requires a service without release hooks",
+			)
 		}
 		for _, scriptID := range scriptIDs {
 			sources, err := service.scripts.LoadReleaseHookExecutionSources(

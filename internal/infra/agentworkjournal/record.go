@@ -13,6 +13,8 @@ import (
 // attemptRecord owns the single transport sequence shared by an operation and
 // its hooks. Each typed report is retained for replay without retaining history.
 type attemptRecord struct {
+	PublicIngress           *standaloneRecord                   `json:"public_ingress,omitempty"`
+	RemoteImage             *standaloneRecord                   `json:"remote_image,omitempty"`
 	TerminalDelivery        *TerminalDelivery                   `json:"terminal_delivery,omitempty"`
 	Resolver                *ResolverRecord                     `json:"resolver,omitempty"`
 	BackingRecovery         *BackingRecoveryRecord              `json:"backing_recovery,omitempty"`
@@ -61,6 +63,12 @@ func (record attemptRecord) script() (*ScriptRecord, error) {
 }
 
 func (record attemptRecord) pending() (bool, error) {
+	if record.RemoteImage != nil {
+		return record.RemoteImage.Receipt == nil, nil
+	}
+	if record.PublicIngress != nil {
+		return record.PublicIngress.Receipt == nil, nil
+	}
 	if record.Resolver != nil {
 		return record.Resolver.Receipt == nil, nil
 	}
@@ -193,6 +201,15 @@ func (record attemptRecord) validate() error {
 		if err != nil || oversized {
 			return invalid()
 		}
+	}
+	if record.PublicIngress != nil && record.RemoteImage != nil {
+		return invalid()
+	}
+	if record.PublicIngress != nil {
+		return record.validateStandalone(record.PublicIngress.Receipt)
+	}
+	if record.RemoteImage != nil {
+		return record.validateStandalone(record.RemoteImage.Receipt)
 	}
 	if record.Resolver != nil {
 		return record.validateResolver()

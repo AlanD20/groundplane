@@ -23,24 +23,26 @@ import (
 // AgentDeliveries joins bounded scheduling and immutable assignment delivery.
 // Sending input grants no effects: the Agent must obtain Start and checkpoints.
 type AgentDeliveries struct {
-	resolvers    ResolverDeliveryOwner
-	backings     BackingDeliveryOwner
-	environments EnvironmentDeliveryOwner
-	queue        *workqueue.Repository
-	scheduler    *Scheduler
-	releases     ReleaseDeliveryOwner
-	restorations ReleaseRestorationDeliveryOwner
-	scripts      ScriptDeliveryOwner
-	hierarchy    HierarchyDeliveryOwner
-	detaches     DetachDeliveryOwner
-	attaches     AttachDeliveryOwner
-	networks     NetworkDeliveryOwner
-	components   ComponentDeliveryOwner
-	entries      EntryDeliveryOwner
-	volumes      VolumeDeliveryOwner
-	lifecycles   LifecycleDeliveryOwner
-	removals     ServiceRemovalDeliveryOwner
-	backups      BackupDeliveryOwner
+	publicIngress PublicIngressDeliveryOwner
+	remoteImage   RemoteImageDeliveryOwner
+	resolvers     ResolverDeliveryOwner
+	backings      BackingDeliveryOwner
+	environments  EnvironmentDeliveryOwner
+	queue         *workqueue.Repository
+	scheduler     *Scheduler
+	releases      ReleaseDeliveryOwner
+	restorations  ReleaseRestorationDeliveryOwner
+	scripts       ScriptDeliveryOwner
+	hierarchy     HierarchyDeliveryOwner
+	detaches      DetachDeliveryOwner
+	attaches      AttachDeliveryOwner
+	networks      NetworkDeliveryOwner
+	components    ComponentDeliveryOwner
+	entries       EntryDeliveryOwner
+	volumes       VolumeDeliveryOwner
+	lifecycles    LifecycleDeliveryOwner
+	removals      ServiceRemovalDeliveryOwner
+	backups       BackupDeliveryOwner
 }
 
 func NewAgentDeliveries(
@@ -281,6 +283,10 @@ func (delivery *AgentDeliveries) message(
 	view workqueue.ResumeView,
 ) (*agentpb.ControllerMessage, error) {
 	switch view.Work.Item.Item.Operation {
+	case workexecution.PublicIngress:
+		return delivery.publicIngressAssignment(ctx, view)
+	case workexecution.RemoteImage:
+		return delivery.remoteImageAssignment(ctx, view)
 	case workexecution.Resolver:
 		assignment, err := delivery.resolvers.LoadWorkAssignment(ctx, view)
 		if err != nil {

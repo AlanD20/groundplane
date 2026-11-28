@@ -25,7 +25,8 @@ func NewLocal(commands commandrunner.Runner) (*HostControl, error) {
 	if commands == nil {
 		return nil, errs.New(errs.KindInternal, "runner host command runner is required")
 	}
-	return New(&localOperations{commands: commands})
+	operations := &localOperations{commands: commands}
+	return &HostControl{operations: operations, local: operations}, nil
 }
 
 func (operations *localOperations) run(ctx context.Context, name string, args ...string) (commandrunner.Result, error) {

@@ -78,7 +78,7 @@ type WorkDispatcher interface {
 		context.Context,
 		agentregistration.WorkAuthorization,
 		workexecution.AgentConcurrency,
-		bool,
+		workdispatch.AgentReadiness,
 	) ([]workdispatch.Issue, error)
 	Dispatch(
 		context.Context,
@@ -178,8 +178,9 @@ func (server *Server) registerWorkProcess(
 	if err != nil {
 		return nil, err
 	}
-	identity, err := server.workIdentities.RegisterWorkProcess(ctx, session.agentID, generation,
-		process.ProcessGeneration, limits, server.workStarts.Operations())
+	identity, err := server.registerChannelProcess(
+		ctx, session.agentID, generation, process.ProcessGeneration, limits, session.remote,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +211,13 @@ func (server *Server) authenticatedWorkIdentity(
 		return agentregistration.WorkAuthorization{}, err
 	}
 	agentID := session.agentID
-	authorization, err := server.workIdentities.ResolveWorkIdentity(ctx, agentID, generation, process.ProcessGeneration)
+	authorization, err := server.resolveChannelProcess(
+		ctx,
+		agentID,
+		generation,
+		process.ProcessGeneration,
+		session.remote,
+	)
 	if err != nil {
 		return agentregistration.WorkAuthorization{}, err
 	}

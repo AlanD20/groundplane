@@ -64,6 +64,7 @@ type Session struct {
 	state    *sessionState
 	ctx      context.Context
 	close    sync.Once
+	remote   *remoteSession
 }
 
 // NewRegistry returns an empty Agent session registry.

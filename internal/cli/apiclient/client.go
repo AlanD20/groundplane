@@ -55,6 +55,7 @@ type Client struct {
 	BaseURL       string
 	HTTP          *http.Client
 	StreamingHTTP *http.Client
+	scopedRunner  bool
 }
 
 func New(baseURL string) *Client {

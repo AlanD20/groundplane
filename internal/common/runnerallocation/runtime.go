@@ -58,6 +58,21 @@ type RunnerRuntimeEgress struct {
 	SourceUID          uint32
 	DeniedCIDRs        []netip.Prefix
 	ControllerEndpoint netip.AddrPort
+	ScopedEndpoint     netip.AddrPort `json:",omitzero"`
+	ScopedRegistry     netip.AddrPort `json:",omitzero"`
+	RegistrationOnly   bool           `json:",omitzero"`
+}
+
+// APIEndpoint selects the authorized Runner listener. ControllerEndpoint
+// remains the address of the installed resolver and legacy registry.
+func (egress RunnerRuntimeEgress) APIEndpoint() netip.AddrPort {
+	if egress.ScopedEndpoint.IsValid() {
+		return egress.ScopedEndpoint
+	}
+	if egress.RegistrationOnly {
+		return netip.AddrPort{}
+	}
+	return egress.ControllerEndpoint
 }
 
 type RunnerContainer struct {
@@ -80,20 +95,21 @@ type RunnerContainer struct {
 }
 
 type RuntimePlan struct {
-	CPUMillis        int64
-	MemoryBytes      int64
-	RunnerID         string
-	TenantID         string
-	OwnerKind        string
-	OwnerID          string
-	RuntimeEpoch     uint64
-	AllocationConfig RunnerAllocationConfig
-	Allocation       RunnerHostAllocationRecord
-	Identity         RunnerRuntimeIdentity
-	Paths            RunnerRuntimePaths
-	Network          RunnerRuntimeNetwork
-	Egress           RunnerRuntimeEgress
-	Container        RunnerContainer
+	CPUMillis              int64
+	MemoryBytes            int64
+	RunnerID               string
+	TenantID               string
+	OwnerKind              string
+	OwnerID                string
+	RuntimeEpoch           uint64
+	AllocationConfig       RunnerAllocationConfig
+	Allocation             RunnerHostAllocationRecord
+	Identity               RunnerRuntimeIdentity
+	Paths                  RunnerRuntimePaths
+	Network                RunnerRuntimeNetwork
+	Egress                 RunnerRuntimeEgress
+	Container              RunnerContainer
+	ScopedPredecessorImage string `json:",omitzero"`
 }
 
 func (plan RuntimePlan) Digest() string {
@@ -228,6 +244,14 @@ func validRuntimeDigest(value string) bool {
 
 func (plan RuntimePlan) IdentityDigest() string {
 	plan.RuntimeEpoch = 0
+	// A staged egress cutover keeps ownership of the same host allocation.
+	plan.Egress.ScopedEndpoint = netip.AddrPort{}
+	plan.Egress.ScopedRegistry = netip.AddrPort{}
+	plan.Egress.RegistrationOnly = false
+	if plan.ScopedPredecessorImage != "" {
+		plan.Container.ImageRef = plan.ScopedPredecessorImage
+		plan.ScopedPredecessorImage = ""
+	}
 	return plan.Digest()
 }
 

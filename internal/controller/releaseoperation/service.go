@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/common/workexecution"
 	"github.com/AlanD20/groundplane/internal/controller/acceptedaction"
@@ -23,6 +24,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdrg "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -39,6 +41,7 @@ type localAgentReader interface {
 }
 
 type Service struct {
+	remotePlacement *remoteDeploymentPreparation
 	acceptedActions *acceptedaction.Submitter
 	queue           *workqueue.Repository
 	agents          localAgentReader
@@ -57,17 +60,19 @@ type Service struct {
 }
 
 type releaseCandidateInput struct {
-	planning       releasequeries.ReleasePlanningService
-	selection      workloadseal.Selection
-	workload       domain.WorkloadSeal
-	tag            string
-	priorWorkload  *domain.WorkloadSeal
-	priorReleaseID string
-	strategy       domain.Strategy
-	priorStrategy  domain.Strategy
-	slot           domain.Slot
-	onFailure      domain.OnFailure
-	rollbackSource string
+	remotePlacement  bool
+	remoteProxyImage *domain.ProxyImage
+	planning         releasequeries.ReleasePlanningService
+	selection        workloadseal.Selection
+	workload         domain.WorkloadSeal
+	tag              string
+	priorWorkload    *domain.WorkloadSeal
+	priorReleaseID   string
+	strategy         domain.Strategy
+	priorStrategy    domain.Strategy
+	slot             domain.Slot
+	onFailure        domain.OnFailure
+	rollbackSource   string
 }
 
 func NewService(
@@ -116,21 +121,31 @@ func (service *Service) DeployService(
 	request domain.ServiceDeployInput,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
+	return service.deployService(ctx, serviceID, request, idempotencyKey, nil, nil)
+}
+
+func (service *Service) deployService(
+	ctx context.Context,
+	serviceID string,
+	request domain.ServiceDeployInput,
+	idempotencyKey string,
+	guards []etcdstore.Condition,
+	publicationForTask func(workexecution.Task) (workqueue.Change, error),
+) (idempotencyrecord.IdempotencyResponse, error) {
+	if request.HostID != "" && ids.Validate(ids.KindHost, request.HostID) != nil {
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"deployment requires a stable host identity",
+		)
+	}
 	ctx = imagefence.WithScope(ctx)
 	current, err := service.services.GetService(ctx, serviceID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	body := requestidempotency.JSONBody(requestidempotency.Object(
-		requestidempotency.Field{Name: "image", Value: requestidempotency.String(request.Image)},
-		requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)},
-		requestidempotency.Field{Name: "strategy", Value: requestidempotency.String(string(request.Strategy))},
-		requestidempotency.Field{Name: "on_failure", Value: requestidempotency.String(string(request.OnFailure))},
-		requestidempotency.Field{Name: "after", Value: releaseAfterValue(request.After)},
-	))
 	locator, protected, durable, replay, err := service.begin(
 		ctx, current.Record.EnvironmentID, http.MethodPost, serviceDeployRoute, serviceID,
-		idempotencyKey, body,
+		idempotencyKey, serviceDeployBody(request),
 	)
 	if err != nil || replay != nil {
 		if replay != nil {
@@ -140,6 +155,29 @@ func (service *Service) DeployService(
 	}
 	defer protected.Destroy()
 	defer clear(durable.Ciphertext)
+	if request.HostID != "" {
+		if service.remotePlacement == nil || len(guards) != 0 {
+			return idempotencyrecord.IdempotencyResponse{}, remotePlacementUnavailable()
+		}
+		return acceptReleaseRequest(ctx, service, current.Record.EnvironmentID, serviceID, current.Record.Desired.Name,
+			workexecution.ActionDeploy, "service-deploy", request.After,
+			acceptedServiceDeploy{ServiceDeployInput: request, RemoteDesiredRevision: current.Revision},
+			locator, durable, protected, servicerecord.ServiceDesiredCondition(current))
+	}
+	if len(guards) != 0 {
+		scope, err := service.ledger.LoadTaskAcceptanceScope(ctx, current.Record.EnvironmentID)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		source, err := captureDeploySource(scope, current.Revision, guards)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+		return publishReleaseRequest(ctx, service, scope, serviceID, current.Record.Desired.Name,
+			workexecution.ActionDeploy, "service-deploy", request.After,
+			acceptedServiceDeploy{ServiceDeployInput: request, Source: &source}, locator, durable, protected,
+			publicationForTask, guards...)
+	}
 	return acceptReleaseRequest(
 		ctx,
 		service,
@@ -153,6 +191,7 @@ func (service *Service) DeployService(
 		locator,
 		durable,
 		protected,
+		guards...,
 	)
 }
 
@@ -386,21 +425,7 @@ func (service *Service) begin(
 	key string,
 	body requestidempotency.Body,
 ) (idempotencyrecord.IdempotencyLocator, requestidempotency.ProtectedEvidence, idempotencyrecord.ProtectedIntentRecord, *idempotencyrecord.IdempotencyResponse, error) {
-	locator := idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
-		Method: method, Route: route, Key: key,
-	}
-	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
-		Method: method, Route: route,
-		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
-		Path:  []requestidempotency.PathBinding{{Name: "id", Value: targetID}},
-		Query: requestidempotency.Object(), Body: body,
-	})
-	if err != nil {
-		return locator, requestidempotency.ProtectedEvidence{}, idempotencyrecord.ProtectedIntentRecord{}, nil, err
-	}
-	defer digest.Destroy()
-	protected, err := service.coordinator.ProtectIntent(ctx, version, digest)
+	locator, protected, err := service.protectReleaseIntent(ctx, environmentID, method, route, targetID, key, body)
 	if err != nil {
 		return locator, requestidempotency.ProtectedEvidence{}, idempotencyrecord.ProtectedIntentRecord{}, nil, err
 	}
@@ -426,6 +451,27 @@ func (service *Service) begin(
 		return locator, requestidempotency.ProtectedEvidence{}, idempotencyrecord.ProtectedIntentRecord{}, &response, nil
 	}
 	return locator, protected, durable, nil, nil
+}
+
+func (service *Service) protectReleaseIntent(ctx context.Context, environmentID, method, route, targetID, key string,
+	body requestidempotency.Body,
+) (idempotencyrecord.IdempotencyLocator, requestidempotency.ProtectedEvidence, error) {
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
+		Method: method, Route: route, Key: key,
+	}
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
+		Method: method, Route: route,
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: targetID}},
+		Query: requestidempotency.Object(), Body: body,
+	})
+	if err != nil {
+		return locator, requestidempotency.ProtectedEvidence{}, err
+	}
+	defer digest.Destroy()
+	protected, err := service.coordinator.ProtectIntent(ctx, version, digest)
+	return locator, protected, err
 }
 
 func (service *Service) deployCandidate(

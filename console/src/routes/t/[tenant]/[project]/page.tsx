@@ -2,6 +2,7 @@ import { TaskRunAfterSelector } from "@/features/task/task-run-after-selector";
 import { CreationButton } from "@/components/common/creation-button";
 import { useEditorSession } from "@/components/common/editor-session";
 import { EnvironmentsTable } from "@/features/environment/environments-table";
+import { ConnectedFirstDeployment } from "@/features/public-ingress/connected-first-deployment";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ResourceLookupState } from "@/components/common/resource-lookup-state";
@@ -24,6 +25,7 @@ import type { Environment } from "@/lib/types";
 import {
   Activity,
   ArrowLeft,
+  Box,
   Boxes,
   Building2,
   KeyRound,
@@ -43,6 +45,7 @@ export default function TenantProjectPage() {
   const tenant = store.getTenant(params.tenant);
   const project = store.getProject(params.tenant, params.project);
   const [open, setOpen] = useState(false);
+  const [deployImage, setDeployImage] = useState(false);
   const [name, setName] = useState("");
   const [networkPool, setNetworkPool] = useState("");
   const [creating, setCreating] = useState(false);
@@ -150,12 +153,31 @@ export default function TenantProjectPage() {
                 <KeyRound className="size-4" /> Configuration
               </Button>
             </Link>
-            <CreationButton active={open} onOpenChange={setOpen}>
+            <CreationButton
+              active={deployImage}
+              variant="outline"
+              onOpenChange={(next) => {
+                if (next) setOpen(false);
+                setDeployImage(next);
+              }}
+            >
+              <Box className="size-4" /> Deploy an image
+            </CreationButton>
+            <CreationButton
+              active={open}
+              onOpenChange={(next) => {
+                if (next) setDeployImage(false);
+                setOpen(next);
+              }}
+            >
               <Plus className="size-4" /> New environment
             </CreationButton>
           </>
         }
       />
+      {deployImage && (
+        <ConnectedFirstDeployment key={project.id} project={project} />
+      )}
       <ResourceForm open={open} onOpenChange={setOpen}>
         <DialogHeader>
           <DialogTitle>New environment · {project.name}</DialogTitle>

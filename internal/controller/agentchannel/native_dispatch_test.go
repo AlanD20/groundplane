@@ -38,7 +38,7 @@ func (*nativeDispatchPeer) AccountJournal(context.Context, agentregistration.Wor
 }
 
 func (peer *nativeDispatchPeer) Ready(context.Context, agentregistration.WorkAuthorization,
-	workexecution.AgentConcurrency, bool,
+	workexecution.AgentConcurrency, workdispatch.AgentReadiness,
 ) ([]workdispatch.Issue, error) {
 	if peer.readiness != nil {
 		return nil, peer.readiness()
@@ -59,18 +59,18 @@ func TestNativeDispatchDefersOnlyReadinessPublicationConflict(t *testing.T) {
 	defer payloads.close()
 	delivered := map[string]string{}
 	peer.readiness = func() error { return errs.New(errs.KindAgentReadinessChanged, "lost publication CAS") }
-	if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, false, delivered, payloads); err != nil ||
+	if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, workdispatch.AgentReadiness{}, delivered, payloads); err != nil ||
 		peer.calls != 0 ||
 		len(stream.messages) != 0 {
 		t.Fatalf("publication conflict disconnected or granted work: %v", err)
 	}
 	peer.readiness = func() error { return errs.New(errs.KindStateConflict, "foreign executor") }
-	if kind, _ := errs.KindOf(server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, false, delivered, payloads)); kind != errs.KindStateConflict ||
+	if kind, _ := errs.KindOf(server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, workdispatch.AgentReadiness{}, delivered, payloads)); kind != errs.KindStateConflict ||
 		peer.calls != 0 {
 		t.Fatal("ordinary ownership refusal was swallowed")
 	}
 	peer.readiness = nil
-	if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, false, delivered, payloads); err != nil ||
+	if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, workdispatch.AgentReadiness{}, delivered, payloads); err != nil ||
 		peer.calls != 1 ||
 		len(stream.messages) != 1 ||
 		len(delivered) != 1 {
@@ -221,7 +221,7 @@ func TestNativeDispatchFencesPreparedDelivery(t *testing.T) {
 			peer.prepare = func() { close(entered); <-release }
 			result := make(chan error, 1)
 			go func() {
-				result <- server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, true, delivered, payloads)
+				result <- server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, workdispatch.AgentReadiness{Staging: true}, delivered, payloads)
 			}()
 			select {
 			case <-entered:
@@ -293,7 +293,7 @@ func TestNativeDispatchFencesPreparedDelivery(t *testing.T) {
 					t.Fatal("pause did not finish after preparation drained")
 				}
 			}
-			if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, true, delivered, payloads); err != nil {
+			if err := server.dispatchWork(stream, session, 1, 1, &agentpb.AgentConfig{MaxConcurrentTasks: 1, MaxParallelOperationsPerTask: 1}, workdispatch.AgentReadiness{Staging: true}, delivered, payloads); err != nil {
 				t.Fatal(err)
 			}
 			if mode == "pause" {
