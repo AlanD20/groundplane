@@ -60,5 +60,10 @@ func serviceDeployBody(request release.ServiceDeployInput) requestidempotency.Bo
 			requestidempotency.Field{Name: "host_id", Value: requestidempotency.String(request.HostID)},
 		)
 	}
+	if request.SourceReleaseID != "" {
+		fields = append(fields, requestidempotency.Field{
+			Name: "source_release_id", Value: requestidempotency.String(request.SourceReleaseID),
+		})
+	}
 	return requestidempotency.JSONBody(requestidempotency.Object(fields...))
 }

@@ -91,13 +91,11 @@ export function ManagedImageUpdate({
               strategy: "recreate",
               onFailure: "leave_active",
             });
-            return store.commitDeploy(
-              env.id,
-              service.name,
-              selected,
-              "recreate",
-              "leave_active",
-            );
+            return store.commitDeploy(env.id, service.id, {
+              image: selected,
+              strategy: "recreate",
+              onFailure: "leave_active",
+            });
           }}
           onSettled={async () => {
             await Promise.all([

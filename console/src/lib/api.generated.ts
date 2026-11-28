@@ -3310,6 +3310,8 @@ export interface components {
             /** @description Host-local registry reference for this Release only; mutually exclusive with tag */
             image?: string;
             on_failure?: string;
+            /** @description Promote the exact image from a successful Release in a sibling Environment of this Project */
+            source_release_id?: string;
             strategy?: string;
             tag?: string;
         };
@@ -4759,12 +4761,14 @@ export interface components {
             group_operation_id?: string;
             id: string;
             image: string;
+            local_image_id?: string;
             on_failure: string;
             operation_id: string;
             operation_kind: string;
             originating_task_id: string;
             prior_serving_release_id?: string;
             prior_successful_release_id?: string;
+            promotion_source_release_id?: string;
             render_input_digest: string;
             rollback_material?: components["schemas"]["ReleaseRollbackMaterial"];
             rollback_source_release_id?: string;
@@ -4873,10 +4877,12 @@ export interface components {
             group_operation_id?: string;
             id: string;
             image: string;
+            local_image_id?: string;
             on_failure: string;
             operation_id: string;
             operation_kind: string;
             originating_task_id: string;
+            promotion_source_release_id?: string;
             service_id: string;
             serving: boolean;
             slot?: string;

@@ -77,7 +77,21 @@ export async function readEnvironment(
   environmentId: string,
   signal?: AbortSignal,
 ): Promise<Environment | null> {
-  const response = await controllerRequest<
+  const response = await readEnvironmentDocument(environmentId, signal);
+  if (!response) return null;
+  return loadEnvironmentResources(environmentFromAPI(response), signal);
+}
+
+export async function readEnvironmentMetadata(
+  environmentId: string,
+  signal?: AbortSignal,
+) {
+  const response = await readEnvironmentDocument(environmentId, signal);
+  return response ? environmentMetadataFromAPI(response) : null;
+}
+
+function readEnvironmentDocument(environmentId: string, signal?: AbortSignal) {
+  return controllerRequest<
     operations["environment.show"]["responses"][200]["content"]["application/json"]
   >(`/environments/${encodeURIComponent(environmentId)}`, 200, {
     signal,
@@ -86,8 +100,6 @@ export async function readEnvironment(
       return null;
     throw cause;
   });
-  if (!response) return null;
-  return loadEnvironmentResources(environmentFromAPI(response), signal);
 }
 
 async function loadEnvironmentResources(

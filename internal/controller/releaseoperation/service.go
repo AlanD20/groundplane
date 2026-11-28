@@ -73,6 +73,8 @@ type releaseCandidateInput struct {
 	slot             domain.Slot
 	onFailure        domain.OnFailure
 	rollbackSource   string
+	promotionSource  string
+	promotionGuards  []etcdstore.Condition
 }
 
 func NewService(
@@ -132,6 +134,11 @@ func (service *Service) deployService(
 	guards []etcdstore.Condition,
 	publicationForTask func(workexecution.Task) (workqueue.Change, error),
 ) (idempotencyrecord.IdempotencyResponse, error) {
+	if request.SourceReleaseID != "" {
+		if err := validatePromotionRequest(request, len(guards) != 0); err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
+	}
 	if request.HostID != "" && ids.Validate(ids.KindHost, request.HostID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
@@ -541,13 +548,21 @@ func (service *Service) rollbackCandidate(
 	if err != nil {
 		return releaseCandidateInput{}, err
 	}
+	candidate, err := service.historicalImageCandidate(ctx, scope, planning, selection.Source, overrideFailure)
+	candidate.rollbackSource = selection.Source.ID
+	return candidate, err
+}
+
+func (service *Service) historicalImageCandidate(ctx context.Context, scope releasequeries.ReleasePlanningScope,
+	planning releasequeries.ReleasePlanningService, source domain.Intent, overrideFailure domain.OnFailure,
+) (releaseCandidateInput, error) {
 	serving, hasServing, err := service.ledger.GetPlanningServingIntent(ctx, scope, planning)
 	if err != nil {
 		return releaseCandidateInput{}, err
 	}
 	execution, err := selectReleaseExecution(
 		planning,
-		selection.Source.CandidateWorkload.RequestedReference,
+		source.CandidateWorkload.RequestedReference,
 		"",
 		overrideFailure,
 		hasServing,
@@ -555,16 +570,15 @@ func (service *Service) rollbackCandidate(
 	if err != nil {
 		return releaseCandidateInput{}, err
 	}
-	// Rollback changes only the image. Its immutable image id comes from history;
-	// replica count, strategy and failure policy come from current Service intent.
-	workload := selection.Source.CandidateWorkload
+	// The historical Release selects the image only. The destination owns execution settings.
+	workload := source.CandidateWorkload
 	workload.ReplicaCount = execution.replicas
 	return releaseCandidateInput{
-		planning: planning, selection: workloadseal.Selection{Historical: &workload}, tag: selection.Source.Tag,
+		planning: planning, selection: workloadseal.Selection{Historical: &workload}, tag: source.Tag,
 		strategy:      execution.strategy,
 		priorWorkload: releasePriorWorkload(serving, hasServing), priorReleaseID: releasePriorID(serving, hasServing),
 		priorStrategy: releasePriorStrategy(serving, hasServing),
 		slot:          domain.InactiveSlot(execution.strategy, planning.Projection.ServingSlot),
-		onFailure:     execution.onFailure, rollbackSource: selection.Source.ID,
+		onFailure:     execution.onFailure,
 	}, nil
 }

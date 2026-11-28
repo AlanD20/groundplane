@@ -60,7 +60,7 @@ func newReleaseCmd() *cobra.Command {
 }
 
 func releaseFields(release apiTypes.ReleaseSummary) map[string]any {
-	return map[string]any{
+	fields := map[string]any{
 		"id":           release.ID,
 		"service_id":   release.ServiceID,
 		"image":        release.Image,
@@ -70,4 +70,8 @@ func releaseFields(release apiTypes.ReleaseSummary) map[string]any {
 		"created_at":   release.CreatedAt,
 		"completed_at": release.CompletedAt,
 	}
+	if release.PromotionSourceReleaseID != "" {
+		fields["promotion_source_release_id"] = release.PromotionSourceReleaseID
+	}
+	return fields
 }

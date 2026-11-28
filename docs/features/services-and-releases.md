@@ -76,6 +76,26 @@ Redeploying the same tag can apply configuration changes. If that local tag has
 been moved to different bytes, a new Deploy can select those bytes; an existing
 Release never changes with the tag. Retry retains its original image and inputs.
 
+### Promote a tested image
+
+In Deploy, choose **Promote a Release** and review the source Release ID. The
+source must be a successful, retained application Release in a sibling Environment
+of the same Project. The destination host needs the exact image ID recorded by
+that Release. If the image is missing, fetch the original digest-pinned registry
+reference before trying again. A tag that now points to different bytes cannot
+supply the source image.
+
+Use `groundplane service deploy SERVICE --source-release RELEASE_ID` or pass
+`source_release_id` to the Service Deploy endpoint. Promotion applies the
+destination's saved configuration, rollout strategy and hooks. It carries only
+the image identity across Environments. Review the destination's storage,
+Backing Service Attaches and migration hooks before Deploy. Use `--after` to
+require successful prerequisite Tasks such as a backup. Deployment rollback
+changes the image and does not reverse a migration or restore data.
+
+The new Release links to its promotion source. This action currently uses the
+local managed host and supports one destination Service at a time.
+
 ## Strategies and replicas
 
 The strategy chosen for a Deploy overrides the declared default for that Release

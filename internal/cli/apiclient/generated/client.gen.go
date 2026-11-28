@@ -3929,8 +3929,11 @@ type DeployRequest struct {
 	// Image Host-local registry reference for this Release only; mutually exclusive with tag
 	Image     *string `json:"image,omitempty"`
 	OnFailure *string `json:"on_failure,omitempty"`
-	Strategy  *string `json:"strategy,omitempty"`
-	Tag       *string `json:"tag,omitempty"`
+
+	// SourceReleaseId Promote the exact image from a successful Release in a sibling Environment of this Project
+	SourceReleaseId *string `json:"source_release_id,omitempty"`
+	Strategy        *string `json:"strategy,omitempty"`
+	Tag             *string `json:"tag,omitempty"`
 }
 
 // EdgeCheckConfiguration defines model for EdgeCheckConfiguration.
@@ -5431,12 +5434,14 @@ type ReleaseDetail struct {
 	GroupOperationId         *string                  `json:"group_operation_id,omitempty"`
 	Id                       string                   `json:"id"`
 	Image                    string                   `json:"image"`
+	LocalImageId             *string                  `json:"local_image_id,omitempty"`
 	OnFailure                string                   `json:"on_failure"`
 	OperationId              string                   `json:"operation_id"`
 	OperationKind            string                   `json:"operation_kind"`
 	OriginatingTaskId        string                   `json:"originating_task_id"`
 	PriorServingReleaseId    *string                  `json:"prior_serving_release_id,omitempty"`
 	PriorSuccessfulReleaseId *string                  `json:"prior_successful_release_id,omitempty"`
+	PromotionSourceReleaseId *string                  `json:"promotion_source_release_id,omitempty"`
 	RenderInputDigest        string                   `json:"render_input_digest"`
 	RollbackMaterial         *ReleaseRollbackMaterial `json:"rollback_material,omitempty"`
 	RollbackSourceReleaseId  *string                  `json:"rollback_source_release_id,omitempty"`
@@ -5542,25 +5547,27 @@ type ReleaseRollbackMaterial struct {
 
 // ReleaseSummary defines model for ReleaseSummary.
 type ReleaseSummary struct {
-	CompletedAt        *string `json:"completed_at,omitempty"`
-	CreatedAt          string  `json:"created_at"`
-	CurrentSuccessful  bool    `json:"current_successful"`
-	Digest             *string `json:"digest,omitempty"`
-	EnvironmentId      string  `json:"environment_id"`
-	GroupMemberOrdinal *int32  `json:"group_member_ordinal,omitempty"`
-	GroupOperationId   *string `json:"group_operation_id,omitempty"`
-	Id                 string  `json:"id"`
-	Image              string  `json:"image"`
-	OnFailure          string  `json:"on_failure"`
-	OperationId        string  `json:"operation_id"`
-	OperationKind      string  `json:"operation_kind"`
-	OriginatingTaskId  string  `json:"originating_task_id"`
-	ServiceId          string  `json:"service_id"`
-	Serving            bool    `json:"serving"`
-	Slot               *string `json:"slot,omitempty"`
-	State              string  `json:"state"`
-	Strategy           string  `json:"strategy"`
-	Tag                string  `json:"tag"`
+	CompletedAt              *string `json:"completed_at,omitempty"`
+	CreatedAt                string  `json:"created_at"`
+	CurrentSuccessful        bool    `json:"current_successful"`
+	Digest                   *string `json:"digest,omitempty"`
+	EnvironmentId            string  `json:"environment_id"`
+	GroupMemberOrdinal       *int32  `json:"group_member_ordinal,omitempty"`
+	GroupOperationId         *string `json:"group_operation_id,omitempty"`
+	Id                       string  `json:"id"`
+	Image                    string  `json:"image"`
+	LocalImageId             *string `json:"local_image_id,omitempty"`
+	OnFailure                string  `json:"on_failure"`
+	OperationId              string  `json:"operation_id"`
+	OperationKind            string  `json:"operation_kind"`
+	OriginatingTaskId        string  `json:"originating_task_id"`
+	PromotionSourceReleaseId *string `json:"promotion_source_release_id,omitempty"`
+	ServiceId                string  `json:"service_id"`
+	Serving                  bool    `json:"serving"`
+	Slot                     *string `json:"slot,omitempty"`
+	State                    string  `json:"state"`
+	Strategy                 string  `json:"strategy"`
+	Tag                      string  `json:"tag"`
 }
 
 // RemoteHost defines model for RemoteHost.

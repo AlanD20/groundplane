@@ -38,10 +38,12 @@ func serviceCreateBody(input apiTypes.ServiceCreate) (generated.ServiceCreateJSO
 
 func serviceDeployBody(input apiTypes.DeployRequest) generated.ServiceDeployJSONRequestBody {
 	return generated.ServiceDeployJSONRequestBody{
-		After: optionalServiceStrings(input.After),
-		Image: optionalServiceString(input.Image),
-		Tag:   optionalServiceString(input.Tag), Strategy: optionalServiceString(input.Strategy),
-		OnFailure: optionalServiceString(string(input.OnFailure)),
+		After:           optionalServiceStrings(input.After),
+		Image:           optionalServiceString(input.Image),
+		Tag:             optionalServiceString(input.Tag),
+		SourceReleaseId: optionalServiceString(input.SourceReleaseID),
+		Strategy:        optionalServiceString(input.Strategy),
+		OnFailure:       optionalServiceString(string(input.OnFailure)),
 	}
 }
 

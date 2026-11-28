@@ -6,6 +6,7 @@ import (
 	"time"
 
 	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
@@ -348,13 +349,17 @@ func newServiceCmd() *cobra.Command {
 	addTaskAfterFlag(remove, &removeAfter)
 	cmd.AddCommand(remove)
 
-	var deployTag, deployImage, deployStrategy, deployOnFailure string
+	var deployTag, deployImage, deploySourceReleaseID, deployStrategy, deployOnFailure string
 	var deployAfter []string
 	deploy := &cobra.Command{
 		Use:   "deploy <name>",
-		Short: "Deploy a service (tag defaults to the current tag — the redeploy case)",
+		Short: "Deploy a Service, optionally promoting an image from a successful Release",
+		Long:  "Deploy a Service. Promotion uses the destination Service's declared strategy and failure policy.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("source-release") && ids.Validate(ids.KindDeployment, deploySourceReleaseID) != nil {
+				return errs.New(errs.KindValidationFailed, "--source-release requires a stable Release ID")
+			}
 			after, err := validatedTaskAfter(deployAfter)
 			if err != nil {
 				return err
@@ -364,7 +369,8 @@ func newServiceCmd() *cobra.Command {
 				return err
 			}
 			accepted, err := fromContext(cmd).Client.DeployService(cmd.Context(), serviceID, apiTypes.DeployRequest{
-				After: after, Tag: deployTag, Image: deployImage, Strategy: deployStrategy, OnFailure: apiTypes.OnFailure(deployOnFailure),
+				After: after, Tag: deployTag, Image: deployImage, SourceReleaseID: deploySourceReleaseID,
+				Strategy: deployStrategy, OnFailure: apiTypes.OnFailure(deployOnFailure),
 			})
 			if err != nil {
 				return err
@@ -376,11 +382,15 @@ func newServiceCmd() *cobra.Command {
 		StringVar(&deployTag, "tag", "", "image tag to resolve and pin for this deployment (defaults to the current tag)")
 	deploy.Flags().
 		StringVar(&deployImage, "image", "", "host-local image reference for this Release only (does not edit Service configuration)")
-	deploy.MarkFlagsMutuallyExclusive("tag", "image")
+	deploy.Flags().
+		StringVar(&deploySourceReleaseID, "source-release", "", "promote the retained image of a successful sibling Environment Release by ID")
+	deploy.MarkFlagsMutuallyExclusive("tag", "image", "source-release")
 	deploy.Flags().
 		StringVar(&deployStrategy, "strategy", "", "blue-green | recreate | rolling")
 	deploy.Flags().
 		StringVar(&deployOnFailure, "on-failure", "", "switch_back | leave_active (defaults to the Service declaration)")
+	deploy.MarkFlagsMutuallyExclusive("source-release", "strategy")
+	deploy.MarkFlagsMutuallyExclusive("source-release", "on-failure")
 	addTaskAfterFlag(deploy, &deployAfter)
 	cmd.AddCommand(deploy)
 

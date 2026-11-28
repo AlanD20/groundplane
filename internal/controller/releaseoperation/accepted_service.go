@@ -145,6 +145,13 @@ func (service *Service) prepareAcceptedServiceDeploy(
 			return taskdependencies.Prepared{}, staleDeploySource()
 		}
 	}
+	if request.SourceReleaseID != "" {
+		candidate, err := service.promotionCandidate(ctx, scope, planning[0], request)
+		if err != nil {
+			return taskdependencies.Prepared{}, err
+		}
+		return service.prepareServiceWork(ctx, scope, candidate, task.Task)
+	}
 	candidate, err := service.deployCandidate(
 		ctx,
 		scope,

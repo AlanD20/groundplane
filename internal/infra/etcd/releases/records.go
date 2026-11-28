@@ -116,7 +116,10 @@ func ReleaseServiceIndexScope(environmentID, serviceID string) string {
 	return releaseServiceIndexPrefix + environmentID + "/" + serviceID + "/"
 }
 
-func ReleaseTerminalKey(releaseID string) string   { return releaseTerminalPrefix + releaseID }
+func ReleaseTerminalKey(releaseID string) string { return releaseTerminalPrefix + releaseID }
+func ReleasePromotionSourceKey(releaseID string) string {
+	return "/v1/records/release-promotion-sources/" + releaseID
+}
 func ReleaseRetentionKey(releaseID string) string  { return releaseRetentionPrefix + releaseID }
 func ReleaseProjectionKey(serviceID string) string { return releaseProjectionPrefix + serviceID }
 

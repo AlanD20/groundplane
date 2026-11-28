@@ -114,7 +114,8 @@ func (admission *ScopedAdmission) mutation(
 	switch request.Operation {
 	case runneraccess.DeployService:
 		input := request.Deploy
-		if input == nil || input.Image != grant.Image || input.Tag != "" || input.Strategy != "" ||
+		if input == nil || input.Image != grant.Image || input.Tag != "" || input.SourceReleaseID != "" ||
+			input.Strategy != "" ||
 			input.OnFailure != "" {
 			return nil, nil
 		}

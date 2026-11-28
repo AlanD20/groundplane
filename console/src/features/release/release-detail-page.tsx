@@ -236,6 +236,12 @@ function ReleaseDetails({
                 {release.digest || "tag resolved without registry digest"}
               </span>
             </p>
+            {release.promotion_source_release_id && (
+              <div className="space-y-1">
+                <p className="text-muted-foreground">Promoted from Release</p>
+                <CompactReference value={release.promotion_source_release_id} />
+              </div>
+            )}
             <p>
               <span className="text-muted-foreground">Render input</span>
               <br />

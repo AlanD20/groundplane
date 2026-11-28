@@ -7,12 +7,13 @@ import (
 )
 
 type ServiceDeployInput struct {
-	After     []string
-	Image     string
-	Tag       string
-	Strategy  Strategy
-	OnFailure OnFailure
-	HostID    string `json:"host_id,omitempty"`
+	After           []string
+	Image           string
+	Tag             string
+	Strategy        Strategy
+	OnFailure       OnFailure
+	HostID          string `json:"host_id,omitempty"`
+	SourceReleaseID string `json:"source_release_id,omitempty"`
 }
 
 type ServiceRollbackInput struct {

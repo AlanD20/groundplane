@@ -3386,6 +3386,11 @@
           "on_failure": {
             "type": "string"
           },
+          "source_release_id": {
+            "description": "Promote the exact image from a successful Release in a sibling Environment of this Project",
+            "pattern": "^dep_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
           "strategy": {
             "type": "string"
           },
@@ -8114,6 +8119,9 @@
           "image": {
             "type": "string"
           },
+          "local_image_id": {
+            "type": "string"
+          },
           "on_failure": {
             "type": "string"
           },
@@ -8130,6 +8138,9 @@
             "type": "string"
           },
           "prior_successful_release_id": {
+            "type": "string"
+          },
+          "promotion_source_release_id": {
             "type": "string"
           },
           "render_input_digest": {
@@ -8494,6 +8505,9 @@
           "image": {
             "type": "string"
           },
+          "local_image_id": {
+            "type": "string"
+          },
           "on_failure": {
             "type": "string"
           },
@@ -8504,6 +8518,9 @@
             "type": "string"
           },
           "originating_task_id": {
+            "type": "string"
+          },
+          "promotion_source_release_id": {
             "type": "string"
           },
           "service_id": {

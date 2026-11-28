@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/workqueue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -95,6 +96,14 @@ func (service *Service) prepareServiceWorkForHost(ctx context.Context, scope rel
 	}
 	if err != nil {
 		return taskdependencies.Prepared{}, err
+	}
+	if candidate.promotionSource != "" {
+		key := releases.ReleasePromotionSourceKey(request.Intent.ID)
+		authority.Conditions = append(authority.Conditions, candidate.promotionGuards...)
+		authority.Conditions = append(authority.Conditions, keyvalue.Condition{Key: key})
+		authority.Mutations = append(authority.Mutations, keyvalue.Mutation{
+			Type: keyvalue.MutationPut, Key: key, Value: []byte(candidate.promotionSource),
+		})
 	}
 	authority.Mutations = keyvalue.CloneMutations(authority.Mutations)
 	graph, err := request.WorkGraph(task, item)

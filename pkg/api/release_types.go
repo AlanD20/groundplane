@@ -27,25 +27,27 @@ const (
 )
 
 type ReleaseSummary struct {
-	ID                 string       `json:"id"`
-	EnvironmentID      string       `json:"environment_id"`
-	ServiceID          string       `json:"service_id"`
-	OperationID        string       `json:"operation_id"`
-	OriginatingTaskID  string       `json:"originating_task_id"`
-	OperationKind      string       `json:"operation_kind"`
-	GroupOperationID   string       `json:"group_operation_id,omitempty"`
-	GroupMemberOrdinal uint32       `json:"group_member_ordinal,omitempty"`
-	Image              string       `json:"image"`
-	Tag                string       `json:"tag"`
-	Digest             string       `json:"digest,omitempty"`
-	Strategy           string       `json:"strategy"`
-	Slot               string       `json:"slot,omitempty"`
-	OnFailure          OnFailure    `json:"on_failure"`
-	State              ReleaseState `json:"state"`
-	CreatedAt          string       `json:"created_at"`
-	CompletedAt        *string      `json:"completed_at,omitempty"`
-	Serving            bool         `json:"serving"`
-	CurrentSuccessful  bool         `json:"current_successful"`
+	ID                       string       `json:"id"`
+	EnvironmentID            string       `json:"environment_id"`
+	ServiceID                string       `json:"service_id"`
+	OperationID              string       `json:"operation_id"`
+	OriginatingTaskID        string       `json:"originating_task_id"`
+	OperationKind            string       `json:"operation_kind"`
+	GroupOperationID         string       `json:"group_operation_id,omitempty"`
+	GroupMemberOrdinal       uint32       `json:"group_member_ordinal,omitempty"`
+	Image                    string       `json:"image"`
+	LocalImageID             string       `json:"local_image_id,omitempty"`
+	PromotionSourceReleaseID string       `json:"promotion_source_release_id,omitempty"`
+	Tag                      string       `json:"tag"`
+	Digest                   string       `json:"digest,omitempty"`
+	Strategy                 string       `json:"strategy"`
+	Slot                     string       `json:"slot,omitempty"`
+	OnFailure                OnFailure    `json:"on_failure"`
+	State                    ReleaseState `json:"state"`
+	CreatedAt                string       `json:"created_at"`
+	CompletedAt              *string      `json:"completed_at,omitempty"`
+	Serving                  bool         `json:"serving"`
+	CurrentSuccessful        bool         `json:"current_successful"`
 }
 
 type ReleaseRollbackMaterial struct {
@@ -96,11 +98,12 @@ type ReleaseGroupEditRequest struct {
 // --- Ops action request bodies (every action returns a TaskAccepted) ---
 
 type DeployRequest struct {
-	After     []string  `json:"after,omitempty" maxItems:"16" uniqueItems:"true" doc:"Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs"`
-	Image     string    `json:"image,omitempty" maxLength:"512" doc:"Host-local registry reference for this Release only; mutually exclusive with tag"`
-	Tag       string    `json:"tag,omitempty"`        // omitted => the service's current tag
-	Strategy  string    `json:"strategy,omitempty"`   // omitted => the service's declared default
-	OnFailure OnFailure `json:"on_failure,omitempty"` // omitted => "switch_back"
+	After           []string  `json:"after,omitempty" maxItems:"16" uniqueItems:"true" doc:"Whole Tasks that must fully settle successfully before this action prepares; at most 16 immutable Task IDs"`
+	Image           string    `json:"image,omitempty" maxLength:"512" doc:"Host-local registry reference for this Release only; mutually exclusive with tag"`
+	SourceReleaseID string    `json:"source_release_id,omitempty" pattern:"^dep_[0-9A-HJKMNP-TV-Z]{26}$" doc:"Promote the exact image from a successful Release in a sibling Environment of this Project"`
+	Tag             string    `json:"tag,omitempty"`        // omitted => the service's current tag
+	Strategy        string    `json:"strategy,omitempty"`   // omitted => the service's declared default
+	OnFailure       OnFailure `json:"on_failure,omitempty"` // omitted => "switch_back"
 }
 
 type RollbackRequest struct {

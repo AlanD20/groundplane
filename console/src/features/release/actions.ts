@@ -9,13 +9,20 @@ import {
 import { listAllReleaseGroups } from "@/features/release-group/api";
 import { refreshReleaseGroupTags } from "@/features/release-group/projection";
 import { listAllReleases, projectReleaseSummary } from "./api";
+
+type DeployInput =
+  | {
+      image: string;
+      strategy: Service["strategy"];
+      onFailure: Service["onFailure"];
+    }
+  | { sourceReleaseId: string };
+
 export type ReleaseActions = {
   commitDeploy: (
     envId: string,
-    service: string,
-    image: string,
-    strategy: Service["strategy"],
-    onFailure: Service["onFailure"],
+    serviceId: string,
+    input: DeployInput,
     after?: string[],
   ) => Promise<string>;
   commitRollback: (
@@ -30,24 +37,21 @@ export function createReleaseActions(
   assertEnvironmentMutable: (environmentId: string, operation: string) => void,
 ): ReleaseActions {
   return {
-    commitDeploy: async (
-      envId,
-      service,
-      image,
-      strategy,
-      onFailure,
-      after = [],
-    ) => {
+    commitDeploy: async (envId, serviceId, input, after = []) => {
       assertEnvironmentMutable(envId, "deployment");
       const target = findEnvironment(state, envId)?.services.find(
-        (candidate) => candidate.name === service,
+        (candidate) => candidate.id === serviceId,
       );
-      if (!target) throw new Error(`Service ${service} no longer exists`);
+      if (!target) throw new Error("The destination Service no longer exists");
       const body: operations["service.deploy"]["requestBody"]["content"]["application/json"] =
         {
-          image,
-          strategy,
-          on_failure: onFailure,
+          ...("sourceReleaseId" in input
+            ? { source_release_id: input.sourceReleaseId }
+            : {
+                image: input.image,
+                strategy: input.strategy,
+                on_failure: input.onFailure,
+              }),
           ...(after.length ? { after } : {}),
         };
       const accepted = await controllerRequest<

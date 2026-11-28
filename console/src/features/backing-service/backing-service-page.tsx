@@ -453,10 +453,12 @@ export default function BackingServiceDetailPage() {
             if (pendingAction === "deploy") {
               return store.commitDeploy(
                 env.id,
-                svc.name,
-                svc.image,
-                svc.strategy,
-                svc.onFailure,
+                svc.id,
+                {
+                  image: svc.image,
+                  strategy: svc.strategy,
+                  onFailure: svc.onFailure,
+                },
                 after,
               );
             }

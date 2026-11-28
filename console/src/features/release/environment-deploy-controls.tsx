@@ -19,6 +19,7 @@ import { useDraftField } from "@/lib/use-draft-field";
 import { ArrowUpCircle, History } from "lucide-react";
 import { useState } from "react";
 import { DeployReleaseGroupDialog } from "@/features/release-group/release-group-operation-dialogs";
+import { PromotionSourceFields, usePromotionSource } from "./promotion-source";
 
 export function DeployControls({
   env,
@@ -101,6 +102,21 @@ export function DeployDialog({
     svc?.strategy ?? "recreate",
     service,
   );
+  const promotionTarget = `${env.id}:${service}:${open}`;
+  const [sourceKind, setSourceKind] = useDraftField<"image" | "promotion">(
+    "image",
+    promotionTarget,
+  );
+  const project = store.getProjectById(env.projectId);
+  const promoting = !!project && sourceKind === "promotion";
+  const promotion = usePromotionSource(open && promoting, env, promotionTarget);
+  const sourceServiceName = project?.environments
+    ?.find(
+      (candidate) => candidate.id === promotion.source?.release.environment_id,
+    )
+    ?.services.find(
+      (candidate) => candidate.id === promotion.source?.release.service_id,
+    )?.name;
 
   const targetSelector = (
     <div className="flex flex-col gap-1.5">
@@ -135,7 +151,8 @@ export function DeployDialog({
     );
   if (!svc)
     return <MissingServiceDialog open={open} onOpenChange={onOpenChange} />;
-  const readinessError = deploymentReadinessError(svc, strategy);
+  const rolloutStrategy = promoting ? svc.strategy : strategy;
+  const readinessError = deploymentReadinessError(svc, rolloutStrategy);
 
   return (
     <TaskRunnerDialog
@@ -144,55 +161,84 @@ export function DeployDialog({
       onOpenChange={onOpenChange}
       variant="inline"
       title={`Deploy ${svc.name} · ${env.name}`}
-      description="Use an image already on this host."
+      description={promoting ? undefined : "Use an image already on this host."}
       type="deploy"
       target={env.id}
       workspace={params.tenant}
-      startLabel="Deploy"
+      startLabel={promoting ? "Promote image" : "Deploy"}
       review={
         <div className="flex flex-col gap-2">
           {targetSelector}
-          <div className="grid gap-3">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="dep-strategy">Strategy</Label>
+          {project && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="dep-image-source">Image source</Label>
               <Select
-                id="dep-strategy"
-                value={strategy}
-                onValueChange={(v) => setStrategy(v as Service["strategy"])}
+                id="dep-image-source"
+                value={sourceKind}
+                onValueChange={(value) => {
+                  setSourceKind(value === "promotion" ? "promotion" : "image");
+                  promotion.resetReview();
+                }}
                 options={[
-                  { value: "blue-green", label: "blue-green" },
-                  { value: "recreate", label: "recreate" },
-                  { value: "rolling", label: "rolling" },
+                  { value: "image", label: "Image on this host" },
+                  { value: "promotion", label: "Promote a Release" },
                 ]}
               />
             </div>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dep-image">Image for this Release</Label>
-            <ImagePicker id="dep-image" value={image} onChange={setImage} />
-          </div>
-          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs">
-            <span className="w-24 text-muted-foreground">Image</span>
-            <span className="flex-1 truncate text-right text-muted-foreground">
-              {svc.image}
-            </span>
-            <span className="mx-2 text-muted-foreground">→</span>
-            <span className="flex-1 truncate text-foreground">{image}</span>
-          </div>
-          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs">
-            <span className="w-24 text-muted-foreground">Strategy</span>
-            <span className="flex-1 text-right text-muted-foreground">
-              declared: {svc.strategy}
-            </span>
-            <span className="mx-2 text-muted-foreground">→</span>
-            <span className="flex-1 text-foreground">{strategy}</span>
-          </div>
+          )}
+          {promoting ? (
+            <PromotionSourceFields
+              selection={promotion}
+              serviceName={svc.name}
+              environmentName={env.name}
+              strategy={rolloutStrategy}
+              sourceServiceName={sourceServiceName}
+            />
+          ) : (
+            <>
+              <div className="grid gap-3">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="dep-strategy">Strategy</Label>
+                  <Select
+                    id="dep-strategy"
+                    value={strategy}
+                    onValueChange={(v) => setStrategy(v as Service["strategy"])}
+                    options={[
+                      { value: "blue-green", label: "blue-green" },
+                      { value: "recreate", label: "recreate" },
+                      { value: "rolling", label: "rolling" },
+                    ]}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="dep-image">Image for this Release</Label>
+                <ImagePicker id="dep-image" value={image} onChange={setImage} />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs">
+                <span className="w-24 text-muted-foreground">Image</span>
+                <span className="flex-1 truncate text-right text-muted-foreground">
+                  {svc.image}
+                </span>
+                <span className="mx-2 text-muted-foreground">→</span>
+                <span className="flex-1 truncate text-foreground">{image}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs">
+                <span className="w-24 text-muted-foreground">Strategy</span>
+                <span className="flex-1 text-right text-muted-foreground">
+                  declared: {svc.strategy}
+                </span>
+                <span className="mx-2 text-muted-foreground">→</span>
+                <span className="flex-1 text-foreground">{strategy}</span>
+              </div>
+            </>
+          )}
           {readinessError && (
             <p role="alert" className="text-sm text-destructive">
               {readinessError}
             </p>
           )}
-          {strategy === "rolling" && !readinessError && (
+          {rolloutStrategy === "rolling" && !readinessError && (
             <p className="text-xs text-muted-foreground">
               {svc.replicas} replicas, replaced one at a time. Each replacement
               has {svc.rollingReplicaTimeoutSeconds || 300} seconds. Old and new
@@ -201,17 +247,29 @@ export function DeployDialog({
           )}
         </div>
       }
-      startDisabled={!image.trim() || !!readinessError}
-      onDispatch={(after) =>
-        store.commitDeploy(
-          env.id,
-          svc.name,
-          image.trim(),
-          strategy,
-          "switch_back",
-          after,
-        )
+      startDisabled={
+        !!readinessError || (promoting ? !promotion.source : !image.trim())
       }
+      onDispatch={(after) => {
+        if (promoting) {
+          if (!promotion.source)
+            return Promise.reject(
+              new Error("Review the source Release before promoting it."),
+            );
+          return store.commitDeploy(
+            env.id,
+            svc.id,
+            { sourceReleaseId: promotion.source.release.id },
+            after,
+          );
+        }
+        return store.commitDeploy(
+          env.id,
+          svc.id,
+          { image: image.trim(), strategy, onFailure: "switch_back" },
+          after,
+        );
+      }}
       onSettled={async () => {
         await Promise.all([
           store.refreshEnvironmentReleases(env.id),
